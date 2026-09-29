@@ -107,7 +107,26 @@ if ($cmakeLists -match 'set\(K6WP_VERSION\s+"([^"]+)"\)') {
 }
 
 # Generated files (configure_file output) must carry the canonical version.
-$genHeader = Join-Path $BuildDir "generated\version.h"
+# configure_file() writes to CMAKE_BINARY_DIR/generated. Relative to $BuildDir
+# (this script's own output dir, default build\release) that is either
+#   .\generated            single-config tree / the dev presets, whose binary
+#                          dir IS the CMake binary dir, or
+#   ..\generated           a multi-config generator (Visual Studio) whose cache
+#                          sits one level up - which is what CI produces, since
+#                          it configures with -B build while this script builds
+#                          into build\release. Before this, only the first
+#                          layout resolved and CI could never package a ZIP.
+$genCandidates = @(
+  (Join-Path $BuildDir "generated\version.h"),
+  (Join-Path $BuildDir "..\generated\version.h"),
+  (Join-Path $BuildDir "Release\generated\version.h"),
+  (Join-Path $BuildDir "Debug\generated\version.h"),
+  (Join-Path $BuildDir "RelWithDebInfo\generated\version.h")
+)
+$genHeader = $genCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+if (-not $genHeader) {
+  Fail "version assert: generated header not found (tried: $($genCandidates -join ', ')). Run cmake configure first."
+}
 if (Test-Path -LiteralPath $genHeader) {
   $genText = Get-Content -LiteralPath $genHeader -Raw
   if ($genText -match '#define\s+K6WP_VERSION_STR\s+"([^"]+)"') {
