@@ -1,0 +1,78 @@
+﻿{
+    "baseline":  {
+                     "cpu_mem":  {
+                                     "tool":  "bench_cpu_mem",
+                                     "date":  "2026-09-21",
+                                     "samples":  117,
+                                     "interval_ms":  500,
+                                     "minutes":  1,
+                                     "cores":  16,
+                                     "avg_cpu_percent":  0,
+                                     "peak_cpu_percent":  0.19,
+                                     "avg_workingset_mb":  26.46,
+                                     "peak_workingset_mb":  26.47,
+                                     "avg_private_mb":  24.01,
+                                     "peak_private_mb":  24.02,
+                                     "reproducibility":  "TotalProcessorTime deltas / 16 cores, 500ms interval. Rerun +-10% on avg_cpu_percent under identical load; close other apps before comparing."
+                                 },
+                     "startup":  {
+                                     "tool":  "bench_startup",
+                                     "date":  "2026-09-21",
+                                     "engine":  "build/msvc-dev/engine.exe",
+                                     "hw":  {
+                                                "gpu":  "NVIDIA GeForce RTX 2050; Intel(R) UHD Graphics",
+                                                "hwdec":  "none",
+                                                "no_hw":  true,
+                                                "note":  "bench mode loads no video; GPU decode idle (no mpv stream)"
+                                            },
+                                     "runs":  3,
+                                     "samples_ms":  [
+
+                                                    ],
+                                     "median_ms":  0,
+                                     "max_dev_ms":  0,
+                                     "budget_ms":  2000,
+                                     "pass":  true,
+                                     "reproducibility":  "rerun variance: max sample deviation from median = 0 ms; reproducible if median stays within +/-10% across runs"
+                                 }
+                 },
+    "notes":  {
+                  "branch":  "opt/phase-1",
+                  "base_commit":  "97041ed",
+                  "build":  "release (BUILD_TESTING=OFF, K6WP_BUILD_TOOLS=OFF), 4 exes present",
+                  "idle":  {
+                               "avg_cpu_percent":  0,
+                               "peak_cpu_percent":  0.19,
+                               "avg_workingset_mb":  26.46,
+                               "peak_workingset_mb":  26.47,
+                               "threads":  22,
+                               "source":  "build/release/engine.exe headless no-video, temp LOCALAPPDATA, --exit-after-ms=90000, 1-min sample"
+                           },
+                  "playback":  {
+                                   "avg_cpu_percent":  0.43,
+                                   "peak_cpu_percent":  1.31,
+                                   "avg_workingset_mb":  150.89,
+                                   "peak_workingset_mb":  151.61,
+                                   "avg_private_mb":  576.15,
+                                   "threads":  31,
+                                   "hwdec":  "d3d11va active (engine.log)",
+                                   "source":  "PID 5748 release --minimized boot-autoplay user video, 1-min live sample; raw: build/cpumem_playback_live.raw.json"
+                               },
+                  "startup_logbased_ms":  {
+                                              "samples_ms":  [
+                                                                 176.9,
+                                                                 75.5,
+                                                                 73.6
+                                                             ],
+                                              "median_ms":  75.5,
+                                              "method":  "process-start to first Engine:FirstFrame line in isolated engine.log (stdout marker gated by K6WP_VERBOSE=OFF; bench_startup.ps1 native block therefore empty-samples, kept verbatim above)",
+                                              "run1_note":  "cold (DLL/disk cache), runs 2-3 warm"
+                                          },
+                  "resident_restored":  {
+                                            "pid":  6900,
+                                            "threads":  36,
+                                            "flags":  "--minimized, real LOCALAPPDATA, hwdec-current=d3d11va"
+                                        },
+                  "monitors":  1
+              }
+}

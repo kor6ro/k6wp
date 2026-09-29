@@ -1,0 +1,76 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://k6wp.local/schemas/studio-settings.schema.json",
+  "title": "K6WP StudioSettings",
+  "description": "Studio-side preferences for the K6WP wallpaper app. Stored at %LOCALAPPDATA%/K6WP/studio_settings.json. Deliberately separate from config.json, which is pure Engine playback state (video_path/fit/monitor/speed/fps/battery). Version 0 (legacy: missing version or missing fields) is migrated to version 3 by the loader; version 1 migrates with compress_advanced_visible defaulted to false; version 2 migrates with the removed keep_original/start_minimized keys ignored. On migration (or corrupt input) the loader backs up the original bytes to <file>.bak and rewrites the file at the current version.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version"],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 3,
+      "description": "Schema version. 0 = legacy (missing fields are defaulted on load), 1 = lockscreen sync fields, 2 = compressor advanced-box visibility, 3 = current (dead keep_original/start_minimized keys removed; old files carrying them migrate by ignoring those keys)."
+    },
+    "auto_compress_on_import": {
+      "type": "boolean",
+      "default": true,
+      "description": "When true, importing a video into the Studio library compresses it automatically with the defaults below."
+    },
+    "compress_output_dir": {
+      "type": "string",
+      "description": "Directory for compressed wallpapers. Default %LOCALAPPDATA%/K6WP/wallpapers. Must not be empty."
+    },
+    "default_crf": {
+      "type": "integer",
+      "minimum": 16,
+      "maximum": 28,
+      "default": 22,
+      "description": "Default compression CRF for the compressor. Agrees with the engine/compressor CRF 22 default. Values outside 16-28 are rejected."
+    },
+    "default_fps": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 30,
+      "default": 30,
+      "description": "Default compression target framerate. Values outside 1-30 are rejected."
+    },
+    "default_resolution_mode": {
+      "type": "string",
+      "enum": ["match_monitor", "source", "720p", "1080p", "2160p"],
+      "default": "match_monitor",
+      "description": "Default compression resolution. match_monitor = scale to the target monitor's native resolution; source = keep the input resolution; otherwise cap the long edge at the given height."
+    },
+    "start_with_windows": {
+      "type": "boolean",
+      "default": false,
+      "description": "When true, Studio registers the HKCU Run autostart entry (engine tray-only start)."
+    },
+    "cache_dir": {
+      "type": "string",
+      "description": "Compressor cache directory. Default %LOCALAPPDATA%/K6WP/cache. Must not be empty."
+    },
+    "lockscreen_sync": {
+      "type": "boolean",
+      "default": false,
+      "description": "Bagian B: when true, engine/studio extract a static frame via compressor --lockframe on every video change (debounced, below-normal, fire-and-forget) into %PROGRAMDATA%/K6WP/lockscreen.jpg; the launcher applies it via K6WP.exe --elevate-lockscreen on|off (one-time admin for folder ACL + HKLM LockScreenImage policy)."
+    },
+    "lockscreen_offset_sec": {
+      "type": "number",
+      "minimum": 0,
+      "default": 1.0,
+      "description": "Seek offset in seconds for the lockscreen frame extract. Must be >= 0."
+    },
+    "compress_advanced_visible": {
+      "type": "boolean",
+      "default": false,
+      "description": "Compressor tab advanced-box expanded state (session UI only; v1 files migrate it to false)."
+    },
+    "check_updates": {
+      "type": "boolean",
+      "default": true,
+      "description": "Optional 'new version available' check (Studio-only, never downloads/installs). When true, Studio GETs the releases API once per start plus manual Help -> Check for updates; network failures are silent. Files missing this key migrate it to true."
+    }
+  }
+}

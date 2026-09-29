@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: Windows release build + tests
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      # The vendored third-party binaries are not tracked: together they are
+      # ~311 MB and libmpv-2.dll alone exceeds GitHub's 100 MB per-file push
+      # limit. Fetch them before configuring; the script verifies every file
+      # against the SHA256s in vendor/VERSIONS.md and fails closed on mismatch.
+      # 7-Zip ships on the windows runner images (used to unpack the libmpv .7z).
+      - name: Fetch vendored binaries
+        shell: pwsh
+        run: ./tools/fetch_vendor.ps1
+
+      - name: License guard (LICENSE + LICENSES/)
+        shell: pwsh
+        run: |
+          if (-not (Test-Path -LiteralPath "./LICENSE")) { Write-Error "LICENSE missing at repo root"; exit 1 }
+          if (-not (Test-Path -LiteralPath "./LICENSES")) { Write-Error "LICENSES/ missing at repo root"; exit 1 }
+          $notices = @(Get-ChildItem -LiteralPath "./LICENSES" -Filter "*.txt" -File)
+          if ($notices.Count -eq 0) { Write-Error "LICENSES/ contains no third-party notice files"; exit 1 }
+          Write-Host "License guard OK ($($notices.Count) notice files)."
+
+      - name: Install Qt 6.8.3 (msvc2022_64)
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.8.3"
+          arch: "win64_msvc2022_64"
+          cache: true
+
+      # NOTE: the repo presets pin the local "Visual Studio 18 2026"
+      # generator, which hosted runners may not have, so CI configures
+      # directly and lets CMake pick the newest installed VS.
+      - name: Configure (Release, tests ON)
+        shell: pwsh
+        run: >
+          cmake -S . -B build -A x64
+          "-DCMAKE_PREFIX_PATH=$env:QT_ROOT_DIR"
+          -DBUILD_TESTING=ON
+
+      - name: Build Release
+        shell: pwsh
+        run: cmake --build build --config Release --parallel
+
+      - name: Test
+        shell: pwsh
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      # NOTE: make_zip.ps1 defaults to the local "Visual Studio 18 2026"
+      # preset paths; -Generator lets the runner build the same release
+      # triple (BUILD_TESTING=OFF, build/release) with its own VS. QT_ROOT
+      # comes from the Qt action's QT_ROOT_DIR, as the script expects.
+      - name: Package portable ZIP
+        shell: pwsh
+        run: |
+          $env:QT_ROOT = $env:QT_ROOT_DIR
+          ./packaging/make_zip.ps1 -Generator "Visual Studio 17 2022"
+
+      - name: Verify ZIP contents
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem -LiteralPath "./dist" -Filter "K6WP-portable-*.zip" -File |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if ($null -eq $zip) { Write-Error "no K6WP-portable-*.zip in dist/"; exit 1 }
+          Add-Type -AssemblyName System.IO.Compression.ZipFile
+          $entries = @([System.IO.Compression.ZipFile]::OpenRead($zip.FullName).Entries.FullName |
+            ForEach-Object { $_ -replace '\\', '/' })
+          $required = @("K6WP.exe", "engine.exe", "studio.exe", "compressor.exe", "LICENSE")
+          foreach ($r in $required) {
+            if (-not ($entries -contains $r)) { Write-Error "ZIP missing required file: $r"; exit 1 }
+          }
+          if (-not ($entries | Where-Object { $_ -like "LICENSES/*" })) { Write-Error "ZIP missing LICENSES/ notices"; exit 1 }
+          Write-Host "ZIP OK: $($zip.Name) ($([math]::Round($zip.Length / 1MB, 2)) MB, $($entries.Count) entries)."
+
+      - name: Upload portable ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: K6WP-portable
+          path: dist/K6WP-portable-*.zip
+          if-no-files-found: error

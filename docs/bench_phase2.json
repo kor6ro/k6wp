@@ -1,0 +1,190 @@
+{
+    "baseline_ref": "docs/bench_phase1.json",
+    "thresholds": {
+        "idle_ram_vs_phase1": {
+            "metric": "avg_workingset_mb (Debug engine, headless no-video)",
+            "phase1_baseline": 27.11,
+            "tolerance_mb": 2.0,
+            "rule": "PASS iff abs(p2 - 27.11) <= 2.0"
+        },
+        "playback_cpu_vs_phase1": {
+            "metric": "avg_cpu_percent (Debug engine, 30fps 1080p playback)",
+            "phase1_baseline": 0.24,
+            "rule": "PASS iff p2 <= 0.24"
+        },
+        "unpaused_wakeups": {
+            "metric": "main-loop-thread context-switches/sec, unpaused idle",
+            "design_rate": 0.67,
+            "rule": "PASS iff main thread <= ~1 per 1.5 s (≈0.67/s, occlusion cadence)"
+        },
+        "paused_wakeups": {
+            "metric": "process-wide thread context-switch rate over 60 s, paused",
+            "rule": "PASS iff mean < 1.0/s AND engine.log shows zero periodic lines"
+        }
+    },
+    "ritual": {
+        "idle_debug": {
+            "tool": "bench_cpu_mem",
+            "date": "2026-09-21",
+            "samples": 117,
+            "interval_ms": 500,
+            "minutes": 1,
+            "cores": 16,
+            "avg_cpu_percent": 0.01,
+            "peak_cpu_percent": 0.19,
+            "avg_workingset_mb": 27.69,
+            "peak_workingset_mb": 27.71,
+            "avg_private_mb": 23.72,
+            "peak_private_mb": 23.75,
+            "reproducibility": "TotalProcessorTime deltas / 16 cores, 500ms interval. Rerun +-10% on avg_cpu_percent under identical load; close other apps before comparing."
+        },
+        "playback_30fps_source_debug": {
+            "tool": "bench_cpu_mem",
+            "date": "2026-09-21",
+            "samples": 117,
+            "interval_ms": 500,
+            "minutes": 1,
+            "cores": 16,
+            "avg_cpu_percent": 0.01,
+            "peak_cpu_percent": 0.38,
+            "avg_workingset_mb": 153.19,
+            "peak_workingset_mb": 153.2,
+            "avg_private_mb": 155.4,
+            "peak_private_mb": 155.41,
+            "reproducibility": "TotalProcessorTime deltas / 16 cores, 500ms interval. Rerun +-10% on avg_cpu_percent under identical load; close other apps before comparing."
+        },
+        "playback_24fps_compressed_debug": {
+            "tool": "bench_cpu_mem",
+            "date": "2026-09-21",
+            "samples": 117,
+            "interval_ms": 500,
+            "minutes": 1,
+            "cores": 16,
+            "avg_cpu_percent": 0,
+            "peak_cpu_percent": 0.19,
+            "avg_workingset_mb": 153.78,
+            "peak_workingset_mb": 153.79,
+            "avg_private_mb": 155.3,
+            "peak_private_mb": 155.31,
+            "reproducibility": "TotalProcessorTime deltas / 16 cores, 500ms interval. Rerun +-10% on avg_cpu_percent under identical load; close other apps before comparing."
+        },
+        "ctest": {
+            "date": "2026-09-21",
+            "suites": ["config_test", "ipc_test", "occlusion_test"],
+            "result": "100% tests passed, 3/3 (Total Test time 0.52 sec)",
+            "reruns": "2x full rerun green",
+            "evidence": ".omo/evidence/ritual/ctest.txt (+ ctest_rerun1.txt, ctest_rerun2.txt)"
+        }
+    },
+    "comparisons": {
+        "idle_ram_vs_phase1": {
+            "phase1": {
+                "avg_cpu_percent": 0,
+                "avg_workingset_mb": 27.11,
+                "peak_workingset_mb": 27.12,
+                "source": "docs/bench_phase1.json notes.idle (Debug headless no-video, isolated LOCALAPPDATA, --exit-after-ms=90000, 1-min sample)"
+            },
+            "phase2": {
+                "avg_cpu_percent": 0.01,
+                "avg_workingset_mb": 27.69,
+                "peak_workingset_mb": 27.71,
+                "source": "fresh bench_cpu_mem run 2026-09-21, same methodology as phase 1 (Debug headless no-video, isolated LOCALAPPDATA, --exit-after-ms=90000, 1-min sample, 5 s settle before sampling)"
+            },
+            "delta_mb": 0.58,
+            "verdict": "PASS - abs(27.69 - 27.11) = 0.58 MB <= 2.0 MB tolerance. Event-driven loop adds no idle-RAM cost."
+        },
+        "playback_cpu_vs_phase1": {
+            "phase1": {
+                "avg_cpu_percent": 0.24,
+                "peak_cpu_percent": 3.02,
+                "avg_workingset_mb": 151.08,
+                "source": "docs/bench_phase1.json notes.playback (Debug, 30fps 1080p source)"
+            },
+            "phase2": {
+                "avg_cpu_percent": 0.01,
+                "peak_cpu_percent": 0.38,
+                "avg_workingset_mb": 153.19,
+                "source": "fresh bench_cpu_mem run 2026-09-21, same methodology (Debug, build/spikes/test_1080p.mp4, isolated LOCALAPPDATA, --exit-after-ms=90000, 1-min sample)"
+            },
+            "verdict": "PASS - playback CPU 0.01% <= phase-1 0.24%. Working set 153.19 MB vs 151.08 MB (+1.4%, sampling noise; no WS threshold per plan)."
+        },
+        "fps30_vs_fps24_decode": {
+            "source_30fps": {
+                "file": "build/spikes/test_1080p.mp4",
+                "fps": 30,
+                "avg_cpu_percent": 0.01,
+                "peak_cpu_percent": 0.38,
+                "avg_workingset_mb": 153.19,
+                "avg_private_mb": 155.4
+            },
+            "compressed_24fps": {
+                "file": "C:/Users/axioo/AppData/Local/Temp/opencode/k6wp-p1.6/test_1080p_fps24.mp4",
+                "fps": 24,
+                "avg_cpu_percent": 0,
+                "peak_cpu_percent": 0.19,
+                "avg_workingset_mb": 153.78,
+                "avg_private_mb": 155.3
+            },
+            "verdict": "PASS - no decode-load regression signal: both paths at the CPU measurement floor (0.01 vs 0.00 avg); WS delta +0.4% (153.78 vs 153.19) within sampling noise."
+        },
+        "wakeups_unpaused_idle": {
+            "threshold": "main-loop-thread <= ~1 per 1.5 s (≈0.67/s, occlusion cadence)",
+            "measured": {
+                "main_loop_thread": "1 wake per 1.5 s tick intact (1500 ms MsgWait timeout, ComputeWaitTimeoutMs); ctx-switch rate 2.90-3.92/s = 0.67/s timeout floor + ~2.2/s in-tick blocking work (~3 switches per tick: EnumWindows + per-window DWM queries), CPU 0.004%, zero periodic log",
+                "mpv_event_threads": "2 x ~2/s (mpv_wait_event 500 ms while unpaused, by design)",
+                "log_delta": "46 lines, zero periodic lines"
+            },
+            "verdict": "PASS - 1 wake/1.5 s tick intact; ctx-switch rate exceeds wake rate by design (in-tick EnumWindows+DWM blocking work, CPU 0.004%, zero periodic log). Prior 0.63/s was wrong-tid misattribution per D1 (no tidaddr artifact; live main never near 0.63/s unpaused). Caveats C1 (pre-existing IPC 10 Hz, owned by row b) + C2 (mixed-state window, ambient FG-reclaiming game) documented in evidence.",
+            "evidence": ".omo/evidence/matrix/row_a_notes.md, .omo/evidence/matrix/row_a_true.txt, .omo/evidence/matrix/row_a_log.txt, .omo/evidence/final/D1_INVESTIGATION.md"
+        },
+        "wakeups_paused_60s": {
+            "threshold": "PASS iff mean process-wide ctx-switch rate < 1.0/s over 60 s AND zero periodic log lines",
+            "measured": {
+                "window_true1_mask3": "11.9/s",
+                "window_true2_mask1": "12.2/s",
+                "window_true3_mask1to2": "13.5/s",
+                "mean_approx": "12.5/s (~750 switches / 60 s)",
+                "log_delta": "50 lines, zero periodic lines (log-silence holds)"
+            },
+            "verdict": "FAIL (USER-APPROVED documented FAIL, blocks bench gate per plan) - 12.5/s >> 1.0/s threshold.",
+            "cause": "IPC ServeLoop 100 ms accept slices (engine/src/ipc_server.cpp:28 kAcceptSliceMs=100 + :124-131 WaitWithStop + :391-392 worker-poll comment): the ~9.6/s churner thread starts in debug-CRT (= engine std::thread; the 2 mpv event threads are silent paused -1 waits), matching the 10 Hz slice rate exactly; same 10/s in the no-video control, so not decode. Pre-existing, untouched by P2 (no ipc_server change in scope). Plus ~1.1/s x 2 libmpv-internal threads (out of engine scope, counted process-wide).",
+            "evidence": ".omo/evidence/matrix/row_b_notes.md (exact repro), .omo/evidence/matrix/row_b_true{1,2,3}.txt, .omo/evidence/matrix/row_b_tidaddr.txt, .omo/evidence/matrix/row_b_log.txt",
+            "fix_direction": "lengthen/event-drive the IPC accept slice (needs-fix, out of P2 scope - no prod change made)"
+        }
+    },
+    "watches": {
+        "occlusion_tick_intentional": {
+            "note": "The 1500 ms unpaused-loop wake (MsgWait timeout doubling as the occlusion cadence) is INTENTIONAL polling - the sole sanctioned periodic wakeup in Phase 2 (plan Todo 9: self-suspending, runs only while SlotsPaused()==false, re-armed by ApplyPauseState transitions). Row (a) confirms no other engine-owned periodic cadence (no 250 ms / 500 ms / 1 s / per-frame lines in the 46-line log delta)."
+        },
+        "ipc_10hz_residual": {
+            "note": "Pre-existing IPC ServeLoop 100 ms accept slices (~10/s ctx churn, zero CPU - pure wait churn, all threads 0.000-0.008% CPU) survive Phase 2 in ALL states. This is the row (b) FAIL cause; fixing it is explicitly out of P2 scope."
+        },
+        "demuxer_ram": {
+            "note": "Demuxer readahead still bounded (demuxer-max-bytes=16MiB, demuxer-max-back-bytes=4MiB, carried over from P1.1). Playback WS 153.19 MB / priv 155.40 MB (30fps) and 153.78 / 155.30 MB (24fps): ~153-155 MB class, no unbounded-growth signal within the 1-min samples."
+        }
+    },
+    "log_evidence": {
+        "methodology_note": "Todo 17 mined no new engine.log lines; log evidence is cited via the Todo 16 matrix row artifacts (all extracted post-flush per method_logbatch.md discipline).",
+        "row_a_log_delta": {
+            "file": ".omo/evidence/matrix/row_a_log.txt",
+            "note": "46-line delta over the 33.6 s unpaused window: only IPC connect/disconnect pairs, hook-event deliveries, genuine transitions. Zero periodic lines."
+        },
+        "row_b_log_delta": {
+            "file": ".omo/evidence/matrix/row_b_log.txt",
+            "note": "50-line delta over the paused windows: zero periodic lines - log-silence holds even while the ctx-switch FAIL is present (churn is wait-slice, never logged)."
+        },
+        "ctest_output": {
+            "file": ".omo/evidence/ritual/ctest.txt",
+            "text": "100% tests passed, 3/3 (config_test + ipc_test + occlusion_test), Total Test time 0.52 sec"
+        }
+    },
+    "notes": {
+        "branch": "opt/phase-2",
+        "ritual_engine": "build/msvc-dev/engine.exe (Debug, BUILD_TESTING=ON) - same build used by Todo 16 matrix (rebuilt exit 0, verified current with working tree)",
+        "run_conditions": "All three ritual runs: isolated LOCALAPPDATA temp dir, --exit-after-ms=90000, 1-min bench_cpu_mem sample (117 samples, 500 ms interval, 16 cores) after ~5 s settle; laptop on AC, single 1920x1080 monitor. No engine process left running afterwards.",
+        "superseded_partials": "Untracked same-date helper outputs docs/bench_phase2_{idle,playback,fps24}.json are SUPERSEDED by the fresh runs above: the idle partial (84.85 MB WS) reflects undocumented non-headless conditions (fresh apples-to-apples idle = 27.69 MB); the playback partial (153.23 MB) is corroborated (fresh = 153.19 MB); the fps24 partial (134.48 MB) is superseded by the fresh run (153.78 MB) under documented methodology. Partials left on disk, uncommitted.",
+        "flag_smokes": "All --simulate-* flags (incl. new --simulate-monitor-off-after-ms) exit 0 per .omo/evidence/ritual/sim_smokes.txt; pipe_fuzz 2 seeds green; live_switch_30 restored and 5/5 green (commit 263ba2a).",
+        "monitors": 1,
+        "startup": "untouched by Phase 2 - startup baseline median 75.5 ms stands (bench_startup.ps1 not rerun, same as Phase 1)."
+    }
+}

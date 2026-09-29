@@ -1,0 +1,13 @@
+{
+  "_comment": "K6WP example config, schema v2. Copy to %LOCALAPPDATA%/K6WP/config.json and set video_path to a REAL video file on your machine - the placeholder below does not exist.",
+  "version": 2,
+  "video_path": "C:/Videos/wallpaper.mp4",
+  "fit_mode": "cover",
+  "speed": 1.0,
+  "monitor_id": -1,
+  "crf": 22,
+  "resolution_w": 0,
+  "resolution_h": 0,
+  "fps_cap": 30,
+  "battery_saver": false
+}

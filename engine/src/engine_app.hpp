@@ -1,0 +1,439 @@
+#pragma once
+
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+
+#include <atomic>
+#include <chrono>
+#include <cstdarg>
+#include <memory>
+#include <string>
+
+#include "config_watch.hpp"
+#include "fullscreen_watch.hpp"
+#include "ipc_server.hpp"
+#include "mpv_renderer.hpp"
+#include "multi_monitor.hpp"
+#include "occlusion_watch.hpp"
+#include "power.hpp"
+#include "timer_ids.hpp"
+#include "tray.hpp"
+
+namespace k6wp {
+
+// Desktop injection strategy (Todo 9). Parsed from --wallpaper-mode.
+enum class WallpaperMode { kAuto, kWorkerW, kProgman };
+
+// Parsed command-line options. See ParseCli().
+// Canonical silent spelling is --minimized; --engine/--silent are compat
+// aliases (old autostart entries keep working). Test flags below are hidden
+// from --help but fully parsed; developer doc: docs/dev-test-flags.md.
+struct CliOptions {
+  std::wstring video_path;   // --video <path> (mpv source, Todo 10)
+  std::wstring config_path;  // --config <path> (config_watch, Todo 11)
+  WallpaperMode wallpaper_mode = WallpaperMode::kAuto;  // --wallpaper-mode
+  bool minimized = false;  // --minimized (Todo 36: tray-only autostart start)
+  int exit_after_ms = 0;  // --exit-after-ms <N> (hidden test flag; 0 = run forever)
+  int simulate_device_lost_after_ms = 0;  // hidden test flag; 0 = never
+  int simulate_suspend_after_ms = 0;  // hidden test flag; 0 = never (resume fires +2s)
+  int simulate_dc_after_ms = 0;  // hidden test flag; 0 = never (AC restore fires +2s)
+  int simulate_monitor_off_after_ms = 0;  // hidden test flag; 0 = never (monitor on fires +2s)
+};
+
+// Parses argv into `out`. Returns 0 on success, 1 if --help was shown
+// (caller exits 0), 2 on malformed arguments (caller exits 2).
+int ParseCli(int argc, char** argv, CliOptions& out);
+
+// Single-instance guard (Todo 14): named mutex held for the process
+// lifetime; the destructor releases it automatically. Never touched by
+// Todo 15's shutdown/persistence work — release happens in the dtor,
+// not in Shutdown().
+struct SingletonMutexGuard {
+  HANDLE handle = nullptr;
+  SingletonMutexGuard() = default;
+  ~SingletonMutexGuard() {
+    if (handle != nullptr) {
+      CloseHandle(handle);
+      handle = nullptr;
+    }
+  }
+  SingletonMutexGuard(const SingletonMutexGuard&) = delete;
+  SingletonMutexGuard& operator=(const SingletonMutexGuard&) = delete;
+};
+
+// Resident wallpaper engine application skeleton (Wave 1).
+//
+// Owns the Win32 message loop, a hidden message-only window (HWND_MESSAGE),
+// power-broadcast handling (PBT_APMSUSPEND / PBT_APMRESUMEAUTOMATIC) and the
+// device-lost / recreate hook points. The renderer (Todo 10) overrides the
+// virtual hooks; the wallpaper window itself arrives in Todo 9.
+class EngineApp {
+ public:
+  EngineApp() = default;
+  ~EngineApp();
+
+  EngineApp(const EngineApp&) = delete;
+  EngineApp& operator=(const EngineApp&) = delete;
+
+  // Parses CLI, registers the window class, creates the hidden message-only
+  // window and installs the Ctrl+C handler. Returns false on failure; use
+  // InitExitCode() for the process exit code (0 = --help, 2 = parse error).
+  bool Init(int argc, char** argv);
+
+  // Runs the message loop until shutdown is requested (WM_CLOSE, Ctrl+C,
+  // --exit-after-ms). Calls Shutdown() before returning.
+  int Run();
+
+  // Tears down the window and console handler. Idempotent; also called from
+  // the destructor.
+  void Shutdown();
+
+  // Exit code to use when Init() returned false.
+  int InitExitCode() const { return init_exit_code_; }
+
+  // --- Renderer hooks (Todo 10 overrides these) ----------------------------
+  // PBT_APMSUSPEND. Sets the suspend owner bit (Step 3.1); the renderer and
+  // tray follow the merged mask via ApplyPauseState.
+  virtual void OnSuspend();
+  // PBT_APMRESUMEAUTOMATIC. Clears the suspend owner bit ONLY (Step 3.1) —
+  // a user/fullscreen pause survives a sleep cycle.
+  virtual void OnResume();
+  // Device lost. Base: log + set the device-lost flag; the Run loop then
+  // calls RecreateDevice().
+  virtual void OnDeviceLost();
+  // Called from the Run loop when the device-lost flag is set. Base: log +
+  // no-op (Todo 10 recreates the D3D11 device here).
+  virtual void RecreateDevice();
+  // Display change (Todo 37). Fired from HandleMessage on WM_DISPLAYCHANGE
+  // with the new resolution (LOWORD/HIWORD of lParam). Re-enumeration point:
+  // once EngineApp owns a MultiMonitor (Todo 33) this calls its
+  // OnDisplayChange() (diff ListMonitors vs live slots); single-window mode
+  // calls DesktopInjector::OnDisplayChange(width, height) (Todo 9) instead.
+  virtual void OnDisplayChange(int width, int height);
+
+ private:
+  static constexpr wchar_t kWindowClassName[] = L"K6WP.Engine.MessageWindow.1";
+  static constexpr wchar_t kSingletonMutexName[] =
+      L"Local\\K6WP-Engine-Singleton";
+  static constexpr UINT kShutdownMessage = WM_APP + 1;
+  // P2.4 (Todo 7): headless-renderer PROPERTY_CHANGE notification, posted by
+  // its event thread on hwdec-current / vo-configured change. Mirrors
+  // MpvRenderer::kMsgHwdecChange (WM_APP + 0x50; private there, so the value
+  // is repeated here with this comment as the link — keep in sync).
+  static constexpr UINT kMpvHwdecChangeMessage = WM_APP + 0x50u;
+  // WM_APP allocation map (all routed in HandleMessage; keep in sync with
+  // the watch headers): +1 shutdown, +0x14 tray, +0x50 mpv hwdec,
+  // +0x51 fullscreen hook (FullscreenWatch::HookMessageId),
+  // +0x52 occlusion re-arm (OcclusionWatch::RearmMessageId),
+  // +0x53 destroy poke (FullscreenWatch::PokeMessageId, HOTFIX),
+  // +0x54 queued set_monitor (CRIT-2: worker validates, main executes),
+  // +0x55 queued set_video (CRIT-2: worker validates, main executes).
+  static constexpr UINT kSetMonitorMessage = WM_APP + 0x54u;
+  static constexpr UINT kSetVideoMessage = WM_APP + 0x55u;
+  // Timer IDs live in timer_ids.hpp (central registry with pairwise-distinct
+  // static_asserts): kWorkingSetTrimTimerId ('K6WP'+1) and
+  // kOcclusionPokeTimerId ('K6WP'+2) are used here; kDebounceTimerId
+  // ('K6WP') belongs to ConfigWatcher. The one-shot poke delay stays local.
+  static constexpr UINT kOcclusionPokeDebounceMs = 150;
+
+  static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
+  static BOOL WINAPI ConsoleCtrlHandler(DWORD ctrl_type);
+  static void Log(const char* fmt, ...);
+  // Same as Log but flushes the batched log sink at once: use for state
+  // transitions (video load, pause/resume, device-lost) that post-mortem
+  // diagnostics must never miss after a taskkill.
+  static void LogImportant(const char* fmt, ...);
+  static void LogLineV(const char* fmt, va_list args, bool important);
+
+  LRESULT HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
+  bool RegisterWindowClass();
+  bool CreateMessageWindow();
+  void RequestShutdown();
+  // CRIT-2 ack contract ("diterima" vs "selesai", LOW-15): the IPC worker
+  // thread NEVER executes these — it only validates the payload
+  // (ipc_marshal.hpp) and queues it via QueueSetVideo/QueueSetMonitor, which
+  // PostMessageW kSetVideoMessage/kSetMonitorMessage to the hidden window.
+  // The {"ok":true} ack therefore means "diterima" (accepted + queued for
+  // the main loop), NOT "selesai" (applied to the desktop). A rejected
+  // payload acks {"error"} and queues nothing. Clients that need certainty
+  // verify via get_state (video/monitor fields reflect the applied state).
+  // Window creation (DesktopInjector::Attach inside SetActiveMonitor, renderer
+  // Create/LoadLoop, tray MRU, config persist) runs on the main thread only.
+  // Validates the set_video payload ({"path": ...}), then hot-swaps the live
+  // renderer via MpvRenderer::LoadLoop — no process restart. Returns false
+  // (→ {"error"} ack, old video keeps playing) when the path is missing, not
+  // a file, or the renderer rejects it. MAIN THREAD ONLY (HandleMessage /
+  // tray quick-switch / Init boot path); the IPC worker path goes through
+  // ValidateSetVideoPayload + QueueSetVideo instead.
+  bool HandleSetVideo(const std::string& payload_json);
+  // Validates the set_monitor payload ({"monitor": N}, alias
+  // {"monitor_id": N}), then retargets the live slots via
+  // MultiMonitor::SetActiveMonitor: -1 = all screens, >=0 = that monitor
+  // only (absent id = zero slots, engine keeps running). Returns false
+  // (→ {"error"} ack) unless the payload is an integer >= -1. On success the
+  // new target is preserve-merged into the config file (best-effort: persist
+  // failure only warns, the live state already changed). MAIN THREAD ONLY
+  // (HandleMessage); the IPC worker path goes through
+  // ParseSetMonitorPayload + QueueSetMonitor instead.
+  bool HandleSetMonitor(const std::string& payload_json);
+  // CRIT-2 worker-side halves: validate (pure, ipc_marshal.hpp) + stash the
+  // pending target under marshal_mutex_ + PostMessageW the private UINT to
+  // the hidden window. Return false (→ {"error"} ack) when validation fails
+  // or the post fails (window gone during shutdown — the command is dropped,
+  // never executed off-loop). Called on the IPC worker thread.
+  bool QueueSetVideo(const std::string& payload_json);
+  bool QueueSetMonitor(const std::string& payload_json);
+  // CRIT-2 main-thread halves: pop the pending value under marshal_mutex_
+  // and run the matching Handle* executor above. Called from HandleMessage
+  // on kSetVideoMessage/kSetMonitorMessage. A lost race (flag set but empty)
+  // only logs — shutdown destroys the window, discarding queued posts, so
+  // no executor ever runs after teardown (Shutdown stops the IPC server
+  // first, joining the worker before any surface is torn down).
+  void ApplyPendingSetVideo();
+  void ApplyPendingSetMonitor();
+  // Part B lockscreen sync: fire-and-forget compressor --lockframe refresh,
+  // debounced to one spawn per 5s and only when lockscreen_sync is ON in
+  // studio_settings.json. Never blocks the caller, never throws: every
+  // failure path only logs. Runs on the IPC worker thread or Init thread.
+  void MaybeTriggerLockscreenSync(const std::string& video_utf8);
+
+  HINSTANCE hinstance_ = nullptr;
+  HWND message_hwnd_ = nullptr;
+  bool class_registered_ = false;
+  // Todo 14: process-lifetime single-instance mutex (acquired in Init
+  // before any window/IPC/tray exists; RAII release at teardown).
+  SingletonMutexGuard singleton_mutex_;
+  // CRIT-1: parsed CLI snapshot. Written once in Init() (pre-Run, single
+  // thread), then read from the main thread (Handle* executors, tray,
+  // BuildStateJson snapshot) AND the IPC worker thread (BuildStateJson via
+  // get_state). Every post-Init access takes options_mutex_; the main thread
+  // copies what it needs (snapshot) and never holds the lock across window
+  // creation, renderer calls, or config I/O.
+  mutable std::mutex options_mutex_;
+  CliOptions options_;
+  int exit_after_ms_ = 0;
+  int simulate_device_lost_after_ms_ = 0;
+  int simulate_suspend_after_ms_ = 0;
+  int simulate_dc_after_ms_ = 0;  // Todo 40: forced-DC power-broadcast sim
+  int simulate_monitor_off_after_ms_ = 0;  // P2.3: monitor-off sim (off at N, on at N+2s)
+  bool monitor_off_simulated_ = false;
+  bool monitor_on_simulated_ = false;
+  // P2.3: GUID_MONITOR_POWER_ON registration handle (HPOWERNOTIFY per
+  // WinUser.h; Register in Init, Unregister in Shutdown — balanced, no
+  // threads involved).
+  HPOWERNOTIFY monitor_power_notify_ = nullptr;
+  bool dc_simulated_ = false;
+  bool dc_restored_ = false;
+  bool simulate_dc_latched_ = false;  // true = reader reports DC regardless
+  // Battery saver (Todo 40): owns the AC/DC cap logic; refs renderer_ +
+  // config_watcher_ (both outlive it). Null until Init() builds it.
+  std::unique_ptr<PowerSaver> power_saver_;
+  bool device_lost_simulated_ = false;
+  bool suspend_simulated_ = false;
+  bool resume_simulated_ = false;
+  // CRIT-1: read by BuildStateJson on the IPC worker thread, written by the
+  // main loop (Run/RequestShutdown). Plain bool was a data race.
+  std::atomic<bool> running_{false};
+  bool shutdown_done_ = false;
+  int exit_code_ = 0;
+  int init_exit_code_ = 2;
+  std::atomic<bool> device_lost_{false};
+  // Config file watcher (Todo 11): started in Init() from CliOptions
+  // (--config, or DefaultConfigPath() when empty), polled in Run(),
+  // stopped in Shutdown(). Value member is safe: config_watch.hpp is
+  // Win32-free, so no incomplete-type pimpl issues.
+  ConfigWatcher config_watcher_;
+  // Fullscreen auto-pause (Todo 34): started in Init(), polled in Run(),
+  // stopped in Shutdown(). Win32-free header, value member is safe.
+  FullscreenWatch fullscreen_watch_;
+  // IPC pipe server (Todo 28): started in Init(), stopped in Shutdown().
+  // IpcServer declares its dtor out-of-line (pimpl), so holding it by value
+  // here is safe — destruction runs inside engine_app.cpp's TU.
+  IpcServer ipc_server_;
+  // Live renderer for IPC set_video (Todo 30): created headless in Init()
+  // (no wallpaper HWND yet — Todo 9's injector is not wired into EngineApp;
+  // Create(nullptr) leaves mpv idle but LoadLoop still swaps the stream).
+  // CRIT-1/CRIT-2: IPC payloads are validated on the worker and marshaled
+  // onto the MAIN thread — HandleSetVideo only ever runs there (see the
+  // "diterima vs selesai" queue contract above); the renderer's own mutex
+  // additionally serializes against the event thread.
+  // P2.4 (Todo 7): held by unique_ptr so Shutdown() can stop + join the
+  // headless event thread (via the dtor: quit flag → mpv_wakeup → blocking
+  // join → mpv_terminate_destroy) BEFORE ShutdownWallpaperSurface() runs.
+  // Null until Init() builds it and again after Shutdown() stops it; every
+  // use site null-checks.
+  std::unique_ptr<MpvRenderer> renderer_;
+  // Live desktop surface (Todo 9): per-monitor DesktopInjector + MpvRenderer
+  // pairs owned by MultiMonitor. Constructed in Init() after tray install
+  // (needs the log + message loop up), torn down in Shutdown(). The
+  // headless renderer_ above stays as the pre-attach fallback: set_video
+  // and pause/resume fan out to BOTH so either path keeps working.
+  MultiMonitor multi_monitor_;
+  // CRIT-1: cross-thread liveness flag. Written on the main thread
+  // (InitWallpaperSurface / HandleSetMonitor executor / Shutdown), read from
+  // the main loop AND the IPC worker thread (ApplyPauseState fan-out,
+  // get_state paths). Plain bool was a data race.
+  std::atomic<bool> wallpaper_surface_live_{false};
+  // Per-monitor occlusion pause (P2.5, Todo 9): 1500 ms self-suspending
+  // tick (no dedicated timer — Check runs on the unpaused-loop wake),
+  // per-slot PauseSlot only, atomic arm/disarm via ApplyPauseState.
+  OcclusionWatch occlusion_watch_;
+  // Todo 15: snapshot of the OS wallpaper path taken at Init time.
+  // Empty/invalid = no restore capability (Shutdown skips gracefully).
+  std::wstring saved_wallpaper_;
+  bool saved_wallpaper_valid_ = false;
+  // Build the live surface (MultiMonitor::Init PerMonitor) + feed it the
+  // current video/fit when available. Never fatal: attach failure degrades
+  // to headless renderers slot-by-slot inside MultiMonitor.
+  void InitWallpaperSurface(const std::string& video_utf8);
+  // Reflects the wallpaper-surface health in the tray tooltip: error state
+  // when any live slot is headless (injection failed), cleared on recovery.
+  void UpdateTrayErrorStatus();
+  // Detach all injected windows (idempotent via MultiMonitor::Shutdown).
+  void ShutdownWallpaperSurface();
+  // P2.4 (Todo 7): stop + join the headless renderer_ event thread at the
+  // START of Shutdown(), before ShutdownWallpaperSurface(). reset() runs
+  // ~MpvRenderer (quit → wakeup → blocking join with timing log, >200 ms
+  // logs critical and keeps blocking, never TerminateThread, never joined
+  // from inside an mpv callback) and only then destroys the mpv instance.
+  void StopHeadlessRenderer();
+  // P2.4 (Todo 7): state-dependent loop wait (Oracle round-03 issue 1).
+  // 50 ms while a test flag is armed, INFINITE while SlotsPaused(), else
+  // 1500 ms (doubles as the Todo 9 occlusion cadence — no separate timer).
+  DWORD ComputeWaitTimeoutMs() const;
+  // Any --exit-after-ms / --simulate-*-after-ms still needing its periodic
+  // check (each simulate disarms once fired; exit-after stays armed — the
+  // loop ends on it anyway). True ⇒ test run ⇒ 50 ms timeout.
+  bool AnySimulateArmed() const;
+  // OS wallpaper save/restore (Todo 15): Init snapshots the active desktop
+  // wallpaper path (SPI_GETDESKWALLPAPER); normal Shutdown() restores it
+  // (SPI_SETDESKWALLPAPER). Never fatal: an unreadable path logs + proceeds
+  // WITHOUT restore capability. Crash-path shutdown is untouched.
+  void SaveOsWallpaper();
+  void RestoreOsWallpaper();
+  // Fan a WallpaperConfig fit_mode out to renderer_ + all live slots.
+  void ApplyFitMode(const std::string& fit_mode);
+  // P3L.3 pin verify scheduling (PATCH A): armed after every (re)load,
+  // fired once post-start in the Run loop. 6 s covers vo-configured +
+  // first frame settle; the pass itself requires EverStarted so a
+  // transient pre-start "no" can never trigger a revert.
+  void ArmPinVerify();
+  void RunPinVerifyPass();
+  // Headless-renderer half of the pass (only when it owns decode).
+  // Returns true when it reverted (recreated unpinned + reloaded).
+  bool VerifyHeadlessPin();
+  // P4.1: one-shot working-set trim (~2 s after the first frame marker).
+  // Armed exactly once from the Run loop; the WM_TIMER handler kills the
+  // timer and runs TrimWorkingSetOnce. Never periodic (periodic trim =
+  // page-in thrashing). Failure is non-fatal (log only).
+  void ArmWorkingSetTrim();
+  void TrimWorkingSetOnce();
+  // HOTFIX (occlusion resume): debounced poke. Loop thread only. Arms the
+  // one-shot poke timer when at least one slot is occlusion-paused (cheap
+  // early-out otherwise); the timer handler runs one direct coverage
+  // check. win_event is logged for the event→poke→check→resume chain.
+  void ScheduleOcclusionPoke(unsigned long win_event);
+  void OnOcclusionPokeTimer();
+  // P3L.2: E-core affinity. mode = config cpu_affinity ("auto" | "all").
+  // auto + hybrid CPU (distinct EfficiencyClass values present) pins the
+  // process to the min-class (E-core) set; anything else is a logged no-op.
+  // Never fatal: enumeration or mask failures only log.
+  void ApplyCpuAffinity(const std::string& mode);
+  // Current video path (UTF-8), guarded by video_mutex_. Post-CRIT-2 the
+  // executor runs on the main thread (Init() and HandleSetVideo both write
+  // there; BuildStateJson reads on the main loop) — the mutex remains as
+  // belt-and-braces for any worker-side reader.
+  mutable std::mutex video_mutex_;
+  std::string current_video_utf8_;
+  // P3L: applied-at-boot config values (watcher flips log restart-required).
+  std::string applied_affinity_ = "auto";
+  std::string applied_adapter_mode_ = "auto";
+  // P3L.3: resolved `d3d11-adapter` substring (empty = unpinned).
+  std::string adapter_pin_value_;
+  // P3L.3 verify scheduling (PATCH A): armed with a steady-clock deadline
+  // after every (re)load; fired once by the Run loop. CRIT-1: armed_ is
+  // atomic (the queued set_video executor arms it on the main thread while
+  // the loop polls it); the deadline + revert counter live under
+  // state_mutex_ (worker-thread get_state reads pin_reverted_total_ via
+  // BuildStateJson).
+  std::atomic<bool> pin_verify_armed_{false};
+  mutable std::mutex state_mutex_;
+  std::chrono::steady_clock::time_point pin_verify_at_{};
+  int pin_reverted_total_ = 0;
+  // P4.1: working-set trim state (loop thread only). armed_ = timer pending;
+  // done_ = TrimWorkingSetOnce ran (success or fail) — never re-arms.
+  bool working_set_trim_armed_ = false;
+  bool working_set_trim_done_ = false;
+  // HOTFIX: poke debounce state (loop thread only). Armed transiently by
+  // ScheduleOcclusionPoke, cleared by the timer handler or Shutdown.
+  bool occlusion_poke_armed_ = false;
+  // True while the headless renderer_ (not the slots) owns decode: the
+  // headless half of the verify pass only runs then. CRIT-1: atomic —
+  // written by the main-thread set_video/boot executors, read by the
+  // verify pass (main) and get_state-adjacent paths.
+  std::atomic<bool> headless_owns_decode_{false};
+  // CRIT-2 marshal queue: the IPC worker stashes one pending set_video
+  // path / set_monitor target here and posts kSetVideoMessage /
+  // kSetMonitorMessage; the main thread pops + executes. One slot each is
+  // enough (pipe serves one client at a time; last write wins and execution
+  // is idempotent). Guarded by marshal_mutex_ on both threads.
+  mutable std::mutex marshal_mutex_;
+  std::string pending_video_;
+  bool has_pending_video_ = false;
+  std::string pending_monitor_;
+  bool has_pending_monitor_ = false;
+  // Serializes the get_state payload (raw JSON object text).
+  std::string BuildStateJson() const;
+  // --- Tray menu actions (Todo 35, all run on the UI thread via WndProc) ----
+  void OnTrayTogglePause();                 // Pause/Resume item + dbl-click
+  void OnTrayQuickSwitch(std::size_t idx);  // quick-switch submenu index
+  void OnTrayOpenStudio();                  // launches <exe_dir>/studio.exe
+  void OnTraySupport();                     // opens K6WP_DONATE_URL in browser
+  // Tray icon (Todo 35): owned by value (RAII: NIM_DELETE in dtor/Shutdown),
+  // installed on the existing message-only window in Init(). Non-fatal when
+  // Explorer is absent — engine keeps running, TaskbarCreated re-adds it.
+  TrayIcon tray_;
+  // Pause state shared between the UI thread (tray menu, power broadcasts,
+  // fullscreen watcher, power saver) and the IPC worker thread (pause/resume
+  // commands). Step 3.1: ownership bitmask — no path writes paused_ or the
+  // slots directly; every path goes through SetPauseOwner + ApplyPauseState.
+  // paused_ is the cached UiPaused() mirror for the tray callback and
+  // get_state; written only inside ApplyPauseState.
+  static constexpr int kPauseUser = 1;
+  static constexpr int kPauseFullscreen = 2;
+  static constexpr int kPauseSuspend = 4;
+  static constexpr int kPausePower = 8;
+  static constexpr int kPauseSessionLock = 16;
+  static constexpr int kPauseScreenOff = 32;
+  std::atomic<int> pause_mask_{0};
+  std::atomic<bool> paused_{false};
+  // UI-visible pause: user, fullscreen, suspend, session-lock, or screen-off
+  // hold the decode. P2.3 DESIGN DECISION (dual membership is INTENTIONAL):
+  // kPauseScreenOff is a member of BOTH UiPaused() and SlotsPaused() with no
+  // double-pause because ApplyPauseState drives two DISJOINT targets —
+  // UiPaused() drives renderer_.Pause()/Resume() (headless) while
+  // SlotsPaused() drives multi_monitor_.PauseAll()/ResumeAll() (slots); a
+  // screen-off pause therefore pauses headless AND slots exactly once each.
+  bool UiPaused() const {
+    return (pause_mask_.load(std::memory_order_acquire) &
+            (kPauseUser | kPauseFullscreen | kPauseSuspend | kPauseSessionLock |
+             kPauseScreenOff)) != 0;
+  }
+  // Slot pause: any owner (incl. the DC power cap and screen-off) stills the
+  // live slots. kPauseScreenOff is a member automatically (mask != 0).
+  bool SlotsPaused() const {
+    return pause_mask_.load(std::memory_order_acquire) != 0;
+  }
+  // Sets/clears one owner bit (no-op when unchanged) and fans the merged
+  // state out to renderer_, the live slots, paused_, and the tray.
+  void SetPauseOwner(int bit, bool on);
+  void ApplyPauseState(const char* owner);
+  static const char* PauseOwnerName(int bit);
+};
+
+}  // namespace k6wp

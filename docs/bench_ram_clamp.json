@@ -1,0 +1,159 @@
+﻿{
+    "tool":  "bench_ram_self",
+    "date":  "2026-09-20",
+    "method":  "tools/bench_ram_self.ps1: headless engine --video + --exit-after-ms, 1s Get-Process samples, settled window avg (startup + teardown excluded), hwdec line scoped to run",
+    "hw":  "RTX 2050 + Intel UHD (decode on iGPU, nvidia-smi dec=0pct on dGPU during 4K), single 1920x1080",
+    "note_1080p_noise":  "run-to-run variance ~+-20MB at 1080p (byte-identical file measured 188.9 vs 208.2); deltas below that are noise",
+    "runs":  [
+                 {
+                     "run":  "ram_gaming_1080p",
+                     "ws_avg_mb":  188.9,
+                     "ws_peak_mb":  206.2,
+                     "priv_avg_mb":  192.2,
+                     "threads":  36,
+                     "handles":  428,
+                     "hwdec":  "mpv: hwdec-current=d3d11va (hwdec active)",
+                     "video":  "gaming.mp4"
+                 },
+                 {
+                     "run":  "ram_gpunext_1080p",
+                     "ws_avg_mb":  196.5,
+                     "ws_peak_mb":  204.1,
+                     "priv_avg_mb":  190.1,
+                     "threads":  36,
+                     "handles":  437,
+                     "hwdec":  "mpv: hwdec-current=d3d11va (hwdec active)",
+                     "video":  "1657392155-1657392155-desktop-esdeath-akame-ga-kill-live-wallpaper_k6wp4.mp4"
+                 },
+                 {
+                     "run":  "ram_gpunext_4k",
+                     "ws_avg_mb":  577.2,
+                     "ws_peak_mb":  588.1,
+                     "priv_avg_mb":  572.6,
+                     "threads":  38,
+                     "handles":  466,
+                     "hwdec":  "mpv: hwdec-current=d3d11va (hwdec active)",
+                     "video":  "1657392155-1657392155-desktop-esdeath-akame-ga-kill-live-wallpaper.mp4"
+                 },
+                 {
+                     "run":  "ram_refs2d_1080p",
+                     "ws_avg_mb":  189.5,
+                     "ws_peak_mb":  195.5,
+                     "priv_avg_mb":  192.1,
+                     "threads":  36,
+                     "handles":  427,
+                     "hwdec":  "mpv: hwdec-current=d3d11va (hwdec active)",
+                     "video":  "1080p_refs2d.mp4"
+                 },
+                 {
+                     "run":  "ram_refs2_1080p",
+                     "ws_avg_mb":  208.2,
+                     "ws_peak_mb":  216,
+                     "priv_avg_mb":  202.5,
+                     "threads":  36,
+                     "handles":  429,
+                     "hwdec":  "mpv: hwdec-current=d3d11va (hwdec active)",
+                     "video":  "1080p_refs2.mp4"
+                 },
+                 {
+                     "run":  "ram_refs2_4k",
+                     "ws_avg_mb":  396.6,
+                     "ws_peak_mb":  406.6,
+                     "priv_avg_mb":  401.4,
+                     "threads":  36,
+                     "handles":  440,
+                     "hwdec":  "mpv: hwdec-current=d3d11va (hwdec active)",
+                     "video":  "4k_refs2.mp4"
+                 },
+                 {
+                     "run":  "ram_rel_1080p",
+                     "ws_avg_mb":  216.9,
+                     "ws_peak_mb":  221.9,
+                     "priv_avg_mb":  220.5,
+                     "threads":  36,
+                     "handles":  427,
+                     "hwdec":  "mpv: hwdec-current=d3d11va (hwdec active)",
+                     "video":  "1657392155-1657392155-desktop-esdeath-akame-ga-kill-live-wallpaper_k6wp4.mp4"
+                 },
+                 {
+                     "run":  "ram_rel_4k",
+                     "ws_avg_mb":  638.9,
+                     "ws_peak_mb":  639.7,
+                     "priv_avg_mb":  644.7,
+                     "threads":  36,
+                     "handles":  434,
+                     "hwdec":  "mpv: hwdec-current=d3d11va (hwdec active)",
+                     "video":  "1657392155-1657392155-desktop-esdeath-akame-ga-kill-live-wallpaper.mp4"
+                 },
+                 {
+                     "run":  "ram_rev_1080p",
+                     "ws_avg_mb":  219.4,
+                     "ws_peak_mb":  220.9,
+                     "priv_avg_mb":  221.8,
+                     "threads":  36,
+                     "handles":  427,
+                     "hwdec":  "mpv: hwdec-current=d3d11va (hwdec active)",
+                     "video":  "1657392155-1657392155-desktop-esdeath-akame-ga-kill-live-wallpaper_k6wp4.mp4"
+                 },
+                 {
+                     "run":  "ram_rev_4k",
+                     "ws_avg_mb":  640.2,
+                     "ws_peak_mb":  640.9,
+                     "priv_avg_mb":  644.5,
+                     "threads":  36,
+                     "handles":  436,
+                     "hwdec":  "mpv: hwdec-current=d3d11va (hwdec active)",
+                     "video":  "1657392155-1657392155-desktop-esdeath-akame-ga-kill-live-wallpaper.mp4"
+                 },
+                 {
+                     "run":  "ram_swapchain_4k",
+                     "ws_avg_mb":  638.4,
+                     "ws_peak_mb":  640.5,
+                     "priv_avg_mb":  644,
+                     "threads":  36,
+                     "handles":  435,
+                     "hwdec":  "mpv: hwdec-current=d3d11va (hwdec active)",
+                     "video":  "1657392155-1657392155-desktop-esdeath-akame-ga-kill-live-wallpaper.mp4"
+                 },
+                 {
+                     "run":  "ram_without_1080p",
+                     "ws_avg_mb":  216.7,
+                     "ws_peak_mb":  221.1,
+                     "priv_avg_mb":  219,
+                     "threads":  36,
+                     "handles":  427,
+                     "hwdec":  "mpv: hwdec-current=d3d11va (hwdec active)",
+                     "video":  "1657392155-1657392155-desktop-esdeath-akame-ga-kill-live-wallpaper_k6wp4.mp4"
+                 },
+                 {
+                     "run":  "ram_without_4k",
+                     "ws_avg_mb":  636,
+                     "ws_peak_mb":  641.3,
+                     "priv_avg_mb":  640,
+                     "threads":  36,
+                     "handles":  436,
+                     "hwdec":  "mpv: hwdec-current=d3d11va (hwdec active)",
+                     "video":  "1657392155-1657392155-desktop-esdeath-akame-ga-kill-live-wallpaper.mp4"
+                 },
+                 {
+                     "run":  "ram_with_1080p",
+                     "ws_avg_mb":  240,
+                     "ws_peak_mb":  245.1,
+                     "priv_avg_mb":  242.1,
+                     "threads":  37,
+                     "handles":  424,
+                     "hwdec":  "mpv: hwdec-current=d3d11va (hwdec active)",
+                     "video":  "1657392155-1657392155-desktop-esdeath-akame-ga-kill-live-wallpaper_k6wp4.mp4"
+                 },
+                 {
+                     "run":  "ram_with_4k",
+                     "ws_avg_mb":  641.3,
+                     "ws_peak_mb":  642.1,
+                     "priv_avg_mb":  645.4,
+                     "threads":  37,
+                     "handles":  432,
+                     "hwdec":  "mpv: hwdec-current=d3d11va (hwdec active)",
+                     "video":  "1657392155-1657392155-desktop-esdeath-akame-ga-kill-live-wallpaper.mp4"
+                 }
+             ]
+}

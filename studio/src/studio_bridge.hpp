@@ -1,0 +1,391 @@
+#pragma once
+
+// Phase 1 of the Widgets -> QML migration: the QML-facing backend.
+//
+// StudioBridge is the ONE object the QML tree talks to. It owns the same
+// backend objects MainWindow owns (the single per-process IpcClient, the
+// ApplyManager that borrows it, the Thumbnailer and the StudioSettings
+// backing store) and re-exposes a small, read-only, QML-friendly surface on
+// top: live engine status polled over the same IPC pipe, plus the preview
+// invokables the shell needs.
+//
+// Registering: this class uses the QML macros (QML_ELEMENT + QML_SINGLETON)
+// rather than qmlRegisterSingletonInstance. The macros let AUTOMOC generate
+// the `K6WP` module's type registration as part of the target, so
+// studio/CMakeLists.txt's qt_add_qml_module is the single place that knows
+// about the module and there is no second registration call to keep in sync
+// (the project also deliberately dropped i18n scaffolding -- see the MED-11
+// note in studio/CMakeLists.txt -- so nothing else registers types).
+//
+// Because QML_SINGLETON types are instantiated by the QML engine itself, the
+// bridge is ENGINE-owned, not owned by QmlShell, and is created lazily on the
+// first property access. That is why the preview invokables do not touch a
+// widget directly but forward through the process' active QmlShell (see
+// qml_shell.hpp: SetActiveQmlShell / ActiveQmlShell).
+//
+// Threading (mirrors main_window.cpp verbatim, HIGH-3 slice B):
+//   * every blocking IPC/process wait runs on a QtConcurrent worker and comes
+//     back through a QFutureWatcher::finished slot on the GUI thread;
+//   * a 1.5s QTimer drives one GetState per tick, and a tick that lands while
+//     a poll is still in flight is SKIPPED (poll_busy_), never queued;
+//   * DecideEngineStatus is the pure, unit-tested decision function and never
+//     throws; it is reused, not reimplemented.
+
+#include <QFutureWatcher>
+#include <QObject>
+#include <QString>
+#include <QStringList>
+#include <QVariantList>
+
+#include <QtQml/qqmlregistration.h>
+
+#include <atomic>
+
+#include "apply_manager.hpp"
+#include "engine_status_controller.hpp"
+#include "ipc_client.hpp"
+#include "links.hpp"
+#include "studio_settings.hpp"
+#include "thumbnailer.hpp"
+
+class QTimer;
+
+namespace k6wp {
+
+class UpdateChecker;
+
+// QML-facing mirror of EngineStatusView::Kind. The VALUES are the stable
+// contract studio/qml/Main.qml switches on (it redeclares the same order as
+// a QML enum); kBridgedStatusCount exists purely so the mapping can be
+// asserted in studio_bridge.cpp instead of drifting silently.
+enum class BridgeStatusKind {
+  kConnected = 0,
+  kPaused = 1,
+  kDegraded = 2,
+  kNotRunning = 3,
+  kDisconnected = 4,
+  kCount = 5,
+};
+
+// Worker payloads. Each is the structured return of one QtConcurrent::run
+// body, so the GUI-thread slot can paint a result without touching the
+// blocking client itself.
+
+// startEngine(): graceful restart + the ready-wait, both blocking, both on
+// one worker. Named EngineStartOutcome, not EngineStartResult, because
+// main_window.hpp declares its own k6wp::EngineStartResult and both headers
+// are compiled into the same target in this phase.
+struct EngineStartOutcome {
+  bool restarted = false;
+  QString restart_error;
+  bool ready = false;
+};
+
+// applyWallpaper(): the shared apply path. error is the engine's / manager's
+// own message so the UI can show it verbatim instead of a generic failure.
+struct ApplyOutcome {
+  bool ok = false;
+  bool restarted = false;
+  QString error;
+};
+
+// NOT `final`, unlike most classes in this project: Qt's QML type
+// registration instantiates QQmlElement<T> which INHERITS from T, so a final
+// QML_ELEMENT class does not compile (C3246). This is a hard Qt requirement,
+// not a style regression.
+class StudioBridge : public QObject {
+  Q_OBJECT
+  // Phase 1 module migration: reachable from QML as the `Studio` singleton
+  // after `import K6WP` (QML_SINGLETON => one instance per QML engine).
+  //
+  // QML_NAMED_ELEMENT(Studio) is load-bearing: bare QML_ELEMENT registers the
+  // type as `StudioBridge`, and Main.qml's `Studio.*` bindings would then hit
+  // an undefined identifier WITHOUT any QML error -- every affected binding
+  // just keeps its default, so the breakage is invisible.
+  QML_NAMED_ELEMENT(Studio)
+  QML_ELEMENT
+  QML_SINGLETON
+
+ public:
+  // Default-constructible on purpose: the QML engine instantiates the
+  // singleton itself and passes no engine pointer.
+  explicit StudioBridge(QObject* parent = nullptr);
+  ~StudioBridge() override;
+
+  // --- QML surface ----------------------------------------------------------
+
+  // Every property below is read-only. The status group shares one notify
+  // signal because ApplyStatus repaints all of them together; `busy`, `log`
+  // and the poster have their own.
+  Q_PROPERTY(int engineStatusKind READ engineStatusKind NOTIFY engineStatusChanged)
+  Q_PROPERTY(QString engineStatusDetail READ engineStatusDetail NOTIFY engineStatusChanged)
+  Q_PROPERTY(QString engineStatusHint READ engineStatusHint NOTIFY engineStatusChanged)
+  Q_PROPERTY(quint64 enginePid READ enginePid NOTIFY engineStatusChanged)
+  Q_PROPERTY(bool videoActive READ videoActive NOTIFY engineStatusChanged)
+  Q_PROPERTY(bool engineRunning READ engineRunning NOTIFY engineStatusChanged)
+  Q_PROPERTY(QString activeVideoPath READ activeVideoPath NOTIFY engineStatusChanged)
+  Q_PROPERTY(QString posterPath READ posterPath NOTIFY posterChanged)
+  Q_PROPERTY(QString lastError READ lastError NOTIFY lastErrorChanged)
+  Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
+  Q_PROPERTY(QString settingsPath READ settingsPath CONSTANT)
+  Q_PROPERTY(QString version READ version CONSTANT)
+  Q_PROPERTY(QString donateUrl READ donateUrl CONSTANT)
+  Q_PROPERTY(QString projectUrl READ projectUrl CONSTANT)
+
+  Q_PROPERTY(bool updateAvailable READ updateAvailable NOTIFY updateChanged)
+  Q_PROPERTY(bool updateCheckBusy READ updateCheckBusy NOTIFY updateChanged)
+  Q_PROPERTY(QString latestVersion READ latestVersion NOTIFY updateChanged)
+  Q_PROPERTY(QString latestPageUrl READ latestPageUrl NOTIFY updateChanged)
+  Q_INVOKABLE void checkForUpdates();
+  Q_PROPERTY(QStringList log READ log NOTIFY logChanged)
+
+  // The video picked in the Wallpaper tab, not yet applied. Empty when nothing
+  // is picked. QML applies it explicitly via applyWallpaper().
+  Q_PROPERTY(QString selectedVideo READ selectedVideo NOTIFY selectedVideoChanged)
+
+  // Quick settings, mirrored from the engine config + the autostart registry.
+  Q_PROPERTY(QString quickFit READ quickFit NOTIFY quickSettingsChanged)
+  Q_PROPERTY(int quickMonitor READ quickMonitor NOTIFY quickSettingsChanged)
+  Q_PROPERTY(bool quickAutostart READ quickAutostart NOTIFY quickSettingsChanged)
+  Q_PROPERTY(bool quickBattery READ quickBattery NOTIFY quickSettingsChanged)
+  // [{ "text": "Semua layar", "id": -1 }, ...] - index 0 is always "Semua
+  // layar" (-1), then one entry per ListMonitors() row, primary first.
+  Q_PROPERTY(QVariantList monitorChoices READ monitorChoices NOTIFY quickSettingsChanged)
+
+  QString selectedVideo() const { return selected_video_; }
+  QString quickFit() const { return quick_fit_; }
+  int quickMonitor() const { return quick_monitor_; }
+  bool quickAutostart() const { return quick_autostart_; }
+  bool quickBattery() const { return quick_battery_; }
+  QVariantList monitorChoices() const { return monitor_choices_; }
+
+  // --- Live engine status (all repainted together by engineStatusChanged) ---
+
+  // BridgeStatusKind as int (see the enum above for the exact order).
+  int engineStatusKind() const { return static_cast<int>(status_.kind); }
+  // The status sentence shown in the UI. The wording is copied verbatim from
+  // wallpaper_tab/main_window so Phase 1 speaks exactly like the old UI:
+  //   "Engine aktif — <video>" / "Engine aktif tapi tak tampil — <video>" /
+  //   "Dijeda — <video>" / "Engine mati — klik Nyalakan Engine" /
+  //   "Terputus — coba lagi"
+  QString engineStatusDetail() const { return status_detail_; }
+  // Tooltip detail: the full video path (or the same "(belum ada video aktif)"
+  // fallback), plus the headless-slot hint on kDegraded, plus the transport
+  // error on kDisconnected. Empty while the first poll is still in flight.
+  QString engineStatusHint() const { return status_hint_; }
+  // Engine PID from the get_state ack; 0 when unknown (not running, or the
+  // ack carried no pid).
+  quint64 enginePid() const { return status_.pid; }
+  // True when the engine reports an active video path.
+  bool videoActive() const { return video_active_; }
+  // True for Connected/Paused/Degraded, i.e. the pipe answers and the
+  // pause/resume invokables are allowed to run.
+  bool engineRunning() const { return engine_running_; }
+  // Full active-video path (empty when nothing is applied yet).
+  QString activeVideoPath() const { return active_video_; }
+
+  // --- Preview / poster -----------------------------------------------------
+
+  // Cached thumbnail JPEG for the shell's preview poster, or empty while it
+  // is still being generated (or when the file cannot be stated). Updated by
+  // posterChanged once the worker finishes, so the QML Image never blocks the
+  // GUI thread.
+  QString posterPath() const { return poster_path_; }
+
+  // --- Diagnostics ----------------------------------------------------------
+
+  // Last failed action, in Indonesian, already safe to display. Cleared by
+  // every successful action. This is the "surface it in the status text"
+  // path: an IPC failure never vanishes, it lands here.
+  QString lastError() const { return last_error_; }
+  // True while a blocking engine op (start / apply) runs on a worker. Bind to
+  // the busy indicator; do not infer busy-ness from lastError.
+  bool busy() const { return busy_; }
+  // %LOCALAPPDATA%/K6WP/studio_settings.json. Shown in the technical detail
+  // line, exactly like the old path_label_ showed the config path. Phase 1
+  // also loads the file once (self-healing, see the ctor) so a corrupt
+  // settings file is reported at startup instead of at the first settings
+  // write in a later phase.
+  QString settingsPath() const { return settings_path_; }
+  QString version() const { return version_; }
+  QString donateUrl() const { return QString::fromUtf8(K6WP_DONATE_URL); }
+  QString projectUrl() const { return QString::fromUtf8(K6WP_PROJECT_URL); }
+  bool updateAvailable() const { return !latest_version_.isEmpty(); }
+  bool updateCheckBusy() const { return update_busy_; }
+  QString latestVersion() const { return latest_version_; }
+  QString latestPageUrl() const { return latest_page_url_; }
+  // The bridge's own log lines (Load() fallback reasons, apply results, the
+  // preview poster hand-off). Backs the Wallpaper tab's "Detail teknis (log)"
+  // text area, which the old UI read from MainWindow's log_view_.
+  QStringList log() const { return log_; }
+
+  // --- Invokables -----------------------------------------------------------
+
+  // Publishes the chosen file to selectedVideo. Does NOT apply: the QML flow is
+  // pick-then-apply, so "Terapkan Wallpaper" reads the selection afterwards.
+  Q_INVOKABLE void pickVideo();
+  Q_INVOKABLE void clearSelectedVideo();
+
+  // --- Quick settings ("Pengaturan cepat") ----------------------------------
+  //
+  // Plain GUI-thread config writes, not workers: the engine's own config
+  // watcher picks the change up, so there is no blocking call to move off the
+  // GUI thread here.
+  Q_INVOKABLE void setQuickFit(const QString& fit_mode);
+  Q_INVOKABLE void setQuickMonitor(int monitor_id);
+  Q_INVOKABLE void setQuickAutostart(bool enabled);
+  Q_INVOKABLE void setQuickBattery(bool enabled);
+
+  // Re-reads the quick settings and the monitor list from disk. QML calls it
+  // when the Wallpaper tab is shown, so a Pengaturan change shows up here.
+  Q_INVOKABLE void refreshQuickSettings();
+
+  // Fires one GetState round-trip on a worker and repaints the properties
+  // above when it lands. A no-op while a poll is in flight. The QTimer calls
+  // this every 1500 ms; QML may call it too (e.g. after pause/resume).
+  Q_INVOKABLE void requestStatusPoll();
+
+  // Graceful engine restart (ApplyManager::RestartEngine) followed by the
+  // cancellable ready-wait. Blocking -> runs on a worker; the result arrives
+  // as busy=false + lastError + a fresh status poll.
+  Q_INVOKABLE void startEngine();
+
+  // The shared apply path: preserve every existing config field, replace only
+  // the video, write the engine config, then live-switch over IPC (with the
+  // manager's built-in restart recovery when the engine is not listening).
+  // Blocking -> worker. An empty or missing path is refused with lastError set.
+  Q_INVOKABLE void applyWallpaper(const QString& path);
+
+  // Size in whole MB when `path` is over the compress-first threshold, else -1.
+  // QML asks this before applying so a large video can be offered to the
+  // compressor first; the offer itself and its wording live in Main.qml.
+  Q_INVOKABLE qint64 compressFirstOfferMb(const QString& path) const;
+
+  // IPC pause / resume, then an immediate status refresh so the label flips
+  // without waiting up to 1.5s. Workers, like every other blocking call.
+  Q_INVOKABLE void pause();
+  Q_INVOKABLE void resume();
+
+  // Requests the preview poster for `videoPath` (usually activeVideoPath()).
+  // Non-blocking: the cached thumbnail is returned immediately when present,
+  // otherwise a worker generates it and posterPath() updates when it lands.
+  Q_INVOKABLE void requestPoster(const QString& videoPath);
+
+  // --- Preview widget plumbing (forwarded to the active QmlShell) -----------
+
+  // Called from the placeholder Item's x/y/width/height change handlers in
+  // studio/qml/Main.qml with QML SCENE coordinates. Converts them to
+  // QMainWindow content coordinates and moves the native PreviewWidget there
+  // (it is a real QWidget on top of the QQuickWidget, not a QQuickItem).
+  // Values <= 0 in w/h hide the preview rather than creating a 0x0 HWND.
+  Q_INVOKABLE void syncPreviewGeometry(int x, int y, int w, int h);
+
+  // Loads `path` into the native preview (PreviewWidget::LoadVideo) and keeps
+  // mpv playing. Used for the engine's active video.
+  Q_INVOKABLE void loadPreview(const QString& path);
+
+  // PreviewWidget::SetPaused passthrough so the QML play/pause button drives
+  // mpv without QML needing to know the widget exists.
+  Q_INVOKABLE void setPreviewPaused(bool paused);
+
+ signals:
+  // One signal for the whole engine-status group: kind / detail / hint / pid /
+  // videoActive / running / activeVideoPath are repainted together by
+  // ApplyStatus, so a single notify keeps the QML bindings consistent (and
+  // avoids seven re-evaluations racing each other).
+  void engineStatusChanged();
+  void posterChanged();
+  void lastErrorChanged();
+  void busyChanged();
+  void logChanged();
+  void selectedVideoChanged();
+  void updateChanged();
+  // Repaints quickFit / quickMonitor / quickAutostart / quickBattery /
+  // monitorChoices together.
+  void quickSettingsChanged();
+
+ private slots:
+  // QFutureWatcher::finished handlers. All run on the GUI thread (queued).
+  void OnPollDone();
+  void OnEngineStartDone();
+  void OnApplyDone();
+  void OnPauseResumeDone();
+  void OnPosterDone();
+
+ private:
+  // Single place where an IpcResult becomes the QML-facing state: the pure
+  // decision function, then the Indonesian sentences MainWindow paints.
+  void ApplyStatus(const EngineStatusView& view);
+  void SetLastError(const QString& error);
+  void ClearLastError();
+  void AppendLog(const QString& line);
+  // Runs a blocking pause/resume on a worker, tagging which one it was so the
+  // finished slot knows what to log (the MainWindow::pending_pause_op_ idea).
+  void RunPauseResume(bool do_pause);
+
+  // T15: the ONE IpcClient of this Studio process, a plain value member --
+  // IpcClient is NOT a QObject and must never be given Q_PROPERTY access.
+  // ApplyManager borrows it via SetIpcClient in the ctor and serializes
+  // against it in Send's mutex, exactly like MainWindow.
+  IpcClient ipc_;
+  // Value member parented to `this` (MainWindow's apply_manager_{this}
+  // pattern): QObject parent-child owns the lifetime, the member owns the
+  // storage, and the block is destructed only after the last watcher fired.
+  ApplyManager apply_manager_{this};
+  // Plain value members (not QObjects, no Q_PROPERTY): the shared thumbs cache
+  // for the shell's preview poster, and Studio's own preferences.
+  Thumbnailer thumb_;
+  StudioSettings settings_;
+  QString settings_path_;
+  QString version_ = QStringLiteral(K6WP_VERSION_STR);
+  UpdateChecker* update_checker_ = nullptr;
+  QString latest_version_;
+  QString latest_page_url_;
+  bool update_busy_ = false;
+
+  // HIGH-3 slice B plumbing, mirrored from MainWindow: 1.5s poll timer, a
+  // poll_busy_ re-entrancy guard so a slow/dead engine stacks nothing up, an
+  // atomic busy flag for the blocking engine ops, and one watcher per blocking
+  // path so every worker result lands on the GUI thread.
+  QTimer* poll_timer_ = nullptr;
+  QFutureWatcher<IpcResult>* poll_watcher_ = nullptr;
+  QFutureWatcher<EngineStartOutcome>* start_watcher_ = nullptr;
+  QFutureWatcher<ApplyOutcome>* apply_watcher_ = nullptr;
+  QFutureWatcher<IpcResult>* pause_watcher_ = nullptr;
+  QFutureWatcher<QString>* poster_watcher_ = nullptr;
+  bool poll_busy_ = false;
+  bool poster_busy_ = false;
+  // 0 = no pause/resume in flight, 1 = pause, 2 = resume (MainWindow's
+  // pending_pause_op_).
+  int pending_pause_op_ = 0;
+  // Path the in-flight apply is for; the preview follows it on success.
+  QString pending_apply_path_;
+  // Last video handed to the native preview, so the steady-state 1.5s poll
+  // does not re-issue LoadVideo on every tick.
+  QString last_preview_video_;
+  // Worker-cancel flag for the blocking waits inside startEngine /
+  // applyWallpaper (RestartEngine's 8s process wait, the pipe-ready poll and
+  // the ready-wait). Set on the GUI thread, read on the worker in short
+  // (<=100ms) slices; never TerminateThread.
+  std::atomic<bool> op_cancel_{false};
+
+  // Repainted state (see the property getters).
+  EngineStatusView status_;
+  QString status_detail_;
+  QString status_hint_;
+  QString active_video_;
+  bool video_active_ = false;
+  bool engine_running_ = false;
+  QString poster_path_;
+  QString last_error_;
+  bool busy_ = false;
+  QStringList log_;
+  QString selected_video_;
+  QString quick_fit_;
+  int quick_monitor_ = -1;
+  bool quick_autostart_ = false;
+  bool quick_battery_ = false;
+  QVariantList monitor_choices_;
+};
+
+}  // namespace k6wp

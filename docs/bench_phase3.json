@@ -1,0 +1,95 @@
+{
+    "tag": "3-lite; shared-decode descoped, lihat tech-debt",
+    "branch": "opt/phase-3",
+    "date": "2026-09-22",
+    "rig": "Win11, 1 fisik monitor, i7-12650H hybrid (6P+4E, 16 threads), 16GB RAM, Intel UHD + RTX 2050",
+    "build": "build/msvc-dev/engine.exe (Debug, BUILD_TESTING=ON)",
+    "config": "schema v5, cpu_affinity=auto, gpu_adapter=auto, 1080p30 test_1080p.mp4, isolated LOCALAPPDATA, --exit-after-ms",
+    "thresholds": {
+        "idle_ram_vs_phase2": {
+            "metric": "avg_workingset_mb (Debug engine, headless no-video)",
+            "phase2_baseline": 27.69,
+            "tolerance_mb": 2.0,
+            "rule": "PASS iff abs(p3 - 27.69) <= 2.0"
+        },
+        "playback_cpu_vs_phase2": {
+            "metric": "avg_cpu_percent (Debug engine, 1080p playback)",
+            "phase2_baseline": 0.01,
+            "rule": "PASS iff p3 at the same CPU floor (<= 0.05)"
+        }
+    },
+    "ritual": {
+        "idle": {
+            "tool": "bench_cpu_mem",
+            "samples": 117,
+            "interval_ms": 500,
+            "minutes": 1,
+            "cores": 16,
+            "avg_cpu_percent": 0.02,
+            "peak_cpu_percent": 0.38,
+            "avg_workingset_mb": 29.02,
+            "peak_workingset_mb": 29.03,
+            "avg_private_mb": 23.71,
+            "peak_private_mb": 23.74
+        },
+        "playback_1080p30_pinned": {
+            "tool": "bench_cpu_mem",
+            "samples": 117,
+            "interval_ms": 500,
+            "minutes": 1,
+            "cores": 16,
+            "notes": "affinity E-core 0xf000 + d3d11-adapter pin Intel UHD, hwdec d3d11va active, verify reverted=0",
+            "avg_cpu_percent": 0.02,
+            "peak_cpu_percent": 0.2,
+            "avg_workingset_mb": 141.83,
+            "peak_workingset_mb": 141.84,
+            "avg_private_mb": 143.62,
+            "peak_private_mb": 143.64
+        },
+        "ctest": {
+            "result": "100% tests passed, 3/3 (config_test + ipc_test + occlusion_test)",
+            "config_test": "217 checks, 0 failures (incl. scenarios 38-43 v5 + full-chain v0->v5)"
+        },
+        "simulate_flags": "--simulate-device-lost/suspend/dc/monitor-off-after-ms all exit 0; device-lost reload ok=1 + pin re-verify fired",
+        "live_switch_30": "PASS 5/5 acks, PID stable, bad-path + reconnect green (with pin+affinity active)"
+    },
+    "comparisons": {
+        "idle_ram_vs_phase2": {
+            "phase2": 27.69,
+            "phase3_lite": 29.02,
+            "delta_mb": 1.33,
+            "verdict": "PASS - within +-2.0 MB (DXGI census + new code pages account for the +1.3 MB)"
+        },
+        "playback_cpu_vs_phase2": {
+            "phase2": 0.01,
+            "phase3_lite": 0.02,
+            "verdict": "PASS - same CPU floor (E-core pinned, 16-core denominator unchanged)"
+        },
+        "playback_ram_vs_phase2": {
+            "phase2_ws": 153.19,
+            "phase3_lite_ws": 141.83,
+            "delta_mb": -11.36,
+            "verdict": "measured -11.4 MB WS (iGPU decode path); single-sample, rerun variance not quantified"
+        }
+    },
+    "external_evidence_patch_b": {
+        "affinity_log": "affinity: auto, hybrid CPU, pinned to E-cores (mask=0xf000)",
+        "task_manager_affinity": "PASS owner-verified 2026-09-22 (two-screen ritual: Details -> affinity -> E-core set; log mask=0xf000 predicts CPUs 12-15 only)",
+        "gpu_pin_log": "gpu-pin: mode=auto pin='Intel(R) UHD Graphics'",
+        "task_manager_gpu": "PASS owner-verified 2026-09-22 (GPU column -> engine.exe on Intel/GPU 0, not RTX)",
+        "nvidia_smi_exclusion": "RTX dec/sm/enc 0% across 3 samples during hwdec-active playback (decoder not on NVIDIA)",
+        "hwdec_log": "mpv: hwdec-current=d3d11va (hwdec active), verify pass reverted=0 total=0"
+    },
+    "revert_path_proof_patch_a": {
+        "bogus_substring_finding": "d3d11-adapter='BOGUS-ADAPTER-XYZ' is SILENTLY IGNORED by this build (hwdec still d3d11va, reverted=0) — revert not triggerable via this route; finding recorded, synthetic trigger used instead",
+        "slot_revert": "forced-hwdec-no dev-run: 'gpu-pin: slot 0 hwdec inactive post-start with pin, reverting to unpinned' -> fresh renderer adapter=default -> 'reverted 1 slot(s)' (log k6wp-p3l3c)",
+        "headless_revert": "forced-hwdec-no + monitor_id=99: 'gpu-pin: headless hwdec inactive post-start with pin, reverting to unpinned' -> adapter=default -> 'reverted=1 total=1', next pass reverted=0 (terminates, no loop) (log k6wp-p3l3d)",
+        "dev_hacks_reverted": "forced-no + fallback-noop + bogus-pin were dev-only, verified absent from tree (repo-wide grep) and final binary (strings scan) before commit"
+    },
+    "notes": {
+        "monitors": 1,
+        "multimonitor_claims": "untested on 2-physical-monitor rig (per-monitor N decode retained by design)",
+        "transient_hwdec_no": "hwdec 'no' before first START_FILE is normal; verify pass requires EverStarted (observed no->d3d11va transition in clean runs)",
+        "dxva2_policy": "dxva2 counts as active hwdec, never triggers revert (no recreate flicker)"
+    }
+}

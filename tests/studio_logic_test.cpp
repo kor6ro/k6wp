@@ -1,0 +1,1221 @@
+// studio_logic_test.cpp — MED-2 slice B: Studio non-GUI logic without the
+// full main_window (no widgets, no event-loop pumping).
+//
+// QCoreApplication, not QApplication: this test creates no widgets and must
+// not load a QPA platform plugin (only qwindows is deployed; the offscreen
+// plugin is absent and its load failure hangs init — HIGH-3 slice B GOTCHA).
+// Compiles the REAL studio/src/ipc_client.cpp + src/apply_manager.cpp
+// (AUTOMOC covers ApplyManager's Q_OBJECT, studio_async_test pattern).
+// Covers:
+//  1. Unwired ApplyManager refuses loudly (SyncMonitor/Apply without
+//     SetIpcClient -> false + "SetIpcClient" in the error).
+//  2. WriteConfig round-trip to an explicit temp path (LoadConfig reads back
+//     the same video_path + monitor_id).
+//  3. ResolveEnginePath resolves to engine.exe.
+//  4. No server -> kNotRunning (before the fake server starts).
+//  5. SyncMonitor dedup over an in-process fake pipe server: first push of
+//     monitor 0 sends set_monitor, repeat of 0 sends nothing, push of 1
+//     sends again — all on the ONE kept connection (LOW-6: IpcClient does
+//     not Disconnect per Send, so the server sees 1 accept + 2 requests,
+//     never 2 accepts + drain-to-disconnect).
+//  6. Engine-read settings contract (LOW-16): only lockscreen_sync +
+//     lockscreen_offset_sec are Engine-visible (LOCALAPPDATA redirected at
+//     a scratch dir; forbidden-field flips must not move the behavior).
+//  7. Dev-fallback gate (LOW-16): IsDevEngineFallbackEnabled() needs _DEBUG
+//     AND K6WP_DEV=1; `--probe-resolve` prints gate + path for QA evidence.
+//  16. Studio import path (LibraryGridModel): the ffmpeg thumbnail spawn and
+//     the ffprobe metadata probe are OFF the calling thread, proven against
+//     real blocking child processes (see the fake-media-tools harness above).
+//  17. First-run wizard: an over-threshold pick still yields a completable
+//     wizard, and "Nanti saja" is as permanent as Finish.
+//
+// The fake server listens on the REAL session pipe name, so section 4-5
+// SKIP when a live engine answers (never steal the real endpoint).
+
+#include "apply_manager.hpp"
+#include "compress_bridge.hpp"
+#include "compress_controller.hpp"
+#include "compress_first_offer.hpp"
+#include "engine_status_controller.hpp"
+#include "ffmpeg_path.hpp"
+#include "first_run_wizard.hpp"
+#include "ipc_client.hpp"
+#include "library_grid_model.hpp"
+#include "lockscreen.hpp"
+#include "qml_shell.hpp"
+#include "studio_settings.hpp"
+
+#include <atomic>
+#include <algorithm>
+#include <chrono>
+#include <cstdio>
+#include <cstring>
+#include <fstream>
+#include <functional>
+#include <string>
+#include <thread>
+#include <vector>
+
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+
+#include <QCoreApplication>
+#include <QDir>
+#include <QElapsedTimer>
+#include <QEventLoop>
+#include <QFile>
+#include <QFileInfo>
+#include <QTemporaryDir>
+#include <QThread>
+#include <QTimer>
+
+namespace {
+
+int g_checks = 0;
+int g_failures = 0;
+
+void Check(bool cond, const std::string& name) {
+  ++g_checks;
+  if (cond) {
+    std::printf("PASS %s\n", name.c_str());
+  } else {
+    ++g_failures;
+    std::printf("FAIL %s\n", name.c_str());
+  }
+}
+
+bool HasSubstr(const std::string& hay, const std::string& needle) {
+  return hay.find(needle) != std::string::npos;
+}
+
+bool HasSubstrQ(const QString& hay, const char* needle) {
+  return hay.toStdString().find(needle) != std::string::npos;
+}
+
+bool EngineAlive() {
+  // Retry: a resident engine's single pipe instance is transiently BUSY
+  // while another client holds it — one probe then looks "dead" and the
+  // fake-server sections below race the real engine for the name. A short
+  // retry makes the skip decision stable in a shared session.
+  for (int i = 0; i < 5; ++i) {
+    const std::wstring name = k6wp::CurrentSessionPipeName();
+    HANDLE h =
+        CreateFileW(name.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr,
+                    OPEN_EXISTING, 0, nullptr);
+    if (h != INVALID_HANDLE_VALUE) {
+      CloseHandle(h);
+      return true;
+    }
+    if (GetLastError() == ERROR_PIPE_BUSY) {
+      return true;  // someone holds it -> an engine is serving
+    }
+    Sleep(100);
+  }
+  return false;
+}
+
+HANDLE MakePipeInstance() {
+  const std::wstring name = k6wp::CurrentSessionPipeName();
+  return CreateNamedPipeW(name.c_str(), PIPE_ACCESS_DUPLEX,
+                          PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
+                          1, 65536, 65536, 0, nullptr);
+}
+
+bool ReadOne(HANDLE pipe, std::string* out) {
+  char buf[65536];
+  DWORD got = 0;
+  if (ReadFile(pipe, buf, sizeof(buf), &got, nullptr) == 0 || got == 0) {
+    return false;
+  }
+  out->assign(buf, got);
+  return true;
+}
+
+bool WriteOne(HANDLE pipe, const std::string& msg) {
+  DWORD written = 0;
+  return WriteFile(pipe, msg.data(), static_cast<DWORD>(msg.size()), &written,
+                   nullptr) != 0 &&
+         written == msg.size();
+}
+
+std::filesystem::path TempConfigPath(const char* leaf) {
+  char tmp[MAX_PATH];
+  const DWORD n = GetTempPathA(MAX_PATH, tmp);
+  if (n == 0 || n >= MAX_PATH) {
+    return std::filesystem::path();
+  }
+  return std::filesystem::path(tmp) / leaf;
+}
+
+// --- fake ffmpeg / ffprobe (sections 16-18) ----------------------------------
+//
+// The import path spawns two real subprocesses per file (ffmpeg for the grid
+// thumbnail, ffprobe for the metadata) and each one blocks for up to 10s
+// (kFfmpegTimeoutMs in thumbnailer.cpp, kProbeTimeoutMs in proc_util.hpp).
+// "That work is not on the GUI thread" is only provable against a process that
+// really blocks, so K6WP_FFMPEG / K6WP_FFPROBE are pointed at THIS executable:
+// when a child sees K6WP_TEST_FAKE_MODE it behaves like the tool it stands in
+// for and exits, and never reaches the suite. No second helper binary.
+//
+// The sleep lives in a CHILD process, so it blocks nobody the UI owns - which
+// is exactly the property the parent is being asked to preserve.
+constexpr wchar_t kFakeModeEnv[] = L"K6WP_TEST_FAKE_MODE";
+constexpr wchar_t kFakeMsEnv[] = L"K6WP_TEST_FAKE_MS";
+
+// Returns true when this process IS the fake child (having done its job), so
+// main() can bail out before the suite runs.
+bool RunFakeChildIfRequested(int argc, char** argv) {
+  wchar_t mode[32] = {};
+  const DWORD mode_len = GetEnvironmentVariableW(kFakeModeEnv, mode, 32);
+  if (mode_len == 0 || mode_len >= 32) {
+    return false;
+  }
+  wchar_t ms[16] = {};
+  const DWORD ms_len = GetEnvironmentVariableW(kFakeMsEnv, ms, 16);
+  const long block_ms =
+      (ms_len > 0 && ms_len < 16) ? wcstol(ms, nullptr, 10) : 3000;
+  std::this_thread::sleep_for(std::chrono::milliseconds(block_ms));
+
+  if (std::wstring(mode) == L"ffmpeg") {
+    // Thumbnailer::BuildThumbCommand puts the output JPEG last, so the tail of
+    // argv is the file to produce. GetThumb only requires a non-empty file.
+    if (argc >= 2) {
+      QFile out(QString::fromLocal8Bit(argv[argc - 1]));
+      if (out.open(QIODevice::WriteOnly)) {
+        out.write("fake-jpeg-bytes", 15);
+        out.close();
+      }
+    }
+  } else {
+    // The exact shape FfprobeHelper::Probe parses, so the async probe's result
+    // is assertable rather than merely "something happened".
+    const char* kJson =
+        R"({"streams":[{"codec_name":"h264","codec_type":"video",)"
+        R"("width":1280,"height":720,"r_frame_rate":"30000/1001"}],)"
+        R"("format":{"duration":"12.5"}})";
+    std::fputs(kJson, stdout);
+    std::fflush(stdout);
+  }
+  return true;
+}
+
+// Watches the event loop of the thread that pumps it, so a GUI-thread block
+// shows up as a number instead of a vibe.
+//
+// beats() counts queued callbacks the loop actually delivered, and maxGapMs() is
+// the longest stretch the loop went without one. A worker thread is invisible
+// to both; a spawn-and-wait on the pumping thread is a multi-second gap.
+class EventLoopWatchdog {
+ public:
+  explicit EventLoopWatchdog(int interval_ms = 5) {
+    clock_.start();
+    timer_.setInterval(interval_ms);
+    QObject::connect(&timer_, &QTimer::timeout, [this]() {
+      ++beats_;
+      Observe();
+    });
+    timer_.start();
+  }
+
+  // Called from the watched thread once per pump iteration. This is the half
+  // that can SEE a block: the timer callback cannot run while the thread is
+  // stuck, so the gap must be sampled from outside the stuck window.
+  void Observe() {
+    const qint64 now = clock_.elapsed();
+    max_gap_ms_ = std::max(max_gap_ms_, now - last_seen_ms_);
+    last_seen_ms_ = now;
+  }
+
+  void Pump() {
+    QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+    Observe();
+  }
+
+  // Pumps until `done` or `budget_ms`, then returns whether it finished. The
+  // 5ms nap keeps the loop from spinning hot for the whole budget.
+  bool PumpUntil(const std::function<bool()>& done, qint64 budget_ms) {
+    while (!done() && clock_.elapsed() < budget_ms) {
+      Pump();
+      std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    return done();
+  }
+
+  int beats() const { return beats_; }
+  qint64 maxGapMs() const { return max_gap_ms_; }
+  qint64 elapsedMs() const { return clock_.elapsed(); }
+
+ private:
+  QElapsedTimer clock_;
+  QTimer timer_;
+  int beats_ = 0;
+  qint64 max_gap_ms_ = 0;
+  qint64 last_seen_ms_ = 0;
+};
+
+// Longest the Studio event loop may go unserved while a thumbnail/probe is in
+// flight. The real defect is a 10s stall; the fakes below stall for 3s, so this
+// budget fails loudly on the regression without being twitchy on a loaded box.
+constexpr int kGuiFreezeBudgetMs = 1500;
+
+// Points K6WP_FFMPEG + K6WP_FFPROBE at this executable and arms the fake-child
+// protocol. Returns the exe path for diagnostics.
+QString ArmFakeMediaTools(const char* mode, int block_ms) {
+  const QString self = QFileInfo(QCoreApplication::applicationFilePath())
+                           .absoluteFilePath();
+  const std::wstring self_w = self.toStdWString();
+  (void)SetEnvironmentVariableW(L"K6WP_FFMPEG", self_w.c_str());
+  (void)SetEnvironmentVariableW(L"K6WP_FFPROBE", self_w.c_str());
+  const std::string ms = std::to_string(block_ms);
+  std::wstring ms_w(ms.begin(), ms.end());
+  const std::wstring mode_w(mode, mode + std::strlen(mode));
+  (void)SetEnvironmentVariableW(kFakeModeEnv, mode_w.c_str());
+  (void)SetEnvironmentVariableW(kFakeMsEnv, ms_w.c_str());
+  return self;
+}
+
+void DisarmFakeMediaTools() {
+  (void)SetEnvironmentVariableW(kFakeModeEnv, nullptr);
+  (void)SetEnvironmentVariableW(kFakeMsEnv, nullptr);
+  (void)SetEnvironmentVariableW(L"K6WP_FFMPEG", nullptr);
+  (void)SetEnvironmentVariableW(L"K6WP_FFPROBE", nullptr);
+}
+
+// A regular file of exactly `bytes` bytes (resize extends the length without
+// writing, so a 20 MiB fixture costs no disk).
+QString WriteSizedFile(const QDir& dir, const char* leaf, qint64 bytes) {
+  QFile f(dir.filePath(QString::fromLatin1(leaf)));
+  if (!f.open(QIODevice::WriteOnly)) {
+    return {};
+  }
+  f.resize(bytes);
+  f.close();
+  return f.fileName();
+}
+
+std::filesystem::path ToPath(const QString& p) {
+  return std::filesystem::path(p.toStdWString());
+}
+
+std::wstring LocalAppDataDir() {
+  wchar_t buf[MAX_PATH] = {};
+  const DWORD n = GetEnvironmentVariableW(L"LOCALAPPDATA", buf, MAX_PATH);
+  return n > 0 && n < MAX_PATH ? std::wstring(buf, n) : std::wstring();
+}
+
+bool SetLocalAppDataDir(const QString& dir) {
+  const std::wstring w = dir.toStdWString();
+  return SetEnvironmentVariableW(L"LOCALAPPDATA", w.c_str()) != 0;
+}
+
+// Counts entries in `json` that carry probed dimensions - i.e. how many async
+// metadata probes have landed and been persisted.
+int ProbedEntryCount(const std::filesystem::path& json) {
+  try {
+    k6wp::LibraryManager probe(json);
+    probe.Load();
+    int n = 0;
+    for (const auto& e : probe.ListItems()) {
+      if (e.width > 0 && e.height > 0) {
+        ++n;
+      }
+    }
+    return n;
+  } catch (const std::exception&) {
+    return 0;  // a half-written file just means "not landed yet"
+  }
+}
+
+}  // namespace
+
+// The model's constructor registers itself with the QML window as the
+// drag-and-drop import target. QmlShell is the whole QQuickWidget + libmpv
+// window and cannot be linked into a QCoreApplication test, so the test
+// supplies the members the model actually calls and answers "no shell" -
+// which is exactly right for a headless run.
+namespace k6wp {
+void SetActiveQmlShell(QmlShell*) {}
+QmlShell* ActiveQmlShell() { return nullptr; }
+void QmlShell::SetImportTarget(LibraryGridModel*) {}
+}  // namespace k6wp
+
+int main(int argc, char** argv) {
+  setvbuf(stdout, nullptr, _IONBF, 0);
+  if (RunFakeChildIfRequested(argc, argv)) {
+    return 0;
+  }
+  QCoreApplication app(argc, argv);
+
+  // QA probe (LOW-16): `--probe-resolve` prints the gate state and the
+  // resolved engine path, then exits 0 without running the suite. Used by
+  // .omo/qa 24-failure.txt (K6WP_DEV unset -> fallback NOT used).
+  if (argc > 1 && std::string(argv[1]) == "--probe-resolve") {
+    wchar_t dev[8] = {};
+    const DWORD dev_n = GetEnvironmentVariableW(L"K6WP_DEV", dev, 8);
+    const QString resolved = k6wp::ApplyManager::ResolveEnginePath();
+    // fallback_taken is meaningful only when the primary is missing (here
+    // the primary exists side-by-side, so the gate state is the signal and
+    // taken stays 0): the dev fallback path always carries "msvc-dev".
+    const QString primary = QDir(QCoreApplication::applicationDirPath())
+                                .filePath(QStringLiteral("engine.exe"));
+    const bool primary_exists = QFile::exists(primary);
+    std::printf("probe k6wp_dev=%ls\n",
+                dev_n > 0 && dev_n < 8 ? dev : L"(unset)");
+    std::printf("probe fallback_enabled=%d\n",
+                k6wp::ApplyManager::IsDevEngineFallbackEnabled() ? 1 : 0);
+    std::printf("probe resolve=%s\n", resolved.toStdString().c_str());
+    std::printf("probe primary_exists=%d\n", primary_exists ? 1 : 0);
+    std::printf("probe fallback_taken=%d\n",
+                (!primary_exists &&
+                 resolved.contains(QStringLiteral("msvc-dev")))
+                    ? 1
+                    : 0);
+    return 0;
+  }
+
+  // 1. Unwired manager refuses loudly (never a null deref, never silent).
+  {
+    k6wp::ApplyManager mgr;
+    QString err;
+    Check(!mgr.SyncMonitor(0, &err), "unwired SyncMonitor returns false");
+    Check(HasSubstrQ(err, "SetIpcClient"), "unwired SyncMonitor names SetIpcClient");
+    k6wp::WallpaperConfig cfg;
+    cfg.video_path = L"C:\\videos\\wallpaper.mp4";
+    QString aerr;
+    Check(!static_cast<bool>(mgr.Apply(cfg, &aerr)),
+          "unwired Apply returns false");
+    Check(HasSubstrQ(aerr, "SetIpcClient"), "unwired Apply names SetIpcClient");
+  }
+
+  // 2. WriteConfig round-trip through the real loader.
+  {
+    k6wp::ApplyManager mgr;
+    const std::filesystem::path cfg_path =
+        TempConfigPath("k6wp-logic-test-config.json");
+    mgr.SetConfigPath(cfg_path);
+    k6wp::WallpaperConfig cfg;
+    cfg.video_path = L"C:\\videos\\wallpaper.mp4";
+    cfg.monitor_id = 2;
+    QString err;
+    Check(mgr.WriteConfig(cfg, &err), "WriteConfig to temp path succeeds");
+    bool loaded = false;
+    k6wp::WallpaperConfig back;
+    try {
+      back = k6wp::LoadConfig(cfg_path);
+      loaded = true;
+    } catch (...) {
+      loaded = false;
+    }
+    Check(loaded, "LoadConfig reads back the written file");
+    Check(back.video_path == cfg.video_path, "round-trip video_path identical");
+    Check(back.monitor_id == 2, "round-trip monitor_id identical");
+    std::error_code ec;
+    std::filesystem::remove(cfg_path, ec);
+  }
+
+  // 3. Engine path resolution ends at engine.exe (never empty).
+  {
+    const QString p = k6wp::ApplyManager::ResolveEnginePath();
+    Check(!p.isEmpty(), "ResolveEnginePath non-empty");
+    Check(p.endsWith(QStringLiteral("engine.exe"), Qt::CaseInsensitive),
+          "ResolveEnginePath ends with engine.exe");
+  }
+
+  const bool skip_server = EngineAlive();
+  std::printf("[info] engine alive: %d (server tests %s)\n",
+              static_cast<int>(skip_server),
+              skip_server ? "SKIPPED" : "running");
+
+  // 4. No server yet -> kNotRunning (engine-dead path, UI offers Start).
+  if (!skip_server) {
+    k6wp::IpcClient client;
+    const k6wp::IpcResult r = client.Send(k6wp::Cmd::get_state);
+    Check(r.status == k6wp::IpcStatus::kNotRunning,
+          "no-server Send maps to kNotRunning");
+  }
+
+  // 5. SyncMonitor dedup: push(0), push(0), push(1) ride ONE kept
+  // connection (LOW-6: no Disconnect per Send). The server acks {"ok":true}
+  // per request and records both set_monitors: exactly 1 accept, 2
+  // requests. (A drain-to-disconnect script would block here — the kept
+  // client never disconnects until its dtor — so the server reads exactly
+  // the scripted requests and closes unilaterally.)
+  if (!skip_server) {
+    std::atomic<int> accepts{0};
+    std::vector<std::string> seen;
+    std::thread server([&]() {
+      HANDLE pipe = MakePipeInstance();
+      if (pipe == INVALID_HANDLE_VALUE) {
+        return;
+      }
+      const BOOL ok = ConnectNamedPipe(pipe, nullptr) != 0 ||
+                      GetLastError() == ERROR_PIPE_CONNECTED;
+      if (!ok) {
+        CloseHandle(pipe);
+        return;
+      }
+      ++accepts;
+      for (int i = 0; i < 2; ++i) {
+        std::string req;
+        if (!ReadOne(pipe, &req)) {
+          CloseHandle(pipe);
+          return;
+        }
+        seen.push_back(req);
+        if (!WriteOne(pipe, "{\"ok\":true}")) {
+          CloseHandle(pipe);
+          return;
+        }
+      }
+      CloseHandle(pipe);
+    });
+
+    k6wp::IpcClient client;
+    k6wp::ApplyManager mgr;
+    mgr.SetIpcClient(&client);
+    QString err;
+    Check(mgr.SyncMonitor(0, &err), "dedup first push(0) true");
+    Check(mgr.SyncMonitor(0, &err), "dedup repeat push(0) true");
+    Check(mgr.SyncMonitor(1, &err), "dedup changed push(1) true");
+    server.join();
+
+    std::printf("[info] dedup accepts=%d\n", accepts.load());
+    Check(accepts.load() == 1, "dedup server saw exactly 1 kept connection");
+    bool wire = seen.size() == 2;
+    for (const auto& req : seen) {
+      wire = wire && HasSubstr(req, "\"set_monitor\"");
+    }
+    Check(wire, "dedup both requests carried set_monitor");
+  }
+
+  // 6. Engine-read settings contract (LOW-16, dev-contracts.md §3): the
+  // Engine may observe exactly lockscreen_sync + lockscreen_offset_sec
+  // (shared/lockscreen.cpp). Point LOCALAPPDATA at a scratch dir so no real
+  // profile is touched, then prove every other field is behavior-invisible.
+  {
+    wchar_t old_local[MAX_PATH] = {};
+    const DWORD old_n =
+        GetEnvironmentVariableW(L"LOCALAPPDATA", old_local, MAX_PATH);
+    char tmp_a[MAX_PATH] = {};
+    Check(GetTempPathA(MAX_PATH, tmp_a) != 0, "contract temp dir available");
+    const std::filesystem::path scratch =
+        std::filesystem::path(tmp_a) / "k6wp-logic-test-settings";
+    std::error_code ec;
+    std::filesystem::create_directories(scratch / "K6WP", ec);
+    Check(!ec, "contract scratch dir created");
+    Check(SetEnvironmentVariableW(L"LOCALAPPDATA", scratch.wstring().c_str()) != 0,
+          "contract LOCALAPPDATA redirected");
+    auto write_settings = [&](bool sync, double offset, int crf, int fps,
+                              const std::string& mode, bool auto_comp,
+                              bool start_win, bool advanced, bool updates) {
+      k6wp::StudioSettings s = k6wp::DefaultStudioSettings();
+      s.compress_output_dir = (scratch / L"K6WP" / L"wallpapers").wstring();
+      s.cache_dir = (scratch / L"K6WP" / L"cache").wstring();
+      s.lockscreen_sync = sync;
+      s.lockscreen_offset_sec = offset;
+      s.default_crf = crf;
+      s.default_fps = fps;
+      s.default_resolution_mode = mode;
+      s.auto_compress_on_import = auto_comp;
+      s.start_with_windows = start_win;
+      s.compress_advanced_visible = advanced;
+      s.check_updates = updates;
+      k6wp::SaveStudioSettings(k6wp::DefaultStudioSettingsPath(), s);
+    };
+    // A: every forbidden field non-default, sync OFF -> engine sees OFF/1.0.
+    write_settings(false, 1.0, 28, 24, "720p", false, true, true, false);
+    Check(!k6wp::IsLockscreenSyncEnabled(),
+          "contract forbidden fields do not enable sync");
+    Check(k6wp::LockscreenOffsetSec() == 1.0,
+          "contract offset default visible");
+    // B: flip ONLY forbidden fields -> engine-visible behavior identical.
+    write_settings(false, 1.0, 16, 1, "source", true, false, false, true);
+    Check(!k6wp::IsLockscreenSyncEnabled(),
+          "contract forbidden flip keeps sync off");
+    Check(k6wp::LockscreenOffsetSec() == 1.0,
+          "contract forbidden flip keeps offset");
+    // C: flip the two allowed fields -> behavior follows them.
+    write_settings(true, 2.5, 16, 1, "source", true, false, false, true);
+    Check(k6wp::IsLockscreenSyncEnabled(),
+          "contract lockscreen_sync=true visible");
+    Check(k6wp::LockscreenOffsetSec() == 2.5,
+          "contract lockscreen_offset_sec visible");
+    // D: settings file missing -> safe defaults (never throws).
+    std::filesystem::remove(k6wp::DefaultStudioSettingsPath(), ec);
+    Check(!k6wp::IsLockscreenSyncEnabled(),
+          "contract missing file sync defaults false");
+    Check(k6wp::LockscreenOffsetSec() == 1.0,
+          "contract missing file offset defaults 1.0");
+    // E: corrupt file -> same safe defaults (never throws).
+    {
+      std::ofstream bad(k6wp::DefaultStudioSettingsPath(), std::ios::binary);
+      bad << "{not valid json";
+    }
+    Check(!k6wp::IsLockscreenSyncEnabled(),
+          "contract corrupt file sync defaults false");
+    Check(k6wp::LockscreenOffsetSec() == 1.0,
+          "contract corrupt file offset defaults 1.0");
+    if (old_n > 0 && old_n < MAX_PATH) {
+      (void)SetEnvironmentVariableW(L"LOCALAPPDATA", old_local);
+    } else {
+      (void)SetEnvironmentVariableW(L"LOCALAPPDATA", nullptr);
+    }
+    std::filesystem::remove_all(scratch, ec);
+  }
+
+  // 7. Dev-fallback gate (LOW-16): IsDevEngineFallbackEnabled() is true only
+  // for a _DEBUG build with K6WP_DEV=1 in the environment — never silent.
+  {
+    (void)SetEnvironmentVariableW(L"K6WP_DEV", nullptr);
+    Check(!k6wp::ApplyManager::IsDevEngineFallbackEnabled(),
+          "gate K6WP_DEV unset -> disabled");
+    (void)SetEnvironmentVariableW(L"K6WP_DEV", L"0");
+    Check(!k6wp::ApplyManager::IsDevEngineFallbackEnabled(),
+          "gate K6WP_DEV=0 -> disabled");
+    (void)SetEnvironmentVariableW(L"K6WP_DEV", L"yes");
+    Check(!k6wp::ApplyManager::IsDevEngineFallbackEnabled(),
+          "gate K6WP_DEV=yes -> disabled");
+    (void)SetEnvironmentVariableW(L"K6WP_DEV", L"1");
+#ifdef _DEBUG
+    Check(k6wp::ApplyManager::IsDevEngineFallbackEnabled(),
+          "gate _DEBUG + K6WP_DEV=1 -> enabled");
+#else
+    Check(!k6wp::ApplyManager::IsDevEngineFallbackEnabled(),
+          "gate release + K6WP_DEV=1 -> disabled");
+#endif
+    (void)SetEnvironmentVariableW(L"K6WP_DEV", nullptr);
+  }
+
+  // 8. First-run gate (MED-5 part 1, extracted from MainWindow::IsFirstRun):
+  // settings file present always wins; otherwise both library-empty and
+  // no-current-video are required.
+  {
+    Check(!k6wp::IsFirstRunCondition(true, true, true),
+          "firstrun settings present -> false");
+    Check(!k6wp::IsFirstRunCondition(true, false, false),
+          "firstrun settings present, active user -> false");
+    Check(!k6wp::IsFirstRunCondition(false, false, true),
+          "firstrun library non-empty -> false");
+    Check(!k6wp::IsFirstRunCondition(false, true, false),
+          "firstrun current video set -> false");
+    Check(k6wp::IsFirstRunCondition(false, true, true),
+          "firstrun fresh profile -> true");
+  }
+
+  // 9. First-run entry builder (MED-5 part 1, from OnFirstRunProbed):
+  // metadata lands only on probe success; thumb only when produced.
+  {
+    k6wp::VideoMetadata meta;
+    meta.duration = 12.5;
+    meta.codec = "h264";
+    meta.width = 1920;
+    meta.height = 1080;
+    meta.fps = 29.97;
+    const std::filesystem::path thumb(L"C:/lib/thumb.jpg");
+    const k6wp::LibraryEntry e = k6wp::BuildFirstRunEntry(
+        QString::fromStdString("C:/src/a.mp4"),
+        QString::fromStdString("C:/lib/a.mp4"), true, meta, thumb);
+    Check(e.src == std::filesystem::path(L"C:/src/a.mp4"),
+          "firstrun entry src kept");
+    Check(e.dst == std::filesystem::path(L"C:/lib/a.mp4"),
+          "firstrun entry dst kept");
+    Check(e.duration == 12.5, "firstrun entry duration kept");
+    Check(e.codec == "h264", "firstrun entry codec kept");
+    Check(e.width == 1920 && e.height == 1080, "firstrun entry dims kept");
+    Check(e.fps == 30, "firstrun entry fps rounded");
+    Check(e.res == "1920x1080", "firstrun entry res string");
+    Check(e.thumb == thumb, "firstrun entry thumb kept");
+    const k6wp::LibraryEntry bad = k6wp::BuildFirstRunEntry(
+        QString::fromStdString("C:/src/b.mp4"),
+        QString::fromStdString("C:/lib/b.mp4"), false, meta,
+        std::filesystem::path());
+    Check(bad.src == std::filesystem::path(L"C:/src/b.mp4"),
+          "firstrun probe-fail src still kept");
+    Check(bad.width == 0 && bad.height == 0 && bad.fps == 30,
+          "firstrun probe-fail dims zero (fps default)");
+    Check(bad.res == "0x0", "firstrun probe-fail res default");
+    Check(bad.codec.empty(), "firstrun probe-fail codec empty");
+    Check(bad.thumb.empty(), "firstrun empty thumb stays empty");
+  }
+
+  // 10. Engine-status decision (MED-5 part 1, from OnPollDone): the paint
+  // contract — Connected/Paused/Degraded/NotRunning/Disconnected.
+  {
+    using Kind = k6wp::EngineStatusView::Kind;
+    k6wp::IpcResult ok;
+    ok.status = k6wp::IpcStatus::kOk;
+    ok.raw = nlohmann::json::parse(
+        "{\"state\":{\"pid\":1234,\"video\":\"C:/v/a.mp4\",\"paused\":false,"
+        "\"headless_slots\":0,\"live\":true}}");
+    const k6wp::EngineStatusView v = k6wp::DecideEngineStatus(ok);
+    Check(v.kind == Kind::kConnected, "status playing -> Connected");
+    Check(v.pid == 1234ULL, "status pid parsed");
+    Check(v.video == QString::fromStdString("C:/v/a.mp4"),
+          "status video parsed");
+    k6wp::IpcResult paused = ok;
+    paused.raw["state"]["paused"] = true;
+    Check(k6wp::DecideEngineStatus(paused).kind == Kind::kPaused,
+          "status paused flag -> Paused");
+    k6wp::IpcResult headless = ok;
+    headless.raw["state"]["headless_slots"] = 2;
+    const k6wp::EngineStatusView vh = k6wp::DecideEngineStatus(headless);
+    Check(vh.kind == Kind::kDegraded && vh.headless == 2,
+          "status headless slots -> Degraded");
+    k6wp::IpcResult idle = ok;
+    idle.raw["state"]["live"] = false;
+    Check(k6wp::DecideEngineStatus(idle).kind == Kind::kDegraded,
+          "status live=false -> Degraded");
+    k6wp::IpcResult empty_ok;
+    empty_ok.status = k6wp::IpcStatus::kOk;
+    const k6wp::EngineStatusView ve = k6wp::DecideEngineStatus(empty_ok);
+    Check(ve.kind == Kind::kConnected && ve.video.isEmpty(),
+          "status empty video tolerated -> Connected");
+    k6wp::IpcResult malformed;
+    malformed.status = k6wp::IpcStatus::kOk;
+    malformed.raw = nlohmann::json::parse("{\"state\":42}");
+    Check(k6wp::DecideEngineStatus(malformed).kind == Kind::kConnected,
+          "status malformed state never throws -> Connected");
+    k6wp::IpcResult dead;
+    dead.status = k6wp::IpcStatus::kNotRunning;
+    Check(k6wp::DecideEngineStatus(dead).kind == Kind::kNotRunning,
+          "status engine dead -> NotRunning");
+    k6wp::IpcResult broken;
+    broken.status = k6wp::IpcStatus::kError;
+    broken.error = "pipe timeout";
+    const k6wp::EngineStatusView vb = k6wp::DecideEngineStatus(broken);
+    Check(vb.kind == Kind::kDisconnected && vb.error == "pipe timeout",
+          "status transport failure -> Disconnected + error");
+  }
+
+  // 11. Worker ready-wait (MED-5 part 1, from MainWindow::WaitForEngineReady):
+  // live engine -> true at once; dead engine -> false after the budget.
+  // Skips the dead-engine leg when a live engine answers (same rule as
+  // sections 4-5 — never steal the real endpoint).
+  {
+    std::atomic<bool> cancel{false};
+    k6wp::IpcClient client;
+    if (skip_server) {
+      Check(k6wp::WaitForEngineReady(client, cancel, 8000),
+            "readywait live engine -> true");
+    } else {
+      Check(!k6wp::WaitForEngineReady(client, cancel, 1000),
+            "readywait dead engine -> false");
+      cancel.store(true);
+      Check(!k6wp::WaitForEngineReady(client, cancel, 8000),
+            "readywait pre-cancelled -> false at once");
+    }
+  }
+
+  // 12. CompressController (MED-5 part 2 commit 1): pure request-building
+  // + single-job queue wrapper. No widgets; QCoreApplication only (the
+  // offscreen QPA plugin is absent — QApplication would hang init).
+  {
+    using k6wp::CompressController;
+    int w = 0, h = 0;
+    CompressController::ResolveSimpleRes("1080p", nullptr, w, h);
+    Check(w == 1920 && h == 1080, "compress res 1080p fixed");
+    CompressController::ResolveSimpleRes("720p", nullptr, w, h);
+    Check(w == 1280 && h == 720, "compress res 720p fixed");
+    CompressController::ResolveSimpleRes("2160p", nullptr, w, h);
+    Check(w == 3840 && h == 2160, "compress res 2160p fixed");
+    k6wp::VideoMetadata probed;
+    probed.width = 640;
+    probed.height = 480;
+    CompressController::ResolveSimpleRes("source", &probed, w, h);
+    Check(w == 640 && h == 480, "compress res source uses probe");
+    CompressController::ResolveSimpleRes("source", nullptr, w, h);
+    Check(w == 1280 && h == 720, "compress res source w/o probe falls back");
+    CompressController::ResolveSimpleRes("match_monitor", &probed, w, h);
+    Check(w > 0 && h > 0, "compress res match_monitor positive");
+
+    const QString def_dir = CompressController::DefaultWallpapersDir();
+    Check(!def_dir.isEmpty(), "compress default out dir non-empty");
+    Check(def_dir.contains(QStringLiteral("wallpapers")),
+          "compress default out dir is wallpapers");
+
+    QTemporaryDir tmp;
+    Check(tmp.isValid(), "compress test temp dir valid");
+    const QString src = QDir(tmp.path()).filePath(QStringLiteral("clip.mp4"));
+    // Auto-naming: UniqueOutPath stem + .mp4 under the resolved dir.
+    k6wp::TabRequestInputs in;
+    in.src = src;
+    in.res_w = 640;
+    in.res_h = 360;
+    in.out_dir = CompressController::ResolveTabOutDir(tmp.path(), QString());
+    Check(in.out_dir == QDir::cleanPath(tmp.path()),
+          "compress out dir override wins");
+    const k6wp::CompressRequest auto_req =
+        CompressController::BuildTabRequest(in);
+    Check(auto_req.out_path.endsWith(QStringLiteral(".mp4")),
+          "compress auto name ends .mp4");
+    Check(auto_req.out_path.contains(QStringLiteral("_k6wp")),
+          "compress auto name carries _k6wp");
+    Check(auto_req.fps == 30 && auto_req.crf == 22 &&
+              auto_req.encoder == QStringLiteral("auto") && !auto_req.force,
+          "compress simple mode safe defaults");
+    // Override name gains .mp4; out-of-range simple prefs clamp.
+    in.out_name_override = QStringLiteral("my clip");
+    in.simple_fps = 99;
+    in.simple_crf = 1;
+    const k6wp::CompressRequest over_req =
+        CompressController::BuildTabRequest(in);
+    Check(over_req.out_path.endsWith(QStringLiteral("my clip.mp4")),
+          "compress override name gains .mp4");
+    Check(over_req.fps == 30 && over_req.crf == 22,
+          "compress simple prefs clamp to safe range");
+    // Advanced values pass through untouched.
+    in.advanced = true;
+    in.adv_fps = 15;
+    in.adv_crf = 28;
+    in.adv_encoder = QStringLiteral("x264");
+    in.adv_force = true;
+    const k6wp::CompressRequest adv_req =
+        CompressController::BuildTabRequest(in);
+    Check(adv_req.fps == 15 && adv_req.crf == 28 &&
+              adv_req.encoder == QStringLiteral("x264") && adv_req.force,
+          "compress advanced prefs pass through");
+
+    // Ledger + validation (no compressor.exe needed for these legs).
+    k6wp::CompressController ctl;
+    Check(!ctl.IsRunning() && ctl.PendingCount() == 0,
+          "compress controller starts idle");
+    k6wp::CompressRequest empty;
+    k6wp::JobMeta meta;
+    QString err;
+    Check(!ctl.Enqueue(empty, meta, &err) && !err.isEmpty(),
+          "compress enqueue empty req refused with error");
+    k6wp::CompressRequest taken;
+    Check(!ctl.TakeRequest(424242, &taken) && taken.out_path.isEmpty(),
+          "compress TakeRequest unknown id -> false + empty");
+  }
+
+  // 13. Live single-job queue (happy: progress NDJSON shows; failure: 2x fast
+  // enqueue queues instead of doubling). Guarded: runs only when
+  // compressor.exe sits next to this binary (POST_BUILD copy) AND ffmpeg is
+  // findable (K6WP_FFMPEG env in ctest) AND the corpus fixture resolves.
+  // Otherwise SKIP (never red) — the pure legs above still pin the logic.
+  {
+    const QString exe_dir = QCoreApplication::applicationDirPath();
+    const QString compressor =
+        QDir(exe_dir).filePath(QStringLiteral("compressor.exe"));
+    const QString corpus = QDir(exe_dir + QStringLiteral("/../../tests/corpus"))
+                               .filePath(QStringLiteral("slideshow.mp4"));
+    // A longer fixture guarantees at least one ffmpeg progress line; the
+    // 14 KB slideshow can finish inside a single progress interval (zero
+    // Progress emissions — flaky under ctest load).
+    const QString corpus_long =
+        QDir(exe_dir + QStringLiteral("/../../tests/corpus"))
+            .filePath(QStringLiteral("anime.mp4"));
+    const bool ready = QFile::exists(compressor) &&
+                       !k6wp::FindFfmpeg().empty() &&
+                       QFile::exists(corpus) && QFile::exists(corpus_long);
+    if (!ready) {
+      std::printf("SKIP live compress queue (compressor=%d ffmpeg=%d corpus=%d)\n",
+                  static_cast<int>(QFile::exists(compressor)),
+                  static_cast<int>(!k6wp::FindFfmpeg().empty()),
+                  static_cast<int>(QFile::exists(corpus)));
+    } else {
+      QTemporaryDir tmp;
+      Check(tmp.isValid(), "live compress temp dir valid");
+      k6wp::CompressController ctl;
+      // Fresh cache dir per run: a warm default cache would turn the jobs
+      // into cache_hits (zero ffmpeg progress lines, still Finished-ok).
+      ctl.SetCacheDir(
+          QDir(tmp.path()).filePath(QStringLiteral("cache-dir")));
+      int started = 0;
+      int finished_ok = 0;
+      int finished_fail = 0;
+      int progress_lines = 0;
+      int concurrent = 0;
+      int max_concurrent = 0;
+      int queue_summaries = 0;
+      int summary_ok = -1;
+      QObject::connect(ctl.service(), &k6wp::CompressService::Started, &app,
+                       [&](const k6wp::JobMeta&) {
+                         ++started;
+                         ++concurrent;
+                         max_concurrent =
+                             std::max(max_concurrent, concurrent);
+                       });
+      QObject::connect(ctl.service(), &k6wp::CompressService::Progress, &app,
+                       [&](int, int) { ++progress_lines; });
+      QObject::connect(ctl.service(), &k6wp::CompressService::Finished, &app,
+                       [&](const k6wp::JobMeta& m, bool ok, const QString&,
+                           const k6wp::CompressOkInfo&) {
+                         --concurrent;
+                         k6wp::CompressRequest req;
+                         Check(ctl.TakeRequest(m.job_id, &req),
+                               "live compress completion has ledger entry");
+                         if (ok) {
+                           ++finished_ok;
+                         } else {
+                           ++finished_fail;
+                         }
+                       });
+      QObject::connect(ctl.service(), &k6wp::CompressService::QueueSummary,
+                       &app, [&](int ok_count, int) {
+                         ++queue_summaries;
+                         summary_ok = ok_count;
+                       });
+      // Two back-to-back enqueues = the 2x-OnCompressCurrent failure shape
+      // (PrepareAndEnqueue funnels into CompressController::Enqueue; the
+      // widget slot itself needs QApplication, which hangs offscreen).
+      // q1 uses the long fixture so progress NDJSON is guaranteed; q2 the
+      // tiny one (different cache key, still a real encode).
+      k6wp::TabRequestInputs in;
+      in.src = corpus_long;
+      in.res_w = 320;
+      in.res_h = 240;
+      in.advanced = true;
+      in.adv_fps = 15;
+      in.adv_crf = 28;
+      in.adv_encoder = QStringLiteral("x264");
+      in.out_dir = tmp.path();
+      k6wp::JobMeta m1;
+      m1.origin = k6wp::JobMeta::Origin::kTab;
+      m1.label = QStringLiteral("live-q1");
+      m1.src = corpus;
+      QString e1;
+      in.out_name_override = QStringLiteral("live-q1");
+      Check(ctl.Enqueue(k6wp::CompressController::BuildTabRequest(in), m1,
+                        &e1),
+            "live compress q1 enqueued");
+      k6wp::JobMeta m2 = m1;
+      m2.label = QStringLiteral("live-q2");
+      QString e2;
+      in.out_name_override = QStringLiteral("live-q2");
+      Check(ctl.Enqueue(k6wp::CompressController::BuildTabRequest(in), m2,
+                        &e2),
+            "live compress q2 enqueued");
+      Check(ctl.PendingCount() == 1,
+            "live compress 2x fast -> exactly 1 waiting (no double job)");
+      Check(started <= 1, "live compress 2x fast -> at most 1 started");
+      QElapsedTimer timer;
+      timer.start();
+      while (finished_ok + finished_fail < 2 && timer.elapsed() < 180000) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+        QThread::msleep(50);
+      }
+      Check(finished_ok + finished_fail == 2,
+            "live compress both jobs finished");
+      Check(finished_fail == 0, "live compress both jobs ok");
+      Check(progress_lines > 0, "live compress progress NDJSON shown");
+      Check(max_concurrent == 1, "live compress never ran 2 jobs at once");
+      Check(queue_summaries >= 1 && summary_ok == 2,
+            "live compress queue summary reports 2 ok");
+      Check(ctl.PendingCount() == 0 && !ctl.IsRunning(),
+            "live compress idle after drain");
+    }
+  }
+
+  // 14. Compress-first threshold (compress_first_offer.hpp): the gate the
+  //     whole "Video Besar" offer hangs on, which had no test at all. The
+  //     boundary is exact - size <= 20 MiB declines, one byte more offers -
+  //     and the reported number is truncated whole MiB, not rounded.
+  {
+    QTemporaryDir offer_dir;
+    Check(offer_dir.isValid(), "offer threshold temp dir is valid");
+    if (offer_dir.isValid()) {
+      const QDir base(offer_dir.path());
+      const auto write_sized = [&base](const char* leaf, qint64 bytes) {
+        QFile f(base.filePath(QString::fromLatin1(leaf)));
+        if (!f.open(QIODevice::WriteOnly)) {
+          return QString();
+        }
+        // resize() extends the length without writing the bytes, so a 20 MiB
+        // boundary case costs no disk.
+        f.resize(bytes);
+        f.close();
+        return f.fileName();
+      };
+
+      const QString tiny = write_sized("tiny.mp4", 1024);
+      const QString exact =
+          write_sized("exact.mp4", k6wp::kCompressFirstThresholdBytes);
+      const QString over =
+          write_sized("over.mp4", k6wp::kCompressFirstThresholdBytes + 1);
+
+      // The fixtures read this same constant, so without a pinned literal
+      // they would all stay green if the threshold were raised.
+      Check(k6wp::kCompressFirstThresholdBytes == 20LL * 1024 * 1024,
+            "threshold is still 20 MiB (value pinned, not merely consistent)");
+      Check(!tiny.isEmpty() && !exact.isEmpty() && !over.isEmpty(),
+            "offer threshold fixtures written");
+      Check(k6wp::CompressFirstOfferMb(tiny) == -1,
+            "under threshold -> no offer (-1)");
+      Check(k6wp::CompressFirstOfferMb(exact) == -1,
+            "exactly 20 MiB -> no offer (-1; the test is <=)");
+      Check(k6wp::CompressFirstOfferMb(over) == 20,
+            "20 MiB + 1 byte -> offered, reported as 20 MB");
+      Check(k6wp::CompressFirstOfferMb(
+                base.filePath(QStringLiteral("missing.mp4"))) == -1,
+            "missing file -> no offer (-1)");
+      Check(k6wp::CompressFirstOfferMb(base.path()) == -1,
+            "a directory -> no offer (-1)");
+    }
+  }
+
+  // 15. CompressBridge's no-result contract: a job that ends without an output
+  //     must announce it, because resultChanged() never fires and a pending
+  //     one-shot apply intent would outlive the job that raised it. A missing
+  //     source reaches that state deterministically and cheaply - the encode
+  //     fails and nothing is written. Confirmed to have teeth: removing the
+  //     emit makes this fail. The refused-enqueue branch (kInvalid) is fixed
+  //     as well but is NOT covered here, because reaching it needs
+  //     compressor.exe to be unfindable - moving a shared binary mid-suite.
+  {
+    k6wp::CompressBridge bridge;
+    int no_result = 0;
+    int result_changed = 0;
+    QObject::connect(&bridge, &k6wp::CompressBridge::jobFinishedWithoutResult,
+                     [&no_result]() { ++no_result; });
+    QObject::connect(&bridge, &k6wp::CompressBridge::resultChanged,
+                     [&result_changed]() { ++result_changed; });
+
+    const auto missing = TempConfigPath("k6wp_no_such_source.mp4");
+    bridge.setSourcePath(QString::fromStdWString(missing.wstring()));
+    bridge.start();
+
+    // The probe runs on a worker thread and the decision lands back on this
+    // one, so the signal can only arrive through the event loop.
+    QElapsedTimer timer;
+    timer.start();
+    while (no_result == 0 && timer.elapsed() < 30000) {
+      QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+      QThread::msleep(50);
+    }
+
+    Check(no_result > 0, "a compress that yields no output announces it");
+    Check(result_changed == 0,
+          "and it reports no result (resultChanged stays silent)");
+  }
+
+  // 16. Studio import path: the per-file subprocess waits are OFF the calling
+  //     thread. Each leg arms a fake ffmpeg/ffprobe that blocks 3s (the real
+  //     budget is 10s) and measures the event loop of the thread that calls
+  //     into the model, so a stall shows up as a number.
+  {
+    const QString self = ArmFakeMediaTools("ffmpeg", 3000);
+    Check(QFileInfo(self).isFile(), "fake ffmpeg stand-in resolves to this exe");
+
+    // 16a. The grid thumbnail. ensureThumbnail used to defer GetThumb with
+    //      QTimer::singleShot(0, this, ...), which posts to the GUI thread -
+    //      the ffmpeg spawn+wait then ran there and froze the UI.
+    QTemporaryDir thumb_dir;
+    Check(thumb_dir.isValid(), "grid test temp dir is valid");
+    if (thumb_dir.isValid()) {
+      const QDir media(thumb_dir.path());
+      const QString video = WriteSizedFile(media, "grid.mp4", 4096);
+      const auto lib_json = ToPath(media.filePath(QStringLiteral("library.json")));
+      const std::wstring thumbs_root =
+          media.filePath(QStringLiteral("thumbs")).toStdWString();
+      (void)SetEnvironmentVariableW(L"K6WP_THUMBS_DIR", thumbs_root.c_str());
+      (void)SetEnvironmentVariableW(L"K6WP_LIBRARY_JSON", lib_json.wstring().c_str());
+
+      k6wp::LibraryEntry seed;
+      seed.src = seed.dst = ToPath(video);
+      seed.res = "1280x720";
+      seed.width = 1280;
+      seed.height = 720;
+      seed.codec = "h264";
+      seed.duration = 12.5;
+      seed.fps = 30;
+      {
+        k6wp::LibraryManager seed_mgr(lib_json);
+        seed_mgr.Add(seed);
+      }
+
+      k6wp::LibraryGridModel model;
+      Check(model.count() == 1, "grid model loaded the seeded library row");
+
+      int resets = 0;
+      QObject::connect(&model, &k6wp::LibraryGridModel::countChanged,
+                       [&resets]() { ++resets; });
+
+      EventLoopWatchdog watch;
+      model.ensureThumbnail(0);
+      const bool thumb_landed = watch.PumpUntil([&resets]() { return resets > 0; },
+                                                30000);
+
+      Check(thumb_landed,
+            "grid thumbnail completion reached the model's own thread");
+      Check(watch.maxGapMs() < kGuiFreezeBudgetMs,
+            "ffmpeg spawn+wait does not stall the event loop (max gap " +
+                std::to_string(watch.maxGapMs()) + "ms, budget " +
+                std::to_string(kGuiFreezeBudgetMs) + "ms)");
+      Check(watch.beats() > 5,
+            "and the loop kept delivering callbacks while it ran (" +
+                std::to_string(watch.beats()) + " beats)");
+
+      k6wp::LibraryManager after_thumb(lib_json);
+      after_thumb.Load();
+      const auto thumb_items = after_thumb.ListItems();
+      Check(thumb_items.size() == 1 && !thumb_items[0].thumb.empty(),
+            "the generated thumbnail is persisted back to library.json");
+    }
+
+    // 16b. The import metadata probe. Add() used to run FfprobeHelper::Probe
+    //      inline, so a multi-select froze the GUI thread for 10s per file.
+    QTemporaryDir import_dir;
+    Check(import_dir.isValid(), "import test temp dir is valid");
+    if (import_dir.isValid()) {
+      const QDir media(import_dir.path());
+      const QStringList videos{
+          WriteSizedFile(media, "one.mp4", 4096),
+          WriteSizedFile(media, "two.mp4", 8192),
+      };
+      const auto lib_json = ToPath(media.filePath(QStringLiteral("library.json")));
+      const std::wstring thumbs_root =
+          media.filePath(QStringLiteral("thumbs")).toStdWString();
+      (void)SetEnvironmentVariableW(L"K6WP_THUMBS_DIR", thumbs_root.c_str());
+      (void)SetEnvironmentVariableW(L"K6WP_LIBRARY_JSON", lib_json.wstring().c_str());
+      (void)SetEnvironmentVariableW(kFakeModeEnv, L"ffprobe");
+
+      k6wp::LibraryGridModel model;
+      Check(model.isEmpty(), "import model starts empty");
+
+      EventLoopWatchdog watch;
+      QElapsedTimer import_timer;
+      import_timer.start();
+      const int added = model.importPaths(videos);
+      const qint64 import_ms = import_timer.elapsed();
+
+      Check(added == 2, "importPaths reports both files added");
+      Check(import_ms < kGuiFreezeBudgetMs,
+            "importPaths does not block on ffprobe (took " +
+                std::to_string(import_ms) + "ms, budget " +
+                std::to_string(kGuiFreezeBudgetMs) + "ms)");
+      Check(model.count() == 2,
+            "both rows are visible immediately (metadata arrives later)");
+
+      const bool probed = watch.PumpUntil(
+          [&lib_json]() { return ProbedEntryCount(lib_json) == 2; }, 30000);
+      Check(probed, "both async metadata probes landed");
+      Check(watch.maxGapMs() < kGuiFreezeBudgetMs,
+            "ffprobe waits do not stall the event loop (max gap " +
+                std::to_string(watch.maxGapMs()) + "ms, budget " +
+                std::to_string(kGuiFreezeBudgetMs) + "ms)");
+      Check(watch.beats() > 5,
+            "and the loop kept delivering callbacks while they ran (" +
+                std::to_string(watch.beats()) + " beats)");
+
+      k6wp::LibraryManager after_import(lib_json);
+      after_import.Load();
+      const auto items = after_import.ListItems();
+      bool all_meta = items.size() == 2;
+      for (const auto& e : items) {
+        all_meta = all_meta && e.width == 1280 && e.height == 720 &&
+                   e.codec == "h264" && e.res == "1280x720" && e.fps == 30 &&
+                   e.duration == 12.5;
+      }
+      Check(all_meta,
+            "async probe metadata (dims/codec/res/fps/duration) is persisted");
+      Check(model.count() == 2, "the grid still shows both rows afterwards");
+    }
+
+    DisarmFakeMediaTools();
+    (void)SetEnvironmentVariableW(L"K6WP_LIBRARY_JSON", nullptr);
+    (void)SetEnvironmentVariableW(L"K6WP_THUMBS_DIR", nullptr);
+  }
+
+  // 17. First-run wizard reachability. An over-threshold first pick used to
+  //     produce an EMPTY firstRunFile, because the only source QML had was
+  //     Library.dstAt(0) and that file was deliberately not imported - so the
+  //     wizard could never be completed. "Nanti saja" also never wrote the
+  //     settings marker, so the wizard reappeared on every start.
+  {
+    // The settings path resolves %LOCALAPPDATA% on every call, so redirecting
+    // it keeps the test from writing the real user preferences file (which
+    // would suppress the wizard on this machine for good).
+    const std::wstring real_localappdata = LocalAppDataDir();
+    QTemporaryDir fake_home;
+    Check(fake_home.isValid(), "firstrun test temp dir is valid");
+    const bool redirected =
+        fake_home.isValid() && SetLocalAppDataDir(fake_home.path());
+    Check(redirected, "LOCALAPPDATA redirected into the temp dir");
+    if (redirected) {
+      const QDir media(fake_home.path());
+      const auto settings_json =
+          media.filePath(QStringLiteral("K6WP/studio_settings.json"));
+      const auto lib_json = ToPath(media.filePath(QStringLiteral("library.json")));
+      (void)SetEnvironmentVariableW(L"K6WP_LIBRARY_JSON", lib_json.wstring().c_str());
+
+      Check(!QFileInfo::exists(settings_json),
+            "no settings file yet -> this is a first run");
+
+      k6wp::LibraryGridModel model;
+      Check(model.firstRunEligible(),
+            "empty library + no settings file -> the wizard is armed");
+
+      // The exact shape that deadlocked: over threshold, so the compress-first
+      // offer takes it and nothing is imported.
+      const QString big = WriteSizedFile(
+          media, "big.mp4", k6wp::kCompressFirstThresholdBytes + 1);
+      int offers = 0;
+      QString offered_path;
+      QObject::connect(&model, &k6wp::LibraryGridModel::compressFirstRequired,
+                       [&offers, &offered_path](const QString& p) {
+                         ++offers;
+                         offered_path = p;
+                       });
+
+      const int added = model.importPaths({big});
+
+      Check(added == 0, "an over-threshold pick is not imported into the grid");
+      Check(offers == 1, "and it raises exactly one compress-first offer");
+      Check(offered_path == big, "naming the file the user actually picked");
+      Check(model.count() == 0, "the grid stays empty");
+      Check(model.dstAt(0).isEmpty(),
+            "the old wizard source dstAt(0) is empty - the dead end itself");
+      Check(model.lastPickedPath() == big,
+            "lastPickedPath still names the pick, so the wizard can preview it");
+
+      // "Nanti saja": nothing imported, so the wizard must not come back - not
+      // now, and not after a restart either.
+      model.markFirstRunHandled();
+
+      Check(QFileInfo::exists(settings_json),
+            "declining writes the settings file that closes the gate");
+      Check(!model.firstRunEligible(),
+            "and the wizard is not eligible any more in this session");
+      Check(model.lastPickedPath().isEmpty(),
+            "the declined pick is forgotten, not carried into a later run");
+
+      k6wp::LibraryGridModel after_restart;
+      Check(!after_restart.firstRunEligible(),
+            "a fresh model (i.e. a restart) agrees the wizard is handled");
+      Check(after_restart.isEmpty(),
+            "and declining really imported nothing");
+
+      // The marker must not be re-stamped: the file now holds the user's
+      // preferences, and rewriting it with defaults would wipe them.
+      {
+        QFile f(settings_json);
+        Check(f.open(QIODevice::WriteOnly | QIODevice::Truncate),
+              "settings file reopened for the no-clobber check");
+        const QByteArray sentinel("{\"sentinel\":true}");
+        f.write(sentinel);
+        f.close();
+      }
+      model.markFirstRunHandled();
+      {
+        QFile f(settings_json);
+        Check(f.open(QIODevice::ReadOnly), "settings file readable afterwards");
+        Check(f.readAll().contains("\"sentinel\":true"),
+              "declining twice does not overwrite existing user settings");
+        f.close();
+      }
+
+      (void)SetEnvironmentVariableW(L"K6WP_LIBRARY_JSON", nullptr);
+    }
+    (void)SetLocalAppDataDir(QString::fromStdWString(real_localappdata));
+  }
+
+  std::printf("checks=%d failures=%d\n", g_checks, g_failures);
+  return g_failures == 0 ? 0 : 1;
+}

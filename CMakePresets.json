@@ -1,0 +1,59 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 25, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "msvc-dev",
+      "displayName": "MSVC x64 Dev (Visual Studio 18 2026)",
+      "description": "x64, C++17, /W4 /WX-. Uses the installed VS 18 (2026) BuildTools generator: the 'Visual Studio 17 2022' generator cannot see VS 18 BuildTools, and a Ninja+vcvars64 toolchain file does not propagate the MSVC environment to nested try_compile runs. Qt is located via the QT_ROOT env var.",
+      "generator": "Visual Studio 18 2026",
+      "architecture": { "value": "x64", "strategy": "set" },
+      "binaryDir": "${sourceDir}/build/msvc-dev",
+      "cacheVariables": {
+        "CMAKE_PREFIX_PATH": "$env{QT_ROOT}",
+        "BUILD_TESTING": "ON",
+        "K6WP_BUILD_TOOLS": "ON"
+      }
+    },
+    {
+      "name": "release",
+      "displayName": "MSVC x64 Release (Visual Studio 18 2026)",
+      "description": "x64, C++17, /O2. Release build with WIN32_EXECUTABLE, BUILD_TESTING=OFF. Uses the installed VS 18 (2026) BuildTools generator.",
+      "generator": "Visual Studio 18 2026",
+      "architecture": { "value": "x64", "strategy": "set" },
+      "binaryDir": "${sourceDir}/build/release",
+      "cacheVariables": {
+        "CMAKE_PREFIX_PATH": "$env{QT_ROOT}",
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_TESTING": "OFF",
+        "K6WP_BUILD_TOOLS": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "msvc-dev",
+      "configurePreset": "msvc-dev",
+      "configuration": "Debug"
+    },
+    {
+      "name": "release",
+      "configurePreset": "release",
+      "configuration": "Release"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "msvc-dev",
+      "configurePreset": "msvc-dev",
+      "configuration": "Debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "release",
+      "configurePreset": "release",
+      "configuration": "Release",
+      "output": { "outputOnFailure": true }
+    }
+  ]
+}

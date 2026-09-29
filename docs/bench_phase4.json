@@ -1,0 +1,157 @@
+{
+    "tag": "phase-4 final; RAM trim + WinHTTP + release flags + ffmpeg essentials",
+    "branch": "opt/phase-4",
+    "date": "2026-09-22",
+    "rig": "Win11, 1 fisik monitor, i7-12650H hybrid (6P+4E, 16 threads), 16GB RAM, Intel UHD + RTX 2050",
+    "build": "build/msvc-dev/engine.exe (Debug, BUILD_TESTING=ON) for CPU/RAM ritual; build/release/ (Release, BUILD_TESTING=OFF) for size/deploy ritual",
+    "config": "schema v5, cpu_affinity=auto, gpu_adapter=auto, 1080p30 build/spikes/test_1080p.mp4, isolated LOCALAPPDATA, --exit-after-ms",
+    "thresholds": {
+        "idle_cpu": {
+            "metric": "avg_cpu_percent (Debug engine, headless no-video)",
+            "rule": "PASS iff < 0.3"
+        },
+        "paused_wakeups": {
+            "metric": "process-wide thread context-switch rate over 60 s, paused",
+            "rule": "PASS iff mean < 1.0/s AND engine.log shows zero periodic lines"
+        },
+        "ram_1mon": {
+            "metric": "private bytes (Debug engine); working set reported separately (post-trim artifact, see trim note)",
+            "phase3_baseline": "idle priv 23.71 MB / playback priv 143.62 MB",
+            "rule": "TARGET 1-monitor private <= baseline - 10 MB (aspirational; recorded honestly)"
+        }
+    },
+    "ritual": {
+        "idle": {
+            "tool": "bench_cpu_mem",
+            "samples": 117,
+            "interval_ms": 500,
+            "minutes": 1,
+            "cores": 16,
+            "avg_cpu_percent": 0.02,
+            "peak_cpu_percent": 0.19,
+            "avg_workingset_mb": 1.63,
+            "peak_workingset_mb": 3.02,
+            "avg_private_mb": 24.16,
+            "peak_private_mb": 24.21,
+            "trim": "ws=29904 KB -> 180 KB (one-shot, t~2s)"
+        },
+        "playback_1080p30_pinned": {
+            "tool": "bench_cpu_mem",
+            "samples": 117,
+            "interval_ms": 500,
+            "minutes": 1,
+            "cores": 16,
+            "notes": "affinity E-core 0xf000 + d3d11-adapter pin Intel UHD, hwdec d3d11va active, slots=1 live=yes",
+            "avg_cpu_percent": 0.01,
+            "peak_cpu_percent": 0.19,
+            "avg_workingset_mb": 2.85,
+            "peak_workingset_mb": 4.94,
+            "avg_private_mb": 150.76,
+            "peak_private_mb": 150.78,
+            "pre_trim_ws_kb": 151584,
+            "post_trim_ws_kb": 184,
+            "peak_ws_verify_run_mb": 158.92
+        },
+        "ws_verify_independent": {
+            "method": "Get-Process WorkingSet64/PrivateMemorySize64/PeakWorkingSet64 + tasklist, 5 samples over 25 s post-trim during 1080p hwdec playback",
+            "ws_mb": "2.57 -> 3.28 (stable)",
+            "priv_mb": 147.05,
+            "peakws_mb": 158.92,
+            "tasklist": "3,356 K",
+            "verdict": "bench_cpu_mem numbers independently confirmed; post-trim WS is genuinely resident, not a sampler artifact"
+        },
+        "ctest": {
+            "result": "100% tests passed, 3/3 (config_test + ipc_test + occlusion_test), Total Test time 0.24 sec",
+            "cmd": "ctest --test-dir build/msvc-dev -C Debug"
+        },
+        "simulate_flags": "--simulate-device-lost/suspend/dc/monitor-off-after-ms all exit 0 with expected log lines (RecreateDevice flag, PBT_APMSUSPEND post, DC latch + PBT_APMPOWERSTATUSCHANGE, PBT_POWERSETTINGCHANGE Data=0)",
+        "release_build": {
+            "result": "cmake --preset release + cmake --build --preset release exit 0 (P4.3 /GL + /LTCG link verified, no LTCG error)",
+            "exe_sizes_before_after_bytes": {
+                "compressor.exe": [259584, 249856],
+                "engine.exe": [570368, 612864],
+                "K6WP.exe": [202240, 196608],
+                "studio.exe": [890368, 877056]
+            },
+            "exe_total_delta": "+13824 bytes (+0.7%): 3 of 4 shrank (compressor -3.7%, K6WP -2.8%, studio -1.5%); engine.exe +42496 (+7.5%, P4.1 trim code + /GL inline growth combined, not separated)"
+        },
+        "qt_deploy": {
+            "before": "18 files / 86.94 MB (Debug build dir): Qt6Networkd.dll 5.32 MB + networkinformation + tls + generic/qtuiotouchplugind.dll",
+            "after": "13 files / 79.98 MB, zero Qt6Network references in studio.exe (strings scan), zero Qt6Network*.dll after rebuild",
+            "release": "Qt6Network.dll 1755784 bytes + generic/networkinformation/tls removed from build/release/; release studio.exe strings scan clean",
+            "root_cause": "windeployqt pulled Qt6Network solely via generic/qtuiotouchplugind.dll; fixed with --exclude-plugins qtuiotouchplugin (desktop Widgets needs no TuioTouch)"
+        },
+        "ffmpeg_essentials": {
+            "version": "8.1.2-essentials_build (gyan.dev, gcc 16.1.0)",
+            "sizes_mb": "ffmpeg.exe 101.90 (was 242.50), ffprobe.exe 101.69 (was 242.29); ~281 MB saved in repo + deploy",
+            "encoders": "h264_nvenc, h264_qsv, h264_amf, libx264 all listed",
+            "filters_muxer": "scale + fps filters listed; mp4 muxer faststart supported",
+            "probe_encoders": "nvenc/qsv/x264 works:true, amf works:false (no AMD HW on rig, expected), chosen h264_nvenc",
+            "corpus_bench": "tools/bench_compress.ps1 (revived pre-release from attic; $PSScriptRoot-relative paths resolve from tools/, verified exit 0): anime 4.10 s, gaming 7.06 s, slideshow 2.03 s, all nvenc, budget 30 s, PASS (fresh cache; -OutJson to temp so docs/bench_compress.json history is untouched)",
+            "e2e_cli": "1080p->720p24 nvenc ok:true, output 1280x720 h264 24fps, moov(36) before mdat(3803) faststart-OK",
+            "sha256": "ffmpeg.exe 1326DDE4C84FF1F96FE6B8916C5BED29E163E9B5DCCF995F6F3DB069D143EC5E, ffprobe.exe B49CCC7C6547B141AD5A2F6EC69CC04323D7133D7704D70B331B904C63EECB07 (vendor/VERSIONS.md)"
+        },
+        "update_checker": {
+            "method": "scratch Qt harness (temp dir, repo update_checker.cpp unmodified) + local fake releases API recording headers",
+            "offline_refused": "CHECK_FINISHED 0, silent, exit 0",
+            "online_newer": "UPDATE_AVAILABLE v9.9.9 + CHECK_FINISHED 1; server saw User-Agent: K6WP/1.1.0, Accept: application/vnd.github+json",
+            "online_older": "CHECK_FINISHED 0, no UpdateAvailable",
+            "disabled_todo_url": "fully silent, no signals",
+            "main_window": "untouched (git status: only update_checker.* + studio/CMakeLists.txt)"
+        },
+        "settings_smoke": {
+            "method": "offscreen QApplication harness instantiating real SettingsWidget",
+            "result": "17/17 PASS (batteryModeCombo cap24/static, cpuAffinityCombo auto/all + E-core label, gpuAdapterCombo auto/integrated/discrete + Terintegrasi/Diskrit labels)"
+        },
+        "packaging": {
+            "tool": "packaging/make_zip.ps1 (fresh release-preset rebuild + stage + asserts)",
+            "result": "DONE exit 0; artifact dist/K6WP-portable-1.1.0.zip (133.37 MB, was 238.44 MB)",
+            "version_assert": "20 version spots agree with K6WP_VERSION 1.1.0 (root CMakeLists project()+K6WP_VERSION, installer.nsi APP_VERSION+VIProductVersion, 4 app.rc FileVersion+ProductVersion)",
+            "ship_set_assert": "30 staged files match installer.nsi File set; 10 RMDir dirs present (generic/tls/networkinformation removed from installer.nsi to match the Network-free deploy)",
+            "qtfree_assert": "K6WP.exe has no Qt6*.dll dependents",
+            "windeployqt": "Direct dependencies Qt6Core/Qt6Gui/Qt6Widgets only; deployed Qt6Core/Qt6Gui/Qt6Svg/Qt6Widgets - zero Qt6Network",
+            "staging": "350.07 MB / 30 files (was 618.82 MB / 28 files): ffmpeg 97.18 MiB + ffprobe 96.98 MiB essentials, Qt runtime ~21.6 MiB, 4 exes ~1.8 MiB, libmpv-2.dll 114.77 MB (unchanged, still the largest single file)",
+            "size_assert": "133.37 MB < 250 MB"
+        }
+    },
+    "final_matrix": {
+        "idle_cpu_lt_0_3": {
+            "actual": 0.02,
+            "verdict": "PASS"
+        },
+        "paused_zero_wakeup": {
+            "actual": "CLOSED as documented limitation (pre-release diagnosis 2026-09-22, packaging/known-limitations.md section 11). Clean replication with the phase-2 row-b method (no exit/simulate flags, manual IPC pause mask=1, 60 s tidsnap raw-delta): 13.5/s process-wide on the current engine (11.8/s pre-hotfix; delta = run variance + transient destroy-poke wakes, all zero-CPU). Top thread ~9.5/s at 0.000% CPU = IPC ServeLoop 100 ms accept slices by design; libmpv-internal threads ~1-1.5/s at 0.000%; all else <=0.16/s. Zero file I/O + zero periodic log lines in-window: decode fully stopped, churn is pure zero-CPU wait slices. Ordered suspects cleared (config event path armed, occlusion disarmed/silent, only conditional/transient SetTimer sites). Silencing the slice = IPC-server redesign (accept-latency + protected IPC v1 path) = non-trivial by the pre-release brief: no refactor, gate recorded NOT MET. Confound on record: --exit-after-ms forces 50 ms cadence via AnySimulateArmed() (~80/s); such runs superseded for cadence.",
+            "p4_impact": "none (no loop/IPC/pause-path change in P4; P4.1 timer fires once then dead)",
+            "hotfix_impact": "destroy/foreground/minimize/locationchange pokes add only transient wakes (150 ms one-shot debounce, early-out when no slot paused); 60 s re-verified 13.5/s vs 11.8/s pre-fix. No periodic timer added.",
+            "verdict": "DOCUMENTED LIMITATION (gate < 1.0/s NOT MET, fix direction recorded, no prod change)"
+        },
+        "ram_1mon": {
+            "actual_private": "idle 24.16 MB (+0.45 vs phase-3 23.71), playback 150.76 MB (+7.14 vs phase-3 143.62)",
+            "actual_ws": "idle 1.63 MB, playback 2.85 MB (post-trim resident; pre-trim peaks 29.9/151.6 MB)",
+            "verdict": "TARGET NOT MET on private bytes (baseline -10 MB aspirational target missed: +0.5/+7.1 MB from new code pages + run variance, single-sample, rerun variance not quantified). WS collapse is a trim artifact, NOT a memory saving: private bytes are the honest cost metric and are carried in full. Page-fault cost on resume/seek after trim is unmeasured."
+        },
+        "ram_2mon": {
+            "actual": "UNTESTED (single-monitor lab; same constraint as phase 2/3)",
+            "verdict": "UNTESTED"
+        },
+        "decode_2mon_eq_1": {
+            "actual": "N (per-monitor decode retained by the 3-lite descoping decision: GL-WGL forced software decode, native D3D11 blocked on upstream PR mpv#17764, ANGLE rejected — see tech-debt)",
+            "verdict": "DESCOPED for 1.1.0 (not re-attempted in P4)"
+        },
+        "occlusion_maximized_monitoroff_batterystatic": {
+            "occlusion": "P2.5 occlusion_test unit suite green in this ritual ctest (behavior carried, no occlusion code touched in P4)",
+            "monitor_off": "sim flag exit 0 + PBT_POWERSETTINGCHANGE Data=0 delivered through the real parse path (P2.3 handler untouched)",
+            "battery_static": "P2.7 schema/tests carried (config_test green); DC sim exit 0 through the forced-DC latch",
+            "verdict": "PASS-by-carry (no P4 code on these paths; fresh sim smokes green)"
+        },
+        "gaming_delta": {
+            "actual": "UNMEASURED (no game harness on the QA rig)",
+            "verdict": "UNMEASURED"
+        }
+    },
+    "notes": {
+        "ws_vs_private": "SetProcessWorkingSetSize(-1,-1) evicts resident pages (WS) but commits nothing: private bytes are unchanged by the trim. Post-trim WS regrowth is workload-driven (idle-paused ~1.6 MB stable; hwdec playback ~3 MB stable — zero-copy d3d11va decode lives in driver/GPU-shared pool, cf. known-limitations section 3a). PeakWorkingSet64 (158.92 MB) preserves the pre-trim residency bound.",
+        "monitors": 1,
+        "trim_once_proof": "engine.log shows exactly one 'working-set trim' line per run (29904->180 KB idle, 151584->184 KB playback); done_ flag + KillTimer make re-trim impossible"
+    }
+}

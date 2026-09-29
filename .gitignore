@@ -1,0 +1,69 @@
+# Build output
+build/
+
+# Vendor scratch / downloaded binaries.
+# The fetchable third-party binaries are NOT tracked: together they are ~311 MB
+# and libmpv-2.dll alone exceeds GitHub's 100 MB per-file push limit. Run
+# tools\fetch_vendor.ps1, which downloads them and verifies every file against
+# the SHA256s in vendor/VERSIONS.md. CI calls it before configuring.
+#
+# Still tracked on purpose:
+#   vendor/VERSIONS.md      the pin manifest (source of truth)
+#   vendor/libmpv/lib/      mpv.lib, generated locally from the DLL's own
+#                           exports via dumpbin + lib; it is not downloadable
+#   vendor/vc_runtime/      app-local MS CRT; installer.nsi hard-fails without it
+#   vendor/.gitkeep
+vendor/bin/
+vendor/ffmpeg/ffmpeg.exe
+vendor/ffmpeg/ffprobe.exe
+vendor/libmpv/bin/
+vendor/libmpv/include/
+shared/thirdparty/json.hpp
+
+# OpenCode state
+.omo/
+
+# Tool scratch
+.codegraph/
+aqtinstall.log
+
+# IDE / editor
+.vs/
+.vscode/
+*.user
+CMakeUserPresets.json
+
+# Benchmark corpus (k6wp-18): generated locally via tools/make_corpus.ps1, never commit
+tests/corpus/*.mp4
+
+# QA probe scratch dirs (task-25: ad-hoc verbose/cfg probes write here; never commit)
+*verbose-probe*/
+*cfg-probe-*/
+
+# MSVC / cl.exe scratch when compiling harness TUs from the repo root (task-25)
+*.obj
+*.ilk
+*.pdb
+
+# OS
+*.log
+engine.log
+
+# Distribution ZIPs and build artifacts (generated; except tagged releases)
+dist/
+dist/*.zip
+
+# Windows thumbnail cache
+Thumbs.db
+
+# IDE / editor intermediate
+Desktop.ini
+
+# Ad-hoc root scratch docs (superseded planning notes)
+planning.md
+repomix.md
+loglog.txt
+*_dump.md
+
+# Test cache (stale .pyc from prior runs)
+tests/__pycache__/

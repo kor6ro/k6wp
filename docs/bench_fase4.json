@@ -1,0 +1,218 @@
+{
+  "todo": 32,
+  "gate": "fase-4",
+  "engine_pid": 11340,
+  "pid_samples": [
+    {
+      "phase": "start",
+      "pid": 11340
+    },
+    {
+      "phase": "r0",
+      "pid": 11340
+    },
+    {
+      "phase": "r1",
+      "pid": 11340
+    },
+    {
+      "phase": "r2",
+      "pid": 11340
+    },
+    {
+      "phase": "middle",
+      "pid": 11340
+    },
+    {
+      "phase": "end",
+      "pid": 11340
+    }
+  ],
+  "pid_constant": true,
+  "latency_budget_ms": 100.0,
+  "matrix": [
+    {
+      "cmd": "set_video",
+      "ack": {
+        "ok": true
+      },
+      "latency_ms": 11.65,
+      "pass": true
+    },
+    {
+      "cmd": "pause",
+      "ack": {
+        "ok": true
+      },
+      "latency_ms": 1.09,
+      "pass": true
+    },
+    {
+      "cmd": "resume",
+      "ack": {
+        "ok": true
+      },
+      "latency_ms": 0.91,
+      "pass": true
+    },
+    {
+      "cmd": "set_monitor",
+      "ack": {
+        "ok": true
+      },
+      "latency_ms": 0.19,
+      "pass": true
+    },
+    {
+      "cmd": "get_state",
+      "ack": {
+        "ok": true,
+        "state": {
+          "config": "",
+          "pid": 11340,
+          "running": true,
+          "video": "tests/corpus/slideshow.mp4",
+          "wallpaper_mode": "auto"
+        }
+      },
+      "latency_ms": 0.15,
+      "pass": true
+    },
+    {
+      "cmd": "set_video",
+      "ack": {
+        "ok": true
+      },
+      "latency_ms": 5.51,
+      "pass": true
+    },
+    {
+      "cmd": "pause",
+      "ack": {
+        "ok": true
+      },
+      "latency_ms": 1.03,
+      "pass": true
+    },
+    {
+      "cmd": "resume",
+      "ack": {
+        "ok": true
+      },
+      "latency_ms": 1.25,
+      "pass": true
+    },
+    {
+      "cmd": "set_monitor",
+      "ack": {
+        "ok": true
+      },
+      "latency_ms": 0.18,
+      "pass": true
+    },
+    {
+      "cmd": "get_state",
+      "ack": {
+        "ok": true,
+        "state": {
+          "config": "",
+          "pid": 11340,
+          "running": true,
+          "video": "tests/corpus/anime.mp4",
+          "wallpaper_mode": "auto"
+        }
+      },
+      "latency_ms": 0.22,
+      "pass": true
+    },
+    {
+      "cmd": "set_video",
+      "ack": {
+        "ok": true
+      },
+      "latency_ms": 3.5,
+      "pass": true
+    },
+    {
+      "cmd": "pause",
+      "ack": {
+        "ok": true
+      },
+      "latency_ms": 0.86,
+      "pass": true
+    },
+    {
+      "cmd": "resume",
+      "ack": {
+        "ok": true
+      },
+      "latency_ms": 0.66,
+      "pass": true
+    },
+    {
+      "cmd": "set_monitor",
+      "ack": {
+        "ok": true
+      },
+      "latency_ms": 0.19,
+      "pass": true
+    },
+    {
+      "cmd": "get_state",
+      "ack": {
+        "ok": true,
+        "state": {
+          "config": "",
+          "pid": 11340,
+          "running": true,
+          "video": "tests/corpus/slideshow.mp4",
+          "wallpaper_mode": "auto"
+        }
+      },
+      "latency_ms": 0.15,
+      "pass": true
+    }
+  ],
+  "error_paths": [
+    {
+      "name": "bad_path_set_video",
+      "expectation": "error ack",
+      "got": {
+        "error": "set_video handler rejected the command"
+      },
+      "latency_ms": 0.26,
+      "pass": true
+    },
+    {
+      "name": "frameless",
+      "expectation": "timeout (no reply)",
+      "got": "timeout, no reply",
+      "pass": true
+    },
+    {
+      "name": "malformed",
+      "expectation": "error ack",
+      "got": {
+        "error": "malformed IPC message (bad JSON, version, cmd, size, or frame)"
+      },
+      "latency_ms": 0.36,
+      "pass": true
+    }
+  ],
+  "ffprobe": [
+    {
+      "file": "slideshow.mp4",
+      "exists": true,
+      "size_bytes": 14435,
+      "ffprobe": "codec_name=h264\nwidth=1920\nheight=1080"
+    },
+    {
+      "file": "anime.mp4",
+      "exists": true,
+      "size_bytes": 33972972,
+      "ffprobe": "codec_name=h264\nwidth=1920\nheight=1080"
+    }
+  ],
+  "verdict": "PASS",
+  "fail_reason": ""
+}

@@ -1,0 +1,89 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://k6wp.local/schemas/config.schema.json",
+  "title": "K6WP WallpaperConfig",
+  "description": "Versioned on-disk configuration for the K6WP wallpaper engine. Stored at %LOCALAPPDATA%/K6WP/config.json. Version 0 (legacy) is missing the newer fields and is migrated to version 5 by the loader; version 1 migrates to version 5 with monitor_id forced to -1 (the v0/v1 id had no render effect); version 2 migrates with legacy fit_mode fill normalized to cover; version 3 migrates with battery_mode defaulted to cap24; version 4 migrates with cpu_affinity/gpu_adapter defaulted to auto. On migration (or corrupt input) the loader backs up the original bytes to <config>.bak and rewrites the file at the current version.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version"],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 5,
+      "description": "Schema version. 0 = legacy (missing fields are defaulted on load), 1 = monitor_id without render effect, 2 = monitor targeting (-1 = all screens), 3 = legacy fit_mode fill normalized to cover, 4 = battery_mode cap24|static, 5 = current (cpu_affinity auto|all + gpu_adapter auto|integrated|discrete)."
+    },
+    "video_path": {
+      "type": "string",
+      "description": "Path to the wallpaper video file, UTF-8 encoded. May contain non-UTF8 bytes on disk; the loader reads the raw path."
+    },
+    "fit_mode": {
+      "type": "string",
+      "enum": ["cover", "fill", "fit", "stretch", "center"],
+      "default": "cover",
+      "description": "How the video is fitted to the monitor. cover/fill = fullscreen fill (no black bars); fit = contain (letterbox); stretch = distort to fill; center = original size."
+    },
+    "speed": {
+      "type": "number",
+      "minimum": 0.5,
+      "maximum": 2.0,
+      "default": 1.0,
+      "description": "Playback speed multiplier. Values outside 0.5-2.0 are rejected. RESERVED: validated and persisted but not yet applied by the renderer."
+    },
+    "monitor_id": {
+      "type": "integer",
+      "minimum": -1,
+      "default": -1,
+      "description": "Target monitor id: -1 = all screens; >=0 = only that monitor."
+    },
+    "crf": {
+      "type": "integer",
+      "minimum": 16,
+      "maximum": 28,
+      "default": 22,
+      "description": "Compression CRF for the compressor. Values outside 16-28 are rejected."
+    },
+    "resolution_w": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0,
+      "description": "Compress target width. 0 = use monitor native resolution."
+    },
+    "resolution_h": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0,
+      "description": "Compress target height. 0 = use monitor native resolution."
+    },
+    "fps_cap": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 30,
+      "default": 30,
+      "description": "Maximum playback/compress framerate. Values above 30 are rejected."
+    },
+    "battery_saver": {
+      "type": "boolean",
+      "default": false,
+      "description": "When true, the engine caps fps / pauses while on battery (DC power)."
+    },
+    "battery_mode": {
+      "type": "string",
+      "enum": ["cap24", "static"],
+      "default": "cap24",
+      "description": "DC-power policy, consulted only when battery_saver is on and the box is on DC power. cap24 = cap fps to 24 (legacy behavior); static = pause slot decode via the power pause bit, holding the last frame, with no fps-cap change. Ignored on AC and when battery_saver is off."
+    },
+    "cpu_affinity": {
+      "type": "string",
+      "enum": ["auto", "all"],
+      "default": "auto",
+      "description": "Engine CPU affinity. auto = pin the engine to performance cores on hybrid (P/E) CPUs; all = use every logical processor."
+    },
+    "gpu_adapter": {
+      "type": "string",
+      "enum": ["auto", "integrated", "discrete"],
+      "default": "auto",
+      "description": "GPU adapter preference for video decode/render on hybrid systems (mpv d3d11-adapter pin). auto = prefer the integrated GPU; integrated/discrete force that adapter when present."
+    }
+  }
+}

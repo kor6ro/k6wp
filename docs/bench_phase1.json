@@ -1,0 +1,225 @@
+{
+    "baseline_ref": "docs/bench_baseline_pre_opt.json",
+    "ritual": {
+        "idle_debug": {
+            "tool": "bench_cpu_mem",
+            "date": "2026-09-21",
+            "samples": 117,
+            "interval_ms": 500,
+            "minutes": 1,
+            "cores": 16,
+            "avg_cpu_percent": 0,
+            "peak_cpu_percent": 0.19,
+            "avg_workingset_mb": 27.11,
+            "peak_workingset_mb": 27.12,
+            "avg_private_mb": 23.41,
+            "peak_private_mb": 23.41,
+            "reproducibility": "TotalProcessorTime deltas / 16 cores, 500ms interval. Rerun +-10% on avg_cpu_percent under identical load; close other apps before comparing."
+        },
+        "idle_release_apples_to_apples": {
+            "tool": "bench_cpu_mem",
+            "date": "2026-09-21",
+            "samples": 117,
+            "interval_ms": 500,
+            "minutes": 1,
+            "cores": 16,
+            "avg_cpu_percent": 0,
+            "peak_cpu_percent": 0.19,
+            "avg_workingset_mb": 26.54,
+            "peak_workingset_mb": 26.54,
+            "avg_private_mb": 23.99,
+            "peak_private_mb": 24,
+            "reproducibility": "TotalProcessorTime deltas / 16 cores, 500ms interval. Rerun +-10% on avg_cpu_percent under identical load; close other apps before comparing."
+        },
+        "idle_release_apples_to_apples_rerun": {
+            "tool": "bench_cpu_mem",
+            "date": "2026-09-21",
+            "samples": 117,
+            "interval_ms": 500,
+            "minutes": 1,
+            "cores": 16,
+            "avg_cpu_percent": 0,
+            "peak_cpu_percent": 0.19,
+            "avg_workingset_mb": 26.48,
+            "peak_workingset_mb": 26.48,
+            "avg_private_mb": 23.8,
+            "peak_private_mb": 23.81,
+            "reproducibility": "TotalProcessorTime deltas / 16 cores, 500ms interval. Rerun +-10% on avg_cpu_percent under identical load; close other apps before comparing."
+        },
+        "playback_30fps_source_debug": {
+            "tool": "bench_cpu_mem",
+            "date": "2026-09-21",
+            "samples": 117,
+            "interval_ms": 500,
+            "minutes": 1,
+            "cores": 16,
+            "avg_cpu_percent": 0.24,
+            "peak_cpu_percent": 3.02,
+            "avg_workingset_mb": 151.08,
+            "peak_workingset_mb": 166.89,
+            "avg_private_mb": 154.02,
+            "peak_private_mb": 168.9,
+            "reproducibility": "TotalProcessorTime deltas / 16 cores, 500ms interval. Rerun +-10% on avg_cpu_percent under identical load; close other apps before comparing."
+        },
+        "playback_24fps_compressed_debug": {
+            "tool": "bench_cpu_mem",
+            "date": "2026-09-21",
+            "samples": 118,
+            "interval_ms": 500,
+            "minutes": 1,
+            "cores": 16,
+            "avg_cpu_percent": 0.19,
+            "peak_cpu_percent": 4.07,
+            "avg_workingset_mb": 149.55,
+            "peak_workingset_mb": 161.71,
+            "avg_private_mb": 153.13,
+            "peak_private_mb": 164.33,
+            "reproducibility": "TotalProcessorTime deltas / 16 cores, 500ms interval. Rerun +-10% on avg_cpu_percent under identical load; close other apps before comparing."
+        }
+    },
+    "comparisons": {
+        "idle_ram_vs_baseline": {
+            "baseline": {
+                "engine": "release",
+                "avg_cpu_percent": 0,
+                "peak_cpu_percent": 0.19,
+                "avg_workingset_mb": 26.46,
+                "peak_workingset_mb": 26.47,
+                "threads": 22,
+                "source": "docs/bench_baseline_pre_opt.json notes.idle (headless no-video, temp LOCALAPPDATA, --exit-after-ms=90000, 1-min sample)"
+            },
+            "ritual_debug": {
+                "avg_cpu_percent": 0,
+                "avg_workingset_mb": 27.11,
+                "peak_workingset_mb": 27.12,
+                "threads": 21,
+                "verdict": "NOT strictly lower (27.11 vs 26.46) - Debug build-type overhead (Debug CRT/iterators/asserts); not a product regression. Phase 1 changes do not touch the idle path (no video/mpv loaded)."
+            },
+            "apples_to_apples_release": {
+                "avg_cpu_percent": 0,
+                "avg_workingset_mb": 26.48,
+                "peak_workingset_mb": 26.48,
+                "threads": 23,
+                "runs": "26.54 then 26.48 (rerun)",
+                "verdict": "Within sampling noise of baseline (26.48-26.54 vs 26.46, +0.08%..+0.3%); NOT strictly lower but unchanged. Same release engine, same conditions as baseline."
+            },
+            "ruling": "Task 8 Ruling: idle RAM 'strictly lower than baseline' gate NOT met. Debug run 27.11 MB fails on build-type grounds (Debug overhead). Apples-to-apples release runs 26.48/26.54 MB vs baseline 26.46 MB = +0.08%..+0.3%, within sampling noise (baseline reproducibility note: +-10% on avg_cpu_percent; 0.3% WS variance is noise). No product code touched to chase the gate; numbers recorded as measured."
+        },
+        "playback_cpu_vs_baseline": {
+            "baseline": {
+                "engine": "release",
+                "avg_cpu_percent": 0.43,
+                "peak_cpu_percent": 1.31,
+                "avg_workingset_mb": 150.89,
+                "avg_private_mb": 576.15,
+                "threads": 31,
+                "hwdec": "d3d11va active (engine.log)",
+                "source": "docs/bench_baseline_pre_opt.json notes.playback (PID 5748 release --minimized boot-autoplay user video, 1-min live sample)"
+            },
+            "ritual_debug": {
+                "avg_cpu_percent": 0.24,
+                "peak_cpu_percent": 3.02,
+                "avg_workingset_mb": 151.08,
+                "avg_private_mb": 154.02,
+                "threads": 34,
+                "hwdec": "d3d11va active (engine.log)",
+                "source": "build/msvc-dev/engine.exe --video build/spikes/test_1080p.mp4 --exit-after-ms=90000, isolated LOCALAPPDATA, 1-min sample"
+            },
+            "verdict": "PASS - playback CPU 0.24% <= baseline 0.43% (Debug engine still below the release baseline; lean mpv profile P1.1 + fps cap). Working set 151.08 MB vs baseline 150.89 MB (+0.1%, noise)."
+        },
+        "fps30_vs_fps24_decode": {
+            "source_30fps": {
+                "file": "build/spikes/test_1080p.mp4",
+                "fps": 30,
+                "avg_cpu_percent": 0.24,
+                "peak_cpu_percent": 3.02,
+                "avg_workingset_mb": 151.08,
+                "avg_private_mb": 154.02
+            },
+            "compressed_24fps": {
+                "file": "C:/Users/axioo/AppData/Local/Temp/opencode/k6wp-p1.6/test_1080p_fps24.mp4",
+                "fps": 24,
+                "encoder": "h264_nvenc",
+                "cache_hit": false,
+                "avg_cpu_percent": 0.19,
+                "peak_cpu_percent": 4.07,
+                "avg_workingset_mb": 149.55,
+                "avg_private_mb": 153.13
+            },
+            "verdict": "PASS - 24fps-compressed decode load numerically below the 30fps source path (avg CPU 0.19 < 0.24; WS 149.55 < 151.08; priv 153.13 < 154.02). Compressed with compressor.exe --fps 24 --res 1920x1080 --crf 22 --encoder auto, fresh LOCALAPPDATA cache dir (cache_hit:false)."
+        }
+    },
+    "watches": {
+        "display_desync_long_loop": {
+            "note": "video-sync=display-desync in effect (mpv option line, engine.log). Both playback runs looped 90 s (--exit-after-ms=90000) with no re-loop/restart errors in engine.log and hwdec staying d3d11va throughout; clean shutdown ('engine shutdown complete'). Before/after visual desync check explicitly deferred to F3-manual (60 s+ loop visual QA)."
+        },
+        "demuxer_ram": {
+            "note": "Demuxer readahead bounded: demuxer-max-bytes=16MiB, demuxer-max-back-bytes=4MiB (engine/src/mpv_renderer.cpp:114-115). Playback WS 151.08 MB / priv 154.02 MB (30fps debug); 24fps path 149.55 / 153.13 MB. Watch: WS stays ~150 MB class across the 90 s loop; no unbounded growth observed in either run."
+        }
+    },
+    "log_evidence": {
+        "new_mpv_option_set": {
+            "file": "C:/Users/axioo/AppData/Local/Temp/opencode/k6wp-p1.6/bench_playback30_debug/K6WP/engine.log",
+            "line": 7,
+            "text": "mpv: start vo=gpu-next,gpu hwdec-current=unknown adapter=default (req hwdec=d3d11va gpu-api=d3d11 video-sync=display-desync; active hwdec follows via observer)"
+        },
+        "vo_hwdec_current_adapter_line": {
+            "file": "C:/Users/axioo/AppData/Local/Temp/opencode/k6wp-p1.6/bench_playback30_debug/K6WP/engine.log",
+            "line": 7,
+            "text": "mpv: start vo=gpu-next,gpu hwdec-current=unknown adapter=default (req hwdec=d3d11va gpu-api=d3d11 video-sync=display-desync; active hwdec follows via observer)"
+        },
+        "hwdec_active": {
+            "file": "C:/Users/axioo/AppData/Local/Temp/opencode/k6wp-p1.6/bench_playback30_debug/K6WP/engine.log",
+            "line": 28,
+            "text": "mpv: hwdec-current=d3d11va (hwdec active)"
+        },
+        "priority_class_line": {
+            "file": "C:/Users/axioo/AppData/Local/Temp/opencode/k6wp-p1.6/bench_playback30_debug/K6WP/engine.log",
+            "line": 1,
+            "text": "priority: BELOW_NORMAL_PRIORITY_CLASS set"
+        },
+        "enqueue_fps_res_lines": {
+            "note": "Studio-side log lines (P1.3-enqueue, commit 420acdd): studio/src/main_window.cpp:1576 and studio/src/import_dialog.cpp:275 emit 'Enqueue: fps=%1 (source=%2, cap=%3) res=%4x%5'. engine.log carries no enqueue line - the engine-side fps cap is the mpv 'vf fps=N' filter (engine/src/mpv_renderer.cpp:320)."
+        }
+    },
+    "notes": {
+        "branch": "opt/phase-1",
+        "base_commit": "d6edc29",
+        "ritual_engine": "build/msvc-dev/engine.exe (Debug, BUILD_TESTING=ON) - per plan §8 ritual; P0.1 baseline used build/release/engine.exe",
+        "apples_to_apples_engine": "build/release/engine.exe (still present from Todo 1, NOT rebuilt)",
+        "idle": {
+            "avg_cpu_percent": 0,
+            "avg_workingset_mb": 27.11,
+            "threads": 21,
+            "source": "build/msvc-dev/engine.exe headless no-video, isolated LOCALAPPDATA, --exit-after-ms=90000, 1-min sample"
+        },
+        "playback": {
+            "avg_cpu_percent": 0.24,
+            "avg_workingset_mb": 151.08,
+            "avg_private_mb": 154.02,
+            "threads": 34,
+            "hwdec": "d3d11va active (engine.log)",
+            "source": "build/msvc-dev/engine.exe --video build/spikes/test_1080p.mp4 (30fps h264 1920x1080), isolated LOCALAPPDATA, --exit-after-ms=90000, 1-min sample"
+        },
+        "fps24": {
+            "avg_cpu_percent": 0.19,
+            "avg_workingset_mb": 149.55,
+            "avg_private_mb": 153.13,
+            "threads": 34,
+            "hwdec": "d3d11va active (engine.log)",
+            "source": "build/msvc-dev/engine.exe --video <temp>/test_1080p_fps24.mp4 (24fps h264 1920x1080, h264_nvenc), isolated LOCALAPPDATA, --exit-after-ms=90000, 1-min sample"
+        },
+        "flag_smokes": {
+            "all_exit_0": true,
+            "flags": "--exit-after-ms, --simulate-device-lost-after-ms, --simulate-suspend-after-ms, --simulate-dc-after-ms, --video, --config, --wallpaper-mode workerw, --wallpaper-mode progman"
+        },
+        "resident_restored": {
+            "pid": 2072,
+            "threads": 36,
+            "flags": "--minimized, real LOCALAPPDATA, hwdec-current=d3d11va",
+            "boot_autoplay": "engine.log [10:39:16.975] engine: boot autoplay 'C:/Users/axioo/Downloads/Video/1657392155-1657392155-desktop-esdeath-akame-ga-kill-live-wallpaper.mp4' - slots own decode, headless stays idle"
+        },
+        "monitors": 1,
+        "startup": "untouched by Phase 1 - bench_startup.ps1 skipped (optional per plan §8); startup baseline median 75.5 ms stands"
+    }
+}
