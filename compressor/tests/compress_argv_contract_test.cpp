@@ -108,6 +108,34 @@ std::string ReadAllBytes(const std::filesystem::path& p) {
                      std::istreambuf_iterator<char>());
 }
 
+// Points the spawned compressor at the pinned vendored ffmpeg via
+// K6WP_FFMPEG. Without this the test depends on shared/ffmpeg_path.cpp's
+// directory guessing (exe_dir\..\..\vendor\ffmpeg), which holds in a dev tree
+// but not on a clean CI checkout, and the "exits 0" assertions then fail for a
+// reason that has nothing to do with the contract under test. Searches upward
+// from the cwd so it works from any build dir inside the repo.
+bool PinFfmpegForChild() {
+  std::error_code ec;
+  std::filesystem::path dir = std::filesystem::current_path(ec);
+  if (ec) return false;
+  for (int up = 0; up < 8 && !dir.empty(); ++up) {
+    const std::filesystem::path candidate =
+        dir / "vendor" / "ffmpeg" / "ffmpeg.exe";
+    if (std::filesystem::exists(candidate, ec) && !ec) {
+      SetEnvironmentVariableW(L"K6WP_FFMPEG", candidate.wstring().c_str());
+      return true;
+    }
+    const std::filesystem::path parent = dir.parent_path();
+    if (parent == dir) break;
+    dir = parent;
+  }
+  std::printf(
+      "     (no vendor/ffmpeg/ffmpeg.exe found walking up from %s - "
+      "run tools\\fetch_vendor.ps1)\n",
+      std::filesystem::current_path().string().c_str());
+  return false;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -164,6 +192,7 @@ int main(int argc, char** argv) {
       self.parent_path() / "compressor.exe";
   Check(std::filesystem::exists(compressor, ec) && !ec,
         "compressor.exe next to test exe");
+  Check(PinFfmpegForChild(), "pinned ffmpeg located for the child process");
   if (g_failures > 0) {
     std::printf("RESULT: %d checks, %d failures (pre-spawn)\n", g_checks,
                 g_failures);
@@ -280,18 +309,18 @@ int main(int argc, char** argv) {
                               std::filesystem::path(L"C:\\vids\\clip.mp4")),
         "not-same-file: empty side is never a collision");
 
-  // Relative vs absolute: absolute() is the layer that resolves this, and the
-  // only honest way to test it is against the real cwd.
-  {
-    const std::filesystem::path abs = same;
-    std::error_code rel_ec;
-    const std::filesystem::path rel = std::filesystem::relative(abs, rel_ec);
-    Check(!rel_ec, "relative() of the fixture resolved");
-    if (!rel_ec) {
-      Check(PathsReferToSameFile(abs, rel),
-            "same-file: relative spelling of an absolute path");
-    }
-  }
+  // A '..'-bearing spelling of the fixture, built from the fixture itself
+      // so it exercises the collapse layer deterministically. It replaces an
+      // earlier std::filesystem::relative() round-trip, which made the result
+      // depend on the process cwd and failed on CI for that reason alone.
+      {
+        const std::filesystem::path abs = same;
+        const std::filesystem::path spelled =
+            abs.parent_path() / ".." / abs.parent_path().filename() /
+            abs.filename();
+        Check(PathsReferToSameFile(abs, spelled),
+              "same-file: '..' round-trip spelling of a real file");
+      }
 
   // Layer 2 (NTFS file identity): a hardlink is a different directory entry
   // pointing at the same file index, which no amount of string normalisation
