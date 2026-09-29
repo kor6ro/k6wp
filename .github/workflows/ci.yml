@@ -61,14 +61,15 @@ jobs:
         run: ctest --test-dir build -C Release --output-on-failure
 
       # NOTE: make_zip.ps1 defaults to the local "Visual Studio 18 2026"
-      # preset paths; -Generator lets the runner build the same release
-      # triple (BUILD_TESTING=OFF, build/release) with its own VS. QT_ROOT
-      # comes from the Qt action's QT_ROOT_DIR, as the script expects.
+      # preset paths. -Generator auto omits -G entirely so CMake picks whatever
+      # Visual Studio the runner has, instead of pinning a version that may not
+      # be installed (pinning "Visual Studio 17 2022" failed on current
+      # runners). QT_ROOT comes from the Qt action's QT_ROOT_DIR.
       - name: Package portable ZIP
         shell: pwsh
         run: |
           $env:QT_ROOT = $env:QT_ROOT_DIR
-          ./packaging/make_zip.ps1 -Generator "Visual Studio 17 2022"
+          ./packaging/make_zip.ps1 -Generator auto
 
       - name: Verify ZIP contents
         shell: pwsh

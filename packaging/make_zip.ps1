@@ -262,8 +262,14 @@ if ([string]::IsNullOrWhiteSpace($Generator)) {
   Write-Host $buildOut
   if ($LASTEXITCODE -ne 0) { Fail "cmake --build --preset release failed with exit $LASTEXITCODE" }
 } else {
-  Log "Building all targets (generator $Generator, dir $BuildDir)..."
-  $cfgOut = & $CmakeExe -S $RepoRoot -B $BuildDir -G $Generator -A x64 "-DCMAKE_PREFIX_PATH=$env:QT_ROOT" -DBUILD_TESTING=OFF -DK6WP_BUILD_TOOLS=OFF 2>&1 | Out-String
+  # "-Generator auto" omits -G so CMake picks the newest installed Visual
+  # Studio. Any other value is passed through as -G, which pins a VS version
+  # and breaks on a runner that has a different one - that is what made CI
+  # packaging fail with "could not find any instance of Visual Studio".
+  $genArgs = @()
+  if ($Generator -ne "auto") { $genArgs = @("-G", $Generator) }
+  Log "Building all targets (generator $(if ($genArgs.Count) { $Generator } else { 'auto-detected' }), dir $BuildDir)..."
+  $cfgOut = & $CmakeExe -S $RepoRoot -B $BuildDir @genArgs -A x64 "-DCMAKE_PREFIX_PATH=$env:QT_ROOT" -DBUILD_TESTING=OFF -DK6WP_BUILD_TOOLS=OFF 2>&1 | Out-String
   Add-Content -LiteralPath $script:LogFile -Value $cfgOut
   Write-Host $cfgOut
   if ($LASTEXITCODE -ne 0) { Fail "cmake configure ($Generator) failed with exit $LASTEXITCODE" }
