@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(k6wp VERSION 1.2.0 LANGUAGES CXX)
+project(k6wp VERSION 1.2.1 LANGUAGES CXX)
 
 # Version used across the project (engine / studio / compressor).
-set(K6WP_VERSION "1.2.0")
+set(K6WP_VERSION "1.2.1")
 
 # --- Single-source version (todo 8 / MED-14) ---------------------------------
 # K6WP_VERSION is canonical. configure_file() stamps it into
