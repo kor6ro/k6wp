@@ -568,9 +568,13 @@ Log "Ship-set assert OK: $($expected.Count) staged files match installer.nsi Fil
       if ($g) { $dumpbinPath = $g.FullName; break }
     }
     # A GitHub windows runner has no VS instance carrying the VC.Tools
-    # component id (vswhere reported 0), yet cmake obviously found a compiler
-    # because the build succeeded. So ask the build system instead of guessing
-    # VS layouts: the cache records the exact cl.exe/link.exe that were used.
+    # component id (vswhere reported 0) and no dumpbin on PATH, yet the build
+    # succeeds, so a toolset is present. Guessing VS directory layouts kept
+    # missing; ask the build system instead. CMake records the toolchain it
+    # resolved in CMakeCache - the linker and RC compiler are recorded
+    # (CMAKE_CXX_COMPILER is not), and dumpbin sits in the same
+    # .../VC/Tools/MSVC/<ver>/bin/Hostx64/x64 directory as link.exe, so derive
+    # it from whichever of those is present.
     if (-not $dumpbinPath) {
       $candidates = @(
         (Join-Path $BuildDir "CMakeCache.txt"),
@@ -579,15 +583,19 @@ Log "Ship-set assert OK: $($expected.Count) staged files match installer.nsi Fil
       )
       foreach ($cache in $candidates) {
         if (-not (Test-Path -LiteralPath $cache)) { continue }
-        $cc = Select-String -LiteralPath $cache -Pattern '^CMAKE_CXX_COMPILER:(?:FILEPATH|PATH)=' -ErrorAction SilentlyContinue |
-          Select-Object -First 1
-        if (-not $cc) { continue }
-        $cl = ($cc.Line -split '=', 2)[1].Trim()
-        # cl.exe lives in <toolset>\bin\Hostx64\x64\; dumpbin is a sibling.
-        $binDir = Split-Path -Parent $cl
+        $tool = $null
+        foreach ($key in @('CMAKE_LINKER', 'CMAKE_RC_COMPILER', 'CMAKE_CXX_COMPILER')) {
+          $hit = Select-String -LiteralPath $cache -Pattern ("^" + $key + ":") -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+          if ($hit) { $tool = ($hit.Line -split '=', 2)[1].Trim(); break }
+        }
+        if (-not $tool) { continue }
+        $binDir = Split-Path -Parent $tool
         $d = Get-ChildItem -LiteralPath $binDir -Filter "dumpbin.exe" -ErrorAction SilentlyContinue |
           Select-Object -First 1
         if ($d) { $dumpbinPath = $d.FullName; break }
+        # RC.EXE can live outside the toolset (Common\MDev98\Bin), so also walk
+        # up to the toolset and glob.
         $d2 = Get-ChildItem -LiteralPath (Split-Path -Parent $binDir) -Filter "dumpbin.exe" -Recurse -ErrorAction SilentlyContinue |
           Select-Object -First 1
         if ($d2) { $dumpbinPath = $d2.FullName; break }
@@ -611,8 +619,10 @@ Log "Ship-set assert OK: $($expected.Count) staged files match installer.nsi Fil
       foreach ($cache in @((Join-Path $BuildDir "CMakeCache.txt"), (Join-Path $RepoRoot "build\CMakeCache.txt"))) {
         $seen += "cache $cache exists : $(Test-Path -LiteralPath $cache)"
         if (Test-Path -LiteralPath $cache) {
-          $cc = Select-String -LiteralPath $cache -Pattern '^CMAKE_CXX_COMPILER:' -ErrorAction SilentlyContinue | Select-Object -First 1
-          $seen += "  CMAKE_CXX_COMPILER : $(if ($cc) { $cc.Line } else { 'not recorded' })"
+          foreach ($key in @('CMAKE_LINKER', 'CMAKE_RC_COMPILER', 'CMAKE_CXX_COMPILER')) {
+            $hit = Select-String -LiteralPath $cache -Pattern ("^" + $key + ":") -ErrorAction SilentlyContinue | Select-Object -First 1
+            $seen += "  $key : $(if ($hit) { $hit.Line } else { 'not recorded' })"
+          }
         }
       }
       $seen += "dumpbin on PATH : $(if (Get-Command dumpbin.exe -ErrorAction SilentlyContinue) { (Get-Command dumpbin.exe).Source } else { 'none' })"
