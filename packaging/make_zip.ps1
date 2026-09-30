@@ -547,30 +547,45 @@ Log "Ship-set assert OK: $($expected.Count) staged files match installer.nsi Fil
     Where-Object { $_.FullName -like "*Hostx64\x64*" } | Select-Object -First 1
   if ($f) { $dumpbinPath = $f.FullName }
   if (-not $dumpbinPath) {
+    # Every instance, not just -latest: a runner can carry several Visual
+    # Studios and the newest one may lack the VC tools.
     $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
+    $vsPaths = @()
     if (Test-Path -LiteralPath $vswhere) {
-      $vsPath = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools -property installationPath 2>$null | Select-Object -First 1
-      if (-not [string]::IsNullOrWhiteSpace($vsPath)) {
-        $msvcRoot = Join-Path $vsPath "VC\Tools\MSVC"
-        $toolset = Get-ChildItem -LiteralPath $msvcRoot -Directory -ErrorAction SilentlyContinue |
-          Sort-Object Name -Descending | Select-Object -First 1
-        if ($toolset) {
-          $cand = Join-Path $toolset.FullName "bin\Hostx64\x64\dumpbin.exe"
-          if (Test-Path -LiteralPath $cand) { $dumpbinPath = $cand }
-        }
-        if (-not $dumpbinPath) {
-          $g = Get-ChildItem -LiteralPath $msvcRoot -Filter "dumpbin.exe" -Recurse -ErrorAction SilentlyContinue |
-            Select-Object -First 1
-          if ($g) { $dumpbinPath = $g.FullName }
-        }
+      $vsPaths = @(& $vswhere -products * -all -prerelease -requires Microsoft.VisualStudio.Component.VC.Tools -property installationPath 2>$null |
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    }
+    foreach ($vp in $vsPaths) {
+      $msvcRoot = Join-Path $vp "VC\Tools\MSVC"
+      $toolset = Get-ChildItem -LiteralPath $msvcRoot -Directory -ErrorAction SilentlyContinue |
+        Sort-Object Name -Descending | Select-Object -First 1
+      if ($toolset) {
+        $cand = Join-Path $toolset.FullName "bin\Hostx64\x64\dumpbin.exe"
+        if (Test-Path -LiteralPath $cand) { $dumpbinPath = $cand; break }
       }
+      $g = Get-ChildItem -LiteralPath $msvcRoot -Filter "dumpbin.exe" -Recurse -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+      if ($g) { $dumpbinPath = $g.FullName; break }
+    }
+    if (-not $dumpbinPath) {
+      $onPath = Get-Command dumpbin.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+      if ($onPath -and $onPath.Path -like "*\Tools\MSVC\*") { $dumpbinPath = $onPath.Path }
+    }
+    if (-not $dumpbinPath) {
+      # Report what was actually inspected. A fail-closed gate that cannot say
+      # why it failed just sends the next person back to guessing.
+      $seen = @()
+      $seen += "vswhere present : $(Test-Path -LiteralPath $vswhere) ($vswhere)"
+      $seen += "instances with VC.Tools : $($vsPaths.Count)"
+      foreach ($vp in $vsPaths) {
+        $seen += "  $vp"
+        $seen += "    VC\Tools\MSVC exists : $(Test-Path -LiteralPath (Join-Path $vp 'VC\Tools\MSVC'))"
+        $seen += "    bin contents : $((Get-ChildItem -LiteralPath (Join-Path $vp 'VC\Tools') -Recurse -Filter 'dumpbin.exe' -ErrorAction SilentlyContinue | Select-Object -First 3 -ExpandProperty FullName) -join '; ')"
+      }
+      $seen += "dumpbin on PATH : $(if (Get-Command dumpbin.exe -ErrorAction SilentlyContinue) { (Get-Command dumpbin.exe).Source } else { 'none' })"
+      Fail ("dumpbin.exe (Hostx64) not found. Probed: " + ($seen -join ' | '))
     }
   }
-  if (-not $dumpbinPath) {
-    $onPath = Get-Command dumpbin.exe -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($onPath -and $onPath.Path -like "*\Tools\MSVC\*") { $dumpbinPath = $onPath.Path }
-  }
-  if (-not $dumpbinPath) { Fail "dumpbin.exe (Hostx64) not found under any Visual Studio MSVC toolset." }
 Log "dumpbin: $($dumpbinPath)"
 
 $systemDir = Join-Path $env:SystemRoot "System32"
