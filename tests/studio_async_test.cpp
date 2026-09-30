@@ -125,17 +125,20 @@ int main(int argc, char** argv) {
   QCoreApplication app(argc, argv);
 
   // 1. Pre-set cancel: no engine, Send must abort the connect-retry gaps
-  //    fast with a "cancelled" error (kNotRunning — engine unreachable).
-  {
-    k6wp::IpcClient client;
-    client.RequestCancel();
-    const ULONGLONG t0 = GetTickCount64();
-    const k6wp::IpcResult r = client.Send(k6wp::Cmd::get_state);
-    const ULONGLONG dt = GetTickCount64() - t0;
-    std::printf("[info] preset-cancel: status=%d dt=%llums err=%s\n",
-                static_cast<int>(r.status), dt, r.error.c_str());
-    Check(r.status == k6wp::IpcStatus::kNotRunning,
-          "preset-cancel maps to kNotRunning");
+  //    fast with a "cancelled" error. The status is kError, not kNotRunning:
+  //    the caller cancelled, and reporting "engine not running" would tell the
+    //    user their engine is down when they only asked to stop waiting. The
+    //    engine really being absent is covered by the clear-cancel leg below.
+    {
+      k6wp::IpcClient client;
+      client.RequestCancel();
+      const ULONGLONG t0 = GetTickCount64();
+      const k6wp::IpcResult r = client.Send(k6wp::Cmd::get_state);
+      const ULONGLONG dt = GetTickCount64() - t0;
+      std::printf("[info] preset-cancel: status=%d dt=%llums err=%s\n",
+                  static_cast<int>(r.status), dt, r.error.c_str());
+      Check(r.status == k6wp::IpcStatus::kError,
+          "preset-cancel maps to kError, not kNotRunning");
     Check(HasSubstr(r.error, "cancelled"), "preset-cancel error says cancelled");
     Check(dt < 800, "preset-cancel returns fast (<800ms, no 500ms gaps)");
     client.ClearCancel();
@@ -190,6 +193,21 @@ int main(int argc, char** argv) {
         CloseHandle(pipe);
       }
     });
+
+    // 2b. A cancel requested BEFORE Send must also map to kError, not
+    //     kNotRunning. Connect() returns a bare bool, so a pre-set cancel is
+    //     indistinguishable from an absent pipe inside Send; reporting
+    //     kNotRunning there tells the user the engine is down when it is up
+    //     and they merely asked to stop waiting. This is the deterministic
+    //     twin of the mid-flight case below, which only lands here when the
+    //     cancel happens to race the connect.
+    {
+      k6wp::IpcClient client;
+      client.RequestCancel();
+      const k6wp::IpcResult r = client.Send(k6wp::Cmd::get_state);
+      Check(r.status == k6wp::IpcStatus::kError,
+            "pre-set cancel maps to kError, not kNotRunning");
+    }
 
     // 2. Mid-flight cancel during the ack poll: cancel at ~300ms, Send must
     //    return kError "cancelled" well before the 2s deadline.

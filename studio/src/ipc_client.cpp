@@ -254,7 +254,14 @@ IpcResult IpcClient::Send(Cmd cmd, const nlohmann::json& payload) {
 
   std::string err;
   if (!EnsureConnected(&err)) {
-    out.status = IpcStatus::kNotRunning;
+    // Connect() reports two different failures as one bool: the pipe really is
+    // absent, or the caller cancelled. A cancel must not be reported as
+    // "engine not running" - Studio shows that as the engine being down and
+    // offers to start it, which is wrong when the engine is up and the user
+    // simply asked to stop waiting. It also mis-flakes the mid-flight cancel
+    // test whenever the cancel lands during connect rather than after it.
+    out.status = IsCancelRequested() ? IpcStatus::kError
+                                     : IpcStatus::kNotRunning;
     out.error = err;
     return out;
   }
