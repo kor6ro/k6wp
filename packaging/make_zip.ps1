@@ -524,27 +524,54 @@ if ($missingDirs.Count -gt 0) {
 }
 Log "Ship-set assert OK: $($expected.Count) staged files match installer.nsi File set; $($rmDirs.Count) RMDir dirs present."
 
-# --- 3. MISSING-DLL check (dumpbin /dependents per staged exe) ----------------
-$dumpbin = Get-ChildItem -Path "C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Tools\MSVC" -Filter "dumpbin.exe" -Recurse -ErrorAction SilentlyContinue |
-  Where-Object { $_.FullName -like "*Hostx64\x64*" } | Select-Object -First 1
-if ($null -eq $dumpbin) {
-  # Runner fallback: newest VS carrying VC tools via vswhere (local VS18 path
-  # above wins when present, so local behavior is unchanged).
-  $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
-  if (Test-Path -LiteralPath $vswhere) {
-    $vsPath = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools -property installationPath 2>$null | Select-Object -First 1
-    if (-not [string]::IsNullOrWhiteSpace($vsPath)) {
-      $toolset = Get-ChildItem -LiteralPath (Join-Path $vsPath "VC\Tools\MSVC") -Directory -ErrorAction SilentlyContinue |
-        Sort-Object Name -Descending | Select-Object -First 1
-      if ($toolset) {
-        $cand = Join-Path $toolset.FullName "bin\Hostx64\x64\dumpbin.exe"
-        if (Test-Path -LiteralPath $cand) { $dumpbin = Get-Item -LiteralPath $cand }
+  # --- 3. MISSING-DLL check (dumpbin /dependents per staged exe) ----------------
+  # Tried in order, because the MSVC bin layout varies by VS version and host
+  # target and this is a fail-closed safety net: if we cannot locate dumpbin we
+  # must not wave the ZIP through unverified.
+  #   1. PATH (a developer command prompt, or a runner that pre-loads MSVC)
+  #   2. the local BuildTools 18 path
+  #   3. vswhere -> newest VC toolset -> bin\Hostx64\x64
+  #   4. vswhere -> newest VC toolset -> recursive glob, any host/arch dir
+  # Located as a plain path string, not an object: Get-Command yields an
+  # ApplicationInfo (which has .Path, not .FullName), while the file probes
+  # yield FileInfo. Mixing them left the invocation path empty on some machines.
+  #
+  # PATH is consulted LAST and only accepts a modern MSVC toolset. This machine
+  # has Visual Studio 98's dumpbin.exe on PATH, and preferring it silently
+  # weakened this check: a VC98 dumpbin cannot parse PE32+ imports, so it
+  # reports no dependencies at all and the "all imports resolve" assert
+  # passes without having checked anything. A fail-closed gate that can
+  # false-pass is worse than no gate.
+  $dumpbinPath = $null
+  $f = Get-ChildItem -Path "C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Tools\MSVC" -Filter "dumpbin.exe" -Recurse -ErrorAction SilentlyContinue |
+    Where-Object { $_.FullName -like "*Hostx64\x64*" } | Select-Object -First 1
+  if ($f) { $dumpbinPath = $f.FullName }
+  if (-not $dumpbinPath) {
+    $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
+    if (Test-Path -LiteralPath $vswhere) {
+      $vsPath = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools -property installationPath 2>$null | Select-Object -First 1
+      if (-not [string]::IsNullOrWhiteSpace($vsPath)) {
+        $msvcRoot = Join-Path $vsPath "VC\Tools\MSVC"
+        $toolset = Get-ChildItem -LiteralPath $msvcRoot -Directory -ErrorAction SilentlyContinue |
+          Sort-Object Name -Descending | Select-Object -First 1
+        if ($toolset) {
+          $cand = Join-Path $toolset.FullName "bin\Hostx64\x64\dumpbin.exe"
+          if (Test-Path -LiteralPath $cand) { $dumpbinPath = $cand }
+        }
+        if (-not $dumpbinPath) {
+          $g = Get-ChildItem -LiteralPath $msvcRoot -Filter "dumpbin.exe" -Recurse -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+          if ($g) { $dumpbinPath = $g.FullName }
+        }
       }
     }
   }
-}
-if ($null -eq $dumpbin) { Fail "dumpbin.exe (Hostx64) not found under any Visual Studio MSVC toolset." }
-Log "dumpbin: $($dumpbin.FullName)"
+  if (-not $dumpbinPath) {
+    $onPath = Get-Command dumpbin.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($onPath -and $onPath.Path -like "*\Tools\MSVC\*") { $dumpbinPath = $onPath.Path }
+  }
+  if (-not $dumpbinPath) { Fail "dumpbin.exe (Hostx64) not found under any Visual Studio MSVC toolset." }
+Log "dumpbin: $($dumpbinPath)"
 
 $systemDir = Join-Path $env:SystemRoot "System32"
 $missing = @()
@@ -552,7 +579,7 @@ $warnings = @()
 $exesToCheck = @("K6WP.exe", "engine.exe", "studio.exe", "compressor.exe")
 if (Test-Path -LiteralPath (Join-Path $StageDir "monitor_dump.exe")) { $exesToCheck += "monitor_dump.exe" }
 foreach ($exe in $exesToCheck) {
-  $out = & $dumpbin.FullName /dependents (Join-Path $StageDir $exe) 2>&1 | Out-String
+  $out = & $dumpbinPath /dependents (Join-Path $StageDir $exe) 2>&1 | Out-String
   $inDelay = $false
   foreach ($line in $out -split "`r?`n") {
     if ($line -match "delay load dependencies") { $inDelay = $true; continue }
@@ -579,7 +606,7 @@ Log "Import check OK: all hard imports of $($exesToCheck.Count) exes resolve fro
 # --- 3b. Qt-free launcher assert (owner decision F1): K6WP.exe must not
 # depend on any Qt6*.dll. Locks the user32+shell32-only property into release.
 $qtDeps = @()
-$k6wpOut = & $dumpbin.FullName /dependents (Join-Path $StageDir "K6WP.exe") 2>&1 | Out-String
+$k6wpOut = & $dumpbinPath /dependents (Join-Path $StageDir "K6WP.exe") 2>&1 | Out-String
 foreach ($line in $k6wpOut -split "`r?`n") {
   if ($line -match "^\s+(\S+\.dll)\s*$") {
     if ($Matches[1] -like "Qt6*.dll") { $qtDeps += $Matches[1] }
@@ -601,7 +628,7 @@ foreach ($exe in $versionExes) {
   $prodName = [System.Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $StageDir $exe)).ProductName
   Log "VersionInfo: $exe ProductName='$prodName'"
   if ($prodName -ne "K6WP") { Fail "version assert failed - $exe ProductName='$prodName', expected 'K6WP'." }
-  $headers = & $dumpbin.FullName /headers (Join-Path $StageDir $exe) 2>&1 | Out-String
+  $headers = & $dumpbinPath /headers (Join-Path $StageDir $exe) 2>&1 | Out-String
   # dumpbin prints one "SECTION HEADER #N" block per section with ".rsrc name"
   # on its own line and the size two lines below ("<hex> size of raw data").
   $rsrcBytes = 0
