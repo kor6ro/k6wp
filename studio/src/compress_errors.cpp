@@ -1,6 +1,7 @@
 #include "compress_errors.hpp"
 
 #include <QCheckBox>
+#include <QCoreApplication>
 #include <QMessageBox>
 
 namespace k6wp {
@@ -24,12 +25,36 @@ QString FriendlyCompressError(const QString& technical) {
   if (t.contains(QStringLiteral("ffmpeg"))) {
     if (t.contains(QStringLiteral("tidak ditemukan")) ||
         t.contains(QStringLiteral("not found"))) {
-      return QStringLiteral(
-          "ffmpeg tidak ditemukan. Pastikan ffmpeg terinstall bersama aplikasi.");
+      return QCoreApplication::translate(
+          "k6wp::CompressError",
+          "ffmpeg tidak ditemukan di folder aplikasi. Ekstrak ulang atau "
+          "pasang ulang K6WP.");
     }
     if (t.contains(QStringLiteral("failed")) ||
         t.contains(QStringLiteral("gagal"))) {
       return QStringLiteral("Gagal menjalankan ffmpeg. Coba lagi.");
+    }
+  }
+  if (t.contains(QStringLiteral("compressor"))) {
+    if (t.contains(QStringLiteral("not found")) ||
+        t.contains(QStringLiteral("tidak ditemukan"))) {
+      return QCoreApplication::translate(
+          "k6wp::CompressError",
+          "Kompresor tidak ditemukan di folder aplikasi. Ekstrak ulang atau "
+          "pasang ulang K6WP.");
+    }
+    if (t.contains(QStringLiteral("failed to start")) ||
+        t.contains(QStringLiteral("gagal menjalankan")) ||
+        t.contains(QStringLiteral("launch failed"))) {
+      return QCoreApplication::translate(
+          "k6wp::CompressError",
+          "Gagal menjalankan kompresor. Coba lagi atau pasang ulang K6WP.");
+    }
+    if (t.contains(QStringLiteral("exited with code"))) {
+      return QCoreApplication::translate(
+          "k6wp::CompressError",
+          "Kompresor berhenti tidak normal. Coba lagi atau cek log untuk "
+          "detail teknis.");
     }
   }
   if (t.contains(QStringLiteral("input")) &&

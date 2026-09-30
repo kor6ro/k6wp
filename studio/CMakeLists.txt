@@ -24,6 +24,8 @@ qt_add_executable(studio
   src/probe_async.hpp
   src/compress_errors.cpp
   src/compress_errors.hpp
+  src/user_errors.cpp
+  src/user_errors.hpp
   src/ffprobe_helper.cpp
   src/ffprobe_helper.hpp
   app.rc
@@ -63,7 +65,7 @@ target_include_directories(studio PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 # libmpv has no D3D11 render backend and that the OpenGL path drops to
 # hwdec-current=no, so the preview CANNOT become a QQuickItem yet; it is a
 # child widget of the window.
-target_link_libraries(studio PRIVATE k6wp_shared Qt6::Widgets Qt6::Quick Qt6::Qml Qt6::QuickControls2 Qt6::QuickWidgets Qt6::Concurrent winhttp)
+target_link_libraries(studio PRIVATE k6wp_shared Qt6::Widgets Qt6::Quick Qt6::Qml Qt6::QuickControls2 Qt6::QuickWidgets Qt6::Concurrent winhttp shell32)
 
 # QML module for the shell's Main.qml. URI K6WP makes `import K6WP` resolve
 # from inside the binary (the file is compiled into a resource, so a deployed
@@ -250,8 +252,20 @@ add_executable(studio_logic_test
   src/thumbnailer.cpp
   src/probe_async.cpp
   src/ffprobe_helper.cpp
+  # SettingsBridge (sections 18-19): reload() must not swallow a corrupt-settings
+  # error, and clearCache() must refuse a cache_dir that is not a K6WP-managed
+  # cache. ui_language.cpp comes along because the bridge's constructor reads
+  # studio_ui.ini. Qt6::Qml supplies the QML_ELEMENT registration macros the
+  # bridge's class declaration uses; shell32 supplies the known-folder lookup
+  # the clearCache guard asks the shell for.
+  src/settings_bridge.cpp
+  src/ui_language.cpp
+  # user_errors.cpp (1.2.1, section 20): the engine / IPC / preview error
+  # mapping that StudioBridge used to show raw. Included so the mapping itself
+  # is unit-testable, not just its call sites.
+  src/user_errors.cpp
 )
-target_link_libraries(studio_logic_test PRIVATE k6wp_shared Qt6::Widgets Qt6::Concurrent)
+target_link_libraries(studio_logic_test PRIVATE k6wp_shared Qt6::Widgets Qt6::Concurrent Qt6::Qml shell32)
 target_include_directories(studio_logic_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_compile_options(studio_logic_test PRIVATE /Zc:__cplusplus /permissive-)
 add_test(NAME studio_logic_test COMMAND studio_logic_test)

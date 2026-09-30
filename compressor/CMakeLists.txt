@@ -25,4 +25,20 @@ add_executable(compress_argv_contract_test tests/compress_argv_contract_test.cpp
 target_link_libraries(compress_argv_contract_test PRIVATE k6wp_shared)
 add_dependencies(compress_argv_contract_test compressor)
 add_test(NAME compress_argv_contract COMMAND compress_argv_contract_test)
+
+# compress_friendly_error (1.2.1): the compressor's USER-FACING error payload.
+# compressor.exe has no i18n machinery, so its `{"friendly","technical"}` text
+# IS what a user reads, and Studio then maps it through
+# FriendlyCompressError. This suite locks both halves of that handoff: the
+# friendly message is actionable (re-extract / reinstall) instead of naming a
+# vendor/ directory and an environment variable, and it still satisfies Studio's
+# matching rule so the two sides keep agreeing. src/ffmpeg_job.cpp is
+# #included by the test so the anonymous-namespace FriendlyId/FormatError are
+# reachable (thumbnailer_test / probe_json_test pattern).
+add_executable(compress_friendly_error_test
+  tests/compress_friendly_error_test.cpp
+  src/encoder_detect.cpp
+)
+target_link_libraries(compress_friendly_error_test PRIVATE k6wp_shared)
+add_test(NAME compress_friendly_error COMMAND compress_friendly_error_test)
 endif()

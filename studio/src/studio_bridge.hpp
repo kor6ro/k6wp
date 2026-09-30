@@ -136,7 +136,12 @@ class StudioBridge : public QObject {
   Q_PROPERTY(bool updateCheckBusy READ updateCheckBusy NOTIFY updateChanged)
   Q_PROPERTY(QString latestVersion READ latestVersion NOTIFY updateChanged)
   Q_PROPERTY(QString latestPageUrl READ latestPageUrl NOTIFY updateChanged)
+  // Outcome of the last user-initiated check, for the QML label. Empty until
+  // checkForUpdatesInteractive() runs: the automatic start-up check must not
+  // put anything here.
+  Q_PROPERTY(QString updateCheckMessage READ updateCheckMessage NOTIFY updateChanged)
   Q_INVOKABLE void checkForUpdates();
+  Q_INVOKABLE void checkForUpdatesInteractive();
   Q_PROPERTY(QStringList log READ log NOTIFY logChanged)
 
   // The video picked in the Wallpaper tab, not yet applied. Empty when nothing
@@ -214,6 +219,7 @@ class StudioBridge : public QObject {
   bool updateCheckBusy() const { return update_busy_; }
   QString latestVersion() const { return latest_version_; }
   QString latestPageUrl() const { return latest_page_url_; }
+  QString updateCheckMessage() const { return update_check_message_; }
   // The bridge's own log lines (Load() fallback reasons, apply results, the
   // preview poster hand-off). Backs the Wallpaper tab's "Detail teknis (log)"
   // text area, which the old UI read from MainWindow's log_view_.
@@ -322,6 +328,7 @@ class StudioBridge : public QObject {
   // Runs a blocking pause/resume on a worker, tagging which one it was so the
   // finished slot knows what to log (the MainWindow::pending_pause_op_ idea).
   void RunPauseResume(bool do_pause);
+  void RunUpdateCheck(bool interactive);
 
   // T15: the ONE IpcClient of this Studio process, a plain value member --
   // IpcClient is NOT a QObject and must never be given Q_PROPERTY access.
@@ -341,7 +348,9 @@ class StudioBridge : public QObject {
   UpdateChecker* update_checker_ = nullptr;
   QString latest_version_;
   QString latest_page_url_;
+  QString update_check_message_;
   bool update_busy_ = false;
+  bool update_check_interactive_ = false;
 
   // HIGH-3 slice B plumbing, mirrored from MainWindow: 1.5s poll timer, a
   // poll_busy_ re-entrancy guard so a slow/dead engine stacks nothing up, an

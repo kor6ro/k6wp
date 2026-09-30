@@ -185,7 +185,18 @@ void UpdateChecker::SetReleasesPageUrl(const QString& url) {
 }
 
 void UpdateChecker::Check(const QString& api_url) {
+  CheckInternal(api_url, /*interactive=*/false);
+}
+
+void UpdateChecker::CheckInteractive(const QString& api_url) {
+  CheckInternal(api_url, /*interactive=*/true);
+}
+
+void UpdateChecker::CheckInternal(const QString& api_url, bool interactive) {
   if (!IsUpdateCheckUrlUsable(api_url)) {
+    if (interactive) {
+      emit CheckFinished(UpdateCheckOutcome::kDisabled);
+    }
     return;  // Disabled: no request, fully silent.
   }
   bool expected = false;
@@ -206,6 +217,9 @@ void UpdateChecker::FetchAndReport(std::string api_url_utf8,
                                    QString releases_page,
                                    QString current_version,
                                    QPointer<UpdateChecker> guard) {
+  // known == the server answered with a tag we could actually compare. Without
+  // it a network error and a genuinely-current install are indistinguishable.
+  bool known = false;
   bool newer = false;
   QString latest;
   QString page = releases_page;
@@ -224,18 +238,25 @@ void UpdateChecker::FetchAndReport(std::string api_url_utf8,
         if (html_it != doc.end() && html_it->is_string()) {
           html = TrimAscii(html_it->get<std::string>());
         }
-        if (!tag.empty() &&
-            IsNewerVersion(tag, current_version.toStdString())) {
-          newer = true;
-          latest = QString::fromStdString(tag);
-          if (!html.empty()) {
-            page = QString::fromStdString(html);
+        if (!tag.empty()) {
+          known = true;
+          newer = IsNewerVersion(tag, current_version.toStdString());
+          if (newer) {
+            latest = QString::fromStdString(tag);
+            if (!html.empty()) {
+              page = QString::fromStdString(html);
+            }
           }
         }
       }
     } catch (const std::exception&) {
-      // Silent: network/parse failures never surface (existing semantics).
+      // Parse failure is reported as kFailed only to an interactive caller.
     }
+  }
+  UpdateCheckOutcome outcome = UpdateCheckOutcome::kFailed;
+  if (known) {
+    outcome = newer ? UpdateCheckOutcome::kUpdateAvailable
+                    : UpdateCheckOutcome::kUpToDate;
   }
   busy_.store(false);
   // A deleted checker drops its queued events in the QObject dtor, so a
@@ -244,19 +265,19 @@ void UpdateChecker::FetchAndReport(std::string api_url_utf8,
   if (guard) {
     QMetaObject::invokeMethod(
         guard,
-        [guard, newer, latest, page]() {
-          if (guard) guard->ReportResult(newer, latest, page);
+        [guard, outcome, latest, page]() {
+          if (guard) guard->ReportResult(outcome, latest, page);
         },
         Qt::QueuedConnection);
   }
 }
 
-void UpdateChecker::ReportResult(bool newer, const QString& latest,
-                                 const QString& page) {
-  if (newer) {
+void UpdateChecker::ReportResult(UpdateCheckOutcome outcome,
+                                 const QString& latest, const QString& page) {
+  if (outcome == UpdateCheckOutcome::kUpdateAvailable) {
     emit UpdateAvailable(latest, page);
   }
-  emit CheckFinished(newer);
+  emit CheckFinished(outcome);
 }
 
 }  // namespace k6wp

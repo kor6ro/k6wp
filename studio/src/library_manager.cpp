@@ -154,6 +154,7 @@ std::filesystem::path LibraryManager::JsonPath() const { return json_path_; }
 void LibraryManager::Load() {
   bool exists = false;
   std::string text;
+  recovered_from_backup_ = false;
   try {
     text = ReadFile(json_path_, exists);
   } catch (const LibraryError&) {
@@ -167,7 +168,38 @@ void LibraryManager::Load() {
   try {
     root = nlohmann::json::parse(text);
   } catch (const nlohmann::json::exception& e) {
-    throw LibraryError(std::string("corrupt library JSON: ") + e.what());
+    // Fall back to the pre-save copy rather than leaving the user with an
+    // unrecoverable index. The .bak is the state as of the last successful
+    // Save, so at worst one change is lost instead of the whole library.
+    std::error_code bak_ec;
+    std::filesystem::path bak = json_path_;
+    bak += L".bak";
+    if (std::filesystem::exists(bak, bak_ec) && !bak_ec) {
+      std::string bak_text;
+      bool bak_exists = false;
+      try {
+        bak_text = ReadFile(bak, bak_exists);
+      } catch (const LibraryError&) {
+        bak_exists = false;
+      }
+      if (bak_exists) {
+        try {
+          nlohmann::json recovered = nlohmann::json::parse(bak_text);
+          if (recovered.is_object()) {
+            recovered_from_backup_ = true;
+            root = std::move(recovered);
+          } else {
+            throw LibraryError(std::string("corrupt library JSON: ") + e.what());
+          }
+        } catch (const nlohmann::json::exception&) {
+          throw LibraryError(std::string("corrupt library JSON: ") + e.what());
+        }
+      } else {
+        throw LibraryError(std::string("corrupt library JSON: ") + e.what());
+      }
+    } else {
+      throw LibraryError(std::string("corrupt library JSON: ") + e.what());
+    }
   }
   try {
     if (!root.is_object()) {
@@ -201,18 +233,27 @@ void LibraryManager::Save() const {
   for (const auto& e : entries_) {
     root["entries"].push_back(EntryToJson(e));
   }
+  // Same crash-safe contract as config.json / studio_settings.json: write to
+  // "<path>.tmp", then replace atomically, so a force-kill during Add / Remove /
+  // Clear cannot leave a truncated index. The previous contents are copied to
+  // "<path>.bak" BEFORE the write, because after it the old bytes are gone and
+  // Load() would have nothing to fall back to.
   std::error_code ec;
   if (!json_path_.parent_path().empty()) {
     std::filesystem::create_directories(json_path_.parent_path(), ec);
   }
-  std::ofstream out(json_path_, std::ios::binary | std::ios::trunc);
-  if (!out) {
-    throw LibraryError("cannot write library file: " + json_path_.string());
+  if (std::filesystem::exists(json_path_, ec) && !ec) {
+    std::filesystem::path bak = json_path_;
+    bak += L".bak";
+    std::error_code copy_ec;
+    std::filesystem::copy_file(json_path_, bak,
+                               std::filesystem::copy_options::overwrite_existing,
+                               copy_ec);
   }
-  out << root.dump(2);
-  out.flush();
-  if (!out) {
-    throw LibraryError("failed writing library file: " + json_path_.string());
+  try {
+    k6wp::AtomicWriteJson(json_path_, root);
+  } catch (const k6wp::ConfigError& e) {
+    throw LibraryError(std::string("cannot write library file: ") + e.what());
   }
 }
 

@@ -12,6 +12,8 @@
 
 #include <cstdio>
 
+#include "user_errors.hpp"
+
 // Task 23: production logging. The informational "worker up" mirror goes to
 // stderr only in verbose builds (root CMake option K6WP_VERBOSE); the two
 // hard-failure lines below stay ungated (error paths are never gated).
@@ -142,6 +144,11 @@ void MpvWorker::run() {
         load_state_.store(PreviewLoadState::kError);
         std::lock_guard<std::mutex> lock(mutex_);
         load_error_ = mpv_error_string(end->error);
+        // libmpv's text is the diagnostic; the label shows a mapped sentence
+        // instead, so the raw string is logged here where it is still useful.
+        std::fprintf(stderr, "[preview] mpv load error: %s\n",
+                     load_error_.c_str());
+        std::fflush(stderr);
       }
     }
   }
@@ -240,10 +247,7 @@ PreviewWidget::PreviewWidget(QWidget* parent) : QWidget(parent) {
       const PreviewLoadState state = load_state_.load();
       if (state == PreviewLoadState::kError && error_detail_.isEmpty()) {
         const std::string detail = worker_->LastError();
-        error_detail_ = detail.empty()
-                            ? tr("file atau codec tak didukung")
-                            : tr("file atau codec tak didukung (%1)")
-                                  .arg(QString::fromUtf8(detail.c_str()));
+        error_detail_ = FriendlyPreviewError(QString::fromUtf8(detail.c_str()));
       }
       if (state == PreviewLoadState::kLive && thumb_label_ != nullptr) {
         thumb_label_->hide();
@@ -529,9 +533,10 @@ QString PreviewWidget::statusText() const {
     case PreviewLoadState::kLive:
       return QString();
     case PreviewLoadState::kError:
-      return error_detail_.isEmpty()
-                 ? tr("Pratinjau tak tersedia")
-                 : tr("Pratinjau tak tersedia: %1").arg(error_detail_);
+      // error_detail_ is already a full sentence (FriendlyPreviewError, or the
+      // backend-start message), so no "Pratinjau tak tersedia: " prefix here.
+      return error_detail_.isEmpty() ? tr("Pratinjau tak tersedia")
+                                    : error_detail_;
     case PreviewLoadState::kIdle:
       break;
   }

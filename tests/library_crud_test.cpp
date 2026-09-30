@@ -159,18 +159,43 @@ void TestLibraryCrud() {
   Check(m.Remove(dir / "k6wp_no_such_entry_xyz.mp4", false) == false,
         "library CRUD remove missing returns false");
 
-  // Corrupt JSON throws LibraryError (never half-loads).
-  {
-    WriteBytes(json, "{ not valid json !!!");
-    k6wp::LibraryManager bad(json);
-    bool threw = false;
-    try {
-      bad.Load();
-    } catch (const k6wp::LibraryError&) {
-      threw = true;
+    // Corrupt main JSON recovers from the .bak instead of losing the library.
+    // The .bak holds the state as of the last successful Save, which is the
+    // best available answer; throwing would leave the user with no index at
+    // all and no way to recover it short of hand-editing JSON.
+    {
+      WriteBytes(json, "{ not valid json !!!");
+      k6wp::LibraryManager bad(json);
+      bool threw = false;
+      try {
+        bad.Load();
+      } catch (const k6wp::LibraryError&) {
+        threw = true;
+      }
+      Check(!threw, "library CRUD corrupt json recovers from .bak, not throw");
+      Check(bad.RecoveredFromBackup(),
+            "library CRUD recovery is reported to the caller");
+      Check(bad.Size() > 0,
+            "library CRUD recovered entries survive the corrupt main file");
     }
-    Check(threw, "library CRUD corrupt json throws LibraryError");
-  }
+
+    // With no usable .bak either, the load must still fail loudly rather than
+    // silently presenting an empty library as if the user had no videos.
+    {
+      std::filesystem::remove(json);
+      std::filesystem::path bak = json;
+      bak += L".bak";
+      std::filesystem::remove(bak);
+      WriteBytes(json, "{ still not json !!!");
+      k6wp::LibraryManager bad(json);
+      bool threw = false;
+      try {
+        bad.Load();
+      } catch (const k6wp::LibraryError&) {
+        threw = true;
+      }
+      Check(threw, "library CRUD corrupt json with no .bak throws LibraryError");
+    }
 
   // MED-18: library.json larger than kMaxConfigBytes (1 MiB) is rejected
   // BEFORE reading — Load throws ConfigError whose message contains

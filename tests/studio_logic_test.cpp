@@ -28,6 +28,10 @@
 //     real blocking child processes (see the fake-media-tools harness above).
 //  17. First-run wizard: an over-threshold pick still yields a completable
 //     wizard, and "Nanti saja" is as permanent as Finish.
+//  20. User-facing error wording: the engine / IPC / preview mappers never
+//     echo a technical string, never leak a path, a .exe name, an env var or
+//     a log prefix, and always say what to do next; the 6 pre-existing
+//     compress sentences are byte-for-byte unchanged.
 //
 // The fake server listens on the REAL session pipe name, so section 4-5
 // SKIP when a live engine answers (never steal the real endpoint).
@@ -35,6 +39,7 @@
 #include "apply_manager.hpp"
 #include "compress_bridge.hpp"
 #include "compress_controller.hpp"
+#include "compress_errors.hpp"
 #include "compress_first_offer.hpp"
 #include "engine_status_controller.hpp"
 #include "ffmpeg_path.hpp"
@@ -43,7 +48,9 @@
 #include "library_grid_model.hpp"
 #include "lockscreen.hpp"
 #include "qml_shell.hpp"
+#include "settings_bridge.hpp"
 #include "studio_settings.hpp"
+#include "user_errors.hpp"
 
 #include <atomic>
 #include <algorithm>
@@ -311,6 +318,64 @@ std::wstring LocalAppDataDir() {
 bool SetLocalAppDataDir(const QString& dir) {
   const std::wstring w = dir.toStdWString();
   return SetEnvironmentVariableW(L"LOCALAPPDATA", w.c_str()) != 0;
+}
+
+std::wstring UserProfileDir() {
+  wchar_t buf[MAX_PATH] = {};
+  const DWORD n = GetEnvironmentVariableW(L"USERPROFILE", buf, MAX_PATH);
+  return n > 0 && n < MAX_PATH ? std::wstring(buf, n) : std::wstring();
+}
+
+bool SetUserProfileDir(const std::wstring& dir) {
+  return SetEnvironmentVariableW(L"USERPROFILE", dir.c_str()) != 0;
+}
+
+// Every regular file under `dir`, recursively - the yardstick for "did
+// clearCache() delete anything it should not have".
+int CountFiles(const std::filesystem::path& dir) {
+  std::error_code ec;
+  if (!std::filesystem::exists(dir, ec)) {
+    return 0;
+  }
+  int n = 0;
+  for (std::filesystem::recursive_directory_iterator it(dir, ec), end;
+       it != end; it.increment(ec)) {
+    if (ec) {
+      break;
+    }
+    std::error_code inner;
+    if (it->is_regular_file(inner) && !inner) {
+      ++n;
+    }
+  }
+  return n;
+}
+
+// A drive letter no volume currently uses, or 0 when there is none free.
+char FreeDriveLetter() {
+  const DWORD used = GetLogicalDrives();
+  for (int i = 0; i < 26; ++i) {
+    if ((used & (1UL << i)) == 0) {
+      return static_cast<char>('A' + i);
+    }
+  }
+  return 0;
+}
+
+// Section 19 needs a directory reparse point that costs no privilege: a
+// junction (mklink /J) always works, a symlink needs SeCreateSymbolicLink /
+// Developer Mode. Returns false when neither could be made, so the caller can
+// skip rather than report a bogus failure.
+bool MakeJunction(const QString& link, const QString& target) {
+  const std::string cmd = "cmd /c mklink /J \"" + link.toStdString() + "\" \"" +
+                          target.toStdString() + "\" >nul 2>&1";
+  if (std::system(cmd.c_str()) == 0 && QFileInfo(link).isDir()) {
+    return true;
+  }
+  QFile::remove(link);
+  return CreateSymbolicLinkW(reinterpret_cast<LPCWSTR>(link.utf16()),
+                             reinterpret_cast<LPCWSTR>(target.utf16()),
+                             SYMBOLIC_LINK_FLAG_DIRECTORY) != 0;
 }
 
 // Counts entries in `json` that carry probed dimensions - i.e. how many async
@@ -1214,6 +1279,418 @@ int main(int argc, char** argv) {
       (void)SetEnvironmentVariableW(L"K6WP_LIBRARY_JSON", nullptr);
     }
     (void)SetLocalAppDataDir(QString::fromStdWString(real_localappdata));
+  }
+
+  // 18. SettingsBridge::reload() must not throw away the error it just
+  //     computed. A corrupt studio_settings.json used to be reported through
+  //     SetLastError and then cleared unconditionally a few lines later, so the
+  //     user's settings were silently reset to defaults and the QML banner had
+  //     nothing left to show - the same trap LibraryGridModel::reload already
+  //     documents.
+  {
+    const std::wstring real_localappdata = LocalAppDataDir();
+    QTemporaryDir fake_home;
+    Check(fake_home.isValid(), "reload test temp dir is valid");
+    const bool redirected =
+        fake_home.isValid() && SetLocalAppDataDir(fake_home.path());
+    Check(redirected, "reload: LOCALAPPDATA redirected into the temp dir");
+    if (redirected) {
+      const QDir media(fake_home.path());
+      const auto settings_json =
+          media.filePath(QStringLiteral("K6WP/studio_settings.json"));
+      Check(QDir().mkpath(media.filePath(QStringLiteral("K6WP"))),
+            "reload: fake K6WP data dir created");
+      {
+        QFile f(settings_json);
+        Check(f.open(QIODevice::WriteOnly | QIODevice::Truncate),
+              "reload: corrupt settings file written");
+        f.write("{ this is not json");
+        f.close();
+      }
+      {
+        // The constructor is the real startup path: it reloads immediately.
+        k6wp::SettingsBridge bridge;
+        Check(bridge.lastError().contains(QString::fromUtf8("rusak")),
+              "reload: a corrupt settings file leaves lastError set");
+        Check(bridge.log().join(QLatin1Char('\n')).contains(
+                  QString::fromUtf8("rusak")),
+              "reload: and the reason reached the log too");
+        Check(QFileInfo::exists(settings_json + ".bak"),
+              "reload: the corrupt bytes are preserved as .bak");
+        Check(ToPath(bridge.cacheDir()) == k6wp::DefaultStudioCacheDir(),
+              "reload: the in-memory fallback is the default cache dir");
+      }
+      {
+        // A good file must clear the error again - the fix is a guard, not a
+        // sticky error.
+        k6wp::StudioSettings good = k6wp::DefaultStudioSettings();
+        good.default_crf = 27;
+        k6wp::SaveStudioSettings(k6wp::DefaultStudioSettingsPath(), good);
+        k6wp::SettingsBridge bridge;
+        Check(bridge.lastError().isEmpty(),
+              "reload: a clean settings file clears lastError");
+        Check(bridge.defaultCrf() == 27,
+              "reload: the clean file is actually loaded");
+      }
+    }
+    (void)SetLocalAppDataDir(QString::fromStdWString(real_localappdata));
+  }
+
+  // 19. SettingsBridge::clearCache() refuses a cache_dir that is not a
+  //     K6WP-managed cache. cache_dir is free text (ValidateStudioSettings only
+  //     rejects the empty string), so one click could otherwise empty
+  //     C:\Users\<me>\Videos. USERPROFILE is redirected at a fake tree so the
+  //     user-content-folder cases are exercised against throwaway files: a
+  //     regression that deleted a real profile would be a catastrophe in this
+  //     suite, not a FAIL line.
+  {
+    const std::wstring real_localappdata = LocalAppDataDir();
+    const std::wstring real_userprofile = UserProfileDir();
+    QTemporaryDir fake_home;
+    QTemporaryDir external;  // stands in for "a folder on another drive"
+    Check(fake_home.isValid() && external.isValid(),
+          "clearcache test temp dirs are valid");
+    const QDir media(fake_home.path());
+    const QDir outside(external.path());
+    Check(QDir().mkpath(media.filePath(QStringLiteral("K6WP/cache"))),
+          "clearcache: fake K6WP cache dir created");
+    Check(QDir().mkpath(media.filePath(QStringLiteral("K6WP/wallpapers"))),
+          "clearcache: fake K6WP wallpapers dir created");
+    Check(QDir().mkpath(media.filePath(QStringLiteral("Pictures"))),
+          "clearcache: fake user-content dir created");
+    const bool redirected =
+        SetLocalAppDataDir(fake_home.path()) &&
+        SetUserProfileDir(fake_home.path().toStdWString());
+    Check(redirected, "clearcache: LOCALAPPDATA + USERPROFILE redirected");
+    if (redirected) {
+      // A directory the user picked, marked as a cache the way pickCacheDir
+      // marks one, and a file inside it that clearCache is supposed to remove.
+      const auto picked = outside.filePath(QStringLiteral("k6wp-cache-drive"));
+      Check(QDir().mkpath(picked), "clearcache: external cache dir created");
+      const auto victim = picked + QStringLiteral("/holiday.mp4");
+      Check(!WriteSizedFile(QDir(picked), "holiday.mp4", 64).isEmpty(),
+            "clearcache: external file created");
+      {
+        QFile marker(picked + QStringLiteral("/.k6wp-cache"));
+        Check(marker.open(QIODevice::WriteOnly | QIODevice::Truncate),
+              "clearcache: opt-in marker written");
+        marker.close();
+      }
+
+      k6wp::SettingsBridge bridge;
+
+      // --- refused: the K6WP data root itself. Clearing it would take
+      // studio_settings.json, config.json and library.json with it.
+      const auto data_root = media.filePath(QStringLiteral("K6WP"));
+      Check(!WriteSizedFile(QDir(data_root), "config.json", 32).isEmpty(),
+            "clearcache: a file in the K6WP data root created");
+      bridge.setCacheDir(data_root);
+      Check(bridge.clearCache() == 0, "clearcache: the K6WP data root is refused");
+      Check(CountFiles(ToPath(data_root)) == 1,
+            "clearcache: and the K6WP data root is left untouched");
+      Check(!bridge.lastError().isEmpty(),
+            "clearcache: refusing the data root sets lastError");
+
+      // --- refused: %LOCALAPPDATA% itself, one level above the data root.
+      const auto local_root = media.path();
+      Check(!WriteSizedFile(media, "stray.json", 32).isEmpty(),
+            "clearcache: a file beside the K6WP dir created");
+      bridge.setCacheDir(local_root);
+      Check(bridge.clearCache() == 0, "clearcache: %LOCALAPPDATA% is refused");
+      Check(QFileInfo::exists(local_root + QStringLiteral("/stray.json")),
+            "clearcache: and %LOCALAPPDATA% is left untouched");
+
+      // --- refused: the user's own content folders, resolved from the
+      // (redirected) profile.
+      const auto pictures = media.filePath(QStringLiteral("Pictures"));
+      Check(!WriteSizedFile(QDir(pictures), "family.png", 32).isEmpty(),
+            "clearcache: a picture created");
+      bridge.setCacheDir(pictures);
+      Check(bridge.clearCache() == 0, "clearcache: Pictures is refused");
+      Check(CountFiles(ToPath(pictures)) == 1, "clearcache: Pictures survives");
+      Check(bridge.lastError().contains(pictures),
+            "clearcache: the refusal names the folder it refused");
+
+      // --- refused: a K6WP dir that holds user output, not cache.
+      const auto wallpapers =
+          media.filePath(QStringLiteral("K6WP/wallpapers"));
+      Check(!WriteSizedFile(QDir(wallpapers), "out.mp4", 32).isEmpty(),
+            "clearcache: a compressed video created");
+      bridge.setCacheDir(wallpapers);
+      Check(bridge.clearCache() == 0,
+            "clearcache: the wallpapers dir is refused");
+      Check(CountFiles(ToPath(wallpapers)) == 1,
+            "clearcache: the compressed video survives");
+
+      // --- refused: a volume root. Tested on a drive letter subst'd at the
+      // throwaway tree rather than on a real volume: if the guard ever
+      // regressed, "X:\" would then hold nothing but fixtures instead of a
+      // system disk.
+      {
+        const char letter = FreeDriveLetter();
+        const bool mapped =
+            letter != 0 && std::system(
+                              (std::string("subst ") + letter + ": \"" +
+                               outside.path().toStdString() + "\" >nul 2>&1")
+                                  .c_str()) == 0;
+        if (mapped) {
+          const QString root =
+              QString(QLatin1Char(letter)) + QStringLiteral(":/");
+          Check(CountFiles(ToPath(outside.path())) > 0,
+                "clearcache: the mapped volume root starts non-empty");
+          bridge.setCacheDir(root);
+          Check(bridge.clearCache() == 0, "clearcache: a volume root is refused");
+          Check(!bridge.lastError().isEmpty(),
+                "clearcache: refusing a volume root sets lastError");
+          Check(CountFiles(ToPath(outside.path())) > 0,
+                "clearcache: a volume root is not walked at all");
+        } else {
+          std::printf("SKIP volume-root case (no free drive letter for subst)\n");
+        }
+        if (letter != 0) {
+          const std::string undo = std::string("subst ") + letter + ": /D";
+          (void)std::system(undo.c_str());
+        }
+      }
+
+      // --- refused: an external directory the user never opted in. This is
+      // the accident the guard exists for - a folder with the user's files and
+      // no K6WP marker anywhere in it.
+      bridge.setCacheDir(outside.path());
+      Check(bridge.clearCache() == 0,
+            "clearcache: an unmarked external dir is refused");
+      Check(QFileInfo::exists(victim),
+            "clearcache: the unmarked external dir is left untouched");
+
+      // --- refused: a junction pointing at a folder outside the cache. The
+      // configured name looks harmless; the resolved target is what the sweep
+      // would walk.
+      const auto linked = outside.filePath(QStringLiteral("link-to-pictures"));
+      if (MakeJunction(linked, pictures)) {
+        bridge.setCacheDir(linked);
+        Check(bridge.clearCache() == 0,
+              "clearcache: a junction to Pictures is refused");
+        Check(CountFiles(ToPath(pictures)) == 1,
+              "clearcache: the junction target survives");
+      } else {
+        std::printf(
+            "SKIP junction case (no privilege to create a reparse point)\n");
+      }
+
+      // --- permitted: %LOCALAPPDATA%\K6WP\cache, the default. The whole point
+      // of the guard is that it must not get in the way here.
+      const auto default_cache = media.filePath(QStringLiteral("K6WP/cache"));
+      const auto nested = default_cache + QStringLiteral("/v2");
+      Check(QDir().mkpath(nested), "clearcache: nested cache subdir created");
+      Check(!WriteSizedFile(QDir(default_cache), "a.bin", 16).isEmpty() &&
+                !WriteSizedFile(QDir(nested), "b.bin", 16).isEmpty(),
+            "clearcache: two cache files created");
+      bridge.setCacheDir(default_cache);
+      Check(bridge.clearCache() == 2,
+            "clearcache: the default cache dir is swept recursively");
+      Check(CountFiles(ToPath(default_cache)) == 0,
+            "clearcache: the default cache dir is empty afterwards");
+      Check(bridge.lastError().isEmpty(),
+            "clearcache: a clean sweep reports no error");
+
+      // --- permitted: an external directory the user opted in through the
+      // folder picker, which is the legitimate "cache on another drive" case.
+      bridge.setCacheDir(picked);
+      Check(bridge.clearCache() == 1,
+            "clearcache: an opted-in external dir is swept");
+      Check(!QFileInfo::exists(victim),
+            "clearcache: the opted-in file is gone");
+      Check(QFileInfo::exists(picked + QStringLiteral("/.k6wp-cache")),
+            "clearcache: the opt-in marker survives, so a second clear works");
+
+      // --- permitted: a dedicated but so far empty external folder, with no
+      // marker. There is nothing in it to lose, so the "point the cache at a
+      // fresh folder on D:\" flow must not be blocked.
+      const auto fresh = outside.filePath(QStringLiteral("fresh"));
+      Check(QDir().mkpath(fresh), "clearcache: fresh external dir created");
+      bridge.setCacheDir(fresh);
+      Check(bridge.clearCache() == 0,
+            "clearcache: an empty external dir is allowed (nothing to delete)");
+      Check(bridge.lastError().isEmpty(),
+            "clearcache: and it is not reported as a refusal");
+
+      // --- a partial sweep must say so instead of logging a clean one. The
+      // open handle denies FILE_SHARE_DELETE, so this file cannot be removed.
+      // `fresh` is opted in now, because it is no longer empty and the guard
+      // refuses an unmarked external dir that has files in it.
+      {
+        QFile marker(fresh + QStringLiteral("/.k6wp-cache"));
+        Check(marker.open(QIODevice::WriteOnly | QIODevice::Truncate),
+              "clearcache: fresh dir opted in for the partial sweep");
+        marker.close();
+      }
+      Check(!WriteSizedFile(QDir(fresh), "free.bin", 16).isEmpty(),
+            "clearcache: a removable cache file created");
+      Check(!WriteSizedFile(QDir(fresh), "locked.bin", 16).isEmpty(),
+            "clearcache: a locked cache file created");
+      {
+        QFile locked(fresh + QStringLiteral("/locked.bin"));
+        Check(locked.open(QIODevice::ReadWrite),
+              "clearcache: the second file is held open");
+        bridge.setCacheDir(fresh);
+        Check(bridge.clearCache() == 1,
+              "clearcache: a partial sweep still reports what it removed");
+        Check(!bridge.lastError().isEmpty(),
+              "clearcache: a partial sweep sets lastError");
+        Check(QFileInfo::exists(fresh + QStringLiteral("/locked.bin")),
+              "clearcache: the locked file is still there");
+        locked.close();
+      }
+    }
+    (void)SetUserProfileDir(real_userprofile);
+    (void)SetLocalAppDataDir(QString::fromStdWString(real_localappdata));
+  }
+
+  // 20. User-facing error wording (1.2.1). StudioBridge showed the engine /
+  //     IPC / mpv technical strings verbatim, so a tooltip or status line could
+  //     read "Apply: engine not running" or a raw libmpv sentence; ApplyManager
+  //     strings carry absolute paths and .exe filenames too. The technical text
+  //     still reaches the log pane, so what is tested here is only what the
+  //     user reads.
+  {
+    // The whole point of the mapping: a user-facing sentence must not leak the
+    // install layout or a developer knob, and must never come back empty.
+    // Applied to every mapper so a future table entry cannot regress quietly.
+    const auto safe_and_actionable = [](const QString& msg, const char* who) {
+      std::string lower = msg.toStdString();
+      std::transform(lower.begin(), lower.end(), lower.begin(),
+                     [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+      Check(!msg.isEmpty(), std::string(who) + ": never returns empty");
+      Check(!HasSubstr(lower, ".exe"),
+            std::string(who) + ": no .exe filename in the visible message");
+      Check(!HasSubstr(lower, "k6wp_ffmpeg") && !HasSubstr(lower, "k6wp_dev"),
+            std::string(who) + ": no environment variable in the visible message");
+      Check(!HasSubstr(lower, ":\\") && !HasSubstr(lower, ":/"),
+            std::string(who) + ": no absolute path in the visible message");
+      Check(!HasSubstr(lower, "apply:") && !HasSubstr(lower, "compress:"),
+            std::string(who) + ": no log prefix in the visible message");
+      Check(HasSubstr(lower, "coba lagi") || HasSubstr(lower, "cek log") ||
+                HasSubstr(lower, "nyalakan") || HasSubstr(lower, "ekstrak"),
+            std::string(who) + ": tells the user what to do next");
+    };
+
+    // Engine not running / not started — the two most common states.
+    const QString no_engine = k6wp::FriendlyApplyError(
+        QStringLiteral("engine not running"));
+    Check(no_engine != QStringLiteral("engine not running"),
+          "engine-not-running is not shown verbatim");
+    safe_and_actionable(no_engine, "apply");
+
+    // An absolute path and a .exe name in one string: exactly what
+    // ApplyManager composes, and exactly what must not reach the status bar.
+    const QString with_path = k6wp::FriendlyApplyError(
+        QStringLiteral("failed to start C:\\Program Files\\K6WP\\engine.exe: "
+                       "The system cannot find the file specified."));
+    Check(!HasSubstrQ(with_path, "Program Files"),
+          "apply: install path from the start failure is not shown");
+    Check(!HasSubstrQ(with_path, "engine.exe"),
+          "apply: engine.exe name from the start failure is not shown");
+    safe_and_actionable(with_path, "apply");
+
+    // The "Apply: " prefix: StudioBridge used to wrap the raw error in it, so
+    // a log-only convention leaked into the UI. Same content, no prefix.
+    const QString busy = k6wp::FriendlyApplyError(
+        QStringLiteral("Engine sibuk - tunggu proses berjalan"));
+    Check(!HasSubstrQ(busy, "Apply:"), "apply: busy message carries no prefix");
+    safe_and_actionable(busy, "apply");
+
+    // Empty input still has to say something a user can act on, not "".
+    safe_and_actionable(k6wp::FriendlyApplyError(QString()), "apply(empty)");
+
+    // IPC transport failures (status_hint_ used to be QString::fromStdString(
+    // view.error) verbatim - the raw pipe error).
+    const QString pipe = k6wp::FriendlyIpcError(
+        QStringLiteral("pipe \\\\ .\\pipe\\k6wp-engine: The pipe has been "
+                       "ended. (232)"));
+    Check(!HasSubstrQ(pipe, "k6wp-engine"),
+          "ipc: the pipe name is not shown to the user");
+    safe_and_actionable(pipe, "ipc");
+
+    const QString busy_pipe = k6wp::FriendlyIpcError(
+        QStringLiteral("engine busy"));
+    Check(!HasSubstrQ(busy_pipe, "busy") || !HasSubstrQ(busy_pipe, "engine busy"),
+          "ipc: a busy engine is reworded, not echoed");
+    safe_and_actionable(busy_pipe, "ipc");
+
+    safe_and_actionable(k6wp::FriendlyIpcError(QString()), "ipc(empty)");
+
+    // libmpv: mpv_error_string() English text reached the preview label
+    // verbatim through error_detail_.
+    const QString mpv_fail = k6wp::FriendlyPreviewError(
+        QStringLiteral("Failed to open file: hresult: 0x80070002"));
+    Check(!HasSubstrQ(mpv_fail, "hresult") && !HasSubstrQ(mpv_fail, "0x"),
+          "preview: no HRESULT / hex error code in the visible message");
+    Check(!HasSubstrQ(mpv_fail, "Failed to open file"),
+          "preview: libmpv's English text is not shown verbatim");
+    safe_and_actionable(mpv_fail, "preview");
+
+    // mpv gave nothing usable - the label must still read as a sentence.
+    safe_and_actionable(k6wp::FriendlyPreviewError(QString()), "preview(empty)");
+
+    // The compression mapping is unchanged where it already worked: the 6
+    // pre-existing rules must keep their exact sentences, since the app has
+    // shipped with them, and the new compressor-side rules must not shadow
+    // them (a missing compressor must not read as "ffmpeg not found").
+    const QString cancelled = k6wp::FriendlyCompressError(
+        QStringLiteral("{\"error\":{\"friendly\":\"dibatalkan\","
+                       "\"technical\":\"cancelled by user\"}}"));
+    Check(cancelled == QStringLiteral("Kompresi dibatalkan."),
+          "compress: cancelled sentence is unchanged");
+    const QString corrupt = k6wp::FriendlyCompressError(
+        QStringLiteral("failed to read duration: corrupt file"));
+    Check(HasSubstrQ(corrupt, "rusak"),
+          "compress: corrupt/duration sentence is unchanged");
+    const QString crf = k6wp::FriendlyCompressError(
+        QStringLiteral("crf must be in range [0,51]"));
+    Check(HasSubstrQ(crf, "16 sampai 28"),
+          "compress: CRF sentence is unchanged");
+    const QString unknown = k6wp::FriendlyCompressError(
+        QStringLiteral("some brand new failure nobody mapped"));
+    Check(unknown == QStringLiteral("Kompresi gagal. Lihat log untuk detail teknis."),
+          "compress: unknown failure keeps the generic fallback");
+
+    // The compressor's ffmpeg-missing sentence is now actionable (it used to
+    // tell an ordinary user about a source-tree vendor/ folder and an
+    // environment variable).
+    const QString ffmpeg_gone = k6wp::FriendlyCompressError(
+        QStringLiteral("ffmpeg.exe not found (K6WP_FFMPEG or "
+                       "vendor/ffmpeg/ffmpeg.exe)"));
+    Check(!HasSubstrQ(ffmpeg_gone, "vendor") &&
+              !HasSubstrQ(ffmpeg_gone, "K6WP_FFMPEG"),
+          "compress: ffmpeg-missing no longer names vendor/ or K6WP_FFMPEG");
+    Check(HasSubstrQ(ffmpeg_gone, "Ekstrak ulang") ||
+              HasSubstrQ(ffmpeg_gone, "pasang ulang"),
+          "compress: ffmpeg-missing tells the user to re-extract / reinstall");
+    safe_and_actionable(ffmpeg_gone, "compress");
+
+    // A missing compressor is its own case and must not be swallowed by the
+    // ffmpeg rule (its own text says "kompresor", but the generic compressor
+    // paths mention the binary).
+    const QString comp_gone = k6wp::FriendlyCompressError(
+        QStringLiteral("compressor.exe not found at "
+                       "C:\\Users\\me\\AppData\\Local\\K6WP\\compressor.exe"));
+    Check(!HasSubstrQ(comp_gone, "ffmpeg"),
+          "compress: missing compressor is not reported as an ffmpeg problem");
+    Check(!HasSubstrQ(comp_gone, ".exe") && !HasSubstrQ(comp_gone, ":\\"),
+          "compress: missing compressor leaks no path or .exe name");
+    safe_and_actionable(comp_gone, "compress");
+
+    const QString comp_start = k6wp::FriendlyCompressError(
+        QStringLiteral("failed to start compressor.exe: access denied"));
+    Check(!HasSubstrQ(comp_start, "access denied"),
+          "compress: start failure no longer shows the raw Win32 reason");
+    safe_and_actionable(comp_start, "compress");
+
+    const QString comp_exit = k6wp::FriendlyCompressError(
+        QStringLiteral("compressor exited with code 3221225781"));
+    Check(!HasSubstrQ(comp_exit, "3221225781"),
+          "compress: exit code is not dumped into the visible message");
+    safe_and_actionable(comp_exit, "compress");
   }
 
   std::printf("checks=%d failures=%d\n", g_checks, g_failures);

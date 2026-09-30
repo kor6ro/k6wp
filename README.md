@@ -142,7 +142,7 @@ cmake --preset release
 cmake --build --preset release
 ```
 
-Unit tests (`BUILD_TESTING=ON`, msvc-dev preset only): **15 CTest suites**,
+Unit tests (`BUILD_TESTING=ON`, msvc-dev preset only): **19 CTest suites**,
 all of which must exit 0. The authoritative list is the `add_test(NAME ...)`
 calls in each module's `CMakeLists.txt`:
 
@@ -150,9 +150,11 @@ calls in each module's `CMakeLists.txt`:
   load/migrate/validate, incl. the v0→v5 chain and a schema-doc sync guard),
   `ipc_test` (NDJSON protocol round-trips), `sha1_test` (RFC 3174 vectors),
   `proc_util_test` (the `RunCaptured` subprocess helper).
-- `engine/CMakeLists.txt` (3): `occlusion_test` (occlusion_watch pure
+- `engine/CMakeLists.txt` (5): `occlusion_test` (occlusion_watch pure
   helpers), `ipc_marshal_test` (the PostMessage marshal payload),
-  `gpu_pin_test` (the gpu_pin VendorId table).
+  `gpu_pin_test` (the gpu_pin VendorId table), `tray_menu_test` (tray popup
+  construction, incl. USER-handle balance), `crash_dump_prune_test` (the
+  crash-dump retention cap).
 - `studio/CMakeLists.txt` (5): `studio_async_test` (offscreen Qt proof that
   IPC/engine waits do not block the GUI thread), `thumbnailer_test`,
   `library_crud_test` (LibraryManager metadata-index CRUD plus
@@ -160,10 +162,13 @@ calls in each module's `CMakeLists.txt`:
   (Studio non-GUI logic, incl. `IsFirstRunCondition` and the CompressBridge
   no-result contract; needs the vendored ffmpeg/ffprobe and a local
   `compressor.exe`), `fake_pipe_test` (in-process fake IPC server).
-- `compressor/CMakeLists.txt` (2): `probe_json_test` (the single-JSON ffprobe
-  parser), `compress_argv_contract` (golden Studio↔compressor argv dry-run).
-- `launcher/CMakeLists.txt` (1): `lockscreen_backup_test` (launcher
-  lockscreen backup UTF-8 round-trip).
+- `compressor/CMakeLists.txt` (3): `probe_json_test` (the single-JSON ffprobe
+  parser), `compress_argv_contract` (golden Studio↔compressor argv dry-run,
+  plus the in-place-compress guard), `compress_friendly_error` (the
+  technical→friendly error mapping).
+- `launcher/CMakeLists.txt` (2): `lockscreen_backup_test` (launcher
+  lockscreen backup UTF-8 round-trip), `launcher_stop_test` (the uninstaller
+  stop path: own-image matching and the elevated-restore outcome mapping).
 
 The Qt-based suites run under `QT_QPA_PLATFORM=offscreen`, so `ctest` works
 headless. Run them all with `ctest --preset msvc-dev` (or the exes directly

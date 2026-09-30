@@ -22,6 +22,7 @@
 #include "monitor_util.hpp"
 #include "qml_shell.hpp"
 #include "update_checker.hpp"
+#include "user_errors.hpp"
 
 namespace k6wp {
 
@@ -224,9 +225,11 @@ void StudioBridge::ApplyStatus(const EngineStatusView& view) {
     status_hint_ = tr("Engine tidak jalan");
   } else {
     status_detail_ = tr("Terputus — coba lagi");
-    // Surfacing the transport error here is the "never swallow an IPC
-    // failure" path: the tooltip carries the engine's own message.
-    status_hint_ = QString::fromStdString(view.error);
+    // The transport error is the "never swallow an IPC failure" path, so it
+    // reaches the log verbatim while the tooltip gets a mapped sentence.
+    const QString technical = QString::fromStdString(view.error);
+    AppendLog(technical);
+    status_hint_ = FriendlyIpcError(technical);
   }
   emit engineStatusChanged();
 
@@ -432,16 +435,15 @@ void StudioBridge::OnEngineStartDone() {
   busy_ = false;
   emit busyChanged();
   if (!ok_read) {
-    SetLastError(thrown.isEmpty() ? QStringLiteral("Engine gagal dinyalakan")
-                                   : thrown);
+    if (!thrown.isEmpty()) AppendLog(thrown);
+    SetLastError(FriendlyApplyError(thrown));
     return;
   }
   if (!r.restarted) {
     // RestartEngine already filled restart_error with the reason (engine.exe
     // missing, the 8s wait gave up, the pipe never came up).
-    SetLastError(r.restart_error.isEmpty()
-                     ? QStringLiteral("Engine gagal dinyalakan")
-                     : r.restart_error);
+    if (!r.restart_error.isEmpty()) AppendLog(r.restart_error);
+    SetLastError(FriendlyApplyError(r.restart_error));
     return;
   }
   if (!r.ready) {
@@ -527,9 +529,10 @@ void StudioBridge::applyWallpaper(const QString& path) {
       outcome.error = QString::fromStdString(res.first_error);
     }
     if (!outcome.ok && outcome.error.isEmpty()) {
-      // The manager reported neither a message nor a first_error; name the
-      // failure anyway so it is never silent.
-      outcome.error = QStringLiteral("Terapkan Gagal");
+      // The manager reported neither a message nor a first_error. Leave it
+      // empty: FriendlyApplyError turns that into actionable wording, so the
+      // failure is still named and no fake line reaches the log.
+      outcome.error.clear();
     }
     return outcome;
   }));
@@ -542,12 +545,15 @@ void StudioBridge::OnApplyDone() {
   busy_ = false;
   emit busyChanged();
   if (!ok_read) {
-    SetLastError(thrown.isEmpty() ? QStringLiteral("Terapkan Gagal") : thrown);
+    if (!thrown.isEmpty()) AppendLog(thrown);
+    SetLastError(FriendlyApplyError(thrown));
     return;
   }
   if (!outcome.ok) {
-    // The engine's / manager's own message, shown verbatim.
-    SetLastError(outcome.error);
+    // The engine's / manager's own message reaches the log; the status line
+    // gets a mapped sentence.
+    if (!outcome.error.isEmpty()) AppendLog(outcome.error);
+    SetLastError(FriendlyApplyError(outcome.error));
     return;
   }
   ClearLastError();
@@ -596,7 +602,9 @@ void StudioBridge::OnPauseResumeDone() {
     } else if (res.status == IpcStatus::kNotRunning) {
       SetLastError(tr("Engine mati — klik Nyalakan Engine dulu"));
     } else {
-      SetLastError(tr("Jeda gagal: %1").arg(QString::fromStdString(res.error)));
+      const QString technical = QString::fromStdString(res.error);
+      if (!technical.isEmpty()) AppendLog(technical);
+      SetLastError(tr("Jeda gagal: %1").arg(FriendlyIpcError(technical)));
     }
   } else if (op == 2) {
     if (res.status == IpcStatus::kOk) {
@@ -605,8 +613,10 @@ void StudioBridge::OnPauseResumeDone() {
     } else if (res.status == IpcStatus::kNotRunning) {
       SetLastError(tr("Engine mati — klik Nyalakan Engine dulu"));
     } else {
-      SetLastError(tr("Lanjutkan gagal: %1")
-                       .arg(QString::fromStdString(res.error)));
+      const QString technical = QString::fromStdString(res.error);
+      if (!technical.isEmpty()) AppendLog(technical);
+      SetLastError(
+          tr("Lanjutkan gagal: %1").arg(FriendlyIpcError(technical)));
     }
   }
   // Refresh right away instead of waiting up to 1.5s for the label to flip.
@@ -669,11 +679,27 @@ void StudioBridge::OnPosterDone() {
 // --- update check -----------------------------------------------------------
 
 void StudioBridge::checkForUpdates() {
+  RunUpdateCheck(/*interactive=*/false);
+}
+
+void StudioBridge::checkForUpdatesInteractive() {
+  RunUpdateCheck(/*interactive=*/true);
+}
+
+void StudioBridge::RunUpdateCheck(bool interactive) {
   if (update_busy_) {
     return;
   }
   const QString url = ResolveUpdateCheckUrl();
-  if (!IsUpdateCheckUrlUsable(url)) {
+  if (interactive) {
+    update_check_message_.clear();
+    if (!IsUpdateCheckUrlUsable(url)) {
+      update_check_message_ =
+          tr("Cek pembaruan dimatikan di Pengaturan \u2192 Pembaruan.");
+      emit updateChanged();
+      return;
+    }
+  } else if (!IsUpdateCheckUrlUsable(url)) {
     return;
   }
   if (update_checker_ == nullptr) {
@@ -687,18 +713,48 @@ void StudioBridge::checkForUpdates() {
               emit updateChanged();
             });
     connect(update_checker_, &UpdateChecker::CheckFinished, this,
-            [this](bool available) {
+            [this](UpdateCheckOutcome outcome) {
               update_busy_ = false;
+              const bool available =
+                  outcome == UpdateCheckOutcome::kUpdateAvailable;
               if (!available) {
                 latest_version_.clear();
                 latest_page_url_.clear();
+              }
+              // Only a user-initiated check narrates; the start-up check
+              // leaves updateCheckMessage empty.
+              if (update_check_interactive_) {
+                update_check_interactive_ = false;
+                switch (outcome) {
+                  case UpdateCheckOutcome::kDisabled:
+                    update_check_message_ =
+                        tr("Cek pembaruan dimatikan di Pengaturan \u2192 Pembaruan.");
+                    break;
+                  case UpdateCheckOutcome::kUpToDate:
+                    update_check_message_ = tr("K6WP kamu sudah versi terbaru.");
+                    break;
+                  case UpdateCheckOutcome::kUpdateAvailable:
+                    update_check_message_ =
+                        tr("Versi %1 tersedia.").arg(latest_version_);
+                    break;
+                  case UpdateCheckOutcome::kFailed:
+                    update_check_message_ = tr(
+                        "Gagal menghubungi server pembaruan. Cek koneksi lalu "
+                        "coba lagi.");
+                    break;
+                }
               }
               emit updateChanged();
             });
   }
   update_busy_ = true;
   emit updateChanged();
-  update_checker_->Check(url);
+  if (interactive) {
+    update_check_interactive_ = true;
+    update_checker_->CheckInteractive(url);
+  } else {
+    update_checker_->Check(url);
+  }
 }
 
 // --- preview widget plumbing (forwarded to the active QmlShell) ------------

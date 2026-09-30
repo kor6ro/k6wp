@@ -231,6 +231,17 @@ void LibraryGridModel::reload() {
     SetLastError(QStringLiteral("Perpustakaan rusak: %1")
                      .arg(QString::fromUtf8(e.what())));
   }
+  if (loaded && library_.RecoveredFromBackup()) {
+    // Succeeding here only means we fell back to the pre-crash copy. Staying
+    // silent would hand over a stale library and leave the user wondering
+    // where their most recent import went.
+    AppendLog(QStringLiteral(
+        "Daftar video dipulihkan dari cadangan .bak; perubahan terakhir "
+        "mungkin tidak ada."));
+    SetLastError(QStringLiteral(
+        "Daftar video korup dan dipulihkan dari cadangan. Video yang "
+        "diimpor terakhir mungkin tidak terdaftar."));
+  }
   beginResetModel();
   items_ = std::move(items);
   endResetModel();

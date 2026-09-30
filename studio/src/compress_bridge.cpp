@@ -451,10 +451,13 @@ void CompressBridge::Dispatch(const QString& src, int res_w, int res_h, bool pro
   const CompressService::EnqueueResult dispatch =
       controller_.EnqueueWithStatus(req, meta, &error);
   if (dispatch == CompressService::EnqueueResult::kInvalid) {
+    // CompressService::fail already logged the technical string; map only what
+    // the user reads.
+    const QString friendly = FriendlyCompressError(error);
     status_text_ =
-        tr("Kompres gagal dimulai: %1").arg(error);
+        tr("Kompres gagal dimulai: %1").arg(friendly);
     emit statusTextChanged();
-    SetLastError(error);
+    SetLastError(friendly);
     emit jobFinishedWithoutResult();
     return;
   }

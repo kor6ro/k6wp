@@ -70,11 +70,14 @@ class LibraryManager {
   [[nodiscard]] std::filesystem::path JsonPath() const;
 
   // Loads entries from disk. Missing file => empty library (first run).
-  // Throws LibraryError on corrupt JSON / wrong-typed fields.
+  // Corrupt main file falls back to the .bak; throws only when neither parses.
   void Load();
 
-  // Persists current entries to disk (creates parent dirs). Throws
-  // LibraryError on write failure.
+  // True when the last Load() fell back to the .bak. Reset by Load().
+  [[nodiscard]] bool RecoveredFromBackup() const { return recovered_from_backup_; }
+
+  // Persists entries, copying the previous contents to "<file>.bak" first and
+  // then replacing atomically so a crash mid-write cannot truncate the index.
   void Save() const;
 
   // Adds an entry, or replaces the existing entry with the same dst
@@ -125,6 +128,7 @@ class LibraryManager {
  private:
   std::filesystem::path json_path_;
   std::vector<LibraryEntry> entries_;
+  bool recovered_from_backup_ = false;
 };
 
 }  // namespace k6wp

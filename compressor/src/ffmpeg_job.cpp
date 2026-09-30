@@ -34,7 +34,7 @@ BOOL WINAPI CancelHandler(DWORD ctrl_type) {
 
 std::string FriendlyId(const char* id) {
   if (std::strcmp(id, "ffmpeg_not_found") == 0)
-    return "ffmpeg tidak ditemukan. Pastikan ffmpeg terinstall di vendor/ffmpeg/ atau atur K6WP_FFMPEG.";
+    return "ffmpeg tidak ditemukan di folder aplikasi. Ekstrak ulang atau pasang ulang K6WP.";
   if (std::strcmp(id, "input_not_found") == 0)
     return "File input tidak ditemukan.";
   if (std::strcmp(id, "launch_failed") == 0)

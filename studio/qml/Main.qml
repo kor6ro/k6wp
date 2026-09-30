@@ -221,7 +221,7 @@ Rectangle {
                     MenuItem {
                         text: qsTr("Check for updates")
                         enabled: !Studio.updateCheckBusy
-                        onTriggered: Studio.checkForUpdates()
+                        onTriggered: Studio.checkForUpdatesInteractive()
                     }
 
                     MenuItem {
@@ -229,6 +229,17 @@ Rectangle {
                         onTriggered: aboutDialog.open()
                     }
                 }
+            }
+
+            Label {
+                id: updateCheckMessageLabel
+                Layout.fillWidth: true
+                Layout.leftMargin: 16
+                Layout.rightMargin: 16
+                Layout.topMargin: 6
+                wrapMode: Text.WordWrap
+                visible: Studio.updateCheckMessage.length > 0
+                text: Studio.updateCheckMessage
             }
 
             TabBar {
@@ -1725,7 +1736,7 @@ Rectangle {
             Label {
                 Layout.preferredWidth: 440
                 wrapMode: Text.WordWrap
-                text: qsTr("Update check contacts the releases host once per app start (never downloads/installs); disable in Settings → Lanjutan.")
+                text: qsTr("Update check contacts the releases host once per app start (never downloads/installs); disable in Settings → Pembaruan.")
             }
 
             RowLayout {

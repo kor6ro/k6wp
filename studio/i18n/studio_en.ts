@@ -34,7 +34,7 @@
         <translation>&amp;About K6WP Studio</translation>
     </message>
     <message>
-        <location line="+17"/>
+        <location line="+28"/>
         <source>Wallpaper</source>
         <translation>Wallpaper</translation>
     </message>
@@ -617,7 +617,12 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
         <translation>Restart engine</translation>
     </message>
     <message>
-        <location line="-4"/>
+        <location line="+145"/>
+        <source>Update check contacts the releases host once per app start (never downloads/installs); disable in Settings → Pembaruan.</source>
+        <translation>Update check contacts the releases host once per app start (never downloads/installs); disable in Settings → Updates.</translation>
+    </message>
+    <message>
+        <location line="-149"/>
         <source>Terapkan perubahan engine yang butuh restart</source>
         <translation>Apply the engine changes that need a restart</translation>
     </message>
@@ -680,12 +685,11 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
         <translation>New version %1 is available.</translation>
     </message>
     <message>
-        <location line="+6"/>
         <source>Update check contacts the releases host once per app start (never downloads/installs); disable in Settings → Lanjutan.</source>
-        <translation>The update check contacts the releases host once per app start (it never downloads or installs anything); disable it in Settings &gt; Advanced.</translation>
+        <translation type="vanished">The update check contacts the releases host once per app start (it never downloads or installs anything); disable it in Settings &gt; Advanced.</translation>
     </message>
     <message>
-        <location line="+7"/>
+        <location line="+13"/>
         <source>Support development</source>
         <translation>Support development</translation>
     </message>
@@ -805,7 +809,7 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
 <context>
     <name>QObject</name>
     <message>
-        <location filename="../src/compress_errors.cpp" line="+58"/>
+        <location filename="../src/compress_errors.cpp" line="+83"/>
         <source>Video Panjang</source>
         <translation>Long Video</translation>
     </message>
@@ -857,12 +861,12 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
     </message>
     <message>
         <location line="+4"/>
-        <location line="+421"/>
+        <location line="+424"/>
         <source>Mengompres %1 ...</source>
         <translation>Compressing %1 ...</translation>
     </message>
     <message>
-        <location line="-391"/>
+        <location line="-394"/>
         <source>Kompres gagal: %1</source>
         <translation>Compression failed: %1</translation>
     </message>
@@ -922,9 +926,32 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
         <translation>Cancelled: long video without permission.</translation>
     </message>
     <message>
-        <location line="+58"/>
+        <location line="+61"/>
         <source>Kompres gagal dimulai: %1</source>
         <translation>Compression failed to start: %1</translation>
+    </message>
+</context>
+<context>
+    <name>k6wp::CompressError</name>
+    <message>
+        <location filename="../src/compress_errors.cpp" line="-64"/>
+        <source>ffmpeg tidak ditemukan di folder aplikasi. Ekstrak ulang atau pasang ulang K6WP.</source>
+        <translation>ffmpeg was not found in the app folder. Re-extract or reinstall K6WP.</translation>
+    </message>
+    <message>
+        <location line="+13"/>
+        <source>Kompresor tidak ditemukan di folder aplikasi. Ekstrak ulang atau pasang ulang K6WP.</source>
+        <translation>Compressor not found in the app folder. Re-extract or reinstall K6WP.</translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>Gagal menjalankan kompresor. Coba lagi atau pasang ulang K6WP.</source>
+        <translation>Could not start the compressor. Try again or reinstall K6WP.</translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>Kompresor berhenti tidak normal. Coba lagi atau cek log untuk detail teknis.</source>
+        <translation>The compressor stopped unexpectedly. Try again or check the log for technical details.</translation>
     </message>
 </context>
 <context>
@@ -968,7 +995,7 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
 <context>
     <name>k6wp::PreviewWidget</name>
     <message>
-        <location filename="../src/preview_widget.cpp" line="+217"/>
+        <location filename="../src/preview_widget.cpp" line="+224"/>
         <source>Klik untuk jeda/jalan</source>
         <translation>Click to pause/play</translation>
     </message>
@@ -978,17 +1005,15 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
         <translation>the video backend failed to start (libmpv missing or broken)</translation>
     </message>
     <message>
-        <location line="+16"/>
         <source>file atau codec tak didukung</source>
-        <translation>unsupported file or codec</translation>
+        <translation type="vanished">unsupported file or codec</translation>
     </message>
     <message>
-        <location line="+1"/>
         <source>file atau codec tak didukung (%1)</source>
-        <translation>unsupported file or codec (%1)</translation>
+        <translation type="vanished">unsupported file or codec (%1)</translation>
     </message>
     <message>
-        <location line="+35"/>
+        <location line="+49"/>
         <source>file tidak ditemukan: %1</source>
         <translation>file not found: %1</translation>
     </message>
@@ -998,17 +1023,16 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
         <translation>Loading preview...</translation>
     </message>
     <message>
-        <location line="+5"/>
+        <location line="+6"/>
         <source>Pratinjau tak tersedia</source>
         <translation>Preview unavailable</translation>
     </message>
     <message>
-        <location line="+1"/>
         <source>Pratinjau tak tersedia: %1</source>
-        <translation>Preview unavailable: %1</translation>
+        <translation type="vanished">Preview unavailable: %1</translation>
     </message>
     <message>
-        <location line="+4"/>
+        <location line="+5"/>
         <source>Belum ada pratinjau — pilih video...</source>
         <translation>No preview yet - choose a video...</translation>
     </message>
@@ -1016,7 +1040,7 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
 <context>
     <name>k6wp::StudioBridge</name>
     <message>
-        <location filename="../src/studio_bridge.cpp" line="+205"/>
+        <location filename="../src/studio_bridge.cpp" line="+206"/>
         <location line="+11"/>
         <source>(belum ada video aktif)</source>
         <translation>(no active video yet)</translation>
@@ -1064,7 +1088,7 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
         <translation>Disconnected - try again</translation>
     </message>
     <message>
-        <location line="+86"/>
+        <location line="+88"/>
         <source>Semua layar</source>
         <translation>All screens</translation>
     </message>
@@ -1079,13 +1103,13 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
         <translation> (primary)</translation>
     </message>
     <message>
-        <location line="+273"/>
+        <location line="+276"/>
         <source>Engine paused (IPC)</source>
         <translation>Engine paused (IPC)</translation>
     </message>
     <message>
         <location line="+3"/>
-        <location line="+9"/>
+        <location line="+11"/>
         <source>Engine mati — klik Nyalakan Engine dulu</source>
         <translation>Engine stopped - click Start Engine first</translation>
     </message>
@@ -1100,9 +1124,78 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
         <translation>Engine resumed (IPC)</translation>
     </message>
     <message>
-        <location line="+5"/>
+        <location line="+8"/>
         <source>Lanjutkan gagal: %1</source>
         <translation>Resume failed: %1</translation>
+    </message>
+    <message>
+        <location line="+79"/>
+        <location line="+33"/>
+        <source>Cek pembaruan dimatikan di Pengaturan → Pembaruan.</source>
+        <translation>Update check is turned off in Settings → Updates.</translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>K6WP kamu sudah versi terbaru.</source>
+        <translation>K6WP is already up to date.</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Versi %1 tersedia.</source>
+        <translation>Version %1 is available.</translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Gagal menghubungi server pembaruan. Cek koneksi lalu coba lagi.</source>
+        <translation>Could not reach the update server. Check your connection and try again.</translation>
+    </message>
+</context>
+<context>
+    <name>k6wp::UserErrors</name>
+    <message>
+        <location filename="../src/user_errors.cpp" line="+12"/>
+        <source>Engine belum jalan. Klik Nyalakan Engine, lalu coba lagi.</source>
+        <translation>The engine is not running. Click Start Engine, then try again.</translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>Engine sedang sibuk. Tunggu proses selesai, lalu coba lagi.</source>
+        <translation>The engine is busy. Wait for the process to finish, then try again.</translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>Engine tidak ditemukan di folder aplikasi. Ekstrak ulang atau pasang ulang K6WP.</source>
+        <translation>Engine not found in the app folder. Re-extract or reinstall K6WP.</translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>Terapkan pengaturan gagal. Cek log untuk detail teknis, lalu coba lagi.</source>
+        <translation>Could not apply the settings. Check the log for technical details, then try again.</translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>Engine sedang sibuk. Tunggu sebentar, lalu coba lagi.</source>
+        <translation>The engine is busy. Wait a moment, then try again.</translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Gagal menghubungi engine. Cek log untuk detail teknis, lalu coba lagi.</source>
+        <translation>Could not reach the engine. Check the log for technical details, then try again.</translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>Pratinjau tak tersedia. Cek log untuk detail teknis, lalu coba lagi.</source>
+        <translation>Preview unavailable. Check the log for technical details, then try again.</translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>Pratinjau tak tersedia. Pilih video lain, lalu coba lagi.</source>
+        <translation>Preview unavailable. Choose another video, then try again.</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Pratinjau tak tersedia. Video mungkin rusak atau formatnya tidak didukung — coba lagi.</source>
+        <translation>Preview unavailable. The video may be corrupted or in an unsupported format — try again.</translation>
     </message>
 </context>
 </TS>
