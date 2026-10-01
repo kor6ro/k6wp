@@ -4,6 +4,7 @@
 
 #include "settings_bridge.hpp"
 
+#include <QCoreApplication>
 #include <QDesktopServices>
 #include <QDir>
 #include <QFileDialog>
@@ -285,12 +286,23 @@ SettingsBridge::SettingsBridge(QObject* parent) : QObject(parent) {
   // Read before reload() so a QML binding on `language` sees the stored value
   // on its first evaluation instead of flashing the default.
   ui_language_ = LoadUiLanguage();
+  connect(this, &SettingsBridge::changed, this, [this]() {
+    if (!loading_) dirty_ = true;
+  });
+  if (QCoreApplication* app = QCoreApplication::instance()) {
+    // Flush unsaved Pengaturan edits on quit; dirty_ gates it so a launch with
+    // no edits never rewrites config.json over engine-side changes.
+    connect(app, &QCoreApplication::aboutToQuit, this, [this]() {
+      if (dirty_) apply();
+    });
+  }
   reload();
 }
 
 SettingsBridge::~SettingsBridge() = default;
 
 void SettingsBridge::reload() {
+  loading_ = true;
   bool loaded = true;
   try {
     studio_ = LoadStudioSettings(settings_path_);
@@ -318,6 +330,7 @@ void SettingsBridge::reload() {
     SetLastError(QString());
   }
   emit changed();
+  loading_ = false;
 }
 
 void SettingsBridge::apply() {
@@ -344,6 +357,7 @@ void SettingsBridge::apply() {
   }
   if (error.isEmpty()) {
     SetLastError(QString());
+    dirty_ = false;
   } else {
     SetLastError(error);
   }

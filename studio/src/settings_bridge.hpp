@@ -184,6 +184,11 @@ class SettingsBridge : public QObject {
   QString ui_language_ = QString::fromLatin1(kUiLanguageSource);
   QString last_error_;
   QStringList log_;
+  // True when the user edited a value this session. A clean quit persists it,
+  // so closing Studio no longer discards Pengaturan changes the user did not
+  // explicitly "Terapkan". loading_ suppresses marking dirty during reload().
+  bool dirty_ = false;
+  bool loading_ = false;
 };
 
 }  // namespace k6wp
