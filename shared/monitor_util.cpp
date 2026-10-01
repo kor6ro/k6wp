@@ -43,6 +43,11 @@ BOOL CALLBACK OnMonitorEnum(HMONITOR hmon, HDC /*hdc*/, LPRECT /*rect*/,
   if (::EnumDisplaySettingsExW(mi.szDevice, ENUM_CURRENT_SETTINGS, &dm, 0)) {
     info.width = static_cast<int>(dm.dmPelsWidth);
     info.height = static_cast<int>(dm.dmPelsHeight);
+  } else {
+    // Driver refused the current mode (mirrored/RDP edge): fall back to the
+    // monitor rect so a real monitor never reports 0x0.
+    info.width = static_cast<int>(mi.rcMonitor.right - mi.rcMonitor.left);
+    info.height = static_cast<int>(mi.rcMonitor.bottom - mi.rcMonitor.top);
   }
 
   ctx->out->push_back(std::move(info));
