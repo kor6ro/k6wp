@@ -26,20 +26,11 @@
 #include "preview_widget.hpp"
 
 #include "library_grid_model.hpp"
+#include "video_paths.hpp"
 
 namespace k6wp {
 
 namespace {
-
-bool IsVideoPath(const QString& path) {
-  const QString lower = path.toLower();
-  return lower.endsWith(QStringLiteral(".mp4")) ||
-         lower.endsWith(QStringLiteral(".webm")) ||
-         lower.endsWith(QStringLiteral(".avi")) ||
-         lower.endsWith(QStringLiteral(".mkv")) ||
-         lower.endsWith(QStringLiteral(".mov")) ||
-         lower.endsWith(QStringLiteral(".wmv"));
-}
 
 // True when the drag carries at least one local video, so the cursor can show
 // the copy affordance only for drops Studio will actually take.

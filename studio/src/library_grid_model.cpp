@@ -9,6 +9,7 @@
 #include "probe_async.hpp"
 #include "qml_shell.hpp"
 #include "studio_settings.hpp"
+#include "video_paths.hpp"
 
 #include <QDesktopServices>
 #include <QDir>
@@ -72,16 +73,6 @@ std::string EntryLabel(const LibraryEntry& entry) {
     label += "\n[belum dioptimasi]";
   }
   return label;
-}
-
-bool IsVideoPath(const QString& path) {
-  const QString lower = path.toLower();
-  return lower.endsWith(QStringLiteral(".mp4")) ||
-         lower.endsWith(QStringLiteral(".webm")) ||
-         lower.endsWith(QStringLiteral(".avi")) ||
-         lower.endsWith(QStringLiteral(".mkv")) ||
-         lower.endsWith(QStringLiteral(".mov")) ||
-         lower.endsWith(QStringLiteral(".wmv"));
 }
 
 QString FileUrl(const std::filesystem::path& p) {
@@ -371,8 +362,20 @@ void LibraryGridModel::OnEntryProbed(const std::filesystem::path& dst, bool ok,
       AppendLog(QStringLiteral("Library: gagal menyimpan metadata: %1")
                     .arg(QString::fromUtf8(err.what())));
     }
+    // Patch just this row: a full reload resets the view (flicker, scroll jump)
+    // once per probed file, and Add() already persisted the metadata.
+    int visible_row = -1;
+    for (std::size_t i = 0; i < visible_.size(); ++i) {
+      if (visible_[i] == row) {
+        visible_row = static_cast<int>(i);
+        break;
+      }
+    }
+    if (visible_row >= 0) {
+      emit dataChanged(index(visible_row), index(visible_row));
+    }
+    emit countChanged();
   }
-  reload();
 }
 
 // --- row actions ------------------------------------------------------------
@@ -492,7 +495,17 @@ void LibraryGridModel::OnThumbFinished() {
     AppendLog(QStringLiteral("Library: gagal menyimpan thumbnail: %1")
                   .arg(QString::fromUtf8(err.what())));
   }
-  reload();
+  int visible_row = -1;
+  for (std::size_t i = 0; i < visible_.size(); ++i) {
+    if (visible_[i] == row) {
+      visible_row = static_cast<int>(i);
+      break;
+    }
+  }
+  if (visible_row >= 0) {
+    emit dataChanged(index(visible_row), index(visible_row));
+  }
+  emit countChanged();
 }
 
 // --- first run ---------------------------------------------------------------
@@ -531,7 +544,11 @@ void LibraryGridModel::markFirstRunHandled() {
 // --- diagnostics ------------------------------------------------------------
 
 void LibraryGridModel::AppendLog(const QString& line) {
+  constexpr int kMaxLogLines = 500;
   log_.append(line);
+  while (log_.size() > kMaxLogLines) {
+    log_.removeFirst();
+  }
   emit logChanged();
 }
 
