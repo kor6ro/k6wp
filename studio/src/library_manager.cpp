@@ -366,23 +366,25 @@ bool LibraryManager::Remove(const std::filesystem::path& dst,
     return false;
   }
   if (move_file_to_trash) {
-    const std::filesystem::path files[2] = {
-        it->dst,
-        std::filesystem::path(it->dst).replace_extension(L".jpg"),
-    };
-    for (const auto& file : files) {
-      std::error_code ec;
-      if (file.empty() || !std::filesystem::is_regular_file(file, ec) || ec) {
-        continue;
+    // Thumbnail first and best-effort: if the primary file is trashed but its
+    // .jpg fails, the entry must still be removed, or it would be kept while
+    // pointing at a file that no longer exists.
+    const std::filesystem::path thumb =
+        std::filesystem::path(it->dst).replace_extension(L".jpg");
+    std::error_code thumb_ec;
+    if (!thumb.empty() &&
+        std::filesystem::is_regular_file(thumb, thumb_ec) && !thumb_ec) {
+      QFile::moveToTrash(QString::fromStdWString(thumb.wstring()));
+    }
+    std::error_code ec;
+    if (std::filesystem::is_regular_file(it->dst, ec) && !ec &&
+        !QFile::moveToTrash(QString::fromStdWString(it->dst.wstring()))) {
+      if (error_out != nullptr) {
+        *error_out = "could not move to Recycle Bin (no trash on this "
+                     "volume?): " +
+                     it->dst.u8string();
       }
-      if (!QFile::moveToTrash(QString::fromStdWString(file.wstring()))) {
-        if (error_out != nullptr) {
-          *error_out = "could not move to Recycle Bin (no trash on this "
-                       "volume?): " +
-                       file.u8string();
-        }
-        return false;
-      }
+      return false;
     }
   }
   entries_.erase(it);
