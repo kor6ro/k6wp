@@ -309,11 +309,12 @@ File dipindahkan ke Recycle Bin.</source>
     </message>
     <message>
         <location line="-585"/>
+        <location line="+586"/>
         <source>Tengah (ukuran asli)</source>
         <translation>Center (original size)</translation>
     </message>
     <message>
-        <location line="+11"/>
+        <location line="-575"/>
         <source>Cara video mengisi layar</source>
         <translation>How the video fills the screen</translation>
     </message>

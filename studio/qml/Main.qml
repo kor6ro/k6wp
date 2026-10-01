@@ -15,8 +15,8 @@
 // QtQuick.Controls. QQuickStyle::setStyle only switches which control
 // IMPLEMENTATION wins; it does not bring the attached property into scope.
 //
-// Language: Indonesian, hardcoded. The project deliberately removed its i18n
-// scaffolding (MED-11), so there are no qsTr() calls here.
+// Language: Indonesian is the source language; user-visible strings are wrapped
+// in qsTr() and translated via studio/i18n/studio_en.ts.
 //
 // Spacing is Material 8dp: 8 / 16 / 24.
 import QtQuick
@@ -871,7 +871,7 @@ Rectangle {
                                 // MainWindow::OnPollDone used for its start button.
                                 Button {
                                     text: qsTr("Nyalakan Engine")
-                                    visible: Studio.engineStatusKind === 3
+                                    visible: Studio.engineStatusKind === root.StatusKind.NotRunning
                                     enabled: !Studio.busy
                                     onClicked: Studio.startEngine()
                                     ToolTip.visible: hovered
@@ -1527,7 +1527,7 @@ Rectangle {
                                         model: [qsTr("Isi layar (potong bila perlu)"),
                                                 qsTr("Sesuaikan (seluruh video terlihat)"),
                                                 qsTr("Regang (isi penuh)"),
-                                                "Tengah (ukuran asli)"]
+                                                qsTr("Tengah (ukuran asli)")]
                                         // Index order must match the fit_mode enum
                                         // in shared/config_schema.cpp.
                                         readonly property var modes: ["cover", "fit",
