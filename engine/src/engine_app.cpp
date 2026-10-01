@@ -608,15 +608,10 @@ bool EngineApp::FireRotation() {
 
 void EngineApp::ArmPinVerify() {
   // No pin anywhere (or nothing loaded yet) = nothing to verify.
-  if (adapter_pin_value_.empty()) return;
-  {
-    std::lock_guard<std::mutex> lock(state_mutex_);
-    pin_verify_at_ = std::chrono::steady_clock::now() + std::chrono::seconds(6);
-  }
-  pin_verify_armed_.store(true, std::memory_order_release);
+  pin_verify_.Arm(!adapter_pin_value_.empty());
 }
 void EngineApp::RunPinVerifyPass() {
-  pin_verify_armed_.store(false, std::memory_order_release);
+  pin_verify_.Disarm();
   if (adapter_pin_value_.empty()) return;
   int reverted = 0;
   if (wallpaper_surface_live_.load(std::memory_order_acquire)) {
@@ -627,12 +622,7 @@ void EngineApp::RunPinVerifyPass() {
     }
   }
   if (VerifyHeadlessPin()) ++reverted;
-  int reverted_total = 0;
-  {
-    std::lock_guard<std::mutex> lock(state_mutex_);
-    pin_reverted_total_ += reverted;
-    reverted_total = pin_reverted_total_;
-  }
+  const int reverted_total = pin_verify_.AddReverts(reverted);
   Log("gpu-pin: verify pass done reverted=%d total=%d", reverted,
       reverted_total);
 }
@@ -751,13 +741,7 @@ int EngineApp::Run() {
     }
     // P3L.3 pin verify pass (PATCH A): fires once ~6 s after every
     // (re)load, gated on EverStarted inside the pass itself.
-    bool fire_pin_verify = false;
-    if (pin_verify_armed_.load(std::memory_order_acquire)) {
-      std::lock_guard<std::mutex> lock(state_mutex_);
-      fire_pin_verify =
-          std::chrono::steady_clock::now() >= pin_verify_at_;
-    }
-    if (fire_pin_verify) {
+    if (pin_verify_.Due()) {
       RunPinVerifyPass();
     }
     if (sim_.ExitReached(elapsed_ms)) {
@@ -1341,10 +1325,7 @@ std::string EngineApp::BuildStateJson() const {
   } catch (...) {
     config_utf8.clear();
   }
-  {
-    std::lock_guard<std::mutex> lock(state_mutex_);
-    reverts_copy = pin_reverted_total_;
-  }
+  reverts_copy = pin_verify_.total();
   // WallpaperModeToString takes the enum by value — resolve outside the
   // lock from the snapshot.
   const char* wallpaper_mode_str = WallpaperModeToString(wallpaper_mode_copy);

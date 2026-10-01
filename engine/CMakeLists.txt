@@ -6,6 +6,7 @@ add_executable(engine
   src/cli_options.cpp
   src/cpu_affinity.cpp
   src/occlusion_poke_scheduler.cpp
+  src/pin_verify_schedule.cpp
   src/test_simulator.cpp
   src/log_file.cpp
   src/os_wallpaper.cpp

@@ -26,6 +26,7 @@
 #include "occlusion_poke_scheduler.hpp"
 #include "occlusion_watch.hpp"
 #include "os_wallpaper.hpp"
+#include "pin_verify_schedule.hpp"
 #include "working_set_trim.hpp"
 #include "pause_controller.hpp"
 #include "pending_queue.hpp"
@@ -347,15 +348,9 @@ class EngineApp {
   // P3L.3: resolved `d3d11-adapter` substring (empty = unpinned).
   std::string adapter_pin_value_;
   // P3L.3 verify scheduling (PATCH A): armed with a steady-clock deadline
-  // after every (re)load; fired once by the Run loop. CRIT-1: armed_ is
-  // atomic (the queued set_video executor arms it on the main thread while
-  // the loop polls it); the deadline + revert counter live under
-  // state_mutex_ (worker-thread get_state reads pin_reverted_total_ via
-  // BuildStateJson).
-  std::atomic<bool> pin_verify_armed_{false};
+  // after every (re)load; fired once by the Run loop.
+  PinVerifySchedule pin_verify_;
   mutable std::mutex state_mutex_;
-  std::chrono::steady_clock::time_point pin_verify_at_{};
-  int pin_reverted_total_ = 0;
   // True while the headless renderer_ (not the slots) owns decode: the
   // headless half of the verify pass only runs then. CRIT-1: atomic —
   // written by the main-thread set_video/boot executors, read by the
