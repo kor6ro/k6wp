@@ -17,6 +17,7 @@
 #include <QtConcurrent/QtConcurrentRun>
 
 #include <algorithm>
+#include <exception>
 #include <filesystem>
 
 namespace k6wp {
@@ -223,9 +224,10 @@ void LibraryGridModel::reload() {
     // with imports landing anywhere in the process.
     library_.Load();
     items = library_.ListItems();
-  } catch (const LibraryError& e) {
-    // Corrupt/unreadable library.json: show the empty state and say why,
-    // instead of letting the exception unwind into the QML engine.
+  } catch (const std::exception& e) {
+    // LibraryError and ConfigError (oversized file) are both std::runtime_error
+    // siblings; catching only LibraryError let a ConfigError unwind out of a
+    // Q_INVOKABLE into the QML engine, which cannot catch C++ exceptions.
     items.clear();
     loaded = false;
     SetLastError(QStringLiteral("Perpustakaan rusak: %1")
