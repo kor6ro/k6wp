@@ -1,4 +1,5 @@
 #include "playlist_bridge.hpp"
+#include "bridge_diagnostics.hpp"
 
 #include <QFileDialog>
 #include <QVariantMap>
@@ -202,10 +203,7 @@ QString PlaylistBridge::pathAt(int row) const {
 }
 
 void PlaylistBridge::AppendLog(const QString& line) {
-  log_.append(line);
-  if (log_.size() > 200) {
-    log_.removeFirst();
-  }
+  AppendCapped(log_, line, 200);
   emit logChanged();
 }
 

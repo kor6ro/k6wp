@@ -3,6 +3,7 @@
 // while everything else waits for apply().
 
 #include "settings_bridge.hpp"
+#include "bridge_diagnostics.hpp"
 
 #include <QCoreApplication>
 #include <QDesktopServices>
@@ -419,11 +420,7 @@ int SettingsBridge::clearCache() {
 // --- diagnostics ------------------------------------------------------------
 
 void SettingsBridge::AppendLog(const QString& line) {
-  constexpr int kMaxLogLines = 500;
-  log_.append(line);
-  while (log_.size() > kMaxLogLines) {
-    log_.removeFirst();
-  }
+  AppendCapped(log_, line, 500);
   emit logChanged();
 }
 

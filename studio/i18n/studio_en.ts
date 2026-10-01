@@ -921,7 +921,7 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
 <context>
     <name>k6wp::CompressBridge</name>
     <message>
-        <location filename="../src/compress_bridge.cpp" line="+31"/>
+        <location filename="../src/compress_bridge.cpp" line="+32"/>
         <source>ETA --</source>
         <translation>ETA --</translation>
     </message>
@@ -937,12 +937,12 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
     </message>
     <message>
         <location line="+4"/>
-        <location line="+438"/>
+        <location line="+434"/>
         <source>Mengompres %1 ...</source>
         <translation>Compressing %1 ...</translation>
     </message>
     <message>
-        <location line="-408"/>
+        <location line="-404"/>
         <source>Kompres gagal: %1</source>
         <translation>Compression failed: %1</translation>
     </message>
@@ -987,7 +987,7 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
         <translation>%1 waiting</translation>
     </message>
     <message>
-        <location line="+39"/>
+        <location line="+35"/>
         <source>Pilih video dulu dengan Impor Video atau Pilih Video.</source>
         <translation>Pick a video first with Import Video or Choose Video.</translation>
     </message>
@@ -1109,7 +1109,7 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
 <context>
     <name>k6wp::SettingsBridge</name>
     <message>
-        <location filename="../src/settings_bridge.cpp" line="+130"/>
+        <location filename="../src/settings_bridge.cpp" line="+131"/>
         <source>Folder output tidak boleh kosong.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1182,7 +1182,7 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
 <context>
     <name>k6wp::StudioBridge</name>
     <message>
-        <location filename="../src/studio_bridge.cpp" line="+215"/>
+        <location filename="../src/studio_bridge.cpp" line="+216"/>
         <location line="+11"/>
         <source>(belum ada video aktif)</source>
         <translation>(no active video yet)</translation>
@@ -1230,7 +1230,7 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
         <translation>Disconnected - try again</translation>
     </message>
     <message>
-        <location line="+92"/>
+        <location line="+88"/>
         <source>Semua layar</source>
         <translation>All screens</translation>
     </message>

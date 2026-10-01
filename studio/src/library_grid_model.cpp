@@ -3,6 +3,7 @@
 // contained here rather than exposed to QML.
 
 #include "library_grid_model.hpp"
+#include "bridge_diagnostics.hpp"
 
 #include "compress_first_offer.hpp"
 #include "first_run_wizard.hpp"
@@ -482,11 +483,7 @@ void LibraryGridModel::markFirstRunHandled() {
 // --- diagnostics ------------------------------------------------------------
 
 void LibraryGridModel::AppendLog(const QString& line) {
-  constexpr int kMaxLogLines = 500;
-  log_.append(line);
-  while (log_.size() > kMaxLogLines) {
-    log_.removeFirst();
-  }
+  AppendCapped(log_, line, 500);
   emit logChanged();
 }
 

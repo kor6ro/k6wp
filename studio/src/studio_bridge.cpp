@@ -4,6 +4,7 @@
 // threading (1.5s QTimer -> QtConcurrent worker -> QFutureWatcher slot).
 
 #include "studio_bridge.hpp"
+#include "bridge_diagnostics.hpp"
 
 #include <QFileDialog>
 #include <QFileInfo>
@@ -270,11 +271,7 @@ void StudioBridge::ClearLastError() {
 }
 
 void StudioBridge::AppendLog(const QString& line) {
-  constexpr int kMaxLogLines = 500;
-  log_.append(line);
-  while (log_.size() > kMaxLogLines) {
-    log_.removeFirst();
-  }
+  AppendCapped(log_, line, 500);
   emit logChanged();
 }
 

@@ -3,6 +3,7 @@
 // surface, and the consent gate driven from QML).
 
 #include "compress_bridge.hpp"
+#include "bridge_diagnostics.hpp"
 
 #include <QCoreApplication>
 #include <QDesktopServices>
@@ -304,11 +305,7 @@ QString CompressBridge::queueText() const {
 void CompressBridge::RefreshQueue() { emit queueChanged(); }
 
 void CompressBridge::AppendLog(const QString& line) {
-  constexpr int kMaxLogLines = 500;
-  log_.append(line);
-  while (log_.size() > kMaxLogLines) {
-    log_.removeFirst();
-  }
+  AppendCapped(log_, line, 500);
   emit logChanged();
 }
 
