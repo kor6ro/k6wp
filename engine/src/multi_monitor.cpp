@@ -147,6 +147,8 @@ bool MultiMonitor::AttachSpanSlot() {
   SpanGeometry g = GetSpanGeometry();
   MonitorInfo mi;
   mi.id = kSpanSlotId;
+  mi.x = g.x;
+  mi.y = g.y;
   mi.width = g.width;
   mi.height = g.height;
   mi.is_primary = true;
@@ -154,6 +156,8 @@ bool MultiMonitor::AttachSpanSlot() {
     // Virtual-screen query failed; fall back to the primary resolution so
     // span mode still shows something instead of dying.
     const MonitorInfo primary = GetPrimaryMonitor();
+    mi.x = primary.x;
+    mi.y = primary.y;
     mi.width = primary.width;
     mi.height = primary.height;
     mi.device_name = primary.device_name;
@@ -262,7 +266,8 @@ void MultiMonitor::OnDisplayChange() {
         return;
       }
       Slot& slot = it->second;
-      if (slot.info.width == g.width && slot.info.height == g.height) {
+      if (slot.info.x == g.x && slot.info.y == g.y &&
+          slot.info.width == g.width && slot.info.height == g.height) {
         return;  // Geometry unchanged — nothing to do.
       }
       // Re-attach the injector at the new span size, keep the renderer
@@ -279,7 +284,7 @@ void MultiMonitor::OnDisplayChange() {
           w = primary.width;
           h = primary.height;
         }
-        if (slot.injector->Attach(slot.info.x, slot.info.y, w, h) && slot.renderer) {
+        if (slot.injector->Attach(g.x, g.y, w, h) && slot.renderer) {
           slot.renderer->SetHWND(slot.injector->injected_hwnd());
         } else if (slot.renderer) {
           // Attach failed (Progman missing / SetParent error): point the
@@ -289,6 +294,8 @@ void MultiMonitor::OnDisplayChange() {
           slot.renderer->SetHWND(headless_host_);
         }
       }
+      slot.info.x = g.x;
+      slot.info.y = g.y;
       slot.info.width = g.width;
       slot.info.height = g.height;
       return;
@@ -307,7 +314,9 @@ void MultiMonitor::OnDisplayChange() {
       }
       {
         const bool resized = (it->second.info.width != mi.width ||
-                              it->second.info.height != mi.height);
+                              it->second.info.height != mi.height ||
+                              it->second.info.x != mi.x ||
+                              it->second.info.y != mi.y);
         it->second.info = mi;
         if (resized && it->second.injector) {
           it->second.injector->OnDisplayChange(mi.x, mi.y, mi.width, mi.height);
