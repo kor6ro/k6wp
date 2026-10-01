@@ -120,6 +120,30 @@ void CheckSchemaDocInSync(const char* schema_path) {
     Check(ver.at("maximum") == k6wp::kConfigSchemaVersion,
           "schema doc version.maximum == kConfigSchemaVersion");
 
+    const k6wp::WallpaperConfig def{};
+    Check(props.at("fit_mode").at("default") == def.fit_mode,
+          "schema doc fit_mode default == code default");
+    Check(props.at("speed").at("default") == def.speed,
+          "schema doc speed default == code default");
+    Check(props.at("monitor_id").at("default") == def.monitor_id,
+          "schema doc monitor_id default == code default");
+    Check(props.at("crf").at("default") == def.crf,
+          "schema doc crf default == code default");
+    Check(props.at("resolution_w").at("default") == def.resolution_w,
+          "schema doc resolution_w default == code default");
+    Check(props.at("resolution_h").at("default") == def.resolution_h,
+          "schema doc resolution_h default == code default");
+    Check(props.at("fps_cap").at("default") == def.fps_cap,
+          "schema doc fps_cap default == code default");
+    Check(props.at("battery_saver").at("default") == def.battery_saver,
+          "schema doc battery_saver default == code default");
+    Check(props.at("battery_mode").at("default") == def.battery_mode,
+          "schema doc battery_mode default == code default");
+    Check(props.at("cpu_affinity").at("default") == def.cpu_affinity,
+          "schema doc cpu_affinity default == code default");
+    Check(props.at("gpu_adapter").at("default") == def.gpu_adapter,
+          "schema doc gpu_adapter default == code default");
+
     const nlohmann::json on_disk = k6wp::ConfigToJson(k6wp::WallpaperConfig{});
     for (auto it = on_disk.begin(); it != on_disk.end(); ++it) {
       Check(props.contains(it.key()),

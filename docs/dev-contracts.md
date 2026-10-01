@@ -113,7 +113,7 @@ doc — when in doubt, read the code.
   `cover` (`fill` = legacy alias of cover); `speed` 1.0 in [0.5, 2.0];
   `monitor_id` `-1` = all screens, `>=0` = only that monitor (Step 5);
   `crf` 22 in [16, 28]; `resolution_w/h` 0 = match monitor;
-  `fps_cap` 30 in [1, 30]; `battery_saver` false.
+  `fps_cap` 24 in [1, 30]; `battery_saver` false.
 - Migration + `.bak` contract: loader migrates v0/v1 → v2 (missing fields
   defaulted; v0/v1 `monitor_id` is FORCED to `-1` because the old id had no
   render effect — preserving it would newly single-out one screen); on
