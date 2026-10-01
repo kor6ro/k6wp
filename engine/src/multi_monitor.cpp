@@ -169,6 +169,31 @@ bool MultiMonitor::AttachSpanSlot() {
   return AttachSlot(mi);
 }
 
+// Span re-anchor shared by OnDisplayChange and Reanchor. `slot.injector` must
+// be non-null. Falls back to the primary resolution when the virtual-screen
+// query yields a non-positive size (same policy as AttachSpanSlot) and to the
+// hidden host when the re-attach fails. `reassert` re-applies the sticky
+// frameless style after a successful attach (Reanchor); OnDisplayChange passes
+// false. No logging here so the callers' distinct fall-back lines stay at the
+// call sites. Structural slot changes are main-thread-only (see the header).
+void MultiMonitor::ReattachSpanLocked(Slot& slot, int x, int y, int w, int h,
+                                      bool reassert) {
+  if (w <= 0 || h <= 0) {
+    const MonitorInfo primary = GetPrimaryMonitor();
+    w = primary.width;
+    h = primary.height;
+  }
+  slot.injector->Detach();
+  if (slot.injector->Attach(x, y, w, h) && slot.renderer) {
+    if (reassert) {
+      slot.injector->ReassertFrameless();
+    }
+    slot.renderer->SetHWND(slot.injector->injected_hwnd());
+  } else if (slot.renderer) {
+    slot.renderer->SetHWND(headless_host_);
+  }
+}
+
 void MultiMonitor::SetHeadlessHost(void* hwnd) { headless_host_ = hwnd; }
 
 void MultiMonitor::SetInjectMode(InjectMode mode) { inject_mode_ = mode; }
@@ -273,26 +298,7 @@ void MultiMonitor::OnDisplayChange() {
       // Re-attach the injector at the new span size, keep the renderer
       // instance (no video reload needed — SetHWND re-points it).
       if (slot.injector) {
-        slot.injector->Detach();
-        int w = g.width;
-        int h = g.height;
-        if (w <= 0 || h <= 0) {
-          // Virtual-screen query failed; fall back to the primary resolution
-          // (same policy as AttachSpanSlot) so span mode still shows
-          // something instead of attaching a 0x0 window.
-          const MonitorInfo primary = GetPrimaryMonitor();
-          w = primary.width;
-          h = primary.height;
-        }
-        if (slot.injector->Attach(g.x, g.y, w, h) && slot.renderer) {
-          slot.renderer->SetHWND(slot.injector->injected_hwnd());
-        } else if (slot.renderer) {
-          // Attach failed (Progman missing / SetParent error): point the
-          // renderer at the hidden host instead of the destroyed HWND so mpv
-          // never spawns its own framed window (plan Must-NOT-Have). The
-          // next display-change / TaskbarCreated re-anchors.
-          slot.renderer->SetHWND(headless_host_);
-        }
+        ReattachSpanLocked(slot, g.x, g.y, g.width, g.height, /*reassert=*/false);
       }
       slot.info.x = g.x;
       slot.info.y = g.y;
@@ -489,28 +495,9 @@ void MultiMonitor::Reanchor() {
       if (it == slots_.end()) {
         AttachSpanSlot();
       } else if (it->second.injector) {
-        SpanGeometry g = GetSpanGeometry();
-        int w = g.width;
-        int h = g.height;
-        if (w <= 0 || h <= 0) {
-          // Virtual-screen query failed; fall back to the primary resolution
-          // (same policy as AttachSpanSlot).
-          const MonitorInfo primary = GetPrimaryMonitor();
-          w = primary.width;
-          h = primary.height;
-        }
-        it->second.injector->Detach();
-        if (it->second.injector->Attach(it->second.info.x, it->second.info.y, w, h) &&
-            it->second.renderer) {
-          it->second.injector->ReassertFrameless();
-          it->second.renderer->SetHWND(it->second.injector->injected_hwnd());
-        } else if (it->second.renderer) {
-          // Attach failed (Progman briefly missing mid-restart): point the
-          // renderer at the hidden host instead of the destroyed HWND so mpv
-          // never spawns its own framed window (plan Must-NOT-Have). The
-          // next TaskbarCreated / display-change re-anchors.
-          it->second.renderer->SetHWND(headless_host_);
-        }
+        const SpanGeometry g = GetSpanGeometry();
+        ReattachSpanLocked(it->second, it->second.info.x, it->second.info.y,
+                           g.width, g.height, /*reassert=*/true);
       }
       initialized_ = !slots_.empty();
       return;

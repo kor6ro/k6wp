@@ -174,6 +174,12 @@ class MultiMonitor {
   void ClearSlots();
   bool AttachSlot(const MonitorInfo& mi);
   bool AttachSpanSlot();
+  // Shared span re-anchor for OnDisplayChange (reassert=false) and Reanchor
+  // (reassert=true): primary-resolution size fallback + hidden-host attach
+  // fallback. `slot.injector` must be non-null. No logging here so the
+  // callers' distinct lines stay put. Structural slot changes are
+  // main-thread-only, so no lock is taken despite the name.
+  void ReattachSpanLocked(Slot& slot, int x, int y, int w, int h, bool reassert);
   // Diff the live slots against DesiredMonitors(): tear down the unwanted,
   // attach the missing. Shared by Init/OnDisplayChange/Reanchor/SetActive.
   void ApplyActiveFilter(const std::vector<MonitorInfo>& desired);
