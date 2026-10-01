@@ -90,10 +90,10 @@ const POWERBROADCAST_SETTING* SimMonitorPowerSetting(DWORD data) {
 
 void PrintUsage(FILE* out) {
   std::fprintf(out,
-      "K6WP engine (Wave 1 skeleton)\n"
+      "K6WP engine\n"
       "Usage: engine.exe [options]\n"
-      "  --video <path>                 video file to render (wired in Todo 10)\n"
-      "  --config <path>                config JSON path (wired in Todo 11)\n"
+      "  --video <path>                 video file to render\n"
+      "  --config <path>                config JSON path\n"
       "  --wallpaper-mode <m>           auto | workerw | progman (injection strategy)\n"
       "  --minimized                    tray-only start (autostart marker, no window)\n"
       "  --engine, --silent             aliases of --minimized (compat, keep working)\n"
