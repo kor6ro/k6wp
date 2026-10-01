@@ -5,6 +5,36 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Wallpaper playlist + timed rotation.** The engine can now cycle through an
+  ordered list of wallpapers on a fixed interval, with optional shuffle.
+  - New `shared/playlist.{hpp,cpp}` (`PlaylistConfig`, `LoadPlaylist`,
+    `SavePlaylist`, `ValidatePlaylist`, `MigratePlaylist`, plus the pure
+    `SelectNextIndex` / `PlaylistIndexForPath` helpers), schema v1, stored at
+    `%LOCALAPPDATA%\K6WP\playlist.json` — deliberately NOT in `config.json`, so
+    an older Studio build (which rewrites `config.json` from its own
+    `WallpaperConfig` struct) can never delete the playlist. Same atomic
+    `.tmp` + `MoveFileExW` publish and `.bak`-on-corrupt contract as the other
+    settings files.
+  - Engine (`engine/src/engine_app.{hpp,cpp}`): `MaybeReloadPlaylist()` watches
+    the file (mtime/size, mirroring `ConfigWatcher`) and `FireRotation()` reuses
+    the existing validated `set_video` path. Rotation is gated on
+    `!SlotsPaused()`, so it freezes while paused (loop wait is INFINITE) and the
+    interval restarts on resume; it re-arms after a device-lost reload. It never
+    feeds the tray MRU and never re-fires the lock-screen frame extract, and it
+    logs at `Log` (not `LogImportant`) to avoid log churn. Tray "Next Wallpaper"
+    advances within the playlist when one is active. `get_state` gains the
+    additive fields `playlist_enabled`, `playlist_size`, `playlist_index`.
+  - Studio: new `Playlist` QML singleton (`studio/src/playlist_bridge.{hpp,cpp}`)
+    and a "Daftar putar" panel on the Wallpaper tab (enable, interval, shuffle,
+    add/remove/reorder/clear).
+  - Tests: `playlist_test` (43 checks) and `playlist_bridge_test` (26 checks).
+  - Packaging: `packaging/playlist.json.example` staged in the ZIP and
+    installer; stale `packaging/config.json.example` refreshed to schema v5.
+
 ## [1.2.0] - 2026-09-27
 
 79 commits landed after the `v1.1.0` tag, all between 2026-09-23 and

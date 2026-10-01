@@ -354,6 +354,7 @@ foreach ($dir in Get-ChildItem -LiteralPath $BuildDir -Directory) {
 
 # 2e. Example config + uninstaller + license texts (GPL-2.0-or-later release).
 Stage-Copy (Join-Path $RepoRoot "packaging\config.json.example") "config.json.example"
+Stage-Copy (Join-Path $RepoRoot "packaging\playlist.json.example") "playlist.json.example"
 Stage-Copy (Join-Path $RepoRoot "packaging\uninstall.bat") "uninstall.bat"
 # Root LICENSE + LICENSES/ third-party notices. LICENSES ships as a subdir
 # (installer.nsi stages it via File /r "${REPO_ROOT}\LICENSES", so the

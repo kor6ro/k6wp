@@ -1,6 +1,6 @@
 {
-  "_comment": "K6WP example config, schema v2. Copy to %LOCALAPPDATA%/K6WP/config.json and set video_path to a REAL video file on your machine - the placeholder below does not exist.",
-  "version": 2,
+  "_comment": "K6WP example config, schema v5. Copy to %LOCALAPPDATA%/K6WP/config.json and set video_path to a REAL video file on your machine - the placeholder below does not exist. Playlist/rotation settings live in the separate playlist.json (see playlist.json.example).",
+  "version": 5,
   "video_path": "C:/Videos/wallpaper.mp4",
   "fit_mode": "cover",
   "speed": 1.0,
@@ -8,6 +8,9 @@
   "crf": 22,
   "resolution_w": 0,
   "resolution_h": 0,
-  "fps_cap": 30,
-  "battery_saver": false
+  "fps_cap": 24,
+  "battery_saver": false,
+  "battery_mode": "cap24",
+  "cpu_affinity": "auto",
+  "gpu_adapter": "auto"
 }

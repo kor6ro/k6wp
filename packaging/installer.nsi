@@ -221,8 +221,9 @@ Section "!${APP_NAME} Application (required)" SEC_APP
   File /r "${SRCDIR}\qml"
   File /r "${SRCDIR}\networkinformation"
   File /r "${SRCDIR}\tls"
-  ; Example config + portable-style uninstall helper.
+  ; Example config + playlist + portable-style uninstall helper.
   File "config.json.example"
+  File "playlist.json.example"
   File "uninstall.bat"
   ; License texts (GPL-2.0-or-later grant + third-party notices; mirrors
   ; make_zip.ps1 staging, kept in sync by its ship-set assert).
@@ -297,6 +298,7 @@ rb_skip_msg:
   RMDir /r "$INSTDIR\networkinformation"
   RMDir /r "$INSTDIR\tls"
   Delete "$INSTDIR\config.json.example"
+  Delete "$INSTDIR\playlist.json.example"
   Delete "$INSTDIR\uninstall.bat"
   Delete "$INSTDIR\LICENSE"
   RMDir /r "$INSTDIR\LICENSES"
@@ -394,6 +396,7 @@ Section "Uninstall" SEC_UNINST
   RMDir /r "$INSTDIR\networkinformation"
   RMDir /r "$INSTDIR\tls"
   Delete "$INSTDIR\config.json.example"
+  Delete "$INSTDIR\playlist.json.example"
   Delete "$INSTDIR\uninstall.bat"
   Delete "$INSTDIR\LICENSE"
   RMDir /r "$INSTDIR\LICENSES"

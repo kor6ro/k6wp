@@ -3,6 +3,7 @@
 add_library(k6wp_shared STATIC
   config_schema.cpp
   studio_settings.cpp
+  playlist.cpp
   ipc_protocol.cpp
   monitor_util.cpp
   autostart.cpp
@@ -65,4 +66,11 @@ add_executable(proc_util_test ../tests/proc_util_test.cpp)
 target_link_libraries(proc_util_test PRIVATE k6wp_shared)
 target_include_directories(proc_util_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 add_test(NAME proc_util_test COMMAND proc_util_test)
+
+# playlist_test - wallpaper playlist + rotation contract (io, validation,
+# migration, .bak, SelectNextIndex / PlaylistIndexForPath pure helpers).
+add_executable(playlist_test ../tests/playlist_test.cpp)
+target_link_libraries(playlist_test PRIVATE k6wp_shared)
+target_include_directories(playlist_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+add_test(NAME playlist_test COMMAND playlist_test)
 endif()

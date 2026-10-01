@@ -33,6 +33,9 @@ outstanding work and belong under `docs/img/` once they exist.
 - Auto-compress to monitor resolution: H.264/MP4 (default CRF 22) with LRU output
   cache (5 GiB), skip-optimal copy, encoder auto-detect (NVENC → QSV → AMF → x264).
 - Video library: copy + thumbnail cache + JSON metadata index, double-click live-switch.
+- Wallpaper playlist: ordered rotation with a configurable interval and optional
+  shuffle, edited in Studio and driven by the engine from `playlist.json`
+  (freezes while paused; tray "Next Wallpaper" advances within it).
 - Tray icon with quick-switch (MRU) and error-status tooltip.
 - Single-instance engine (named mutex), OS-wallpaper save/restore on exit,
   config migration with `.bak` self-healing.
@@ -142,26 +145,28 @@ cmake --preset release
 cmake --build --preset release
 ```
 
-Unit tests (`BUILD_TESTING=ON`, msvc-dev preset only): **19 CTest suites**,
+Unit tests (`BUILD_TESTING=ON`, msvc-dev preset only): **21 CTest suites**,
 all of which must exit 0. The authoritative list is the `add_test(NAME ...)`
 calls in each module's `CMakeLists.txt`:
 
-- `shared/CMakeLists.txt` (4): `config_test` (config schema
+- `shared/CMakeLists.txt` (5): `config_test` (config schema
   load/migrate/validate, incl. the v0→v5 chain and a schema-doc sync guard),
   `ipc_test` (NDJSON protocol round-trips), `sha1_test` (RFC 3174 vectors),
-  `proc_util_test` (the `RunCaptured` subprocess helper).
+  `proc_util_test` (the `RunCaptured` subprocess helper), `playlist_test`
+  (playlist.json io/validation/migration + rotation helpers).
 - `engine/CMakeLists.txt` (5): `occlusion_test` (occlusion_watch pure
   helpers), `ipc_marshal_test` (the PostMessage marshal payload),
   `gpu_pin_test` (the gpu_pin VendorId table), `tray_menu_test` (tray popup
   construction, incl. USER-handle balance), `crash_dump_prune_test` (the
   crash-dump retention cap).
-- `studio/CMakeLists.txt` (5): `studio_async_test` (offscreen Qt proof that
+- `studio/CMakeLists.txt` (6): `studio_async_test` (offscreen Qt proof that
   IPC/engine waits do not block the GUI thread), `thumbnailer_test`,
   `library_crud_test` (LibraryManager metadata-index CRUD plus
   `ReferenceInPlace` and the shared-manager contract), `studio_logic_test`
   (Studio non-GUI logic, incl. `IsFirstRunCondition` and the CompressBridge
   no-result contract; needs the vendored ffmpeg/ffprobe and a local
-  `compressor.exe`), `fake_pipe_test` (in-process fake IPC server).
+  `compressor.exe`), `fake_pipe_test` (in-process fake IPC server),
+  `playlist_bridge_test` (PlaylistBridge CRUD/persist round-trip).
 - `compressor/CMakeLists.txt` (3): `probe_json_test` (the single-JSON ffprobe
   parser), `compress_argv_contract` (golden Studio↔compressor argv dry-run,
   plus the in-place-compress guard), `compress_friendly_error` (the

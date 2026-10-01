@@ -11,6 +11,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdarg>
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -23,6 +24,7 @@
 #include "occlusion_watch.hpp"
 #include "pause_controller.hpp"
 #include "pending_queue.hpp"
+#include "playlist.hpp"
 #include "test_simulator.hpp"
 #include "power.hpp"
 #include "timer_ids.hpp"
@@ -151,7 +153,13 @@ class EngineApp {
   // a file, or the renderer rejects it. MAIN THREAD ONLY (HandleMessage /
   // tray quick-switch / Init boot path); the IPC worker path goes through
   // ValidateSetVideoPayload + QueueSetVideo instead.
-  bool HandleSetVideo(const std::string& payload_json);
+  //
+  // rotation=true marks an automatic playlist rotation: the tray MRU is NOT
+  // fed (it stays reserved for genuine user picks) and the lockscreen sync is
+  // NOT re-fired (a rotation is not a user action), and the final success line
+  // logs at Log level instead of LogImportant so a short interval cannot flush
+  // the log every cycle.
+  bool HandleSetVideo(const std::string& payload_json, bool rotation = false);
   // Validates the set_monitor payload ({"monitor": N}, alias
   // {"monitor_id": N}), then retargets the live slots via
   // MultiMonitor::SetActiveMonitor: -1 = all screens, >=0 = that monitor
@@ -292,6 +300,31 @@ class EngineApp {
   void RestoreOsWallpaper();
   // Fan a WallpaperConfig fit_mode out to renderer_ + all live slots.
   void ApplyFitMode(const std::string& fit_mode);
+  // --- Wallpaper playlist + rotation -----------------------------------------
+  // playlist.json is engine-read and Studio-written. The loop reloads it when
+  // its mtime/size change (MaybeReloadPlaylist) and fires FireRotation when the
+  // interval elapses while NOT paused. playlist_ is touched ONLY on the main
+  // loop thread; the playlist_*_atomic fields are the get_state (IPC worker)
+  // snapshot, refreshed whenever playlist_ changes.
+  std::filesystem::path ResolvePlaylistPath() const;
+  void MaybeReloadPlaylist();
+  void ArmRotation();
+  bool FireRotation();
+  PlaylistConfig playlist_;
+  std::filesystem::file_time_type playlist_mtime_{};
+  std::uintmax_t playlist_size_ = 0;
+  bool playlist_mtime_valid_ = false;
+  bool playlist_missing_logged_ = false;
+  std::uint64_t rotate_rng_ = 0x9E3779B97F4A7C15ull;
+  std::atomic<bool> rotate_armed_{false};
+  // Rotation deadline (state_mutex_ guards the timestamp; rotate_armed_ is the
+  // atomic armed flag) + the resume-edge detector (loop thread only) that
+  // restarts the interval when the wallpaper comes back from a pause.
+  std::chrono::steady_clock::time_point next_rotate_at_{};
+  bool was_slots_paused_ = false;
+  std::atomic<bool> playlist_enabled_atomic_{false};
+  std::atomic<long long> playlist_size_atomic_{0};
+  std::atomic<long long> playlist_index_atomic_{-1};
   // P3L.3 pin verify scheduling (PATCH A): armed after every (re)load,
   // fired once post-start in the Run loop. 6 s covers vo-configured +
   // first frame settle; the pass itself requires EverStarted so a

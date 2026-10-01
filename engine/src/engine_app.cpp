@@ -313,7 +313,15 @@ bool EngineApp::Init(int argc, char** argv) {
     std::lock_guard<std::mutex> lock(video_mutex_);
     return current_video_utf8_;
   };
-  tray_cb.on_next = [this](std::size_t idx) { OnTrayQuickSwitch(idx); };
+  tray_cb.on_next = [this](std::size_t idx) {
+    // Playlist active: Next advances within the playlist (restarting the
+    // interval); otherwise the legacy MRU rotation applies.
+    if (playlist_.enabled && !playlist_.order.empty()) {
+      FireRotation();
+    } else {
+      OnTrayQuickSwitch(idx);
+    }
+  };
   tray_cb.on_open_studio = [this]() { OnTrayOpenStudio(); };
   tray_cb.on_support = [this]() { OnTraySupport(); };
   tray_cb.on_exit = [this]() { RequestShutdown(); };
@@ -368,6 +376,10 @@ bool EngineApp::Init(int argc, char** argv) {
     // matching the old tray-paused boot behavior).
     SetPauseOwner(kPauseUser, true);
   }
+  // Load playlist.json (missing = rotation disabled) and seed the resume-edge
+  // detector with the boot pause state.
+  MaybeReloadPlaylist();
+  was_slots_paused_ = SlotsPaused();
   return true;
 }
 
@@ -496,6 +508,136 @@ void EngineApp::ApplyFitMode(const std::string& fit_mode) {
   if (wallpaper_surface_live_.load(std::memory_order_acquire))
     multi_monitor_.ApplyFitModeAll(fit_mode);
   LogImportant("video: fit mode applied '%s'", fit_mode.c_str());
+}
+
+std::filesystem::path EngineApp::ResolvePlaylistPath() const {
+  std::lock_guard<std::mutex> lock(options_mutex_);
+  if (!options_.config_path.empty()) {
+    return PlaylistPathForConfig(std::filesystem::path(options_.config_path));
+  }
+  return DefaultPlaylistPath();
+}
+
+void EngineApp::MaybeReloadPlaylist() {
+  std::filesystem::path path;
+  try {
+    path = ResolvePlaylistPath();
+  } catch (const ConfigError& e) {
+    if (!playlist_missing_logged_) {
+      Log("playlist: cannot resolve path (%s), rotation disabled", e.what());
+      playlist_missing_logged_ = true;
+    }
+    return;
+  }
+  std::error_code ec;
+  const auto mtime = std::filesystem::last_write_time(path, ec);
+  if (ec) {
+    // No file: treat as "no playlist" and disarm. A later create re-arms.
+    if (playlist_mtime_valid_) {
+      playlist_mtime_valid_ = false;
+      playlist_ = PlaylistConfig{};
+      playlist_enabled_atomic_.store(false, std::memory_order_release);
+      playlist_size_atomic_.store(0, std::memory_order_release);
+      playlist_index_atomic_.store(-1, std::memory_order_release);
+      rotate_armed_.store(false, std::memory_order_release);
+      Log("playlist: file removed, rotation disabled");
+    } else if (!playlist_missing_logged_) {
+      Log("playlist: no file at %s, rotation disabled", path.string().c_str());
+      playlist_missing_logged_ = true;
+    }
+    return;
+  }
+  const auto size = std::filesystem::file_size(path, ec);
+  if (ec) return;
+  if (playlist_mtime_valid_ && mtime == playlist_mtime_ &&
+      size == playlist_size_) {
+    return;
+  }
+  playlist_mtime_ = mtime;
+  playlist_size_ = size;
+  playlist_mtime_valid_ = true;
+  playlist_missing_logged_ = false;
+  try {
+    playlist_ = LoadPlaylist(path);
+  } catch (const ConfigError& e) {
+    Log("playlist: reload failed (keeping last-valid): %s", e.what());
+    return;
+  }
+  std::string current;
+  {
+    std::lock_guard<std::mutex> lock(video_mutex_);
+    current = current_video_utf8_;
+  }
+  const int idx = PlaylistIndexForPath(
+      playlist_.order, std::filesystem::u8path(current).wstring());
+  playlist_enabled_atomic_.store(playlist_.enabled, std::memory_order_release);
+  playlist_size_atomic_.store(static_cast<long long>(playlist_.order.size()),
+                              std::memory_order_release);
+  playlist_index_atomic_.store(idx, std::memory_order_release);
+  Log("playlist: loaded %llu entries (enabled=%d interval_min=%d shuffle=%d)",
+      static_cast<unsigned long long>(playlist_.order.size()),
+      playlist_.enabled ? 1 : 0, playlist_.interval_min,
+      playlist_.shuffle ? 1 : 0);
+  ArmRotation();
+}
+
+void EngineApp::ArmRotation() {
+  if (!playlist_.enabled || playlist_.order.size() < 2) {
+    rotate_armed_.store(false, std::memory_order_release);
+    return;
+  }
+  const auto deadline = std::chrono::steady_clock::now() +
+                        std::chrono::minutes(playlist_.interval_min);
+  {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    next_rotate_at_ = deadline;
+  }
+  rotate_armed_.store(true, std::memory_order_release);
+}
+
+bool EngineApp::FireRotation() {
+  const std::size_t n = playlist_.order.size();
+  if (!playlist_.enabled || n < 2) {
+    rotate_armed_.store(false, std::memory_order_release);
+    return false;
+  }
+  std::string current;
+  {
+    std::lock_guard<std::mutex> lock(video_mutex_);
+    current = current_video_utf8_;
+  }
+  // Unknown current (e.g. a manual apply not in the playlist) starts the walk
+  // from the end so the first SelectNextIndex lands on entry 0.
+  int idx = PlaylistIndexForPath(playlist_.order,
+                                 std::filesystem::u8path(current).wstring());
+  if (idx < 0) idx = static_cast<int>(n) - 1;
+  for (std::size_t attempt = 0; attempt < n; ++attempt) {
+    const std::size_t next =
+        SelectNextIndex(static_cast<std::size_t>(idx), n, playlist_.shuffle,
+                        rotate_rng_);
+    idx = static_cast<int>(next);
+    const std::wstring& cand = playlist_.order[next];
+    std::error_code ec;
+    if (!std::filesystem::is_regular_file(cand, ec)) {
+      Log("playlist: skipping missing entry [%llu] %s",
+          static_cast<unsigned long long>(next),
+          std::filesystem::path(cand).u8string().c_str());
+      continue;
+    }
+    const std::string utf8 = std::filesystem::path(cand).u8string();
+    if (HandleSetVideo(nlohmann::json{{"path", utf8}}.dump(), /*rotation=*/true)) {
+      playlist_index_atomic_.store(static_cast<long long>(next),
+                                   std::memory_order_release);
+      Log("playlist: rotated to [%llu/%llu] %s",
+          static_cast<unsigned long long>(next),
+          static_cast<unsigned long long>(n), utf8.c_str());
+      ArmRotation();
+      return true;
+    }
+  }
+  Log("playlist: no playable entry found, keeping current video");
+  ArmRotation();  // back off to the next interval instead of spinning
+  return false;
 }
 
 void EngineApp::ArmPinVerify() {
@@ -833,6 +975,23 @@ int EngineApp::Run() {
     // P2.1 (Todo 2): Poll() is the FALLBACK path only — the primary trigger
     // is the config dir-watch event joined into the wait array below.
     config_watcher_.Poll();
+    // Wallpaper playlist: reload on file change; rotate when due. While paused
+    // the loop wait is INFINITE, so this block does not run (zero-wakeup budget
+    // preserved) and the resume edge below restarts the full interval.
+    MaybeReloadPlaylist();
+    const bool slots_paused_now = SlotsPaused();
+    if (was_slots_paused_ && !slots_paused_now) {
+      ArmRotation();
+    }
+    was_slots_paused_ = slots_paused_now;
+    if (!slots_paused_now && rotate_armed_.load(std::memory_order_acquire)) {
+      bool rotate_due = false;
+      {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        rotate_due = std::chrono::steady_clock::now() >= next_rotate_at_;
+      }
+      if (rotate_due) FireRotation();
+    }
     // Todo 34: foreground-window check (internally throttled to 1 s).
     // P2.2 (Todo 4): Poll() is the FALLBACK path only — the primary trigger
     // is the WinEvent hook event (foreground/minimize -> OnHookEvent).
@@ -1068,7 +1227,7 @@ void EngineApp::ApplyPendingSetMonitor() {
   HandleSetMonitor(payload);
 }
 
-bool EngineApp::HandleSetVideo(const std::string& payload_json) {
+bool EngineApp::HandleSetVideo(const std::string& payload_json, bool rotation) {
   // Payload shape matches IpcClient::SetVideo: {"path": "<utf8>"}.
   std::string utf8_path;
   try {
@@ -1157,9 +1316,15 @@ bool EngineApp::HandleSetVideo(const std::string& payload_json) {
     Log("warning: set_video config persist failed: %s", e.what());
   }
 
-  tray_.PushRecent(utf8_path);  // Todo 35: feed the quick-switch MRU list
-  LogImportant("ipc: set_video live-switched to %s", utf8_path.c_str());
-  MaybeTriggerLockscreenSync(utf8_path);
+  if (!rotation) {
+    tray_.PushRecent(utf8_path);  // Todo 35: MRU is for manual picks only
+    LogImportant("ipc: set_video live-switched to %s", utf8_path.c_str());
+    MaybeTriggerLockscreenSync(utf8_path);
+  } else {
+    // Rotation is not a user action: no MRU feed, no lock-screen extract, and
+    // Log (not LogImportant) so a short interval cannot flush the log per cycle.
+    Log("playlist: rotation live-switched to %s", utf8_path.c_str());
+  }
   headless_owns_decode_.store(
       !wallpaper_surface_live_.load(std::memory_order_acquire),
       std::memory_order_release);
@@ -1282,7 +1447,10 @@ void EngineApp::RecreateDevice() {
     ok = renderer_->LoadLoop(video, true);
   }
   LogImportant("device-lost: RecreateDevice() end reload ok=%d", ok ? 1 : 0);
-  if (ok) ArmPinVerify();  // P3L.3: re-verify pin after the forced reload
+  if (ok) {
+    ArmRotation();  // restart the playlist interval after the forced reload
+    ArmPinVerify();  // P3L.3: re-verify pin after the forced reload
+  }
 }
 
 void EngineApp::OnTrayTogglePause() {
@@ -1454,6 +1622,10 @@ std::string EngineApp::BuildStateJson() const {
       // + lifetime revert count from the verify pass (PATCH A).
       {"gpu_pin", adapter_pin_value_},
       {"gpu_pin_reverts", reverts_copy},
+      // Wallpaper playlist snapshot (additive; old clients ignore it).
+      {"playlist_enabled", playlist_enabled_atomic_.load(std::memory_order_acquire)},
+      {"playlist_size", playlist_size_atomic_.load(std::memory_order_acquire)},
+      {"playlist_index", playlist_index_atomic_.load(std::memory_order_acquire)},
   };
   return state.dump();
 }

@@ -568,6 +568,161 @@ Rectangle {
                                     }
                                 }
                             }
+
+                            // --- Daftar putar (playlist) ---------------------
+                            // Small editing surface for playlist.json: the engine
+                            // reads that file and rotates on its own, so Studio
+                            // only adds / removes / reorders entries here.
+                            Pane {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 170
+                                Material.elevation: 1
+                                padding: 12
+
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    spacing: 6
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 8
+
+                                        Label {
+                                            text: qsTr("Daftar putar (%1)").arg(Playlist.count)
+                                            font.bold: true
+                                        }
+
+                                        Item {
+                                            Layout.fillWidth: true
+                                        }
+
+                                        Button {
+                                            text: qsTr("Tambah...")
+                                            onClicked: Playlist.pickAndAdd()
+                                            ToolTip.visible: hovered
+                                            ToolTip.text: qsTr("Tambah video ke daftar putar")
+                                        }
+
+                                        Button {
+                                            text: qsTr("Kosongkan")
+                                            enabled: Playlist.count > 0
+                                            onClicked: Playlist.clear()
+                                            ToolTip.visible: hovered
+                                            ToolTip.text: qsTr("Hapus semua entri daftar putar")
+                                        }
+                                    }
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 8
+
+                                        CheckBox {
+                                            text: qsTr("Putar otomatis")
+                                            checked: Playlist.enabled
+                                            onToggled: Playlist.setEnabled(checked)
+                                            ToolTip.visible: hovered
+                                            ToolTip.text: qsTr("Ganti wallpaper secara berkala")
+                                        }
+
+                                        Label {
+                                            text: qsTr("Interval:")
+                                        }
+
+                                        SpinBox {
+                                            id: intervalSpin
+                                            Layout.preferredWidth: root.spinWidth
+                                            from: 1
+                                            to: 1440
+                                            editable: true
+                                            value: Playlist.intervalMin
+                                            onValueModified: Playlist.setIntervalMin(value)
+                                            ToolTip.visible: hovered
+                                            ToolTip.text: qsTr("Menit antar pergantian (1-1440)")
+                                        }
+
+                                        Label {
+                                            text: qsTr(" menit")
+                                        }
+
+                                        Item {
+                                            Layout.fillWidth: true
+                                        }
+
+                                        CheckBox {
+                                            text: qsTr("Acak")
+                                            checked: Playlist.shuffle
+                                            onToggled: Playlist.setShuffle(checked)
+                                            ToolTip.visible: hovered
+                                            ToolTip.text: qsTr("Putar daftar putar dalam urutan acak")
+                                        }
+                                    }
+
+                                    Label {
+                                        Layout.fillWidth: true
+                                        visible: Playlist.lastError.length > 0
+                                        wrapMode: Text.WordWrap
+                                        color: "red"
+                                        text: Playlist.lastError
+                                    }
+
+                                    Label {
+                                        Layout.fillWidth: true
+                                        Layout.fillHeight: true
+                                        horizontalAlignment: Text.AlignHCenter
+                                        verticalAlignment: Text.AlignVCenter
+                                        wrapMode: Text.WordWrap
+                                        visible: Playlist.count === 0
+                                        opacity: 0.7
+                                        text: qsTr("Belum ada video di daftar putar — tambah dari perpustakaan atau berkas")
+                                    }
+
+                                    ListView {
+                                        id: playlistList
+                                        Layout.fillWidth: true
+                                        Layout.fillHeight: true
+                                        clip: true
+                                        visible: Playlist.count > 0
+                                        model: Playlist.items
+                                        boundsBehavior: Flickable.StopAtBounds
+                                        spacing: 2
+
+                                        delegate: RowLayout {
+                                            required property var modelData
+                                            required property int index
+
+                                            width: playlistList.width
+                                            spacing: 6
+                                            opacity: modelData.exists === false ? 0.6 : 1.0
+
+                                            Label {
+                                                Layout.fillWidth: true
+                                                elide: Text.ElideMiddle
+                                                text: modelData.label
+                                                color: modelData.exists === false
+                                                       ? "red"
+                                                       : Material.foreground
+                                            }
+
+                                            Button {
+                                                text: qsTr("Naik")
+                                                enabled: index > 0
+                                                onClicked: Playlist.moveUp(index)
+                                            }
+
+                                            Button {
+                                                text: qsTr("Turun")
+                                                enabled: index < Playlist.count - 1
+                                                onClicked: Playlist.moveDown(index)
+                                            }
+
+                                            Button {
+                                                text: qsTr("Hapus")
+                                                onClicked: Playlist.removeAt(index)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
 
                         // -----------------------------------------------------

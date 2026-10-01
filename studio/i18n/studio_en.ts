@@ -105,12 +105,13 @@
     </message>
     <message>
         <location line="+4"/>
-        <location line="+172"/>
+        <location line="+173"/>
+        <location line="+154"/>
         <source>Hapus</source>
         <translation>Remove</translation>
     </message>
     <message>
-        <location line="-164"/>
+        <location line="-319"/>
         <source>Hapus Entri Perpustakaan</source>
         <translation>Remove Library Entry</translation>
     </message>
@@ -123,7 +124,82 @@ File dipindahkan ke Recycle Bin.</source>
         <translation>Remove entry for: %1The file will be moved to the Recycle Bin.</translation>
     </message>
     <message>
-        <location line="+38"/>
+        <location line="+28"/>
+        <source>Daftar putar (%1)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>Tambah...</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Tambah video ke daftar putar</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Kosongkan</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Hapus semua entri daftar putar</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>Putar otomatis</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Ganti wallpaper secara berkala</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Interval:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+12"/>
+        <source>Menit antar pergantian (1-1440)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source> menit</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>Acak</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Putar daftar putar dalam urutan acak</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+20"/>
+        <source>Belum ada video di daftar putar — tambah dari perpustakaan atau berkas</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+31"/>
+        <source>Naik</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>Turun</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+43"/>
         <source>Status engine:</source>
         <translation>Engine status:</translation>
     </message>

@@ -1,0 +1,11 @@
+{
+  "_comment": "K6WP example wallpaper playlist, schema v1. Copy to %LOCALAPPDATA%/K6WP/playlist.json and set order to REAL video files on your machine - the placeholders below do not exist. When enabled, the engine rotates through order every interval_min minutes. interval_min is clamped to [1, 1440]; entries are de-duplicated case-insensitively. The engine reads this file; Studio edits it. It is separate from config.json so older Studio builds can never clobber it.",
+  "version": 1,
+  "enabled": false,
+  "interval_min": 30,
+  "shuffle": false,
+  "order": [
+    "C:/Videos/wallpaper-a.mp4",
+    "C:/Videos/wallpaper-b.mp4"
+  ]
+}

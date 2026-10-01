@@ -147,6 +147,10 @@ target_sources(studio PRIVATE
   # can never unwind into the QML engine.
   src/library_grid_model.cpp
   src/library_grid_model.hpp
+  # Phase 6: PlaylistBridge, the Wallpaper tab's playlist backend. Owns
+  # playlist.json (shared/playlist.hpp); the engine reads the same file.
+  src/playlist_bridge.cpp
+  src/playlist_bridge.hpp
 )
 
 # Optional "new version available" check (Studio-only, WinHTTP worker).
@@ -295,6 +299,19 @@ add_executable(fake_pipe_test
 target_link_libraries(fake_pipe_test PRIVATE k6wp_shared)
 target_include_directories(fake_pipe_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 add_test(NAME fake_pipe_test COMMAND fake_pipe_test)
+
+# playlist_bridge_test: PlaylistBridge CRUD/persist round-trip over a scratch
+# playlist.json (K6WP_PLAYLIST_JSON override). QCoreApplication; the native
+# picker is never invoked (addPaths drives the additions). Qt6::Qml supplies the
+# QML_ELEMENT registration macros; Qt6::Widgets the QFileDialog symbol.
+add_executable(playlist_bridge_test
+  ../tests/playlist_bridge_test.cpp
+  src/playlist_bridge.cpp
+)
+target_link_libraries(playlist_bridge_test PRIVATE k6wp_shared Qt6::Widgets Qt6::Qml)
+target_include_directories(playlist_bridge_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_compile_options(playlist_bridge_test PRIVATE /Zc:__cplusplus /permissive-)
+add_test(NAME playlist_bridge_test COMMAND playlist_bridge_test)
 endif()
 
 # Vendored libmpv (Todo 2): headers + MSVC import lib. libmpv-2.dll is copied

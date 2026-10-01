@@ -86,7 +86,9 @@ doc — when in doubt, read the code.
   `wallpaper_mode`, `video` (utf-8 path), `config` (config path in use),
   `headless_slots` (Step 4, int), `monitor` (Step 5: live target, `-1` =
   all screens). Studio pushes `set_monitor` on change (and
-  `ApplyManager::SyncMonitor` skips unchanged values).
+  `ApplyManager::SyncMonitor` skips unchanged values). Additive playlist
+  fields (`playlist_enabled` / `playlist_size` / `playlist_index`) are
+  documented in §3a.
 - Client discipline: `IpcClient::Send` is one atomic transaction
   (connect + write + ack-read under a mutex) with a 2 s ack deadline;
   pipe-drop gets exactly 1 retry on a fresh connection; `kNotRunning`
@@ -189,6 +191,35 @@ doc — when in doubt, read the code.
   unchanged; flipping only the two allowed fields must move the behavior.
   Missing-file and corrupt-file cases must yield the safe defaults above.
 
+## 3a. Playlist (`%LOCALAPPDATA%\K6WP\playlist.json`)
+
+- Schema: `shared/playlist.hpp` / `shared/playlist.cpp` (schema v1,
+  `kPlaylistSchemaVersion`). Engine reader: `EngineApp::MaybeReloadPlaylist` /
+  `EngineApp::FireRotation` (`engine/src/engine_app.cpp`); Studio writer:
+  `studio/src/playlist_bridge.cpp` (the `Playlist` QML singleton).
+- Why a separate file: `config.json` is Engine playback state, and an older
+  Studio build rewrites it from its own `WallpaperConfig` struct
+  (`ApplyManager::WriteConfig` → `SaveConfig`), which would silently delete a
+  playlist stored there. A separate file is never touched by old builds, so
+  downgrade cannot corrupt the playlist.
+- Fields: `version` (1), `enabled` (bool, default false), `interval_min` (int,
+  `[1, 1440]`, default 30), `shuffle` (bool, default false), `order` (array of
+  UTF-8 absolute paths; de-duplicated case-insensitively; max 500 entries).
+- Same `.bak` + `AtomicWriteJson` contract as §2/§3. The engine reloads when the
+  file's mtime/size change (mirrors `ConfigWatcher`) and rotates via the existing
+  validated `set_video` path when the interval elapses AND the wallpaper is not
+  paused. While paused the loop wait is INFINITE, so rotation is frozen and the
+  full interval restarts on resume. The rotation position is derived from
+  `config.video_path` (no separate persisted index).
+- Location: sibling of `config.json` (`PlaylistPathForConfig`), so an engine
+  started with `--config <dir>/config.json` reads `<dir>/playlist.json`.
+- Additive `get_state` fields (old clients ignore unknown keys):
+  `playlist_enabled` (bool), `playlist_size` (int), `playlist_index` (int,
+  -1 when the current video is not in the playlist).
+- Tests: `playlist_test` (`shared/CMakeLists.txt`, pure io/validation/helpers)
+  and `playlist_bridge_test` (`studio/CMakeLists.txt`, QML-singleton round-trip
+  over a scratch file via the `K6WP_PLAYLIST_JSON` override).
+
 ## 4. Contract-test inventory (kept — never delete)
 
 | Suite | Source | Gate | Last verified |
@@ -207,6 +238,8 @@ doc — when in doubt, read the code.
 | `library_crud_test` (42 checks) | `tests/library_crud_test.cpp` | `BUILD_TESTING=ON` (`studio/CMakeLists.txt`) | Todo 21: 42 checks, 0 failures — ReferenceInPlace + shared-manager contract |
 | `studio_logic_test` (34 checks) | `tests/studio_logic_test.cpp` | `BUILD_TESTING=ON` (`studio/CMakeLists.txt`) | Todo 22: 17 checks, 0 failures — ApplyManager non-GUI logic (unwired refusals, WriteConfig round-trip, SyncMonitor dedup over fake pipe) + Todo 24: +17 (engine-read settings contract §6, dev-fallback gate §7) |
 | `fake_pipe_test` (14 checks) | `tests/fake_pipe_test.cpp` | `BUILD_TESTING=ON` (`studio/CMakeLists.txt`) | Todo 22: 14 checks, 0 failures — Qt-free IpcClient round-trips over in-process fake pipe (`--no-server` proves the kNotRunning path) |
+| `playlist_test` (43 checks) | `tests/playlist_test.cpp` | `BUILD_TESTING=ON` (`shared/CMakeLists.txt`) | playlist.json io/validation/migration + `SelectNextIndex` / `PlaylistIndexForPath` (43 checks, 0 failures) |
+| `playlist_bridge_test` (26 checks) | `tests/playlist_bridge_test.cpp` | `BUILD_TESTING=ON` (`studio/CMakeLists.txt`) | PlaylistBridge CRUD/persist round-trip over a scratch playlist.json (26 checks, 0 failures) |
 | `lockscreen_backup_test` (34 checks) | `tests/lockscreen_backup_test.cpp` | `BUILD_TESTING=ON` (root `CMakeLists.txt`) | Todo 19/22: 34 checks, 0 failures — lockscreen backup escape/decode round-trip (needs `/utf-8`: literals are UTF-8 without BOM) |
 | `monitor_dump` | `shared/monitor_dump.cpp` | always built (QA tool, prints monitor list as JSON) | — |
 
