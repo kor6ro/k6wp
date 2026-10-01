@@ -387,6 +387,10 @@ void FullscreenWatch::Stop() {
     hook_location_ = nullptr;
   }
   hook_active_ = false;
+  // Drop the delivery target: a late OUTOFCONTEXT callback must not post to a
+  // window that is about to be destroyed (and the global outlives the instance).
+  g_hook_notify_hwnd.store(nullptr);
+  notify_hwnd_ = nullptr;
   if (!started_) return;
   on_change_ = nullptr;
   fullscreen_ = false;
