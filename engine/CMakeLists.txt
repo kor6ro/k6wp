@@ -7,6 +7,7 @@ add_executable(engine
   src/test_simulator.cpp
   src/log_file.cpp
   src/os_wallpaper.cpp
+  src/working_set_trim.cpp
   src/desktop_inject.cpp
   src/bench_hook.cpp
   src/mpv_renderer.cpp

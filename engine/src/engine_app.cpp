@@ -708,58 +708,6 @@ void EngineApp::OnOcclusionPokeTimer() {
   occlusion_watch_.CheckNow(multi_monitor_);
 }
 
-void EngineApp::ArmWorkingSetTrim() {
-  // One-shot only: never re-arm after the trim ran or while pending.
-  if (working_set_trim_done_ || working_set_trim_armed_) return;
-  if (message_hwnd_ == nullptr) {
-    Log("warning: working-set trim not armed (no message window)");
-    return;
-  }
-  if (SetTimer(message_hwnd_, kWorkingSetTrimTimerId, 2000, nullptr) == 0) {
-    Log("warning: working-set trim SetTimer failed (error %lu), skipping trim",
-        GetLastError());
-    return;
-  }
-  working_set_trim_armed_ = true;
-}
-
-void EngineApp::TrimWorkingSetOnce() {
-  // Fires exactly once per process: mark done FIRST so every path below
-  // (including failure) can never re-trim. Periodic trim would thrash
-  // paged-in pages back out, so there is intentionally no re-arm here.
-  if (working_set_trim_done_) return;
-  working_set_trim_done_ = true;
-  working_set_trim_armed_ = false;
-  PROCESS_MEMORY_COUNTERS_EX before{};
-  before.cb = sizeof(before);
-  SIZE_T ws_before_kb = 0;
-  if (GetProcessMemoryInfo(GetCurrentProcess(),
-                           reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&before),
-                           sizeof(before))) {
-    ws_before_kb = static_cast<SIZE_T>(before.WorkingSetSize / 1024);
-  }
-  if (!SetProcessWorkingSetSize(GetCurrentProcess(), (SIZE_T)-1,
-                                (SIZE_T)-1)) {
-    Log("warning: working-set trim failed (error %lu), continuing",
-        GetLastError());
-    return;
-  }
-  PROCESS_MEMORY_COUNTERS_EX after{};
-  after.cb = sizeof(after);
-  if (GetProcessMemoryInfo(GetCurrentProcess(),
-                           reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&after),
-                           sizeof(after))) {
-    const SIZE_T ws_after_kb =
-        static_cast<SIZE_T>(after.WorkingSetSize / 1024);
-    Log("engine: working-set trim ws=%llu KB -> %llu KB",
-        static_cast<unsigned long long>(ws_before_kb),
-        static_cast<unsigned long long>(ws_after_kb));
-  } else {
-    Log("engine: working-set trim done (ws before=%llu KB)",
-        static_cast<unsigned long long>(ws_before_kb));
-  }
-}
-
 void EngineApp::ApplyCpuAffinity(const std::string& mode) {
   // P3L.2: opted out or explicitly "all" — no-op with a log line so the
   // choice is auditable in engine.log.
@@ -856,7 +804,7 @@ int EngineApp::Run() {
     if (first_iteration) {
       first_iteration = false;
       MarkFirstFrame();
-      ArmWorkingSetTrim();  // P4.1: one-shot trim ~2 s after first frame
+      working_set_trim_.Arm(message_hwnd_);  // P4.1: one-shot trim ~2 s after first frame
     }
     while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
       if (msg.message == WM_QUIT) {
@@ -1008,7 +956,7 @@ void EngineApp::Shutdown() {
     KillTimer(message_hwnd_, kWorkingSetTrimTimerId);
     KillTimer(message_hwnd_, kOcclusionPokeTimerId);
   }
-  working_set_trim_armed_ = false;
+  working_set_trim_.Cancel();
   occlusion_poke_armed_ = false;
   // HIGH-1 (audit-remediation): stop the IPC server FIRST, before any
   // renderer/surface teardown. The IPC worker thread runs handlers that
@@ -1706,7 +1654,7 @@ LRESULT EngineApp::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
       // then trim once. Stray firings after done are ignored inside.
       if (wParam == static_cast<WPARAM>(kWorkingSetTrimTimerId)) {
         KillTimer(hwnd, kWorkingSetTrimTimerId);
-        TrimWorkingSetOnce();
+        working_set_trim_.RunOnce();
         return 0;
       }
       // HOTFIX: debounced occlusion poke — kill immediately (transient,

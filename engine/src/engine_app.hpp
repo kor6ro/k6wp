@@ -24,6 +24,7 @@
 #include "multi_monitor.hpp"
 #include "occlusion_watch.hpp"
 #include "os_wallpaper.hpp"
+#include "working_set_trim.hpp"
 #include "pause_controller.hpp"
 #include "pending_queue.hpp"
 #include "playlist.hpp"
@@ -329,12 +330,8 @@ class EngineApp {
   // Headless-renderer half of the pass (only when it owns decode).
   // Returns true when it reverted (recreated unpinned + reloaded).
   bool VerifyHeadlessPin();
-  // P4.1: one-shot working-set trim (~2 s after the first frame marker).
-  // Armed exactly once from the Run loop; the WM_TIMER handler kills the
-  // timer and runs TrimWorkingSetOnce. Never periodic (periodic trim =
-  // page-in thrashing). Failure is non-fatal (log only).
-  void ArmWorkingSetTrim();
-  void TrimWorkingSetOnce();
+  // P4.1: one-shot working-set trim (loop thread only).
+  WorkingSetTrim working_set_trim_{&EngineApp::Log};
   // HOTFIX (occlusion resume): debounced poke. Loop thread only. Arms the
   // one-shot poke timer when at least one slot is occlusion-paused (cheap
   // early-out otherwise); the timer handler runs one direct coverage
@@ -367,10 +364,6 @@ class EngineApp {
   mutable std::mutex state_mutex_;
   std::chrono::steady_clock::time_point pin_verify_at_{};
   int pin_reverted_total_ = 0;
-  // P4.1: working-set trim state (loop thread only). armed_ = timer pending;
-  // done_ = TrimWorkingSetOnce ran (success or fail) — never re-arms.
-  bool working_set_trim_armed_ = false;
-  bool working_set_trim_done_ = false;
   // HOTFIX: poke debounce state (loop thread only). Armed transiently by
   // ScheduleOcclusionPoke, cleared by the timer handler or Shutdown.
   bool occlusion_poke_armed_ = false;
