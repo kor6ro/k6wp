@@ -88,7 +88,20 @@ Rectangle {
     // A collapsed / hidden hole is pushed as a 0x0 rect, which QmlShell treats
     // as "hide the native surface" - that is what keeps the preview from
     // floating over the Kompresor / Pengaturan pages.
+    function dialogOpened() {
+        root.openDialogs += 1;
+        Studio.syncPreviewGeometry(0, 0, 0, 0);
+    }
+
+    function dialogClosed() {
+        root.openDialogs = Math.max(0, root.openDialogs - 1);
+        if (root.openDialogs === 0)
+            root.syncPreview();
+    }
+
     function syncPreview() {
+        if (root.openDialogs > 0)
+            return;
         if (!previewHole.visible) {
             Studio.syncPreviewGeometry(0, 0, 0, 0);
             return;
@@ -159,6 +172,9 @@ Rectangle {
     // an offer silently ticked (or unticked) a preference the user never
     // touched. This flag belongs to the offer and is one-shot.
     property bool applyAfterCompress: false
+    // Modals stack (e.g. first-run wizard + compress offer): keep the native
+    // preview hidden until the last one closes.
+    property int openDialogs: 0
 
     function startCompressFirst() {
         Compress.setSourcePath(offerPath)
@@ -184,6 +200,46 @@ Rectangle {
         target: Compress
         function onJobFinishedWithoutResult() {
             root.applyAfterCompress = false
+        }
+        // A QML control's own value binding is destroyed by the first user
+        // edit, so re-assert every field when the backend reports a change
+        // (e.g. startCompressFirst() setting the 1080p pin) instead of relying
+        // on a stale one-shot binding.
+        function onInputsChanged() {
+            if (crfBox)
+                crfBox.value = Compress.crf
+            if (fpsBox)
+                fpsBox.value = Compress.fps
+            if (encoderCombo)
+                encoderCombo.currentIndex = Math.max(0, encoderCombo.model.indexOf(Compress.encoder))
+            if (advancedBox)
+                advancedBox.checked = Compress.advanced
+            if (resolutionField && !resolutionField.activeFocus)
+                resolutionField.text = Compress.resolutionText
+        }
+    }
+
+    Connections {
+        target: Studio
+        function onQuickSettingsChanged() {
+            if (fitCombo) {
+                const i = fitCombo.modes.indexOf(Studio.quickFit)
+                fitCombo.currentIndex = i >= 0 ? i : 0
+            }
+            if (monitorCombo) {
+                let m = 0
+                for (let i = 0; i < Studio.monitorChoices.length; ++i) {
+                    if (Studio.monitorChoices[i].id === Studio.quickMonitor) {
+                        m = i
+                        break
+                    }
+                }
+                monitorCombo.currentIndex = m
+            }
+            if (autostartBox)
+                autostartBox.checked = Studio.quickAutostart
+            if (batteryBox)
+                batteryBox.checked = Studio.quickBattery
         }
     }
 
@@ -500,6 +556,8 @@ Rectangle {
                                         anchors.centerIn: Overlay.overlay
                                         standardButtons: Dialog.Yes | Dialog.No
                                         onAccepted: Library.removeAt(index, true)
+                                        onOpened: root.dialogOpened()
+                                        onClosed: root.dialogClosed()
 
                                         contentItem: Label {
                                             text: qsTr("Hapus entri untuk:\n%1"
@@ -777,6 +835,7 @@ Rectangle {
                                     }
 
                                     CheckBox {
+                                        id: autostartBox
                                         Layout.fillWidth: true
                                         text: qsTr("Jalankan saat Windows menyala")
                                         checked: Studio.quickAutostart
@@ -784,6 +843,7 @@ Rectangle {
                                     }
 
                                     CheckBox {
+                                        id: batteryBox
                                         Layout.fillWidth: true
                                         text: qsTr("Hemat baterai (wallpaper berhenti saat pakai baterai)")
                                         checked: Studio.quickBattery
@@ -908,7 +968,7 @@ Rectangle {
                                     opacity: 0.8
                                     text: Compress.sourcePath.length > 0
                                           ? Compress.sourcePath
-                                          : qsTr("(gunakan video saat ini)")
+                                          : qsTr("(belum dipilih — klik Jelajahi)")
 
                                     HoverHandler {
                                         id: srcHover
@@ -1097,6 +1157,7 @@ Rectangle {
                                     spacing: root.formRowSpacing
 
                                     CheckBox {
+                                        id: advancedBox
                                         Layout.fillWidth: true
                                         text: qsTr("Mode lanjutan (teknis)")
                                         checked: Compress.advanced
@@ -1120,6 +1181,7 @@ Rectangle {
                                         }
 
                                         SpinBox {
+                                            id: crfBox
                                             Layout.fillWidth: true
                                             Layout.maximumWidth: root.narrowControlWidth
                                             from: 16
@@ -1137,6 +1199,7 @@ Rectangle {
                                         }
 
                                         SpinBox {
+                                            id: fpsBox
                                             Layout.fillWidth: true
                                             Layout.maximumWidth: root.narrowControlWidth
                                             from: 1
@@ -1154,6 +1217,7 @@ Rectangle {
                                         }
 
                                         TextField {
+                                            id: resolutionField
                                             Layout.fillWidth: true
                                             Layout.maximumWidth: root.narrowControlWidth
                                             placeholderText: qsTr("mis. 1920x1080 (kosong = ikut sumber)")
@@ -1169,6 +1233,7 @@ Rectangle {
                                         }
 
                                         ComboBox {
+                                            id: encoderCombo
                                             Layout.fillWidth: true
                                             Layout.maximumWidth: root.narrowControlWidth
                                             model: ["auto", "nvenc", "qsv", "amf", "x264"]
@@ -1677,8 +1742,8 @@ Rectangle {
         // QQuickWidget, so this dialog would be hidden behind it. A 0x0 rect
         // drops the native surface; startCompressFirst / the restored preview
         // bring it back.
-        onOpened: Studio.syncPreviewGeometry(0, 0, 0, 0)
-        onClosed: root.syncPreview()
+        onOpened: root.dialogOpened()
+        onClosed: root.dialogClosed()
 
         contentItem: Label {
             // One translatable sentence with %1/%2 placeholders. Splitting it
@@ -1702,8 +1767,8 @@ Rectangle {
         // The mpv preview is a separate HWND that DWM composites above the
         // QQuickWidget, so a QML dialog cannot draw over it. A 0x0 rect tells
         // QmlShell to drop the native surface; syncPreview() puts it back.
-        onOpened: Studio.syncPreviewGeometry(0, 0, 0, 0)
-        onClosed: root.syncPreview()
+        onOpened: root.dialogOpened()
+        onClosed: root.dialogClosed()
 
         contentItem: ColumnLayout {
             spacing: 8
@@ -1779,8 +1844,8 @@ Rectangle {
 
         // The mpv preview HWND composites above the QQuickWidget, so it has to
         // step aside for this dialog (same as the About box).
-        onOpened: Studio.syncPreviewGeometry(0, 0, 0, 0)
-        onClosed: root.syncPreview()
+        onOpened: root.dialogOpened()
+        onClosed: root.dialogClosed()
 
         onAccepted: {
             // The pick was already imported by the picker (Library.
