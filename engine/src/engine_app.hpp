@@ -131,7 +131,6 @@ class EngineApp {
   // transitions (video load, pause/resume, device-lost) that post-mortem
   // diagnostics must never miss after a taskkill.
   static void LogImportant(const char* fmt, ...);
-  static void LogLineV(const char* fmt, va_list args, bool important);
 
   LRESULT HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
   bool RegisterWindowClass();

@@ -24,7 +24,6 @@
 namespace k6wp {
 namespace {
 
-std::mutex g_log_mutex;
 std::atomic<HWND> g_message_hwnd{nullptr};
 
 unsigned long long CurrentThreadCount() {
@@ -1930,36 +1929,15 @@ BOOL WINAPI EngineApp::ConsoleCtrlHandler(DWORD ctrl_type) {
 void EngineApp::Log(const char* fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  LogLineV(fmt, args, false);
+  EngineLogfV(fmt, args, false);
   va_end(args);
 }
 
 void EngineApp::LogImportant(const char* fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  LogLineV(fmt, args, true);
+  EngineLogfV(fmt, args, true);
   va_end(args);
-}
-
-void EngineApp::LogLineV(const char* fmt, va_list args, bool important) {
-  std::lock_guard<std::mutex> lock(g_log_mutex);
-  SYSTEMTIME st{};
-  GetLocalTime(&st);
-  char ts[64] = {};
-  std::snprintf(ts, sizeof(ts), "[%02u:%02u:%02u.%03u]", static_cast<unsigned>(st.wHour),
-                static_cast<unsigned>(st.wMinute), static_cast<unsigned>(st.wSecond),
-                static_cast<unsigned>(st.wMilliseconds));
-  char msg[4096] = {};
-  std::vsnprintf(msg, sizeof(msg), fmt, args);
-  char line[4160] = {};
-  std::snprintf(line, sizeof(line), "%s %s", ts, msg);
-#if K6WP_VERBOSE
-  std::fprintf(stdout, "%s\n", line);
-  std::fflush(stdout);
-#endif
-  // Todo 11: GUI subsystem has no console — mirror every line to
-  // %LOCALAPPDATA%/K6WP/engine.log (batched; important lines flush at once).
-  AppendEngineLogLine(line, important);
 }
 
 }  // namespace k6wp
