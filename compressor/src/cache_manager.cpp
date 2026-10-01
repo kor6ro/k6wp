@@ -157,15 +157,29 @@ int CacheStoreFromOut(const std::string& key_hex,
     error = "cache: cannot create cache dir: " + ec.message();
     return 1;
   }
-  std::filesystem::copy_file(out, cached,
+  std::filesystem::path tmp = cached;
+  tmp += L".tmp";
+  std::filesystem::copy_file(out, tmp,
                              std::filesystem::copy_options::overwrite_existing,
                              ec);
   if (ec) {
     error = "cache: cannot store to cache (disk full?): " + ec.message();
+    std::error_code cleanup_ec;
+    std::filesystem::remove(tmp, cleanup_ec);
+    return 1;
+  }
+  // Publish atomically so a concurrent reader never sees a half-written .mp4:
+  // rename() replaces on the same volume (MSVC MoveFileExW). A .tmp orphan is
+  // ignored by CachePrune's extension filter.
+  std::filesystem::rename(tmp, cached, ec);
+  if (ec) {
+    error = "cache: cannot publish cache file: " + ec.message();
+    std::error_code cleanup_ec;
+    std::filesystem::remove(tmp, cleanup_ec);
     return 1;
   }
   std::string prune_error;
-  CachePrune(prune_error);  // Best-effort; store already succeeded.
+  CachePrune(prune_error);  // Best-effort; publish already succeeded.
   return 0;
 }
 
