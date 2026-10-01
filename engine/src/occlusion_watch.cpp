@@ -278,6 +278,7 @@ void OcclusionWatch::CheckNow(MultiMonitor& slots) {
   // iteration order PauseSlot/IsSlotPaused index into (span mode is the
   // single kSpanSlotId slot at index 0).
   CoverRect mons[kMaxSlots];
+  bool valid[kMaxSlots] = {};
   size_t nslots = 0;
   if (slots.mode() == MultiMonitorMode::Span) {
     const SpanGeometry g = MultiMonitor::GetSpanGeometry();
@@ -286,22 +287,25 @@ void OcclusionWatch::CheckNow(MultiMonitor& slots) {
     mons[0].top = g.y;
     mons[0].right = g.x + g.width;
     mons[0].bottom = g.y + g.height;
+    valid[0] = true;
     nslots = 1;
   } else {
     const std::vector<int> ids = slots.monitor_ids();
     if (ids.empty()) return;
+    nslots = ids.size() < kMaxSlots ? ids.size() : kMaxSlots;
     const std::vector<MonitorInfo> all = ListMonitors();
-    for (size_t i = 0; i < ids.size() && nslots < kMaxSlots; ++i) {
+    for (size_t i = 0; i < nslots; ++i) {
       for (const MonitorInfo& mi : all) {
         if (mi.id == ids[i] && mi.width > 0 && mi.height > 0) {
-          mons[nslots++] = MonitorCover(mi);
+          mons[i] = MonitorCover(mi);
+          valid[i] = true;
           break;
         }
       }
-      // Id vanished mid-tick (display change): skip the slot this round,
-      // leaving its pause state untouched.
+      // Id vanished mid-tick (display change): leave this slot's pause state
+      // untouched (valid[i] stays false). A dense repack would shift later
+      // monitors into this index and pause the wrong slot.
     }
-    if (nslots == 0) return;
   }
 
   // One EnumWindows snapshot shared by all slots (windows pre-clipped
@@ -323,6 +327,7 @@ void OcclusionWatch::CheckNow(MultiMonitor& slots) {
   }
 
   for (size_t i = 0; i < nslots; ++i) {
+    if (!valid[i]) continue;
     const double coverage =
         ComputeCoverage(mons[i], ctx.out, ctx.count);
     const bool paused = slots.IsSlotPaused(i);
