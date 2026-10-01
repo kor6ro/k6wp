@@ -138,6 +138,8 @@ target_sources(studio PRIVATE
   # (a plain struct) plus the engine playback config, and persists both.
   src/settings_bridge.cpp
   src/settings_bridge.hpp
+  src/cache_dir_policy.cpp
+  src/cache_dir_policy.hpp
   # UI-language store (studio_ui.ini). Standalone on purpose: main.cpp reads the
   # language before any QML exists, so it must not depend on the bridge.
   src/ui_language.cpp
@@ -263,6 +265,7 @@ add_executable(studio_logic_test
   # bridge's class declaration uses; shell32 supplies the known-folder lookup
   # the clearCache guard asks the shell for.
   src/settings_bridge.cpp
+  src/cache_dir_policy.cpp
   src/ui_language.cpp
   # user_errors.cpp (1.2.1, section 20): the engine / IPC / preview error
   # mapping that StudioBridge used to show raw. Included so the mapping itself

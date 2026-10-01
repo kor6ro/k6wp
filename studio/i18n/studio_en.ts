@@ -1109,7 +1109,7 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
 <context>
     <name>k6wp::SettingsBridge</name>
     <message>
-        <location filename="../src/settings_bridge.cpp" line="+379"/>
+        <location filename="../src/settings_bridge.cpp" line="+130"/>
         <source>Folder output tidak boleh kosong.</source>
         <translation type="unfinished"></translation>
     </message>
