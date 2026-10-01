@@ -38,14 +38,17 @@ void MarkFirstFrame() {
   std::snprintf(line, sizeof(line), "Engine:FirstFrame qpc:%lld qpf:%lld",
                 static_cast<long long>(ticks.QuadPart),
                 static_cast<long long>(freq.QuadPart));
-  // Todo 11: mirror every line to engine.log (append, flushed; ODS fallback inside).
-  AppendEngineLogLine(line);
+  // Todo 11: mirror every line to engine.log (flushed immediately - this is a
+  // start-up gate marker, so it must survive a kill).
+  AppendEngineLogLine(line, /*important=*/true);
 
-  // Bench output (always emitted for observability, gated for stdout)
-#if K6WP_VERBOSE
+  // Bench output: always emitted to stdout. tools/bench_startup.ps1 reads the
+  // redirected stdout for this marker; the old K6WP_VERBOSE gate (default OFF)
+  // meant the poll timed out and the script could report median 0 / pass. The
+  // engine is a GUI-subsystem exe in production (no stdout), so this is a
+  // harmless no-op there.
   std::fprintf(stdout, "%s\n", line);
   std::fflush(stdout);
-#endif
 }
 
 }  // namespace k6wp
