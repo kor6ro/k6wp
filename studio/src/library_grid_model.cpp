@@ -244,9 +244,10 @@ void LibraryGridModel::reload() {
         "Daftar video korup dan dipulihkan dari cadangan. Video yang "
         "diimpor terakhir mungkin tidak terdaftar."));
   }
-  beginResetModel();
+  // ReapplyFilter() performs the single reset and rebuilds visible_ from the
+  // new items_ before any view can query data(); the previous two-step reset
+  // left visible_ indexing the old items_ between endResetModel() and here.
   items_ = std::move(items);
-  endResetModel();
   ReapplyFilter();
   // Clearing unconditionally would also wipe an error the caller just set
   // (importPaths sets one before calling reload) and hide the failure above.
