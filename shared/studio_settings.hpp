@@ -26,7 +26,7 @@ struct StudioSettings {
   int default_fps = 30;              // 1 - 30
   std::string default_resolution_mode =
       "match_monitor";  // match_monitor | source | 720p | 1080p | 2160p
-  bool start_with_windows = false;
+  bool start_with_windows = false;  // RESERVED: autostart is read from HKCU Run, not this field
   std::wstring cache_dir;  // default %LOCALAPPDATA%/K6WP/cache
   // Bagian B — lock screen sync (static frame only, B5).
   // When true, engine/studio fire `compressor --lockframe` on every video

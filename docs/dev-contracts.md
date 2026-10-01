@@ -152,7 +152,9 @@ doc — when in doubt, read the code.
   result location), `default_crf` 22 in [16, 28], `default_fps` 30 in
   [1, 30], `default_resolution_mode` in
   `match_monitor/source/720p/1080p/2160p` (default `match_monitor`),
-  `start_with_windows` false, `lockscreen_sync` false,
+  `start_with_windows` false (RESERVED: autostart state comes from the HKCU
+  `Run` value via `IsAutostart()`; this field is persisted but not read by
+  production code), `lockscreen_sync` false,
   `lockscreen_offset_sec` 1.0 (>= 0), `compress_advanced_visible` false
   (Compressor-tab advanced-box state, UI-only),
   `cache_dir` (default `%LOCALAPPDATA%\K6WP\cache`).
