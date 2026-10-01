@@ -85,8 +85,8 @@ std::filesystem::path DefaultLockscreenPath() {
   return std::filesystem::temp_directory_path(ec) / L"K6WP" / L"lockscreen.jpg";
 }
 
-bool IsOptimal(const k6wp::compressor::VideoProps& props, int target_w, int target_h,
-               int target_fps, const std::string&) {
+bool IsOptimal(const k6wp::compressor::VideoProps& props, int target_w,
+               int target_h, int target_fps) {
   if (!props.valid) return false;
   if (props.video_codec != "h264") return false;
   if (props.has_audio) return false;
@@ -263,7 +263,7 @@ int main(int argc, char** argv) {
 
   const k6wp::compressor::VideoProps props =
       k6wp::compressor::ProbeVideoProps(opts.in);
-  if (IsOptimal(props, opts.res_w, opts.res_h, opts.fps, encoder_name)) {
+  if (IsOptimal(props, opts.res_w, opts.res_h, opts.fps)) {
     std::error_code ec;
     std::filesystem::copy_file(opts.in, opts.out,
                                std::filesystem::copy_options::overwrite_existing,
