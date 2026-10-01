@@ -19,10 +19,6 @@ std::atomic<bool> g_first_frame_emitted{false};
 
 }  // namespace
 
-#ifndef K6WP_VERBOSE
-#define K6WP_VERBOSE 0
-#endif
-
 void MarkFirstFrame() {
   bool expected = false;
   if (!g_first_frame_emitted.compare_exchange_strong(expected, true)) {

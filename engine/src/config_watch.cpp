@@ -22,10 +22,6 @@ namespace {
 
 // Local log helper — mirrors EngineApp::Log pattern (local-time timestamp,
 // flush). windows.h is fine here; the header stays Win32-free.
-#ifndef K6WP_VERBOSE
-#define K6WP_VERBOSE 0
-#endif
-
 void Log(const char* fmt, ...) {
   va_list args;
   va_start(args, fmt);

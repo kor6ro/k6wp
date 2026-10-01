@@ -83,10 +83,6 @@ bool AppendQuickSwitchSubmenu(HMENU menu, const std::vector<std::string>& recent
 
 void Log(const char* fmt, ...);
 
-#ifndef K6WP_VERBOSE
-#define K6WP_VERBOSE 0
-#endif
-
 void Log(const char* fmt, ...) {
   va_list args;
   va_start(args, fmt);
