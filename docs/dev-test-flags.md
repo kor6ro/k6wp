@@ -13,8 +13,13 @@ but are hidden from user-facing help and UI. User-facing silent start is
 | `--simulate-dc-after-ms` | `--simulate-dc-after-ms <N>` | latch forced-DC + post PBT_APMPOWERSTATUSCHANGE after N ms, AC restore +2 s |
 | `--simulate-monitor-off-after-ms` | `--simulate-monitor-off-after-ms <N>` | send PBT_POWERSETTINGCHANGE Data=0 (monitor off) after N ms, Data=1 (on) +2 s |
 
-Parsing lives in `engine/src/engine_app.cpp` (`ParseCli`); unknown `--flag`
-prints usage to stderr and exits 2.
+Parsing lives in `engine/src/cli_options.cpp`; unknown `--flag` prints usage
+to stderr and exits 2.
+
+Legacy/compat: `--engine` and `--silent` remain working aliases of
+`--minimized` for old autostart entries and scripts, and `--restarted` is
+accepted and ignored (posted by `RegisterApplicationRestart` on OS-initiated
+restarts, so it must stay parseable).
 
 Wire + on-disk contracts (IPC NDJSON v1, config schema, studio settings,
 `.bak` rule, contract-test inventory): `docs/dev-contracts.md`.
