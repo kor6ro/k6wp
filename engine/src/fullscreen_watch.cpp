@@ -245,10 +245,10 @@ void FullscreenWatch::Start(FullscreenCallback on_change) {
     hook_location_ = static_cast<void*>(h4);
   }
   if (hook_active_) {
-    Log("fullscreen-watch: started, poll-interval=%dms, event=hook watch "
-        "armed (foreground + minimize + destroy + locationchange hooks, "
-        "1s poll fallback live)",
-        kPollIntervalMs);
+    Log("fullscreen-watch: started, poll-interval=%dms, event=hook watch armed "
+        "(foreground+minimize%s%s, 1s poll fallback live)",
+        kPollIntervalMs, hook_destroy_ ? "+destroy" : "",
+        hook_location_ ? "+locationchange" : "");
   } else {
     Log("fullscreen-watch: started, poll-interval=%dms (event=hook partial, "
         "1s poll fallback)",
