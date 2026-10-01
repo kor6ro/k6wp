@@ -58,7 +58,9 @@ std::vector<GpuAdapterInfo> Enumerate() {
   }
   for (int i = 0;; ++i) {
     IDXGIAdapter1* ad = nullptr;
-    if (f1->EnumAdapters1(i, &ad) == DXGI_ERROR_NOT_FOUND) break;
+    const HRESULT hr = f1->EnumAdapters1(i, &ad);
+    if (hr == DXGI_ERROR_NOT_FOUND) break;
+    if (FAILED(hr)) break;  // any other failure: stop instead of spinning
     DXGI_ADAPTER_DESC1 d{};
     if (ad && SUCCEEDED(ad->GetDesc1(&d)) &&
         !(d.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)) {
