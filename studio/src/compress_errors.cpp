@@ -1,8 +1,6 @@
 #include "compress_errors.hpp"
 
-#include <QCheckBox>
 #include <QCoreApplication>
-#include <QMessageBox>
 
 namespace k6wp {
 
@@ -70,35 +68,6 @@ QString FriendlyCompressError(const QString& technical) {
     return QStringLiteral("Kompresi gagal tanpa keterangan.");
   }
   return QStringLiteral("Kompresi gagal. Lihat log untuk detail teknis.");
-}
-
-bool AskLongVideoConsent(QWidget* parent, const QString& src,
-                         double duration_sec) {
-  static bool session_allowed = false;
-  if (session_allowed) {
-    return true;
-  }
-  const double minutes = duration_sec / 60.0;
-  QMessageBox box(parent);
-  box.setWindowTitle(QObject::tr("Video Panjang"));
-  box.setText(QObject::tr("Video %1 berdurasi %2 menit (lebih dari 10). "
-                          "Kompres tetap?")
-                  .arg(src, QString::number(minutes, 'f', 1)));
-  box.setInformativeText(QObject::tr(
-      "Video panjang butuh waktu lama dan memakai --force-long."));
-  box.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
-  box.setDefaultButton(QMessageBox::No);
-  auto* remember =
-      new QCheckBox(QObject::tr("Jangan tanya lagi sesi ini"), &box);
-  box.setCheckBox(remember);
-  const int answer = box.exec();
-  if (answer != QMessageBox::Yes) {
-    return false;
-  }
-  if (remember->isChecked()) {
-    session_allowed = true;
-  }
-  return true;
 }
 
 }  // namespace k6wp
