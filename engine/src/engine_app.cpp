@@ -394,7 +394,7 @@ bool EngineApp::Init(int argc, char** argv) {
   // logic). Slot renderers keep the inline path (no MultiMonitor API change
   // in this todo). SetMessageWindow also wakes the thread so a queued change
   // is picked up even from its -1 paused block.
-  renderer_ = std::make_unique<MpvRenderer>();
+  renderer_ = std::make_shared<MpvRenderer>();
   if (!adapter_pin_value_.empty()) renderer_->SetAdapterPin(adapter_pin_value_);
   if (!renderer_->Create(message_hwnd_)) {
     Log("warning: MpvRenderer::Create failed, set_video will reject until restart");
@@ -618,13 +618,25 @@ void EngineApp::ShutdownWallpaperSurface() {
   Log("engine: wallpaper surface detached");
 }
 
+std::shared_ptr<MpvRenderer> EngineApp::AcquireRenderer() const {
+  std::lock_guard<std::mutex> lock(renderer_mutex_);
+  return renderer_;
+}
+
 void EngineApp::StopHeadlessRenderer() {
-  if (!renderer_) return;
+  std::shared_ptr<MpvRenderer> doomed;
+  {
+    std::lock_guard<std::mutex> lock(renderer_mutex_);
+    doomed = std::move(renderer_);
+    renderer_.reset();
+  }
+  if (!doomed) return;
   // Signal first so a thread parked in its -1 paused block observes quit
   // promptly (StopEventThread re-wakes internally; this explicit Wakeup is
-  // the documented signal step). reset() then joins with timing logs.
-  renderer_->Wakeup();
-  renderer_.reset();
+  // the documented signal step). Releasing the last reference then joins with
+  // timing logs, outside renderer_mutex_ so a worker copy cannot deadlock.
+  doomed->Wakeup();
+  doomed.reset();
   LogImportant("engine shutdown: headless renderer event thread stopped (join timing above)");
 }
 
@@ -718,6 +730,14 @@ bool EngineApp::VerifyHeadlessPin() {
   // Headless half: only when it owns decode, was created WITH pin, has
   // started, and still reports hwdec inactive. Recreate = teardown →
   // Create without pin → LoadLoop → re-verify next pass (PATCH A).
+  std::string video;
+  {
+    std::lock_guard<std::mutex> lock(video_mutex_);
+    video = current_video_utf8_;
+  }
+  // Hold renderer_mutex_ across the checks + recreate so a concurrent worker
+  // copy (get_state / pause) can never observe a half-torn renderer.
+  std::lock_guard<std::mutex> renderer_lock(renderer_mutex_);
   if (!renderer_ ||
       !headless_owns_decode_.load(std::memory_order_acquire))
     return false;
@@ -726,14 +746,9 @@ bool EngineApp::VerifyHeadlessPin() {
   if (renderer_->IsHwdecActive()) return false;  // d3d11va OR dxva2: fine
   LogImportant("gpu-pin: headless hwdec inactive post-start with pin, "
                "reverting to unpinned");
-  std::string video;
-  {
-    std::lock_guard<std::mutex> lock(video_mutex_);
-    video = current_video_utf8_;
-  }
   const bool was_paused = UiPaused();
   renderer_.reset();
-  renderer_ = std::make_unique<MpvRenderer>();
+  renderer_ = std::make_shared<MpvRenderer>();
   if (!renderer_->Create(message_hwnd_)) {
     Log("warning: gpu-pin: headless unpinned recreate failed");
     return false;
@@ -1165,11 +1180,11 @@ void EngineApp::ApplyPauseState(const char* owner) {
   // Pause()/Resume() flip the renderer atomic + wake the event thread out of
   // its -1 block (500 ms watchdog rearms immediately), so the IPC
   // pause/resume worker paths and the tray path fast-drain via this fan-out.
-  if (renderer_) {
+  if (std::shared_ptr<MpvRenderer> renderer = AcquireRenderer()) {
     if (ui) {
-      renderer_->Pause();
+      renderer->Pause();
     } else {
-      renderer_->Resume();
+      renderer->Resume();
     }
   }
   if (wallpaper_surface_live_.load(std::memory_order_acquire)) {
@@ -1425,6 +1440,24 @@ bool EngineApp::HandleSetMonitor(const std::string& payload_json) {
   wallpaper_surface_live_.store(multi_monitor_.slot_count() > 0,
                                 std::memory_order_release);
 
+  // SetActiveMonitor/ApplyActiveFilter only CREATE new slot renderers - they
+  // never load a file. Seed any freshly attached slot with the current video
+  // and fit mode, or a monitor switch / hotplug shows a blank surface until
+  // the next set_video.
+  if (wallpaper_surface_live_.load(std::memory_order_acquire)) {
+    std::string video;
+    {
+      std::lock_guard<std::mutex> lock(video_mutex_);
+      video = current_video_utf8_;
+    }
+    if (!video.empty()) {
+      if (!multi_monitor_.LoadLoopAll(video)) {
+        Log("warning: set_monitor could not load video into new slot(s)");
+      }
+      multi_monitor_.ApplyFitModeAll(config_watcher_.GetConfig().fit_mode);
+    }
+  }
+
   // Persist the new target to config.json (preserve-merge, same path rule
   // as set_video). Best-effort: the live state already changed, so a
   // persist failure only warns while the ack stays ok.
@@ -1633,6 +1666,7 @@ std::string EngineApp::BuildStateJson() const {
   // WallpaperModeToString takes the enum by value — resolve outside the
   // lock from the snapshot.
   const char* wallpaper_mode_str = WallpaperModeToString(wallpaper_mode_copy);
+  const std::shared_ptr<MpvRenderer> renderer_snapshot = AcquireRenderer();
   const nlohmann::json state = {
       {"running", running_.load(std::memory_order_acquire)},
       {"paused", UiPaused()},
@@ -1650,7 +1684,7 @@ std::string EngineApp::BuildStateJson() const {
       {"monitor", multi_monitor_.active_monitor()},
       {"thread_count", CurrentThreadCount()},
       {"handle_count", CurrentHandleCount()},
-      {"hwdec_active", renderer_ ? renderer_->IsHwdecActive() : false},
+      {"hwdec_active", renderer_snapshot ? renderer_snapshot->IsHwdecActive() : false},
       // P3L.3, additive only: resolved d3d11-adapter pin ("" = unpinned)
       // + lifetime revert count from the verify pass (PATCH A).
       {"gpu_pin", adapter_pin_value_},

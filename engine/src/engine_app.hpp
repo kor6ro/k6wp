@@ -267,7 +267,12 @@ class EngineApp {
   // join → mpv_terminate_destroy) BEFORE ShutdownWallpaperSurface() runs.
   // Null until Init() builds it and again after Shutdown() stops it; every
   // use site null-checks.
-  std::unique_ptr<MpvRenderer> renderer_;
+  std::shared_ptr<MpvRenderer> renderer_;
+  // Guards renderer_'s own lifetime: the IPC worker (get_state -> BuildStateJson,
+  // pause/resume -> ApplyPauseState) copies it through AcquireRenderer() while
+  // the main loop may reset/recreate it (pin verify, shutdown).
+  mutable std::mutex renderer_mutex_;
+  std::shared_ptr<MpvRenderer> AcquireRenderer() const;
   // Live desktop surface (Todo 9): per-monitor DesktopInjector + MpvRenderer
   // pairs owned by MultiMonitor. Constructed in Init() after tray install
   // (needs the log + message loop up), torn down in Shutdown(). The
