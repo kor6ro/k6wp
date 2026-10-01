@@ -62,30 +62,19 @@ unsigned long long CurrentHandleCount() {
   return static_cast<unsigned long long>(n);
 }
 
-// P2.3: static POWERBROADCAST_SETTING buffers for
-// --simulate-monitor-off-after-ms. Static lifetime (never freed): the Run
-// loop delivers a pointer synchronously via SendMessageW and the same loop
-// thread consumes it in HandleMessage, so there is no heap ownership to
-// track and no cross-thread race (off sends at N, on at N+2s — never in
-// flight together).
-const POWERBROADCAST_SETTING* SimMonitorPowerSetting(DWORD data) {
-  struct Buffer {
-    POWERBROADCAST_SETTING base;
-    BYTE pad[3];  // base.Data is UCHAR[1]; a DWORD payload needs 4 bytes
-  };
-  static Buffer off = {};
-  static Buffer on = {};
-  static bool init = false;
-  if (!init) {
-    init = true;
-    off.base.PowerSetting = GUID_MONITOR_POWER_ON;
-    off.base.DataLength = sizeof(DWORD);
-    on.base.PowerSetting = GUID_MONITOR_POWER_ON;
-    on.base.DataLength = sizeof(DWORD);
-  }
-  Buffer* buf = (data == 0) ? &off : &on;
-  std::memcpy(buf->base.Data, &data, sizeof(data));
-  return &buf->base;
+// P2.3: --simulate-monitor-off-after-ms payload. Built by value at the call
+// site: SendMessageW is synchronous, so a stack buffer stays valid for the
+// whole dispatch and no static state (or its lazy init) is needed.
+struct MonitorPowerSetting {
+  POWERBROADCAST_SETTING base;
+  BYTE pad[3];  // base.Data is UCHAR[1]; room for the DWORD payload
+};
+
+void InitMonitorPowerSetting(MonitorPowerSetting& setting, DWORD data) {
+  setting = {};
+  setting.base.PowerSetting = GUID_MONITOR_POWER_ON;
+  setting.base.DataLength = sizeof(DWORD);
+  std::memcpy(setting.base.Data, &data, sizeof(data));
 }
 
 void PrintUsage(FILE* out) {
@@ -1006,15 +995,19 @@ int EngineApp::Run() {
       // WM_POWERBROADCAST is sync-only: PostMessageW fails with
       // ERROR_MESSAGE_SYNC_ONLY (1159). SendMessageW to our own loop thread
       // dispatches synchronously, exactly like the OS broadcast.
+      MonitorPowerSetting off_setting{};
+      InitMonitorPowerSetting(off_setting, 0);
       SendMessageW(message_hwnd_, WM_POWERBROADCAST, PBT_POWERSETTINGCHANGE,
-                   reinterpret_cast<LPARAM>(SimMonitorPowerSetting(0)));
+                   reinterpret_cast<LPARAM>(&off_setting.base));
     }
     if (simulate_monitor_off_after_ms_ > 0 && !monitor_on_simulated_ &&
         elapsed_ms >= simulate_monitor_off_after_ms_ + 2000) {
       monitor_on_simulated_ = true;
       Log("test: sending PBT_POWERSETTINGCHANGE Data=1 (monitor on)");
+      MonitorPowerSetting on_setting{};
+      InitMonitorPowerSetting(on_setting, 1);
       SendMessageW(message_hwnd_, WM_POWERBROADCAST, PBT_POWERSETTINGCHANGE,
-                   reinterpret_cast<LPARAM>(SimMonitorPowerSetting(1)));
+                   reinterpret_cast<LPARAM>(&on_setting.base));
     }
     if (device_lost_.exchange(false)) {
       Log("device-lost: flag set, calling RecreateDevice()");
@@ -1078,7 +1071,7 @@ int EngineApp::Run() {
   }
 
   Shutdown();
-  return exit_code_;
+  return 0;
 }
 
 void EngineApp::Shutdown() {

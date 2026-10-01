@@ -240,7 +240,6 @@ class EngineApp {
   // main loop (Run/RequestShutdown). Plain bool was a data race.
   std::atomic<bool> running_{false};
   bool shutdown_done_ = false;
-  int exit_code_ = 0;
   int init_exit_code_ = 2;
   std::atomic<bool> device_lost_{false};
   // Config file watcher (Todo 11): started in Init() from CliOptions
