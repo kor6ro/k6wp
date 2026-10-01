@@ -169,6 +169,8 @@ target_sources(studio PRIVATE
 target_sources(studio PRIVATE
   src/library_manager.cpp
   src/library_manager.hpp
+  src/library_json_codec.cpp
+  src/library_json_codec.hpp
 )
 
 # Studio thumbnailer (Todo 41, fase-6): central mtime-keyed thumbs cache
@@ -225,6 +227,7 @@ add_test(NAME thumbnailer_test COMMAND thumbnailer_test)
 add_executable(library_crud_test
   ../tests/library_crud_test.cpp
   src/ffprobe_helper.cpp
+  src/library_json_codec.cpp
 )
 target_link_libraries(library_crud_test PRIVATE k6wp_shared Qt6::Widgets Qt6::Concurrent)
 target_include_directories(library_crud_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -256,6 +259,7 @@ add_executable(studio_logic_test
   src/compress_bridge.cpp
   src/compress_errors.cpp
   src/library_manager.cpp
+  src/library_json_codec.cpp
   src/library_grid_model.cpp
   src/library_format.cpp
   src/thumbnailer.cpp
