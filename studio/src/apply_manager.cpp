@@ -402,13 +402,8 @@ ApplyResult ApplyManager::Apply(const WallpaperConfig& cfg,
         AppendLog(QStringLiteral("Apply: monitor sync skipped/failed: %1")
                       .arg(r.monitor_error));
       }
-      try {
-        const nlohmann::json state = ipc_->GetState().raw.value(
-            "state", nlohmann::json::object());
-        r.live_path = QString::fromUtf8(
-            state.value("video", std::string()).c_str());
-      } catch (const std::exception&) {
-      }
+      r.live_path = QString::fromUtf8(
+          ParseEngineState(ipc_->GetState().raw).video.c_str());
       AppendLog(
           QStringLiteral("Apply: IPC live-switch OK (auto-start)"));
       return r;

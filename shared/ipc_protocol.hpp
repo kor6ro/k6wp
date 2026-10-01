@@ -61,6 +61,18 @@ struct IpcMessage {
   nlohmann::json payload = nlohmann::json::object();
 };
 
+// Fields of a get_state ack's "state" object (engine BuildStateJson). Missing
+// keys keep the defaults; parsing never throws. Shared so Studio parses the
+// engine state in exactly one place.
+struct EngineState {
+  unsigned long long pid = 0;
+  std::string video;  // utf-8 path
+  bool paused = false;
+  int headless_slots = 0;
+  bool live = true;
+};
+EngineState ParseEngineState(const nlohmann::json& raw);
+
 // Structured error thrown by Encode on invalid input (e.g. payload larger
 // than kMaxPayloadBytes, or an unknown Cmd value).
 class IpcError : public std::runtime_error {

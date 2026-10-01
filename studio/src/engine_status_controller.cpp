@@ -11,17 +11,12 @@ EngineStatusView DecideEngineStatus(const IpcResult& res) {
   EngineStatusView view;
   if (res.status == IpcStatus::kOk) {
     view.kind = EngineStatusView::Kind::kConnected;
-    try {
-      const nlohmann::json state =
-          res.raw.value("state", nlohmann::json::object());
-      view.pid = state.value("pid", 0ULL);
-      view.video = QString::fromUtf8(
-          state.value("video", std::string()).c_str());
-      view.paused = state.value("paused", false);
-      view.headless = state.value("headless_slots", 0);
-      view.live = state.value("live", true);
-    } catch (const std::exception&) {
-    }
+    const EngineState state = ParseEngineState(res.raw);
+    view.pid = state.pid;
+    view.video = QString::fromUtf8(state.video.c_str());
+    view.paused = state.paused;
+    view.headless = state.headless_slots;
+    view.live = state.live;
     if (view.paused) {
       view.kind = EngineStatusView::Kind::kPaused;
     } else if (!view.live || view.headless > 0) {

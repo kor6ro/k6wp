@@ -215,4 +215,18 @@ PSECURITY_ATTRIBUTES MakeCurrentUserOnlySA() {
   return sa;
 }
 
+EngineState ParseEngineState(const nlohmann::json& raw) {
+  EngineState s;
+  try {
+    const nlohmann::json state = raw.value("state", nlohmann::json::object());
+    s.pid = state.value("pid", 0ULL);
+    s.video = state.value("video", std::string());
+    s.paused = state.value("paused", false);
+    s.headless_slots = state.value("headless_slots", 0);
+    s.live = state.value("live", true);
+  } catch (const std::exception&) {
+  }
+  return s;
+}
+
 }  // namespace k6wp
