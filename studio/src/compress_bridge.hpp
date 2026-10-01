@@ -179,6 +179,9 @@ class CompressBridge : public QObject {
   int consent_w_ = 0;
   int consent_h_ = 0;
   bool consent_need_res_ = false;
+  bool consent_probed_ok_ = false;
+  double consent_fps_source_ = 0.0;
+  bool consent_force_ = false;
 };
 
 }  // namespace k6wp

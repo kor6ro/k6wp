@@ -119,6 +119,11 @@ CompressBridge::CompressBridge(QObject* parent) : QObject(parent) {
                   }
                 }
                 entry.dst = std::filesystem::path(out.toStdWString());
+                // This is a second LibraryManager in the process that starts
+                // empty. Add() persists the WHOLE in-memory index, so without
+                // loading the on-disk index first this write would truncate the
+                // user's library to the single just-compressed entry.
+                library_mgr_.Load();
                 library_mgr_.Add(entry);
                 AppendLog(
                     QStringLiteral("Compress: imported to library: %1").arg(out));
@@ -377,6 +382,8 @@ void CompressBridge::EnqueueWithProbe(const QString& src, int res_w, int res_h,
           consent_w_ = res_w;
           consent_h_ = res_h;
           consent_need_res_ = need_res;
+          consent_probed_ok_ = ok;
+          consent_fps_source_ = probed.fps;
           emit consentRequired(duration / 60.0);
           return;
         }
@@ -392,21 +399,24 @@ void CompressBridge::resolveConsent(bool approved) {
   const QString src = consent_src_;
   const int w = consent_w_;
   const int h = consent_h_;
+  const bool probed_ok = consent_probed_ok_;
+  const double fps_source = consent_fps_source_;
   consent_src_.clear();
   if (!approved) {
     status_text_ = tr("Dibatalkan: video panjang tanpa izin.");
     emit statusTextChanged();
     return;
   }
-  force_long_ = true;
-  emit inputsChanged();
-  // The probe already ran; re-probing would double the wait, so dispatch
-  // straight away with the fps unknown (-> engine cap).
-  Dispatch(src, w, h, /*ok=*/false, /*fps_source=*/0.0);
+  // One-shot consent: it must not flip the user-facing forceLong toggle, and
+  // the probe result is reused instead of falling back to the engine cap.
+  consent_force_ = true;
+  Dispatch(src, w, h, probed_ok, fps_source);
+  consent_force_ = false;
 }
 
 void CompressBridge::Dispatch(const QString& src, int res_w, int res_h, bool probed_ok,
                               double fps_source) {
+  const bool force_effective = force_long_ || consent_force_;
   CompressRequest req;
   {
     TabRequestInputs in;
@@ -417,14 +427,14 @@ void CompressBridge::Dispatch(const QString& src, int res_w, int res_h, bool pro
     in.adv_fps = fps_;
     in.adv_crf = crf_;
     in.adv_encoder = encoder_;
-    in.adv_force = force_long_;
+    in.adv_force = force_effective;
     in.simple_fps = fps_;
     in.simple_crf = crf_;
     in.out_dir = out_dir_.isEmpty() ? CompressController::DefaultWallpapersDir()
                                     : out_dir_;
     req = CompressController::BuildTabRequest(in);
   }
-  req.force = force_long_;
+  req.force = force_effective;
 
   const int engine_fps_cap = CompressController::ResolveEngineFpsCap();
   const double usable_fps = (probed_ok && fps_source > 0.0 && std::isfinite(fps_source))
@@ -473,10 +483,12 @@ void CompressBridge::Dispatch(const QString& src, int res_w, int res_h, bool pro
 }
 
 void CompressBridge::cancel() {
-  if (!controller_.IsRunning()) {
+  if (!controller_.IsRunning() && controller_.PendingCount() == 0) {
     return;
   }
-  controller_.CancelCurrent();
+  // Cancel means the whole batch: CancelCurrent alone lets the queue's next
+  // job start as soon as the running one dies.
+  controller_.CancelAll();
   AppendLog(QStringLiteral("Dibatalkan"));
   RefreshQueue();
 }

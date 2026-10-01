@@ -79,6 +79,8 @@ class CompressController {
   bool IsRunning() const { return service_.IsRunning(); }
   int PendingCount() const { return service_.PendingCount(); }
   void CancelCurrent() { service_.CancelCurrent(); }
+  // Drops every queued job and kills the running one.
+  void CancelAll() { service_.CancelAll(); }
 
   // Pushes the studio cache dir into the service (K6WP_CACHE_DIR override).
   void SetCacheDir(const QString& dir) { service_.SetCacheDir(dir); }
