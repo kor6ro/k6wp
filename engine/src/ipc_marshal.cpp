@@ -21,7 +21,12 @@ std::optional<int> ParseSetMonitorPayload(const std::string& payload_json) {
       value = &payload.at("monitor_id");
     }
     if (value == nullptr || !value->is_number_integer()) return std::nullopt;
-    id = value->get<int>();
+    // Range-check before narrowing: is_number_integer() is also true for
+    // number_unsigned, and get<int>() on an out-of-range value is an
+    // implementation-defined wrap (e.g. 4294967295 -> -1 = "all screens").
+    const long long raw = value->get<long long>();
+    if (raw < -1 || raw > 2147483647LL) return std::nullopt;
+    id = static_cast<int>(raw);
   } catch (...) {
     return std::nullopt;
   }
