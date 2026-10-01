@@ -89,12 +89,21 @@ void MaybeRotateLog() {
   if (ec || size < kMaxLogBytes) {
     return;
   }
+  // Once a rotation attempt fails (AV/indexer holding engine.log.1), back off
+  // for a minute instead of close/reopen-cycling on every important flush.
+  static ULONGLONG next_attempt_ms = 0;
+  const ULONGLONG now_ms = GetTickCount64();
+  if (now_ms < next_attempt_ms) {
+    return;
+  }
   std::fclose(g_log_file);
   g_log_file = nullptr;
   std::filesystem::path rotated = g_log_path;
   rotated += L".1";
   std::filesystem::remove(rotated, ec);
-  std::filesystem::rename(g_log_path, rotated, ec);
+  std::error_code ren_ec;
+  std::filesystem::rename(g_log_path, rotated, ren_ec);
+  next_attempt_ms = ren_ec ? (now_ms + 60000) : 0;
   FILE* f = _wfsopen(g_log_path.c_str(), L"a", _SH_DENYNO);
   if (f != nullptr) {
     g_log_file = f;
