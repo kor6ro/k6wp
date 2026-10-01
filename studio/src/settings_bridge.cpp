@@ -654,7 +654,11 @@ int SettingsBridge::clearCache() {
 // --- diagnostics ------------------------------------------------------------
 
 void SettingsBridge::AppendLog(const QString& line) {
+  constexpr int kMaxLogLines = 500;
   log_.append(line);
+  while (log_.size() > kMaxLogLines) {
+    log_.removeFirst();
+  }
   emit logChanged();
 }
 

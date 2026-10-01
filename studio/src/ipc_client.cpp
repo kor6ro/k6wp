@@ -126,7 +126,13 @@ IpcClient& IpcClient::operator=(IpcClient&& other) noexcept {
   return *this;
 }
 
-void IpcClient::AppendLog(const std::string& line) { log_.push_back(line); }
+void IpcClient::AppendLog(const std::string& line) {
+  log_.push_back(line);
+  constexpr std::size_t kMaxLogLines = 500;
+  while (log_.size() > kMaxLogLines) {
+    log_.erase(log_.begin());
+  }
+}
 
 bool IpcClient::IsConnected() const {
   std::lock_guard<std::mutex> lock(mutex_);
