@@ -3,9 +3,9 @@
 #include <cstdio>
 #include <string>
 
-namespace k6wp::launcher {
+#include "exit_codes.hpp"
 
-inline constexpr int kExitBadFlag = 2;
+namespace k6wp::launcher {
 
 struct Options {
   bool want_studio = true;   // default + --studio

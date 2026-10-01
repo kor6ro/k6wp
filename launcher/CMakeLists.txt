@@ -6,7 +6,7 @@
 #
 # Todo 11 (done): /SUBSYSTEM:WINDOWS via WIN32_EXECUTABLE + wWinMain entry
 # point, no console. main.cpp stays console-clean either way.
-add_executable(launcher main.cpp cli.cpp process_paths.cpp lockscreen_backup.cpp lockscreen_policy.cpp app.rc)
+add_executable(launcher main.cpp cli.cpp process_paths.cpp lockscreen_backup.cpp lockscreen_policy.cpp lockscreen_sync.cpp app.rc)
 
 # Todo 11: GUI subsystem — no console window. Entry point is wWinMain in
 # main.cpp (CommandLineToArgvW keeps the Run(argc, argv) contract).
@@ -36,7 +36,7 @@ target_link_libraries(launcher PRIVATE user32 shell32 advapi32)
 # stays console-subsystem so the test's own main() is the entry point and
 # the launcher build above is untouched). Same Win32 libs as the launcher.
 if(BUILD_TESTING)
-add_executable(lockscreen_backup_test ../tests/lockscreen_backup_test.cpp lockscreen_backup.cpp process_paths.cpp cli.cpp lockscreen_policy.cpp)
+add_executable(lockscreen_backup_test ../tests/lockscreen_backup_test.cpp lockscreen_backup.cpp process_paths.cpp cli.cpp lockscreen_policy.cpp lockscreen_sync.cpp)
 target_link_libraries(lockscreen_backup_test PRIVATE user32 shell32 advapi32)
 # The test spells CJK/accent paths as literal UTF-8 wide strings; without
 # /utf-8 MSVC decodes the BOM-less source per the system ANSI code page and
@@ -51,7 +51,7 @@ add_test(NAME lockscreen_backup_test COMMAND lockscreen_backup_test)
 # maps to an exit code + user message. Same include-the-real-.cpp pattern as
 # lockscreen_backup_test above (anonymous-namespace escape, console subsystem).
 if(BUILD_TESTING)
-  add_executable(launcher_stop_test ../tests/launcher_stop_test.cpp lockscreen_backup.cpp process_paths.cpp cli.cpp lockscreen_policy.cpp)
+  add_executable(launcher_stop_test ../tests/launcher_stop_test.cpp lockscreen_backup.cpp process_paths.cpp cli.cpp lockscreen_policy.cpp lockscreen_sync.cpp)
   target_link_libraries(launcher_stop_test PRIVATE user32 shell32 advapi32)
   target_compile_options(launcher_stop_test PRIVATE /utf-8)
   add_test(NAME launcher_stop_test COMMAND launcher_stop_test)
