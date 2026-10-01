@@ -21,6 +21,7 @@
 #include "mpv_renderer.hpp"
 #include "multi_monitor.hpp"
 #include "occlusion_watch.hpp"
+#include "pause_controller.hpp"
 #include "power.hpp"
 #include "timer_ids.hpp"
 #include "tray.hpp"
@@ -380,42 +381,23 @@ class EngineApp {
   // installed on the existing hidden window in Init(). Non-fatal when
   // Explorer is absent — engine keeps running, TaskbarCreated re-adds it.
   TrayIcon tray_;
-  // Pause state shared between the UI thread (tray menu, power broadcasts,
-  // fullscreen watcher, power saver) and the IPC worker thread (pause/resume
-  // commands). Step 3.1: ownership bitmask — no path writes paused_ or the
-  // slots directly; every path goes through SetPauseOwner + ApplyPauseState.
-  // paused_ is the cached UiPaused() mirror for the tray callback and
-  // get_state; written only inside ApplyPauseState.
-  static constexpr int kPauseUser = 1;
-  static constexpr int kPauseFullscreen = 2;
-  static constexpr int kPauseSuspend = 4;
-  static constexpr int kPausePower = 8;
-  static constexpr int kPauseSessionLock = 16;
-  static constexpr int kPauseScreenOff = 32;
-  std::atomic<int> pause_mask_{0};
-  std::atomic<bool> paused_{false};
-  // UI-visible pause: user, fullscreen, suspend, session-lock, or screen-off
-  // hold the decode. P2.3 DESIGN DECISION (dual membership is INTENTIONAL):
-  // kPauseScreenOff is a member of BOTH UiPaused() and SlotsPaused() with no
-  // double-pause because ApplyPauseState drives two DISJOINT targets —
-  // UiPaused() drives renderer_.Pause()/Resume() (headless) while
-  // SlotsPaused() drives multi_monitor_.PauseAll()/ResumeAll() (slots); a
-  // screen-off pause therefore pauses headless AND slots exactly once each.
-  bool UiPaused() const {
-    return (pause_mask_.load(std::memory_order_acquire) &
-            (kPauseUser | kPauseFullscreen | kPauseSuspend | kPauseSessionLock |
-             kPauseScreenOff)) != 0;
-  }
-  // Slot pause: any owner (incl. the DC power cap and screen-off) stills the
-  // live slots. kPauseScreenOff is a member automatically (mask != 0).
-  bool SlotsPaused() const {
-    return pause_mask_.load(std::memory_order_acquire) != 0;
-  }
+  // Pause ownership now lives in PauseController; the aliases keep call sites
+  // readable and UiPaused()/SlotsPaused() stay as thin forwards. Writers still
+  // go through SetPauseOwner + ApplyPauseState.
+  static constexpr int kPauseUser = PauseController::kUser;
+  static constexpr int kPauseFullscreen = PauseController::kFullscreen;
+  static constexpr int kPauseSuspend = PauseController::kSuspend;
+  static constexpr int kPausePower = PauseController::kPower;
+  static constexpr int kPauseSessionLock = PauseController::kSessionLock;
+  static constexpr int kPauseScreenOff = PauseController::kScreenOff;
+  bool UiPaused() const { return pause_.UiPaused(); }
+  bool SlotsPaused() const { return pause_.SlotsPaused(); }
   // Sets/clears one owner bit (no-op when unchanged) and fans the merged
-  // state out to renderer_, the live slots, paused_, and the tray.
+  // state out to renderer_, the live slots, and the tray.
   void SetPauseOwner(int bit, bool on);
   void ApplyPauseState(const char* owner);
   static const char* PauseOwnerName(int bit);
+  PauseController pause_;
 };
 
 }  // namespace k6wp

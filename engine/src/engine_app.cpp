@@ -321,7 +321,7 @@ bool EngineApp::Init(int argc, char** argv) {
   tray_cb.on_open_studio = [this]() { OnTrayOpenStudio(); };
   tray_cb.on_support = [this]() { OnTraySupport(); };
   tray_cb.on_exit = [this]() { RequestShutdown(); };
-  tray_cb.is_paused = [this]() { return paused_.load(); };
+  tray_cb.is_paused = [this]() { return pause_.UiPaused(); };
   tray_.Install(message_hwnd_, std::move(tray_cb));
   std::string boot_video;
   {
@@ -982,19 +982,16 @@ const char* EngineApp::PauseOwnerName(int bit) {
 }
 
 void EngineApp::SetPauseOwner(int bit, bool on) {
-  const int old = on ? pause_mask_.fetch_or(bit, std::memory_order_acq_rel)
-                     : pause_mask_.fetch_and(~bit, std::memory_order_acq_rel);
-  const int updated = on ? (old | bit) : (old & ~bit);
-  if (updated == old) {
+  if (!pause_.SetBit(bit, on)) {
     return;
   }
   ApplyPauseState(PauseOwnerName(bit));
 }
 
 void EngineApp::ApplyPauseState(const char* owner) {
-  const int mask = pause_mask_.load(std::memory_order_acquire);
-  const bool ui = UiPaused();
-  const bool slots = SlotsPaused();
+  const int mask = pause_.mask();
+  const bool ui = pause_.UiPaused();
+  const bool slots = pause_.SlotsPaused();
   // Pause()/Resume() flip the renderer atomic + wake the event thread out of
   // its -1 block (500 ms watchdog rearms immediately), so the IPC
   // pause/resume worker paths and the tray path fast-drain via this fan-out.
@@ -1012,7 +1009,6 @@ void EngineApp::ApplyPauseState(const char* owner) {
       multi_monitor_.ResumeAll();
     }
   }
-  paused_.store(ui, std::memory_order_release);
   tray_.SetPaused(ui);
   // P2.5 (Todo 9): occlusion arm/disarm follows the merged mask. Mask
   // zero re-arms the 1500 ms tick (posts a wake to the loop thread when
@@ -1341,7 +1337,7 @@ void EngineApp::RecreateDevice() {
 void EngineApp::OnTrayTogglePause() {
   // Step 3.1: the tray item owns the user bit only — toggling it never
   // clears a fullscreen/suspend/power hold.
-  if ((pause_mask_.load(std::memory_order_acquire) & kPauseUser) != 0) {
+  if ((pause_.mask() & kPauseUser) != 0) {
     SetPauseOwner(kPauseUser, false);
   } else {
     SetPauseOwner(kPauseUser, true);
@@ -1490,7 +1486,7 @@ std::string EngineApp::BuildStateJson() const {
       {"paused", UiPaused()},
       // P2.3, additive only: raw pause-owner mask (bit 32 = screen-off) so
       // QA can prove the screen-off bit sets and clears via get_state.
-      {"pause_mask", pause_mask_.load(std::memory_order_acquire)},
+      {"pause_mask", pause_.mask()},
       {"pid", static_cast<unsigned long long>(GetCurrentProcessId())},
       {"wallpaper_mode", wallpaper_mode_str},
       {"video", video_utf8},
