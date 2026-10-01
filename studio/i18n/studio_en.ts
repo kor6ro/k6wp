@@ -89,7 +89,7 @@
         <translation>No results for this search</translation>
     </message>
     <message>
-        <location line="+85"/>
+        <location line="+83"/>
         <source>Terapkan</source>
         <translation>Apply</translation>
     </message>

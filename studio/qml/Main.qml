@@ -462,11 +462,9 @@ Rectangle {
                                     height: libraryGrid.cellHeight
 
                                     required property int index
-                                    required property string name
                                     required property string label
                                     required property string thumbUrl
                                     required property string dst
-                                    required property bool broken
 
                                     // thumbUrl stays empty until a thumbnail
                                     // exists, and an Image with no source never
