@@ -145,7 +145,7 @@ cmake --preset release
 cmake --build --preset release
 ```
 
-Unit tests (`BUILD_TESTING=ON`, msvc-dev preset only): **21 CTest suites**,
+Unit tests (`BUILD_TESTING=ON`, msvc-dev preset only): **22 CTest suites**,
 all of which must exit 0. The authoritative list is the `add_test(NAME ...)`
 calls in each module's `CMakeLists.txt`:
 
@@ -167,10 +167,11 @@ calls in each module's `CMakeLists.txt`:
   no-result contract; needs the vendored ffmpeg/ffprobe and a local
   `compressor.exe`), `fake_pipe_test` (in-process fake IPC server),
   `playlist_bridge_test` (PlaylistBridge CRUD/persist round-trip).
-- `compressor/CMakeLists.txt` (3): `probe_json_test` (the single-JSON ffprobe
+- `compressor/CMakeLists.txt` (4): `probe_json_test` (the single-JSON ffprobe
   parser), `compress_argv_contract` (golden Studio↔compressor argv dry-run,
   plus the in-place-compress guard), `compress_friendly_error` (the
-  technical→friendly error mapping).
+  technical→friendly error mapping), `widen_utf8_test` (the production
+  `Widen()` UTF-8 decode).
 - `launcher/CMakeLists.txt` (2): `lockscreen_backup_test` (launcher
   lockscreen backup UTF-8 round-trip), `launcher_stop_test` (the uninstaller
   stop path: own-image matching and the elevated-restore outcome mapping).

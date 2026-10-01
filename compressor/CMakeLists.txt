@@ -41,4 +41,13 @@ add_executable(compress_friendly_error_test
 )
 target_link_libraries(compress_friendly_error_test PRIVATE k6wp_shared)
 add_test(NAME compress_friendly_error COMMAND compress_friendly_error_test)
+
+# widen_utf8_test (MED-10): #includes the real ffmpeg_job.cpp so the
+# anonymous-namespace Widen() under test is production code; FindFfmpeg and
+# PickEncoder are stubbed by the test. Registered here so the UTF-8 decode
+# fix stays locked.
+add_executable(widen_utf8_test tests/widen_utf8_test.cpp)
+target_link_libraries(widen_utf8_test PRIVATE k6wp_shared)
+target_include_directories(widen_utf8_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+add_test(NAME widen_utf8_test COMMAND widen_utf8_test)
 endif()
