@@ -211,12 +211,18 @@ bool PersistConfigField(const std::filesystem::path& path,
   if (have_valid && raw.contains(field) && raw.at(field) == value) {
     return false;
   }
+  const bool current_schema =
+      have_valid && raw.value("version", 0) == kConfigSchemaVersion;
   raw[field] = value;
   // Validate the merged document BEFORE touching disk: a bad mutation throws
   // and the on-disk file (or the .bak-backed fallback) stays untouched.
   WallpaperConfig merged = MigrateConfig(raw);
   ValidateConfig(merged);
-  AtomicWriteJson(path, raw);
+  // A pre-current-schema file must be written back at the current schema;
+  // writing `raw` would leave version 0 / missing keys on disk, so the next
+  // load has to migrate again. Current-schema files keep `raw` so unknown /
+  // future keys survive the single-field update.
+  AtomicWriteJson(path, current_schema ? raw : ConfigToJson(merged));
   return true;
 }
 
