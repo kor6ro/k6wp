@@ -18,6 +18,7 @@
 #include <cstring>
 #include <filesystem>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -1226,33 +1227,17 @@ void EngineApp::ApplyPendingSetMonitor() {
 }
 
 bool EngineApp::HandleSetVideo(const std::string& payload_json, bool rotation) {
-  // Payload shape matches IpcClient::SetVideo: {"path": "<utf8>"}.
-  std::string utf8_path;
-  try {
-    const nlohmann::json payload = nlohmann::json::parse(payload_json);
-    if (!payload.is_object() || !payload.contains("path") ||
-        !payload.at("path").is_string()) {
-      Log("ipc: set_video rejected (missing/invalid \"path\" field)");
-      return false;
-    }
-    utf8_path = payload.at("path").get<std::string>();
-  } catch (const std::exception& e) {
-    Log("ipc: set_video rejected (payload parse failed: %s)", e.what());
+  // Payload shape matches IpcClient::SetVideo: {"path": "<utf8>"}. Re-validate
+  // through the shared helper (the file may have vanished since queueing); a
+  // bad path keeps the old wallpaper rendering.
+  const std::optional<std::string> validated =
+      ValidateSetVideoPayload(payload_json);
+  if (!validated) {
+    Log("ipc: set_video rejected (missing/invalid path or not a file)");
     return false;
   }
-  if (utf8_path.empty()) {
-    Log("ipc: set_video rejected (empty path)");
-    return false;
-  }
-  // Validate BEFORE loadfile: a bad path must ack {"error"} while the old
-  // wallpaper keeps rendering (QA-fail path).
-  std::error_code ec;
+  const std::string& utf8_path = *validated;
   const std::filesystem::path fs_path = std::filesystem::u8path(utf8_path);
-  if (!std::filesystem::exists(fs_path, ec) ||
-      !std::filesystem::is_regular_file(fs_path, ec)) {
-    Log("ipc: set_video rejected (not a file: %s)", utf8_path.c_str());
-    return false;
-  }
   // The visible slots own the decode: loading the headless renderer too
   // would decode the same file twice (~500MB wasted on 4K). Headless is
   // fallback only when no live surface exists. Thread-safe: MpvRenderer
@@ -1332,33 +1317,13 @@ bool EngineApp::HandleSetVideo(const std::string& payload_json, bool rotation) {
 
 bool EngineApp::HandleSetMonitor(const std::string& payload_json) {
   // Payload shape matches IpcClient::SetMonitor: {"monitor": N}, with
-  // {"monitor_id": N} accepted as an alias.
-  int id = -1;
-  try {
-    const nlohmann::json payload = nlohmann::json::parse(payload_json);
-    if (!payload.is_object()) {
-      Log("ipc: set_monitor rejected (payload is not an object)");
-      return false;
-    }
-    const nlohmann::json* value = nullptr;
-    if (payload.contains("monitor")) {
-      value = &payload.at("monitor");
-    } else if (payload.contains("monitor_id")) {
-      value = &payload.at("monitor_id");
-    }
-    if (value == nullptr || !value->is_number_integer()) {
-      Log("ipc: set_monitor rejected (missing/invalid \"monitor\" field)");
-      return false;
-    }
-    id = value->get<int>();
-  } catch (const std::exception& e) {
-    Log("ipc: set_monitor rejected (payload parse failed: %s)", e.what());
+  // {"monitor_id": N} accepted as an alias. Shared validator: integer >= -1.
+  const std::optional<int> parsed = ParseSetMonitorPayload(payload_json);
+  if (!parsed) {
+    Log("ipc: set_monitor rejected (missing/invalid \"monitor\" field)");
     return false;
   }
-  if (id < -1) {
-    Log("ipc: set_monitor rejected (monitor %d < -1)", id);
-    return false;
-  }
+  const int id = *parsed;
   multi_monitor_.SetActiveMonitor(id);
   // Re-sync the live flag with the slot census: filtering down to an absent
   // monitor leaves zero slots (headless fallback owns decode), and
