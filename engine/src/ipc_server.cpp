@@ -174,32 +174,33 @@ struct IpcServer::Impl {
       switch (msg.cmd) {
         case Cmd::set_video: {
           const std::string payload = msg.payload.dump();
-          bool ok = true;
-          if (handlers.set_video) ok = handlers.set_video(payload);
-          if (!ok) return ErrorAck("set_video handler rejected the command");
+          if (!handlers.set_video) return ErrorAck("set_video handler not installed");
+          if (!handlers.set_video(payload)) return ErrorAck("set_video handler rejected the command");
           return "{\"ok\":true}\n";
         }
         case Cmd::set_monitor: {
           const std::string payload = msg.payload.dump();
-          bool ok = true;
-          if (handlers.set_monitor) ok = handlers.set_monitor(payload);
-          if (!ok) return ErrorAck("set_monitor handler rejected the command");
+          if (!handlers.set_monitor) return ErrorAck("set_monitor handler not installed");
+          if (!handlers.set_monitor(payload)) return ErrorAck("set_monitor handler rejected the command");
           return "{\"ok\":true}\n";
         }
         case Cmd::pause:
-          if (handlers.pause) handlers.pause();
+          if (!handlers.pause) return ErrorAck("pause handler not installed");
+          handlers.pause();
           return "{\"ok\":true}\n";
         case Cmd::resume:
-          if (handlers.resume) handlers.resume();
+          if (!handlers.resume) return ErrorAck("resume handler not installed");
+          handlers.resume();
           return "{\"ok\":true}\n";
         case Cmd::get_state: {
-          std::string state = "{\"ipc\":\"up\"}";
-          if (handlers.get_state) state = handlers.get_state();
+          if (!handlers.get_state) return ErrorAck("get_state handler not installed");
+          std::string state = handlers.get_state();
           if (state.empty()) state = "{}";
           return "{\"ok\":true,\"state\":" + state + "}\n";
         }
         case Cmd::quit: {
-          if (handlers.quit) handlers.quit();
+          if (!handlers.quit) return ErrorAck("quit handler not installed");
+          handlers.quit();
           return "{\"ok\":true}\n";
         }
       }
