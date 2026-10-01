@@ -23,6 +23,7 @@
 #include "mpv_renderer.hpp"
 #include "multi_monitor.hpp"
 #include "cpu_affinity.hpp"
+#include "lockscreen_glue.hpp"
 #include "occlusion_poke_scheduler.hpp"
 #include "occlusion_watch.hpp"
 #include "os_wallpaper.hpp"
@@ -193,12 +194,6 @@ class EngineApp {
   // first, joining the worker before any surface is torn down).
   void ApplyPendingSetVideo();
   void ApplyPendingSetMonitor();
-  // Part B lockscreen sync: fire-and-forget compressor --lockframe refresh,
-  // debounced to one spawn per 5s and only when lockscreen_sync is ON in
-  // studio_settings.json. Never blocks the caller, never throws: every
-  // failure path only logs. Runs on the IPC worker thread or Init thread.
-  void MaybeTriggerLockscreenSync(const std::string& video_utf8);
-
   HINSTANCE hinstance_ = nullptr;
   HWND message_hwnd_ = nullptr;
   bool class_registered_ = false;

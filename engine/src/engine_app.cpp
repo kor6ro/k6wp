@@ -359,12 +359,12 @@ bool EngineApp::Init(int argc, char** argv) {
         Log("warning: renderer could not load '%s', keeping current video",
             boot_video.c_str());
       } else {
-        MaybeTriggerLockscreenSync(boot_video);
+        MaybeTriggerLockscreenSync(boot_video, &EngineApp::Log);
       }
     } else {
       Log("engine: boot autoplay '%s' — slots own decode, headless stays idle",
           boot_video.c_str());
-      MaybeTriggerLockscreenSync(boot_video);
+      MaybeTriggerLockscreenSync(boot_video, &EngineApp::Log);
     }
   } else {
     // No valid video at boot: seed paused state so tray shows off icon
@@ -937,7 +937,7 @@ bool EngineApp::HandleSetVideo(const std::string& payload_json, bool rotation) {
   if (!rotation) {
     tray_.PushRecent(utf8_path);  // Todo 35: MRU is for manual picks only
     LogImportant("ipc: set_video live-switched to %s", utf8_path.c_str());
-    MaybeTriggerLockscreenSync(utf8_path);
+    MaybeTriggerLockscreenSync(utf8_path, &EngineApp::Log);
   } else {
     // Rotation is not a user action: no MRU feed, no lock-screen extract, and
     // Log (not LogImportant) so a short interval cannot flush the log per cycle.
@@ -1008,16 +1008,6 @@ bool EngineApp::HandleSetMonitor(const std::string& payload_json) {
   return true;
 }
 
-void EngineApp::MaybeTriggerLockscreenSync(const std::string& video_utf8) {
-  if (video_utf8.empty()) return;
-  // Canonical helper (shared/lockscreen.cpp): no-op unless lockscreen_sync is
-  // ON, debounced to one spawn per 5s, child detached BELOW_NORMAL, never
-  // throws. Log-only here so sync can never break the render path.
-  if (!IsLockscreenSyncEnabled()) return;
-  FireLockscreenSyncAsync(std::filesystem::u8path(video_utf8));
-  Log("lockscreen: refresh requested for %s (best-effort, debounced)",
-      video_utf8.c_str());
-}
 void EngineApp::RecreateDevice() {
   std::string video;
   {
