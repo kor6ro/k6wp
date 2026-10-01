@@ -149,6 +149,8 @@ target_sources(studio PRIVATE
   # can never unwind into the QML engine.
   src/library_grid_model.cpp
   src/library_grid_model.hpp
+  src/library_format.cpp
+  src/library_format.hpp
   # Phase 6: PlaylistBridge, the Wallpaper tab's playlist backend. Owns
   # playlist.json (shared/playlist.hpp); the engine reads the same file.
   src/playlist_bridge.cpp
@@ -255,6 +257,7 @@ add_executable(studio_logic_test
   src/compress_errors.cpp
   src/library_manager.cpp
   src/library_grid_model.cpp
+  src/library_format.cpp
   src/thumbnailer.cpp
   src/probe_async.cpp
   src/ffprobe_helper.cpp

@@ -6,6 +6,7 @@
 
 #include "compress_first_offer.hpp"
 #include "first_run_wizard.hpp"
+#include "library_format.hpp"
 #include "probe_async.hpp"
 #include "qml_shell.hpp"
 #include "studio_settings.hpp"
@@ -22,69 +23,6 @@
 #include <filesystem>
 
 namespace k6wp {
-
-namespace {
-
-// Ported verbatim from LibraryWidget::FilterMatches.
-std::string ToLowerAscii(std::string s) {
-  std::transform(s.begin(), s.end(), s.begin(),
-                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-  return s;
-}
-
-bool FilterMatches(const std::string& name, const std::string& label,
-                   const std::string& query) {
-  if (query.empty()) {
-    return true;
-  }
-  const std::string q = ToLowerAscii(query);
-  return ToLowerAscii(name).find(q) != std::string::npos ||
-         ToLowerAscii(label).find(q) != std::string::npos;
-}
-
-// Ported verbatim from LibraryWidget::EntryLabel, so the grid shows exactly the
-// text the Widgets grid did (same em-dashes, same badges).
-std::string EntryLabel(const LibraryEntry& entry) {
-  const std::string res =
-      (entry.res.empty() || entry.res == "0x0") ? "\xE2\x80\x94" : entry.res;
-
-  std::string dur_str;
-  if (entry.duration > 0.0) {
-    const int total_sec = static_cast<int>(entry.duration);
-    const int h = total_sec / 3600;
-    const int m = (total_sec % 3600) / 60;
-    const int s = total_sec % 60;
-    if (h > 0) {
-      dur_str = std::to_string(h) + " jam " + std::to_string(m) + " mnt";
-    } else if (m > 0) {
-      dur_str = std::to_string(m) + " mnt " + std::to_string(s) + " dtk";
-    } else {
-      dur_str = std::to_string(s) + " dtk";
-    }
-  } else {
-    dur_str = "\xE2\x80\x94";
-  }
-
-  std::string label = entry.dst.filename().u8string() + "\n" + res +
-                      " \xE2\x80\xA2 " + dur_str;
-  if (entry.broken) {
-    label += "\n[file hilang]";
-  } else if (!entry.src.empty() && entry.src == entry.dst) {
-    label += "\n[belum dioptimasi]";
-  }
-  return label;
-}
-
-QString FileUrl(const std::filesystem::path& p) {
-  if (p.empty()) {
-    return QString();
-  }
-  return QUrl::fromLocalFile(QDir::toNativeSeparators(
-                                 QString::fromStdWString(p.wstring())))
-      .toString();
-}
-
-}  // namespace
 
 LibraryGridModel::LibraryGridModel(QObject* parent) : QAbstractListModel(parent) {
   if (QmlShell* shell = ActiveQmlShell()) {
