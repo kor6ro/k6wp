@@ -1,4 +1,5 @@
 #include "config_schema.hpp"
+#include "settings_io.hpp"
 
 #include <windows.h>
 
@@ -8,44 +9,6 @@
 namespace k6wp {
 
 namespace {
-
-// Reads the whole file into a string. RAII via std::ifstream; throws
-// ConfigError when the file cannot be opened. MED-18: rejects files larger
-// than kMaxConfigBytes BEFORE reading (file_size with error_code, so a
-// missing/unstatable file still falls through to the cannot-open error).
-std::string ReadFile(const std::filesystem::path& path) {
-  std::error_code ec;
-  const std::uintmax_t size = std::filesystem::file_size(path, ec);
-  if (!ec && size > kMaxConfigBytes) {
-    throw ConfigError("config file exceeds maximum size (" +
-                      std::to_string(kMaxConfigBytes) + " bytes): " +
-                      path.string());
-  }
-  std::ifstream in(path, std::ios::binary);
-  if (!in) {
-    throw ConfigError("cannot open config file: " + path.string());
-  }
-  return std::string(std::istreambuf_iterator<char>(in),
-                     std::istreambuf_iterator<char>());
-}
-
-// Backup destination for `path`: the same filename with ".bak" appended
-// (e.g. config.json -> config.json.bak). operator+= appends to the filename
-// component, so wide/non-UTF8 paths survive (no narrow string() round-trip).
-std::filesystem::path BackupPath(const std::filesystem::path& path) {
-  std::filesystem::path bak = path;
-  bak += L".bak";
-  return bak;
-}
-
-// Copies the original config bytes to "<config>.bak". Best-effort: uses the
-// error_code overloads and never throws, so a failed backup can never turn
-// a clean load into an error.
-void BackupConfigFile(const std::filesystem::path& path) noexcept {
-  std::error_code ec;
-  std::filesystem::copy_file(path, BackupPath(path),
-                             std::filesystem::copy_options::overwrite_existing, ec);
-}
 
 // True when `raw` predates the current schema: explicit older version, or any
 // known field absent (e.g. a v1 file written before battery_saver /
@@ -135,14 +98,14 @@ nlohmann::json ConfigToJson(const WallpaperConfig& cfg) {
 }
 
 WallpaperConfig LoadConfig(const std::filesystem::path& path) {
-  const std::string text = ReadFile(path);
+  const std::string text = detail::ReadFile(path, "config file");
   nlohmann::json raw;
   try {
     raw = nlohmann::json::parse(text);
   } catch (const nlohmann::json::exception& e) {
     // QA-fail path: keep the corrupt bytes for forensics, then report a
     // structured error. The caller falls back to last-valid/safe defaults.
-    BackupConfigFile(path);
+    detail::BackupFile(path);
     throw ConfigError(std::string("corrupt config JSON: ") + e.what());
   }
   WallpaperConfig cfg;
@@ -151,21 +114,21 @@ WallpaperConfig LoadConfig(const std::filesystem::path& path) {
   } catch (const ConfigError&) {
     // Unknown schema version or type-corrupt field: back up before throwing
     // so the caller can fall back to a safe default without losing data.
-    BackupConfigFile(path);
+    detail::BackupFile(path);
     throw;
   }
   const bool migrated = NeedsMigration(raw);
   if (migrated) {
     // Old config (v0, or v1 missing newer fields): preserve the original
     // bytes before the self-healing rewrite below overwrites them.
-    BackupConfigFile(path);
+    detail::BackupFile(path);
   }
   try {
     ValidateConfig(cfg);
   } catch (const ConfigError&) {
     // Invalid field value (e.g. unknown fit_mode): preserve the original
     // bytes before the caller falls back to last-valid/safe defaults.
-    BackupConfigFile(path);
+    detail::BackupFile(path);
     throw;
   }
   if (migrated) {
@@ -195,7 +158,7 @@ bool PersistConfigField(const std::filesystem::path& path,
   nlohmann::json raw;
   bool have_valid = false;
   try {
-    raw = nlohmann::json::parse(ReadFile(path));
+    raw = nlohmann::json::parse(detail::ReadFile(path, "config file"));
     if (!raw.is_object()) {
       throw ConfigError("config root must be a JSON object");
     }
@@ -205,7 +168,7 @@ bool PersistConfigField(const std::filesystem::path& path,
   } catch (const ConfigError&) {
     // Missing / corrupt / invalid: preserve the existing bytes for forensics
     // (no-op when the file is simply absent), then rebuild from fallback.
-    BackupConfigFile(path);
+    detail::BackupFile(path);
     raw = ConfigToJson(fallback);
   }
   if (have_valid && raw.contains(field) && raw.at(field) == value) {

@@ -1,6 +1,7 @@
 #include "playlist.hpp"
 
 #include "config_schema.hpp"  // ConfigError, AtomicWriteJson, kMaxConfigBytes
+#include "settings_io.hpp"
 
 #include <fstream>
 #include <system_error>
@@ -8,39 +9,6 @@
 
 namespace k6wp {
 namespace {
-
-// Reads the whole file into a string, rejecting oversize files BEFORE reading
-// (same MED-18 guard as config_schema.cpp). Throws ConfigError when the file
-// cannot be opened.
-std::string ReadFile(const std::filesystem::path& path) {
-  std::error_code ec;
-  const std::uintmax_t size = std::filesystem::file_size(path, ec);
-  if (!ec && size > kMaxConfigBytes) {
-    throw ConfigError("playlist file exceeds maximum size (" +
-                      std::to_string(kMaxConfigBytes) + " bytes): " +
-                      path.string());
-  }
-  std::ifstream in(path, std::ios::binary);
-  if (!in) {
-    throw ConfigError("cannot open playlist file: " + path.string());
-  }
-  return std::string(std::istreambuf_iterator<char>(in),
-                     std::istreambuf_iterator<char>());
-}
-
-// "<playlist>.bak" (filename += ".bak", so wide/non-UTF8 paths survive).
-std::filesystem::path BackupPath(const std::filesystem::path& path) {
-  std::filesystem::path bak = path;
-  bak += L".bak";
-  return bak;
-}
-
-void BackupFile(const std::filesystem::path& path) noexcept {
-  std::error_code ec;
-  std::filesystem::copy_file(path, BackupPath(path),
-                             std::filesystem::copy_options::overwrite_existing,
-                             ec);
-}
 
 bool NeedsMigration(const nlohmann::json& raw) {
   if (!raw.is_object()) {
@@ -143,31 +111,31 @@ nlohmann::json PlaylistToJson(const PlaylistConfig& cfg) {
 }
 
 PlaylistConfig LoadPlaylist(const std::filesystem::path& path) {
-  const std::string text = ReadFile(path);
+  const std::string text = detail::ReadFile(path, "playlist file");
   nlohmann::json raw;
   try {
     raw = nlohmann::json::parse(text);
   } catch (const nlohmann::json::exception& e) {
     // QA-fail path: keep the corrupt bytes for forensics, then report a
     // structured error. The caller falls back to last-valid/defaults.
-    BackupFile(path);
+    detail::BackupFile(path);
     throw ConfigError(std::string("corrupt playlist JSON: ") + e.what());
   }
   PlaylistConfig cfg;
   try {
     cfg = MigratePlaylist(raw);
   } catch (const ConfigError&) {
-    BackupFile(path);
+    detail::BackupFile(path);
     throw;
   }
   const bool migrated = NeedsMigration(raw);
   if (migrated) {
-    BackupFile(path);
+    detail::BackupFile(path);
   }
   try {
     ValidatePlaylist(cfg);
   } catch (const ConfigError&) {
-    BackupFile(path);
+    detail::BackupFile(path);
     throw;
   }
   if (migrated) {

@@ -12,6 +12,7 @@ add_library(k6wp_shared STATIC
   proc_util.cpp
   sha1.cpp
   compress_args.cpp
+  settings_io.cpp
 )
 
 target_include_directories(k6wp_shared PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
