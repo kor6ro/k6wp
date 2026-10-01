@@ -11,6 +11,7 @@
 #include <atomic>
 #include <cstdio>
 #include <cstring>
+#include <mutex>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -20,9 +21,13 @@
 namespace k6wp {
 namespace {
 
-// Debounce window: at most one compressor spawn per 5s per process.
+// Debounce window for repeated syncs of the SAME video. A DIFFERENT video is
+// allowed through immediately: quick-switching wallpapers must not leave the
+// lockscreen showing the previous frame with no later event to correct it.
 constexpr ULONGLONG kDebounceMs = 5000;
-std::atomic<ULONGLONG> g_last_fire_ms{0};
+std::mutex g_fire_mutex;
+std::wstring g_last_fire_path;
+ULONGLONG g_last_fire_ms = 0;  // both guarded by g_fire_mutex
 
 void DebugLog(const wchar_t* fmt, DWORD code) {
   wchar_t line[512] = {};
@@ -103,20 +108,27 @@ void FireLockscreenSyncAsync(const std::filesystem::path& video_path) noexcept {
     if (video_path.empty()) return;
     if (!IsLockscreenSyncEnabled()) return;
 
-    // Debounce: skip when the previous fire was <5s ago (CAS loop so two
-    // racing threads still spawn at most one extra compressor).
-    const ULONGLONG now = GetTickCount64();
-    ULONGLONG last = g_last_fire_ms.load(std::memory_order_relaxed);
-    for (;;) {
-      if (now - last < kDebounceMs) return;  // within window: drop silently
-      if (g_last_fire_ms.compare_exchange_weak(last, now,
-                                               std::memory_order_relaxed)) {
-        break;
+    // Reserve the debounce slot for this path. Same video inside the window is
+    // dropped; a different video always proceeds. A reserved slot is released
+    // again on any failure below so a failed attempt cannot mute the next 5s.
+    {
+      std::lock_guard<std::mutex> lock(g_fire_mutex);
+      const ULONGLONG now = GetTickCount64();
+      if (!g_last_fire_path.empty() && video_path.wstring() == g_last_fire_path &&
+          now - g_last_fire_ms < kDebounceMs) {
+        return;
       }
+      g_last_fire_path = video_path.wstring();
+      g_last_fire_ms = now;
     }
+    const auto release_slot = [] {
+      std::lock_guard<std::mutex> lock(g_fire_mutex);
+      g_last_fire_path.clear();
+    };
 
     std::error_code ec;
     if (!std::filesystem::exists(video_path, ec)) {
+      release_slot();
       DebugLog(L"K6WP lockscreen: video missing, skipping sync (ec=%lu)",
                static_cast<DWORD>(ec.value()));
       return;
@@ -124,6 +136,7 @@ void FireLockscreenSyncAsync(const std::filesystem::path& video_path) noexcept {
 
     const std::filesystem::path compressor = SiblingCompressor();
     if (compressor.empty()) {
+      release_slot();
       DebugLog(L"K6WP lockscreen: compressor.exe not found, skipping (ec=%lu)",
                GetLastError());
       return;
@@ -148,6 +161,7 @@ void FireLockscreenSyncAsync(const std::filesystem::path& video_path) noexcept {
     if (!CreateProcessW(compressor.c_str(), cmd.data(), nullptr, nullptr, FALSE,
                         DETACHED_PROCESS | BELOW_NORMAL_PRIORITY_CLASS,
                         nullptr, nullptr, &si, &pi)) {
+      release_slot();
       DebugLog(L"K6WP lockscreen: CreateProcess failed (%lu), skipping",
                GetLastError());
       return;
