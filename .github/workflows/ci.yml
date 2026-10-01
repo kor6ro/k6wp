@@ -87,6 +87,20 @@ jobs:
           if (-not ($entries | Where-Object { $_ -like "LICENSES/*" })) { Write-Error "ZIP missing LICENSES/ notices"; exit 1 }
           Write-Host "ZIP OK: $($zip.Name) ($([math]::Round($zip.Length / 1MB, 2)) MB, $($entries.Count) entries)."
 
+      # The ZIP-only path above never invokes makensis, so installer.nsi
+      # syntax/section errors were caught only at release time. Compile it here
+      # to fail fast (NSIS is available via Chocolatey on the runner).
+      - name: Compile installer (NSIS)
+        shell: pwsh
+        run: |
+          choco install nsis -y --no-progress | Out-Null
+          $makensis = Join-Path ${env:ProgramFiles(x86)} "NSIS\makensis.exe"
+          if (-not (Test-Path -LiteralPath $makensis)) { Write-Error "makensis not found"; exit 1 }
+          & $makensis "packaging\installer.nsi"
+          if ($LASTEXITCODE -ne 0) { Write-Error "makensis failed ($LASTEXITCODE)"; exit 1 }
+          if (-not (Test-Path -LiteralPath "dist\K6WP-Setup.exe")) { Write-Error "installer output missing"; exit 1 }
+          Write-Host "NSIS installer compiled OK."
+
       - name: Upload portable ZIP
         uses: actions/upload-artifact@v4
         with:
