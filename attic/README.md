@@ -17,7 +17,6 @@ git history.
 | attic/tools/bench_cpu_mem.ps1 | tools/bench_cpu_mem.ps1           | CPU/memory benchmark (archived copy; Step 9 wrote a new generic sampler at tools/bench_cpu_mem.ps1) |
 | attic/tests/app_live_apply.py | tests/app_live_apply.py           | Live apply QA |
 | attic/tests/gate_fase4_32.py  | tests/gate_fase4_32.py            | Fase 4 QA |
-| attic/tests/live_switch_30.py | tests/live_switch_30.py           | Live switch QA |
 | attic/packaging-icons/app.ico | packaging/app.ico               | Legacy placeholder icon (LOW-22; superseded by k6wp-on.ico) |
 | attic/packaging-icons/app_paused.ico | packaging/app_paused.ico   | Legacy placeholder icon (LOW-22; superseded by k6wp-off.ico) |
 | attic/spikes/render_shared.cpp | spikes/render_shared.cpp           | GL-WGL shared-surface render probe (P3L spike A; never in CMake) |
@@ -26,7 +25,8 @@ git history.
 Step 10 promotions (moved back out of the attic, history preserved):
 `attic/tests/send_test.py` + `attic/tests/pipe_fuzz.py` → `tests/`
 (headless pipe QA beside `config_test`/`ipc_test`);
-`attic/tools/bench_startup.ps1` → `tools/` (operator-facing bench).
+`attic/tools/bench_startup.ps1` → `tools/` (operator-facing bench);
+`live_switch_30.py` also lives at `tests/` (never archived).
 
 ## Archive reason
 
@@ -79,8 +79,8 @@ restore if needed.
 
 ## Task-25 archive state (2026-09-18)
 
-- `spikes/` at repo root holds only `.gitkeep` (directory retained so the
-  path exists); every probe program lives here in `attic/spikes/`.
+- Every probe program lives here in `attic/spikes/`; the root `spikes/`
+  placeholder directory was removed.
 - Main-build exclusion VERIFIED 2026-09-18: root `CMakeLists.txt` lists only
   `shared/engine/compressor/studio/launcher`; repo-wide grep for
   `add_subdirectory` referencing `spikes`/`attic` returns zero matches
@@ -89,10 +89,9 @@ restore if needed.
   so archive additions stay committable; already-tracked files were never
   affected. Build/log/cache/probe outputs stay ignored
   (`build/`, `*.log`, `*verbose-probe*/`, `*cfg-probe-*/`, `*.obj`...).
-- Known stale pointer (NOT edited here — product-code freeze, T25 lane is
-  attic/docs/gitignore only): `engine/src/mpv_renderer.cpp:5` comments
-  "Pattern follows spikes/mpv_hwdec.cpp" — the file now lives at
-  `attic/spikes/mpv_hwdec.cpp`. Left for the owning task; history is intact.
+- `engine/src/mpv_renderer.cpp` references the probe at its archived path
+  (`attic/spikes/mpv_hwdec.cpp`); the stale root-`spikes/` pointer was
+  corrected.
 
 ## Provenances (v1 verification)
 

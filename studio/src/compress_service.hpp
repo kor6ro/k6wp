@@ -1,9 +1,8 @@
 #pragma once
 
 // Single queued compression runner (Step 7.1): exactly ONE QProcess for
-// compressor.exe plus a FIFO job queue. Replaces the three CompressBridge
-// instances (Compressor tab, ImportDialog, LibraryWidget lazy bridge) so two
-// compressions can never run concurrently.
+// compressor.exe plus a FIFO job queue, so two compressions can never run
+// concurrently. CompressBridge owns exactly one of these.
 //
 // Wire contract: unchanged. compressor.exe argv and its NDJSON stdout
 // ({"progress":0-100,"eta_s":N}, {"ok":true,...}) / stderr ({"error":...})

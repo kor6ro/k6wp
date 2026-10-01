@@ -2,9 +2,8 @@
 
 // Studio library metadata layer (Todo 38, fase-5).
 //
-// ONE LibraryManager per Studio process: MainWindow owns it and shares it by
-// reference with LibraryWidget and ImportDialog (each used to keep its own
-// instance and re-Load() from disk to paper over the staleness). It persists
+// ONE LibraryManager per Studio process: LibraryGridModel owns it and wraps
+// its throwing API for QML. It persists
 // one JSON object per imported video to %LOCALAPPDATA%/K6WP/library.json so
 // Studio can list/persist/delete entries and show compressor-cache status.
 //

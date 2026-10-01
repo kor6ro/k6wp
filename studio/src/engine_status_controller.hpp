@@ -1,10 +1,9 @@
 #pragma once
 
-// Engine-status controller (MED-5 part 1): extracted from main_window.{hpp,cpp}
-// as a pure refactor — no behavior change. MainWindow keeps the wiring (the
-// 1.5s QTimer, the QFutureWatcher plumbing, the widget painting with its
-// MainWindow tr() context); the status *decision* and the worker-only
-// ready-wait live here so they are unit-testable without widgets.
+// Engine-status controller (MED-5 part 1): the status *decision* and the
+// worker-only ready-wait live here so they are unit-testable without
+// widgets; StudioBridge owns the poll timer, the QFutureWatcher plumbing
+// and the QML-facing status properties.
 //
 // Status contract (docs/known-issues.md item 1): the first get_state after
 // pipe-up may report running:false until the video actually starts; Studio

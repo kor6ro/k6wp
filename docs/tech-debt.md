@@ -6,13 +6,10 @@ Generated: 2026-09-20
 
 ## TODO/FIXME/HACK occurrences
 
-- `README.md:20` — `<!-- TODO: add Studio screenshot (e.g. docs/img/studio.png) -->`
-- `README.md:21` — `<!-- TODO: add desktop playback GIF (e.g. docs/img/demo.gif) -->`
-- `README.md:167` — `<!-- TODO: add donation link (e.g. https://example.com/donate) -->`
-- `README.md:168` — `<!-- TODO: add sponsor link (e.g. https://example.com/sponsor) -->`
-- `SECURITY.md:8` — `<!-- TODO: add private contact (e.g. security@<domain>) -->`
-
-**Total: 5 occurrences across 2 files.**
+None remain in shipped source. The five placeholders formerly listed here
+(README screenshots/donation/sponsor, SECURITY contact) were resolved before
+1.2.0. The only remaining `TODO`-shaped strings are deliberate runtime
+disable sentinels in `shared/links.hpp` and `studio/src/update_checker.cpp`.
 
 - **RESOLVED (2026-09-24, structural review): `shared/links.hpp` URLs** —
   the four `TODO: replace with donation URL` placeholders now hold the real

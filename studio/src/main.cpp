@@ -129,9 +129,6 @@ int main(int argc, char* argv[]) {
   // the default style.
   QQuickStyle::setStyle(QStringLiteral("Material"));
 
-  // Phase 1 shell. MainWindow and its tab widgets stay in the build and stay
-  // compiled (they are simply not instantiated yet); they are removed in a
-  // later phase of the Widgets -> QML migration.
   k6wp::QmlShell window;
   window.showMaximized();
   // Re-applied after show() so the icon lands on a real HWND. Do not verify

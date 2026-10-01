@@ -23,24 +23,24 @@ namespace k6wp {
 //
 // T15 shared-client ownership (one IpcClient per Studio process, for Wave-E):
 //
-//   MainWindow owns:  IpcClient ipc_      (member, lives with the window)
-//        | borrows (non-owning raw ptr, set once in MainWindow ctor)
+//   StudioBridge owns:  IpcClient ipc_   (member, lives with the bridge)
+//        | borrows (non-owning raw ptr, set once in the StudioBridge ctor)
 //        v
 //   ApplyManager::ipc_  ── never new/delete, never null after wiring ──
 //        |
 //        +-- Apply()/WriteConfig()/RestartEngine() use it for SetVideo/
-//            SetMonitor/GetState. Status poll, pause/resume use
-//            MainWindow::ipc_ directly (same object).
-//   LibraryWidget holds NO client: double-click/context Apply only guard
-//   the path and emit ApplyRequested; MainWindow::ApplyVideoPath does the
-//   single IPC live-switch. Exactly-once at the connection level (T13).
+//            SetMonitor/GetState. Status poll, pause/resume use the same
+//            shared client through StudioBridge.
+//   LibraryGridModel holds NO client: its row actions emit applyRequested /
+//   recompressRequested; StudioBridge::applyWallpaper does the single IPC
+//   live-switch. Exactly-once at the connection level (T13).
 //
-// Lifetime: MainWindow (QObject parent) outlives every apply call; the
+// Lifetime: StudioBridge (QObject parent) outlives every apply call; the
 // shared-client transactions serialize inside IpcClient::Send (mutex_).
 //
 // HIGH-3 slice B: every blocking op (Apply, RestartEngine's 8s process wait
 // and pipe-ready poll) runs on a CALLER-OWNED QtConcurrent worker, never on
-// the GUI thread. MainWindow runs Apply on its apply watcher and paints the
+// the GUI thread. StudioBridge runs Apply on its watcher and paints the
 // returned ApplyResult; the GUI disables its buttons and shows an
 // indeterminate progress bar while busy. Cancellation is cooperative: an
 // atomic flag polled in short (<=100ms) slices — never TerminateThread.

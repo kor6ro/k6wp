@@ -90,8 +90,7 @@ class CompressController {
   static QString DefaultWallpapersDir();
 
   // Resolves the effective output dir: explicit override wins, then the
-  // settings dir, then the default above (created on disk). Was
-  // MainWindow::ResolveTabOutDir.
+  // settings dir, then the default above (created on disk).
   static QString ResolveTabOutDir(const QString& override_dir,
                                   const QString& settings_dir);
 
@@ -99,7 +98,6 @@ class CompressController {
   // match_monitor = primary monitor native size, source = probed input size,
   // 720p/1080p/2160p = fixed. Falls back to 1280x720. Probe-free unless mode
   // is "source" (only "source" consults probed; nullptr = no probe ran).
-  // Was the anonymous-namespace ResolveSimpleRes in main_window.cpp.
   static void ResolveSimpleRes(const std::string& mode,
                                const VideoMetadata* probed, int& w, int& h);
 
@@ -110,14 +108,13 @@ class CompressController {
 
   // Fresh-read of the engine fps cap so external config edits apply without
   // a restart; a corrupt config falls back to the "<config>.bak"
-  // (keep-last-valid path), then to the schema default. Shared by
-  // CompressorTabWidget and ImportDialog (was duplicated in both).
+  // (keep-last-valid path), then to the schema default. Shared by the
+  // Compress and import paths.
   static int ResolveEngineFpsCap();
 
   // Builds a tab compress request (output dir, quality, resolution). The
   // compressor CLI requires an explicit positive WxH (it rejects 0x0), so
-  // the caller resolves "source" mode via ResolveSimpleRes first. Was
-  // MainWindow::BuildTabRequest.
+  // the caller resolves "source" mode via ResolveSimpleRes first.
   static CompressRequest BuildTabRequest(const TabRequestInputs& in);
 
  private:
