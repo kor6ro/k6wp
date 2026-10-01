@@ -114,4 +114,16 @@ add_test(NAME tray_menu_test COMMAND tray_menu_test)
 add_executable(crash_dump_prune_test ../tests/crash_dump_prune_test.cpp src/crash_dump_prune.cpp)
 target_include_directories(crash_dump_prune_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 add_test(NAME crash_dump_prune_test COMMAND crash_dump_prune_test)
+
+# engine_units_test (P0-3): pure-logic coverage for the units split out of
+# engine_app.cpp - cli_options (argv), PauseController (owner bitmask),
+# PendingCommandQueue (worker->main handoff) and TestSimulator (QA schedule).
+# windows.h-free; no engine_app / mpv link deps.
+add_executable(engine_units_test
+  ../tests/engine_units_test.cpp
+  src/cli_options.cpp
+  src/test_simulator.cpp
+)
+target_include_directories(engine_units_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+add_test(NAME engine_units_test COMMAND engine_units_test)
 endif()

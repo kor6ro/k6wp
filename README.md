@@ -145,7 +145,7 @@ cmake --preset release
 cmake --build --preset release
 ```
 
-Unit tests (`BUILD_TESTING=ON`, msvc-dev preset only): **22 CTest suites**,
+Unit tests (`BUILD_TESTING=ON`, msvc-dev preset only): **23 CTest suites**,
 all of which must exit 0. The authoritative list is the `add_test(NAME ...)`
 calls in each module's `CMakeLists.txt`:
 
@@ -154,11 +154,12 @@ calls in each module's `CMakeLists.txt`:
   `ipc_test` (NDJSON protocol round-trips), `sha1_test` (RFC 3174 vectors),
   `proc_util_test` (the `RunCaptured` subprocess helper), `playlist_test`
   (playlist.json io/validation/migration + rotation helpers).
-- `engine/CMakeLists.txt` (5): `occlusion_test` (occlusion_watch pure
+- `engine/CMakeLists.txt` (6): `occlusion_test` (occlusion_watch pure
   helpers), `ipc_marshal_test` (the PostMessage marshal payload),
   `gpu_pin_test` (the gpu_pin VendorId table), `tray_menu_test` (tray popup
   construction, incl. USER-handle balance), `crash_dump_prune_test` (the
-  crash-dump retention cap).
+  crash-dump retention cap), `engine_units_test` (cli_options argv,
+  PauseController bitmask, PendingCommandQueue handoff, TestSimulator).
 - `studio/CMakeLists.txt` (6): `studio_async_test` (offscreen Qt proof that
   IPC/engine waits do not block the GUI thread), `thumbnailer_test`,
   `library_crud_test` (LibraryManager metadata-index CRUD plus
