@@ -48,9 +48,37 @@ std::string FriendlyId(const char* id) {
   return "Terjadi kesalahan tidak diketahui.";
 }
 
+std::string EscapeJsonString(const std::string& s) {
+  std::string out;
+  out.reserve(s.size() + 8);
+  for (const unsigned char c : s) {
+    switch (c) {
+      case '"': out += "\\\""; break;
+      case '\\': out += "\\\\"; break;
+      case '\b': out += "\\b"; break;
+      case '\f': out += "\\f"; break;
+      case '\n': out += "\\n"; break;
+      case '\r': out += "\\r"; break;
+      case '\t': out += "\\t"; break;
+      default:
+        if (c < 0x20) {
+          char hex[8] = {};
+          std::snprintf(hex, sizeof(hex), "\\u%04x", c);
+          out += hex;
+        } else {
+          out += static_cast<char>(c);
+        }
+    }
+  }
+  return out;
+}
+
 std::string FormatError(const char* friendly_id, const std::string& technical_detail) {
-  return std::string("{\"friendly\":\"") + FriendlyId(friendly_id) +
-         "\",\"technical\":\"" + technical_detail + "\"}";
+  // Escape the detail: it routinely carries Windows paths (backslashes); an
+  // unescaped payload is not valid JSON and would break the first consumer that
+  // actually parses it instead of substring-matching.
+  return std::string("{\"friendly\":\"") + EscapeJsonString(FriendlyId(friendly_id)) +
+         "\",\"technical\":\"" + EscapeJsonString(technical_detail) + "\"}";
 }
 
 // ---- RAII handle guard ----
@@ -276,6 +304,19 @@ int RunFfmpegJob(const FfmpegJobOptions& opts, std::string& error) {
   }
   HandleGuard proc(pi.hProcess);
   CloseHandle(pi.hThread);
+
+  // Reap ffmpeg if THIS process dies. Studio's cancel calls TerminateProcess on
+  // the compressor, which skips every cleanup below; without a job object the
+  // ffmpeg child would keep encoding and the partial output would survive.
+  HandleGuard job(CreateJobObjectW(nullptr, nullptr));
+  if (job.get() != nullptr) {
+    JOBOBJECT_EXTENDED_LIMIT_INFORMATION jeli{};
+    jeli.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+    if (SetInformationJobObject(job.get(), JobObjectExtendedLimitInformation,
+                                &jeli, sizeof(jeli))) {
+      AssignProcessToJobObject(job.get(), proc.get());
+    }
+  }
 
   g_cancel.store(false, std::memory_order_release);
   g_job_active.store(true, std::memory_order_release);
