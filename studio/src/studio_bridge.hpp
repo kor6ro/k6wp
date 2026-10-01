@@ -364,6 +364,9 @@ class StudioBridge : public QObject {
   QFutureWatcher<QString>* poster_watcher_ = nullptr;
   bool poll_busy_ = false;
   bool poster_busy_ = false;
+  // Latest poster request that arrived while one was already running; re-issued
+  // when the in-flight job finishes so the wrong video's poster is never left.
+  QString pending_poster_video_;
   // 0 = no pause/resume in flight, 1 = pause, 2 = resume (MainWindow's
   // pending_pause_op_).
   int pending_pause_op_ = 0;

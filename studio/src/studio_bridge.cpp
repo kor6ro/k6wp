@@ -131,9 +131,18 @@ StudioBridge::StudioBridge(QObject* parent) : QObject(parent) {
 
 StudioBridge::~StudioBridge() {
   // The QML engine owns this singleton, so the destruction order is: engine
-  // teardown -> here. Stop the timer first so no NEW poll is launched. A poll
-  // already in flight is bounded by the 2s pipe ack deadline inside Send.
+  // teardown -> here. Stop the timer so no NEW poll launches, then cancel and
+  // drain every in-flight worker BEFORE members die: each lambda captures
+  // `this` and touches ipc_/thumb_, and the watcher QObject children are
+  // destroyed after the members, so a still-running worker would use freed
+  // state. RequestCancel() aborts the cancellable IPC waits quickly.
   poll_timer_->stop();
+  ipc_.RequestCancel();
+  if (poll_watcher_) poll_watcher_->waitForFinished();
+  if (start_watcher_) start_watcher_->waitForFinished();
+  if (apply_watcher_) apply_watcher_->waitForFinished();
+  if (pause_watcher_) pause_watcher_->waitForFinished();
+  if (poster_watcher_) poster_watcher_->waitForFinished();
 }
 
 // --- status ----------------------------------------------------------------
@@ -647,8 +656,10 @@ void StudioBridge::requestPoster(const QString& video_path) {
     return;
   }
   if (poster_busy_) {
+    pending_poster_video_ = video_path;
     return;
   }
+  pending_poster_video_.clear();
   poster_busy_ = true;
   // Cache miss: GetThumb spawns ffmpeg, so it runs on a worker. It returns an
   // empty path on ANY failure and never throws, so the QML Image just stays
@@ -667,13 +678,17 @@ void StudioBridge::OnPosterDone() {
     if (!thrown.isEmpty()) {
       AppendLog(thrown);
     }
-    return;
+  } else if (poster_path_ != path) {
+    poster_path_ = path;
+    emit posterChanged();
   }
-  if (poster_path_ == path) {
-    return;
+  // A request that arrived while this job ran was deferred; re-issue it now so
+  // the poster follows the newest selection instead of the finished video.
+  if (!pending_poster_video_.isEmpty()) {
+    const QString next = pending_poster_video_;
+    pending_poster_video_.clear();
+    requestPoster(next);
   }
-  poster_path_ = path;
-  emit posterChanged();
 }
 
 // --- update check -----------------------------------------------------------
