@@ -14,6 +14,7 @@
 #include <memory>
 #include <string>
 
+#include "cli_options.hpp"
 #include "config_watch.hpp"
 #include "fullscreen_watch.hpp"
 #include "ipc_server.hpp"
@@ -25,29 +26,6 @@
 #include "tray.hpp"
 
 namespace k6wp {
-
-// Desktop injection strategy (Todo 9). Parsed from --wallpaper-mode.
-enum class WallpaperMode { kAuto, kWorkerW, kProgman };
-
-// Parsed command-line options. See ParseCli().
-// Canonical silent spelling is --minimized; --engine/--silent are compat
-// aliases (old autostart entries keep working). Test flags below are hidden
-// from --help but fully parsed; developer doc: docs/dev-test-flags.md.
-struct CliOptions {
-  std::wstring video_path;   // --video <path> (mpv source, Todo 10)
-  std::wstring config_path;  // --config <path> (config_watch, Todo 11)
-  WallpaperMode wallpaper_mode = WallpaperMode::kAuto;  // --wallpaper-mode
-  bool minimized = false;  // --minimized (Todo 36: tray-only autostart start)
-  int exit_after_ms = 0;  // --exit-after-ms <N> (hidden test flag; 0 = run forever)
-  int simulate_device_lost_after_ms = 0;  // hidden test flag; 0 = never
-  int simulate_suspend_after_ms = 0;  // hidden test flag; 0 = never (resume fires +2s)
-  int simulate_dc_after_ms = 0;  // hidden test flag; 0 = never (AC restore fires +2s)
-  int simulate_monitor_off_after_ms = 0;  // hidden test flag; 0 = never (monitor on fires +2s)
-};
-
-// Parses argv into `out`. Returns 0 on success, 1 if --help was shown
-// (caller exits 0), 2 on malformed arguments (caller exits 2).
-int ParseCli(int argc, char** argv, CliOptions& out);
 
 // Single-instance guard (Todo 14): named mutex held for the process
 // lifetime; the destructor releases it automatically. Never touched by
