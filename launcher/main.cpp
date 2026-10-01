@@ -263,6 +263,10 @@ bool WaitForEnginePipe(DWORD timeout_ms) {
     if (GetTickCount64() - start >= timeout_ms) {
       return false;
     }
+    // WaitNamedPipeW returns immediately with ERROR_FILE_NOT_FOUND while the
+    // pipe does not exist yet (its timeout only applies to a busy pipe), so
+    // without this sleep the loop burns a full core during engine boot.
+    Sleep(kPipeReadyPollMs);
   }
 }
 
@@ -914,12 +918,29 @@ std::string EscapeBackupJson(const std::wstring& wide) {
 
 bool WriteLockscreenBackup(const std::filesystem::path& backup_path,
                            bool had_value, const std::wstring& value) {
-  std::ofstream out(backup_path, std::ios::binary | std::ios::trunc);
-  if (!out) return false;
-  out << "{\"had_value\":" << (had_value ? "true" : "false") << ",\"value\":\""
-      << EscapeBackupJson(value) << "\"}";
-  out.flush();
-  return static_cast<bool>(out);
+  // Crash-safe publish (same contract as config.json): write a sibling .tmp,
+  // then replace atomically. Losing this file loses the user's pre-K6WP policy
+  // permanently, so a truncated in-place write is not acceptable here.
+  const std::filesystem::path tmp =
+      backup_path.parent_path() /
+      (backup_path.filename().wstring() + L".tmp");
+  {
+    std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+    if (!out) return false;
+    out << "{\"had_value\":" << (had_value ? "true" : "false") << ",\"value\":\""
+        << EscapeBackupJson(value) << "\"}";
+    out.flush();
+    if (!out) {
+      DeleteFileW(tmp.c_str());
+      return false;
+    }
+  }
+  if (!MoveFileExW(tmp.c_str(), backup_path.c_str(),
+                   MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+    DeleteFileW(tmp.c_str());
+    return false;
+  }
+  return true;
 }
 
 bool ReadLockscreenBackup(const std::filesystem::path& backup_path,
@@ -1305,16 +1326,23 @@ int RunElevateLockscreen(const Options& opts) {
                           L"it untouched.\n");
     return 0;
   }
+  const bool backup_exists = std::filesystem::exists(backup, ec);
   bool had_value = false;
   std::wstring old_value;
-  if (ReadLockscreenBackup(backup, had_value, old_value) && had_value &&
-      !old_value.empty()) {
+  const bool backup_ok = ReadLockscreenBackup(backup, had_value, old_value);
+  if (backup_ok && had_value && !old_value.empty()) {
     if (!WriteLockscreenPolicy(old_value)) {
       std::fwprintf(stderr, L"K6WP: error: cannot restore the LockScreenImage "
                             L"policy (%ls).\n",
                     FormatSysError(GetLastError()).c_str());
       return 3;
     }
+  } else if (backup_exists && !backup_ok) {
+    // The backup exists but could not be read: removing the policy now would
+    // destroy the only record of the user's pre-K6WP wallpaper with no way back.
+    std::fwprintf(stderr, L"K6WP: error: lockscreen backup is unreadable; "
+                          L"refusing to remove the policy.\n");
+    return 3;
   } else if (!DeleteLockscreenPolicy()) {
     std::fwprintf(stderr, L"K6WP: error: cannot remove the LockScreenImage "
                           L"policy (%ls).\n",
