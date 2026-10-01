@@ -19,6 +19,7 @@
 
 #include <cstdarg>
 #include <cstdio>
+#include <exception>
 #include <filesystem>
 
 #include "log_file.hpp"
@@ -371,7 +372,10 @@ void TrayIcon::OnMenuCommand(unsigned id) {
       Log("tray: menu Quick-switch[%llu] selected", static_cast<unsigned long long>(idx));
       if (cb.on_quick_switch) cb.on_quick_switch(idx);
     }
+  } catch (const std::exception& e) {
+    Log("tray: menu handler threw: %s", e.what());
   } catch (...) {
+    Log("tray: menu handler threw an unknown exception");
   }
 }
 
