@@ -143,6 +143,8 @@ add_executable(engine_state_test
   src/pin_verify_schedule.cpp
   src/playlist_controller.cpp
   src/occlusion_poke_scheduler.cpp
+  src/ipc_command_marshal.cpp
+  src/ipc_marshal.cpp
 )
 target_link_libraries(engine_state_test PRIVATE k6wp_shared user32)
 target_include_directories(engine_state_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)

@@ -2,11 +2,13 @@
 // EngineApp: PinVerifySchedule (deadline + revert counter) and
 // PlaylistController (reload + snapshot + one-shot rotation) with fake hooks.
 
+#include "ipc_command_marshal.hpp"
 #include "occlusion_poke_scheduler.hpp"
 #include "pin_verify_schedule.hpp"
 #include "playlist_controller.hpp"
 
 #include "playlist.hpp"
+#include "thirdparty/json.hpp"
 
 #include <cstdio>
 #include <filesystem>
@@ -145,6 +147,32 @@ int main() {
     live = false;
     s.OnTimer();
     Check(checks == 1, "poke: OnTimer skips the check when not live");
+  }
+
+  // IpcCommandMarshal: a well-formed command is validated then dropped when no
+  // hidden window is set; a bad payload is rejected before anything is queued.
+  {
+    const auto dir = TempDir();
+    const auto file = dir / "v.mp4";
+    Touch(file);
+    k6wp::IpcCommandMarshal m;
+    std::string out;
+
+    Check(!m.QueueVideo("{\"path\":\"\"}"),
+          "marshal: empty path rejected");
+    Check(!m.TakeVideo(&out), "marshal: nothing queued after reject");
+
+    nlohmann::json j;
+    j["path"] = file.u8string();
+    Check(!m.QueueVideo(j.dump()),
+          "marshal: valid path dropped without a window");
+    Check(!m.TakeVideo(&out), "marshal: dropped video not left queued");
+
+    Check(!m.QueueMonitor("{\"monitor\":0}"),
+          "marshal: monitor dropped without a window");
+    Check(!m.TakeMonitor(&out), "marshal: dropped monitor not left queued");
+    Check(!m.QueueMonitor("{\"monitor\":\"x\"}"),
+          "marshal: non-integer monitor rejected");
   }
 
   std::printf(g_failures == 0 ? "RESULT: ALL ENGINE-STATE CHECKS PASSED\n"
