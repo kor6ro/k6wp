@@ -142,6 +142,25 @@ HWND FindWorkerWStrategyB(const DesktopWindows& d) {
   return nullptr;
 }
 
+// Sends the shell's 0x052C "spawn WorkerW" message to Progman and returns the
+// resulting WorkerW (if any) plus the DefView found afterwards. Does not log:
+// the caller distinguishes a SendMessageTimeoutW failure from "sent but no
+// WorkerW appeared" (the call sites log differing fall-back text).
+struct SpawnWorkerWResult {
+  bool sent = false;
+  HWND workerw = nullptr;
+  HWND def_view = nullptr;
+};
+SpawnWorkerWResult SpawnWorkerWViaProgman(HWND progman) {
+  DWORD_PTR result = 0;
+  if (!SendMessageTimeoutW(progman, kSpawnWorkerW, kSpawnWorkerWWParam,
+                           kSpawnWorkerWLParam, SMTO_NORMAL, 1000, &result)) {
+    return {false, nullptr, nullptr};
+  }
+  const DesktopWindows after = FindDesktopWindows();
+  return {true, FindWorkerWStrategyB(after), after.def_view};
+}
+
 // 24H2 detection: Progman carries WS_EX_NOREDIRECTIONBITMAP.
 bool IsWin11_24H2(HWND progman) {
   if (!progman) return false;
@@ -332,19 +351,14 @@ struct DesktopInjector::Impl {
         layered = true;
         Logf("desktop-inject: strategy forced workerw -> Strategy A WorkerW 0x%p", a);
       } else {
-        DWORD_PTR result = 0;
-        if (SendMessageTimeoutW(d.progman, kSpawnWorkerW, kSpawnWorkerWWParam,
-                                kSpawnWorkerWLParam, SMTO_NORMAL, 1000,
-                                &result)) {
-          const DesktopWindows after = FindDesktopWindows();
-          HWND b = FindWorkerWStrategyB(after);
-          if (b) {
-            target = b;
-            insert_after = HWND_BOTTOM;
-            layered = true;
-            Logf("desktop-inject: strategy forced workerw -> Strategy B empty WorkerW 0x%p", b);
-          }
-        } else {
+        const SpawnWorkerWResult spawn = SpawnWorkerWViaProgman(d.progman);
+        if (spawn.workerw) {
+          target = spawn.workerw;
+          insert_after = HWND_BOTTOM;
+          layered = true;
+          Logf("desktop-inject: strategy forced workerw -> Strategy B empty WorkerW 0x%p",
+               spawn.workerw);
+        } else if (!spawn.sent) {
           Logf("desktop-inject: 0x052C SendMessageTimeoutW timeout/failed (error %lu)",
                GetLastError());
         }
@@ -358,18 +372,13 @@ struct DesktopInjector::Impl {
       // it and prefer it when it appears -- that is Microsoft's arrangement
       // (our surface above the wallpaper layer, below the icons). Without one,
       // fall back to a layered child of Progman directly below DefView.
-      DWORD_PTR spawned = 0;
-      if (SendMessageTimeoutW(d.progman, kSpawnWorkerW, kSpawnWorkerWWParam,
-                              kSpawnWorkerWLParam, SMTO_NORMAL, 1000, &spawned)) {
-        const DesktopWindows after = FindDesktopWindows();
-        const HWND wallpaper_layer = FindWorkerWStrategyB(after);
-        if (wallpaper_layer) {
-          target = wallpaper_layer;
-          insert_after = after.def_view ? after.def_view : HWND_BOTTOM;
-          layered = true;
-          Logf("desktop-inject: 24H2 path -> wallpaper WorkerW 0x%p (Progman child)",
-               wallpaper_layer);
-        }
+      const SpawnWorkerWResult spawn = SpawnWorkerWViaProgman(d.progman);
+      if (spawn.workerw) {
+        target = spawn.workerw;
+        insert_after = spawn.def_view ? spawn.def_view : HWND_BOTTOM;
+        layered = true;
+        Logf("desktop-inject: 24H2 path -> wallpaper WorkerW 0x%p (Progman child)",
+             spawn.workerw);
       }
       if (!target) {
         target = d.progman;
@@ -389,19 +398,13 @@ struct DesktopInjector::Impl {
         Logf("desktop-inject: Strategy A -> WorkerW 0x%p (hosts DefView)", a);
       } else {
         // Try to spawn a WorkerW via 0x052C (Strategy B).
-        DWORD_PTR result = 0;
-        if (SendMessageTimeoutW(d.progman, kSpawnWorkerW, kSpawnWorkerWWParam,
-                                kSpawnWorkerWLParam, SMTO_NORMAL, 1000,
-                                &result)) {
-          const DesktopWindows after = FindDesktopWindows();
-          HWND b = FindWorkerWStrategyB(after);
-          if (b) {
-            target = b;
-            insert_after = HWND_BOTTOM;
-            layered = true;
-            Logf("desktop-inject: Strategy B -> empty WorkerW 0x%p", b);
-          }
-        } else {
+        const SpawnWorkerWResult spawn = SpawnWorkerWViaProgman(d.progman);
+        if (spawn.workerw) {
+          target = spawn.workerw;
+          insert_after = HWND_BOTTOM;
+          layered = true;
+          Logf("desktop-inject: Strategy B -> empty WorkerW 0x%p", spawn.workerw);
+        } else if (!spawn.sent) {
           Logf("desktop-inject: 0x052C SendMessageTimeoutW timeout/failed (error %lu), falling back to Progman",
                GetLastError());
         }
