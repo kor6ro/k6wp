@@ -73,10 +73,6 @@ class FullscreenWatch {
   // on EngineApp::kMpvHwdecChangeMessage.
   static constexpr unsigned PokeMessageId() { return 0x8000u + 0x0053u; }
 
-  // True when BOTH hooks installed (event path live). Poll() remains as
-  // the safety net either way.
-  bool IsHookActive() const { return hook_active_; }
-
   // HOTFIX (occlusion resume): destroy of a tracked fullscreen window.
   // Loop thread only (routed from the PokeMessageId handler). When the
   // destroyed HWND is the tracked fullscreen holder, the bit clears
@@ -94,12 +90,6 @@ class FullscreenWatch {
   // evaluation (F11-entry cascades complete without poll luck).
   // Public because EngineApp routes the locationchange message to it.
   void OnWindowMoved(void* hwnd);
-
-  // Last-reported state (true = a fullscreen app currently covers a
-  // monitor). Valid after Start(); false before Start()/after Stop().
-  bool IsFullscreen() const { return fullscreen_; }
-
-  static constexpr int PollIntervalMs() { return kPollIntervalMs; }
 
   // windows.h-free predicate for the core rule (also directly testable):
   // rect (l,t,r,b) covers monitor (ml,mt,mr,mb) exactly AND `style` has no

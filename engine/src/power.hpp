@@ -76,9 +76,6 @@ class PowerSaver {
   // config on_change callback.
   void Update();
 
-  PowerSaverState state() const { return state_; }
-  static const char* StateToString(PowerSaverState state);
-
  private:
   void Log(const std::string& message) const {
     if (log_) log_(message);

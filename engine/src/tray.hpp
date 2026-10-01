@@ -45,14 +45,13 @@ inline constexpr unsigned kTrayResourceIdPaused = 102;
 
 // Menu command ids (private range, must not clash with anything else: the
 // engine message window owns no other menus).
-inline constexpr unsigned kTrayCmdTogglePause = 1001;  // legacy single toggle
 inline constexpr unsigned kTrayCmdOpenStudio = 1002;
 inline constexpr unsigned kTrayCmdExit = 1003;
 inline constexpr unsigned kTrayCmdNextWallpaper = 1004;
 // Task 21: separate Pause / Resume entries (gray-state driven by is_paused).
-// kTrayCmdTogglePause stays as a compat alias — both new ids funnel through
-// the same on_toggle_pause callback, guarded by the live paused state, so no
-// EngineApp change is needed (EngineApp only sees OnMenuCommand ids).
+// Both ids funnel through the same on_toggle_pause callback, guarded by the
+// live paused state, so no EngineApp change is needed (EngineApp only sees
+// OnMenuCommand ids).
 inline constexpr unsigned kTrayCmdPause = 1005;
 inline constexpr unsigned kTrayCmdResume = 1006;
 // Donation touchpoint (non-intrusive): "Support the developer" tray item
@@ -135,11 +134,6 @@ class TrayIcon {
   unsigned taskbar_created_msg() const {
     std::lock_guard<std::mutex> lock(mutex_);
     return taskbar_created_msg_;
-  }
-
-  bool installed() const {
-    std::lock_guard<std::mutex> lock(mutex_);
-    return installed_;
   }
 
   // Centralized icon state update: computes the effective paused state

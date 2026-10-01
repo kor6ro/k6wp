@@ -109,14 +109,6 @@ class MpvRenderer {
     return hwdec_active_.load(std::memory_order_relaxed);
   }
 
-  // Is mpv initialized and ready?
-  bool IsReady() const { return initialized_; }
-
-  // Is the renderer currently paused (atomic, no mutex)?
-  bool IsPaused() const {
-    return paused_.load(std::memory_order_relaxed);
-  }
-
   // Registers the engine hidden window for PROPERTY_CHANGE notifications.
   // Called once by EngineApp during Init (Todo 7); until set, the event
   // thread handles property changes inline (pre-P2.4 behavior preserved).

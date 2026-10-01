@@ -510,10 +510,6 @@ void* DesktopInjector::injected_hwnd() const {
   return impl_ ? impl_->injected : nullptr;
 }
 
-bool DesktopInjector::is_layered_path() const {
-  return impl_ ? impl_->layered_path : false;
-}
-
 void DesktopInjector::ReassertFrameless() {
   if (!impl_ || !impl_->injected) return;
   // Re-anchor enforcement: Explorer recreations must never leave a

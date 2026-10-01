@@ -78,9 +78,6 @@ class DesktopInjector {
   // owns it and will destroy it in Detach()/destructor.
   void* injected_hwnd() const;
 
-  // Was the last successful attach via Progman (24H2 layered path)?
-  bool is_layered_path() const;
-
   // Re-assert the frameless wallpaper surface style on the live injected
   // window (WS_POPUP|WS_CLIPCHILDREN, no frame bits; ex TOOLWINDOW|NOACTIVATE
   // + LAYERED, no APPWINDOW). Called from Reanchor paths after Attach so

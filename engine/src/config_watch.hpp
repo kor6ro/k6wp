@@ -102,10 +102,6 @@ class ConfigWatcher {
   // Returns a default config if no file was ever successfully loaded.
   WallpaperConfig GetConfig() const;
 
-  static constexpr int PollIntervalMs() { return kPollIntervalMs; }
-  // P2.1 (Todo 3): 250 ms quiet-period debounce. NEVER exceed (acceptance
-  // cap); no new periodic wakeups — the timer is armed only by FS events.
-  static constexpr int DebounceMs() { return kDebounceMs; }
   // P2.1 (Todo 3): hidden-window timer id for the config debounce. Carried
   // as uintptr_t so this header stays windows.h-free (cast to UINT_PTR at
   // the SetTimer/KillTimer/WM_TIMER sites in the .cpp + engine_app.cpp).

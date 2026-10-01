@@ -80,20 +80,6 @@ void PowerSaver::Update() {
   state_ = PowerSaverState::kAcFullRate;
 }
 
-const char* PowerSaver::StateToString(PowerSaverState state) {
-  switch (state) {
-    case PowerSaverState::kDisabled:
-      return "disabled";
-    case PowerSaverState::kInertNoBattery:
-      return "inert-no-battery";
-    case PowerSaverState::kAcFullRate:
-      return "ac-full-rate";
-    case PowerSaverState::kDcCapped:
-      return "dc-capped";
-  }
-  return "unknown";
-}
-
 PowerReading ReadSystemPower(const WallpaperConfig& config) {
   PowerReading reading;
   reading.battery_saver_on = config.battery_saver;

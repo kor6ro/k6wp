@@ -297,10 +297,7 @@ void TrayIcon::OnMenuCommand(unsigned id) {
     }
   }
   try {
-    if (id == kTrayCmdTogglePause) {
-      Log("tray: menu Pause/Resume (toggle) selected");
-      if (cb.on_toggle_pause) cb.on_toggle_pause();
-    } else if (id == kTrayCmdPause) {
+    if (id == kTrayCmdPause) {
       Log("tray: menu Pause selected");
       if (live_paused) {
         Log("tray: Pause ignored (already paused)");

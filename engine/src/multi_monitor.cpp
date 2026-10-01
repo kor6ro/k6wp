@@ -557,17 +557,6 @@ bool MultiMonitor::has_headless_slots() const {
   return false;
 }
 
-int MultiMonitor::layered_slot_count() const {
-  int n = 0;
-  for (const auto& kv : slots_) {
-    if (kv.second.injector && kv.second.injector->injected_hwnd() != nullptr &&
-        kv.second.injector->is_layered_path()) {
-      ++n;
-    }
-  }
-  return n;
-}
-
 int MultiMonitor::headless_slot_count() const {
   int n = 0;
   for (const auto& kv : slots_) {
@@ -576,10 +565,6 @@ int MultiMonitor::headless_slot_count() const {
     }
   }
   return n;
-}
-
-bool MultiMonitor::has_monitor(int id) const {
-  return slots_.find(id) != slots_.end();
 }
 
 std::vector<int> MultiMonitor::monitor_ids() const {

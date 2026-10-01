@@ -85,8 +85,6 @@ class OcclusionWatch {
  public:
   // Unpaused-loop cadence doubling as the occlusion tick (Todo 7).
   static constexpr int kTickMs = 1500;
-  static constexpr double kPauseAt = 0.95;
-  static constexpr double kResumeBelow = 0.90;
 
   // Loop-thread re-arm note: WM_APP (0x8000) + 0x52. Posted by
   // OnPauseMaskChanged when the mask returns to zero (any thread posts;

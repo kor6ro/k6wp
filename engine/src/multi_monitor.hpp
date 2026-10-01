@@ -69,7 +69,6 @@ class MultiMonitor {
   // Empty = unpinned. Survives OnDisplayChange/Reanchor (instances kept);
   // VerifyPinAndRevert() drops it per-slot on revert.
   void SetAdapterPin(const std::string& substr);
-  std::string adapter_pin() const { return adapter_pin_; }
 
   // Enumerate via ListMonitors() and attach. PerMonitor: one slot per
   // monitor; Span: a single slot across the virtual screen. Returns true
@@ -127,7 +126,6 @@ class MultiMonitor {
   void Reanchor();
 
   size_t slot_count() const;
-  bool has_monitor(int id) const;
   std::vector<int> monitor_ids() const;
   MultiMonitorMode mode() const;
 
@@ -136,10 +134,8 @@ class MultiMonitor {
   // from injected_hwnd() == nullptr, so a successful Reanchor clears it.
   bool has_headless_slots() const;
 
-  // Slot census (Step 4, for get_state "headless_slots"): layered counts
-  // live injected slots on the layered path; headless counts slots whose
-  // injection failed. Unchanged behavior for has_headless_slots().
-  int layered_slot_count() const;
+  // Slot census (Step 4, for get_state "headless_slots"): headless counts
+  // slots whose injection failed. Unchanged behavior for has_headless_slots().
   int headless_slot_count() const;
 
   // Current virtual-screen geometry (GetSystemMetrics in the .cpp).
