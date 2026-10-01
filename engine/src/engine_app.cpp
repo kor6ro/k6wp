@@ -138,6 +138,7 @@ bool EngineApp::Init(int argc, char** argv) {
     Log("warning: SetConsoleCtrlHandler failed (error %lu)", GetLastError());
   }
   g_message_hwnd.store(message_hwnd_);
+  ipc_marshal_.SetWindow(message_hwnd_);
 
   Log("engine init: video='%ls' config='%ls' wallpaper-mode=%s exit-after-ms=%d",
       options_.video_path.c_str(), options_.config_path.c_str(),
@@ -281,10 +282,10 @@ bool EngineApp::Init(int argc, char** argv) {
   // get_state), get_state reports the live engine state.
   IpcHandlers handlers;
   handlers.set_video = [this](const std::string& payload) {
-    return QueueSetVideo(payload);
+    return ipc_marshal_.QueueVideo(payload);
   };
   handlers.set_monitor = [this](const std::string& payload) {
-    return QueueSetMonitor(payload);
+    return ipc_marshal_.QueueMonitor(payload);
   };
   handlers.pause = [this]() { SetPauseOwner(kPauseUser, true); };
   handlers.resume = [this]() { SetPauseOwner(kPauseUser, false); };
@@ -737,6 +738,7 @@ void EngineApp::Shutdown() {
     DestroyWindow(message_hwnd_);
     message_hwnd_ = nullptr;
     g_message_hwnd.store(nullptr);
+    ipc_marshal_.ClearWindow();
   }
   if (class_registered_) {
     UnregisterClassW(kWindowClassName, hinstance_);
@@ -801,49 +803,9 @@ void EngineApp::OnDisplayChange(int width, int height) {
   UpdateTrayErrorStatus();
 }
 
-bool EngineApp::QueueSetVideo(const std::string& payload_json) {
-  // Worker-side half: validate only (pure, ipc_marshal.hpp). A reject here
-  // acks {"error"} and queues nothing — the old video keeps playing.
-  if (!ValidateSetVideoPayload(payload_json)) {
-    Log("ipc: set_video rejected (missing/invalid path or not a file)");
-    return false;
-  }
-  const HWND hwnd = g_message_hwnd.load(std::memory_order_acquire);
-  pending_.SetVideo(payload_json);
-  // Post AFTER storing: the main thread pops under the same mutex, so it
-  // can never observe the flag without the payload. g_message_hwnd is
-  // atomic and Shutdown nulls it only after ipc_server_.Stop() joined this
-  // worker, so null here means teardown already started — drop loudly.
-  if (hwnd == nullptr || !PostMessageW(hwnd, kSetVideoMessage, 0, 0)) {
-    pending_.ClearVideo();
-    Log("warning: set_video post failed (error %lu), command dropped",
-        GetLastError());
-    return false;
-  }
-  Log("ipc: set_video diterima (queued for main loop, verify via get_state)");
-  return true;
-}
-
-bool EngineApp::QueueSetMonitor(const std::string& payload_json) {
-  if (!ParseSetMonitorPayload(payload_json)) {
-    Log("ipc: set_monitor rejected (missing/invalid \"monitor\" field)");
-    return false;
-  }
-  const HWND hwnd = g_message_hwnd.load(std::memory_order_acquire);
-  pending_.SetMonitor(payload_json);
-  if (hwnd == nullptr || !PostMessageW(hwnd, kSetMonitorMessage, 0, 0)) {
-    pending_.ClearMonitor();
-    Log("warning: set_monitor post failed (error %lu), command dropped",
-        GetLastError());
-    return false;
-  }
-  Log("ipc: set_monitor diterima (queued for main loop, verify via get_state)");
-  return true;
-}
-
 void EngineApp::ApplyPendingSetVideo() {
   std::string payload;
-  if (!pending_.TakeVideo(&payload)) {
+  if (!ipc_marshal_.TakeVideo(&payload)) {
     Log("ipc: set_video main-loop wake with empty queue (ignoring)");
     return;
   }
@@ -855,7 +817,7 @@ void EngineApp::ApplyPendingSetVideo() {
 
 void EngineApp::ApplyPendingSetMonitor() {
   std::string payload;
-  if (!pending_.TakeMonitor(&payload)) {
+  if (!ipc_marshal_.TakeMonitor(&payload)) {
     Log("ipc: set_monitor main-loop wake with empty queue (ignoring)");
     return;
   }

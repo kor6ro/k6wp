@@ -20,6 +20,7 @@ add_executable(engine
   src/config_watch.cpp
   src/ipc_server.cpp
   src/ipc_marshal.cpp  # CRIT-2: worker-side set_video/set_monitor validators
+  src/ipc_command_marshal.cpp  # CRIT-2: worker->main command queue
   src/fullscreen_watch.cpp
   src/occlusion_watch.cpp
   src/power.cpp

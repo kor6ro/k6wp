@@ -30,7 +30,7 @@
 #include "pin_verify_schedule.hpp"
 #include "working_set_trim.hpp"
 #include "pause_controller.hpp"
-#include "pending_queue.hpp"
+#include "ipc_command_marshal.hpp"
 #include "playlist.hpp"
 #include "playlist_controller.hpp"
 #include "test_simulator.hpp"
@@ -123,10 +123,8 @@ class EngineApp {
   // +0x51 fullscreen hook (FullscreenWatch::HookMessageId),
   // +0x52 occlusion re-arm (OcclusionWatch::RearmMessageId),
   // +0x53 destroy poke (FullscreenWatch::PokeMessageId, HOTFIX),
-  // +0x54 queued set_monitor (CRIT-2: worker validates, main executes),
-  // +0x55 queued set_video (CRIT-2: worker validates, main executes).
-  static constexpr UINT kSetMonitorMessage = WM_APP + 0x54u;
-  static constexpr UINT kSetVideoMessage = WM_APP + 0x55u;
+  // +0x54 queued set_monitor / +0x55 queued set_video are
+  // kSetMonitorMessage / kSetVideoMessage in ipc_command_marshal.hpp.
   // Timer IDs live in timer_ids.hpp (central registry with pairwise-distinct
   // static_asserts): kWorkingSetTrimTimerId ('K6WP'+1) and
   // kOcclusionPokeTimerId ('K6WP'+2) are used here; kDebounceTimerId
@@ -147,7 +145,7 @@ class EngineApp {
   void RequestShutdown();
   // CRIT-2 ack contract ("diterima" vs "selesai", LOW-15): the IPC worker
   // thread NEVER executes these — it only validates the payload
-  // (ipc_marshal.hpp) and queues it via QueueSetVideo/QueueSetMonitor, which
+  // (ipc_marshal.hpp) and queues it via IpcCommandMarshal, which
   // PostMessageW kSetVideoMessage/kSetMonitorMessage to the hidden window.
   // The {"ok":true} ack therefore means "diterima" (accepted + queued for
   // the main loop), NOT "selesai" (applied to the desktop). A rejected
@@ -160,7 +158,7 @@ class EngineApp {
   // (→ {"error"} ack, old video keeps playing) when the path is missing, not
   // a file, or the renderer rejects it. MAIN THREAD ONLY (HandleMessage /
   // tray quick-switch / Init boot path); the IPC worker path goes through
-  // ValidateSetVideoPayload + QueueSetVideo instead.
+  // ValidateSetVideoPayload + IpcCommandMarshal::QueueVideo instead.
   //
   // rotation=true marks an automatic playlist rotation: the tray MRU is NOT
   // fed (it stays reserved for genuine user picks) and the lockscreen sync is
@@ -176,17 +174,10 @@ class EngineApp {
   // new target is preserve-merged into the config file (best-effort: persist
   // failure only warns, the live state already changed). MAIN THREAD ONLY
   // (HandleMessage); the IPC worker path goes through
-  // ParseSetMonitorPayload + QueueSetMonitor instead.
+  // ParseSetMonitorPayload + IpcCommandMarshal::QueueMonitor instead.
   bool HandleSetMonitor(const std::string& payload_json);
   std::filesystem::path ResolvedConfigPath() const;
-  // CRIT-2 worker-side halves: validate (pure, ipc_marshal.hpp) + stash the
-  // pending target under marshal_mutex_ + PostMessageW the private UINT to
-  // the hidden window. Return false (→ {"error"} ack) when validation fails
-  // or the post fails (window gone during shutdown — the command is dropped,
-  // never executed off-loop). Called on the IPC worker thread.
-  bool QueueSetVideo(const std::string& payload_json);
-  bool QueueSetMonitor(const std::string& payload_json);
-  // CRIT-2 main-thread halves: pop the pending value under marshal_mutex_
+  // CRIT-2 main-thread halves: pop the pending value (IpcCommandMarshal)
   // and run the matching Handle* executor above. Called from HandleMessage
   // on kSetVideoMessage/kSetMonitorMessage. A lost race (flag set but empty)
   // only logs — shutdown destroys the window, discarding queued posts, so
@@ -333,7 +324,7 @@ class EngineApp {
   // verify pass (main) and get_state-adjacent paths.
   std::atomic<bool> headless_owns_decode_{false};
   // CRIT-2 worker->main handoff; one slot each (last write wins, idempotent).
-  PendingCommandQueue pending_;
+  IpcCommandMarshal ipc_marshal_{&EngineApp::Log};
   // Serializes the get_state payload (raw JSON object text).
   std::string BuildStateJson() const;
   // --- Tray menu actions (Todo 35, all run on the UI thread via WndProc) ----
