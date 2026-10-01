@@ -23,6 +23,7 @@
 #include "mpv_renderer.hpp"
 #include "multi_monitor.hpp"
 #include "cpu_affinity.hpp"
+#include "occlusion_poke_scheduler.hpp"
 #include "occlusion_watch.hpp"
 #include "os_wallpaper.hpp"
 #include "working_set_trim.hpp"
@@ -125,8 +126,7 @@ class EngineApp {
   // Timer IDs live in timer_ids.hpp (central registry with pairwise-distinct
   // static_asserts): kWorkingSetTrimTimerId ('K6WP'+1) and
   // kOcclusionPokeTimerId ('K6WP'+2) are used here; kDebounceTimerId
-  // ('K6WP') belongs to ConfigWatcher. The one-shot poke delay stays local.
-  static constexpr UINT kOcclusionPokeDebounceMs = 150;
+  // ('K6WP') belongs to ConfigWatcher.
 
   static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
   static BOOL WINAPI ConsoleCtrlHandler(DWORD ctrl_type);
@@ -333,12 +333,8 @@ class EngineApp {
   bool VerifyHeadlessPin();
   // P4.1: one-shot working-set trim (loop thread only).
   WorkingSetTrim working_set_trim_{&EngineApp::Log};
-  // HOTFIX (occlusion resume): debounced poke. Loop thread only. Arms the
-  // one-shot poke timer when at least one slot is occlusion-paused (cheap
-  // early-out otherwise); the timer handler runs one direct coverage
-  // check. win_event is logged for the event→poke→check→resume chain.
-  void ScheduleOcclusionPoke(unsigned long win_event);
-  void OnOcclusionPokeTimer();
+  // HOTFIX (occlusion resume): debounced poke scheduler (loop thread only).
+  OcclusionPokeScheduler occlusion_poke_{&EngineApp::Log};
   // Current video path (UTF-8), guarded by video_mutex_. Post-CRIT-2 the
   // executor runs on the main thread (Init() and HandleSetVideo both write
   // there; BuildStateJson reads on the main loop) — the mutex remains as
@@ -360,9 +356,6 @@ class EngineApp {
   mutable std::mutex state_mutex_;
   std::chrono::steady_clock::time_point pin_verify_at_{};
   int pin_reverted_total_ = 0;
-  // HOTFIX: poke debounce state (loop thread only). Armed transiently by
-  // ScheduleOcclusionPoke, cleared by the timer handler or Shutdown.
-  bool occlusion_poke_armed_ = false;
   // True while the headless renderer_ (not the slots) owns decode: the
   // headless half of the verify pass only runs then. CRIT-1: atomic —
   // written by the main-thread set_video/boot executors, read by the

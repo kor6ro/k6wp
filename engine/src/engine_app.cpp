@@ -671,43 +671,6 @@ bool EngineApp::VerifyHeadlessPin() {
   return true;
 }
 
-void EngineApp::ScheduleOcclusionPoke(unsigned long win_event) {
-  // Loop thread only (called from HandleMessage). Cheap guard first: no
-  // occlusion-paused slot means no poke (foreground/minimize storms cost
-  // one slot-count scan, never an EnumWindows).
-  if (occlusion_poke_armed_ ||
-      !wallpaper_surface_live_.load(std::memory_order_acquire))
-    return;
-  bool any_paused = false;
-  for (size_t i = 0; i < multi_monitor_.slot_count(); ++i) {
-    if (multi_monitor_.IsSlotPaused(i)) {
-      any_paused = true;
-      break;
-    }
-  }
-  if (!any_paused) return;
-  if (message_hwnd_ == nullptr) return;
-  if (SetTimer(message_hwnd_, kOcclusionPokeTimerId,
-               kOcclusionPokeDebounceMs, nullptr) == 0) {
-    // Fail-safe (still loop thread): run the check inline instead of
-    // silently dropping the poke.
-    Log("warning: occlusion poke SetTimer failed (error %lu), checking now",
-        GetLastError());
-    occlusion_watch_.CheckNow(multi_monitor_);
-    return;
-  }
-  occlusion_poke_armed_ = true;
-  Log("occlusion: poke scheduled (win-event=0x%lX)",
-      win_event);
-}
-
-void EngineApp::OnOcclusionPokeTimer() {
-  occlusion_poke_armed_ = false;
-  if (!wallpaper_surface_live_.load(std::memory_order_acquire)) return;
-  Log("occlusion: poke check");
-  occlusion_watch_.CheckNow(multi_monitor_);
-}
-
 int EngineApp::Run() {
   running_.store(true, std::memory_order_release);
   const auto start = std::chrono::steady_clock::now();
@@ -874,7 +837,7 @@ void EngineApp::Shutdown() {
     KillTimer(message_hwnd_, kOcclusionPokeTimerId);
   }
   working_set_trim_.Cancel();
-  occlusion_poke_armed_ = false;
+  occlusion_poke_.Disarm();
   // HIGH-1 (audit-remediation): stop the IPC server FIRST, before any
   // renderer/surface teardown. The IPC worker thread runs handlers that
   // dereference renderer_ and multi_monitor_ (set_video -> LoadLoopAll /
@@ -1578,7 +1541,7 @@ LRESULT EngineApp::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
       // never periodic), then run one direct coverage check.
       if (wParam == static_cast<WPARAM>(kOcclusionPokeTimerId)) {
         KillTimer(hwnd, kOcclusionPokeTimerId);
-        OnOcclusionPokeTimer();
+        occlusion_poke_.OnTimer();
         return 0;
       }
       return DefWindowProcW(hwnd, msg, wParam, lParam);
@@ -1589,7 +1552,7 @@ LRESULT EngineApp::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
       // HOTFIX: the same event may have un-covered a slot (focus moved
       // back, window minimized) — schedule a debounced direct check.
       // Cheap no-op unless a slot is occlusion-paused.
-      ScheduleOcclusionPoke(static_cast<unsigned long>(wParam));
+      occlusion_poke_.Schedule(static_cast<unsigned long>(wParam));
       return 0;
     case FullscreenWatch::PokeMessageId():
       // HOTFIX: window geometry notification (wParam = win-event id,
@@ -1604,7 +1567,7 @@ LRESULT EngineApp::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
         fullscreen_watch_.OnWindowMoved(
             reinterpret_cast<void*>(lParam));
       }
-      ScheduleOcclusionPoke(static_cast<unsigned long>(wParam));
+      occlusion_poke_.Schedule(static_cast<unsigned long>(wParam));
       return 0;
     case kMpvHwdecChangeMessage:
       // P2.4 (Todo 7): headless event thread observed hwdec-current /
@@ -1681,6 +1644,18 @@ bool EngineApp::CreateMessageWindow() {
   // timer). Wired here so it exists before InitWallpaperSurface runs.
   occlusion_watch_.SetLog(&EngineApp::Log);
   occlusion_watch_.SetNotifyWindow(message_hwnd_);
+  occlusion_poke_.SetHooks(
+      message_hwnd_,
+      [this]() {
+        return wallpaper_surface_live_.load(std::memory_order_acquire);
+      },
+      [this]() {
+        for (std::size_t i = 0; i < multi_monitor_.slot_count(); ++i) {
+          if (multi_monitor_.IsSlotPaused(i)) return true;
+        }
+        return false;
+      },
+      [this]() { occlusion_watch_.CheckNow(multi_monitor_); });
   return true;
 }
 
