@@ -4,7 +4,7 @@
 <context>
     <name>Main</name>
     <message>
-        <location filename="../qml/Main.qml" line="+203"/>
+        <location filename="../qml/Main.qml" line="+259"/>
         <source>&amp;Berkas</source>
         <translation>&amp;File</translation>
     </message>
@@ -105,17 +105,17 @@
     </message>
     <message>
         <location line="+4"/>
-        <location line="+170"/>
+        <location line="+172"/>
         <source>Hapus</source>
         <translation>Remove</translation>
     </message>
     <message>
-        <location line="-162"/>
+        <location line="-164"/>
         <source>Hapus Entri Perpustakaan</source>
         <translation>Remove Library Entry</translation>
     </message>
     <message>
-        <location line="+7"/>
+        <location line="+9"/>
         <source>Hapus entri untuk:
 %1
 
@@ -209,30 +209,30 @@ File dipindahkan ke Recycle Bin.</source>
     </message>
     <message>
         <location line="+14"/>
-        <location line="+582"/>
+        <location line="+589"/>
         <source>Isi layar:</source>
         <translation>Fill screen:</translation>
     </message>
     <message>
-        <location line="-574"/>
-        <location line="+582"/>
+        <location line="-581"/>
+        <location line="+589"/>
         <source>Isi layar (potong bila perlu)</source>
         <translation>Fill screen (crop if needed)</translation>
     </message>
     <message>
-        <location line="-581"/>
-        <location line="+582"/>
+        <location line="-588"/>
+        <location line="+589"/>
         <source>Sesuaikan (seluruh video terlihat)</source>
         <translation>Fit (whole video visible)</translation>
     </message>
     <message>
-        <location line="-581"/>
-        <location line="+582"/>
+        <location line="-588"/>
+        <location line="+589"/>
         <source>Regang (isi penuh)</source>
         <translation>Stretch (fill)</translation>
     </message>
     <message>
-        <location line="-581"/>
+        <location line="-588"/>
         <source>Tengah (ukuran asli)</source>
         <translation>Center (original size)</translation>
     </message>
@@ -243,47 +243,46 @@ File dipindahkan ke Recycle Bin.</source>
     </message>
     <message>
         <location line="+4"/>
-        <location line="+580"/>
+        <location line="+587"/>
         <source>Layar:</source>
         <translation>Screen:</translation>
     </message>
     <message>
-        <location line="-555"/>
-        <location line="+508"/>
+        <location line="-561"/>
+        <location line="+514"/>
         <location line="+620"/>
         <source>Jalankan saat Windows menyala</source>
         <translation>Start when Windows starts</translation>
     </message>
     <message>
-        <location line="-1121"/>
-        <location line="+508"/>
+        <location line="-1126"/>
+        <location line="+513"/>
         <source>Hemat baterai (wallpaper berhenti saat pakai baterai)</source>
         <translation>Save battery (wallpaper stops on battery power)</translation>
     </message>
     <message>
-        <location line="-488"/>
-        <location line="+818"/>
+        <location line="-493"/>
+        <location line="+823"/>
         <source>Detail teknis (log)</source>
         <translation>Technical details (log)</translation>
     </message>
     <message>
-        <location line="-798"/>
-        <location line="+813"/>
+        <location line="-803"/>
+        <location line="+818"/>
         <source>Log terapkan muncul di sini...</source>
         <translation>Apply log appears here...</translation>
     </message>
     <message>
-        <location line="-741"/>
+        <location line="-746"/>
         <source>Sumber:</source>
         <translation>Source:</translation>
     </message>
     <message>
-        <location line="+11"/>
         <source>(gunakan video saat ini)</source>
-        <translation>(use the current video)</translation>
+        <translation type="vanished">(use the current video)</translation>
     </message>
     <message>
-        <location line="+10"/>
+        <location line="+21"/>
         <source>&amp;Jelajahi...</source>
         <translation>&amp;Browse...</translation>
     </message>
@@ -294,12 +293,12 @@ File dipindahkan ke Recycle Bin.</source>
     </message>
     <message>
         <location line="+4"/>
-        <location line="+472"/>
+        <location line="+477"/>
         <source>Folder output:</source>
         <translation>Output folder:</translation>
     </message>
     <message>
-        <location line="-456"/>
+        <location line="-461"/>
         <source>&amp;Ganti folder...</source>
         <translation>&amp;Change folder...</translation>
     </message>
@@ -374,7 +373,7 @@ File dipindahkan ke Recycle Bin.</source>
         <translation>Automatically apply the compressed result as wallpaper</translation>
     </message>
     <message>
-        <location line="+37"/>
+        <location line="+38"/>
         <source>Mode lanjutan (teknis)</source>
         <translation>Advanced mode (technical)</translation>
     </message>
@@ -384,7 +383,7 @@ File dipindahkan ke Recycle Bin.</source>
         <translation>CRF:</translation>
     </message>
     <message>
-        <location line="+13"/>
+        <location line="+14"/>
         <source>Kualitas CRF 16-28 (bawaan 22)</source>
         <translation>CRF quality 16-28 (default 22)</translation>
     </message>
@@ -394,7 +393,7 @@ File dipindahkan ke Recycle Bin.</source>
         <translation>FPS:</translation>
     </message>
     <message>
-        <location line="+13"/>
+        <location line="+14"/>
         <source>Target bingkai per detik (bawaan 30, maks 30)</source>
         <translation>Target frames per second (default 30, max 30)</translation>
     </message>
@@ -404,7 +403,7 @@ File dipindahkan ke Recycle Bin.</source>
         <translation>Resolution:</translation>
     </message>
     <message>
-        <location line="+7"/>
+        <location line="+8"/>
         <source>mis. 1920x1080 (kosong = ikut sumber)</source>
         <translation>e.g. 1920x1080 (empty = follow source)</translation>
     </message>
@@ -419,7 +418,7 @@ File dipindahkan ke Recycle Bin.</source>
         <translation>Encoder:</translation>
     </message>
     <message>
-        <location line="+11"/>
+        <location line="+12"/>
         <source>Encoder (bawaan auto)</source>
         <translation>Encoder (default auto)</translation>
     </message>
@@ -627,7 +626,12 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
         <translation>Apply the engine changes that need a restart</translation>
     </message>
     <message>
-        <location line="+7"/>
+        <location line="-684"/>
+        <source>(belum dipilih — klik Jelajahi)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+691"/>
         <source>Mulai ulang engine supaya perubahan inti CPU / GPU langsung berlaku</source>
         <translation>Restart the engine so CPU / GPU core changes take effect immediately</translation>
     </message>
@@ -861,17 +865,17 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
     </message>
     <message>
         <location line="+4"/>
-        <location line="+424"/>
+        <location line="+434"/>
         <source>Mengompres %1 ...</source>
         <translation>Compressing %1 ...</translation>
     </message>
     <message>
-        <location line="-394"/>
+        <location line="-404"/>
         <source>Kompres gagal: %1</source>
         <translation>Compression failed: %1</translation>
     </message>
     <message>
-        <location line="+67"/>
+        <location line="+72"/>
         <source>Selesai: %1 (%2)</source>
         <translation>Done: %1 (%2)</translation>
     </message>
@@ -921,12 +925,12 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
         <translation>Preparing...</translation>
     </message>
     <message>
-        <location line="+35"/>
+        <location line="+39"/>
         <source>Dibatalkan: video panjang tanpa izin.</source>
         <translation>Cancelled: long video without permission.</translation>
     </message>
     <message>
-        <location line="+61"/>
+        <location line="+62"/>
         <source>Kompres gagal dimulai: %1</source>
         <translation>Compression failed to start: %1</translation>
     </message>
