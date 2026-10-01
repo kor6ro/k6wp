@@ -17,6 +17,12 @@
 #include <string>
 #include <vector>
 
+// EngineLogfV mirrors to stdout only in verbose builds; the root CMake option
+// sets K6WP_VERBOSE=1, so an undefined macro must read as 0.
+#ifndef K6WP_VERBOSE
+#define K6WP_VERBOSE 0
+#endif
+
 namespace k6wp {
 namespace {
 
@@ -166,6 +172,28 @@ void AppendEngineLogLine(const char* line, bool important) {
 void FlushEngineLog() {
   std::lock_guard<std::mutex> lock(g_file_mutex);
   FlushLocked();
+}
+
+void EngineLogfV(const char* fmt, va_list args, bool important) {
+  static std::mutex mutex;
+  std::lock_guard<std::mutex> lock(mutex);
+  SYSTEMTIME st{};
+  ::GetLocalTime(&st);
+  char ts[64] = {};
+  std::snprintf(ts, sizeof(ts), "[%02u:%02u:%02u.%03u]",
+                static_cast<unsigned>(st.wHour),
+                static_cast<unsigned>(st.wMinute),
+                static_cast<unsigned>(st.wSecond),
+                static_cast<unsigned>(st.wMilliseconds));
+  char msg[4096] = {};
+  std::vsnprintf(msg, sizeof(msg), fmt, args);
+  char line[4160] = {};
+  std::snprintf(line, sizeof(line), "%s %s", ts, msg);
+#if K6WP_VERBOSE
+  std::fprintf(stdout, "%s\n", line);
+  std::fflush(stdout);
+#endif
+  AppendEngineLogLine(line, important);
 }
 
 void FlushEngineLogFromCrash() {

@@ -18,35 +18,15 @@
 namespace k6wp {
 namespace {
 
-std::mutex g_fs_log_mutex;
-
 #ifndef K6WP_VERBOSE
 #define K6WP_VERBOSE 0
 #endif
 
 void Log(const char* fmt, ...) {
-  std::lock_guard<std::mutex> lock(g_fs_log_mutex);
-  SYSTEMTIME st{};
-  GetLocalTime(&st);
-  char ts[64] = {};
-  std::snprintf(ts, sizeof(ts), "[%02u:%02u:%02u.%03u]",
-                static_cast<unsigned>(st.wHour),
-                static_cast<unsigned>(st.wMinute),
-                static_cast<unsigned>(st.wSecond),
-                static_cast<unsigned>(st.wMilliseconds));
-  char msg[4096] = {};
   va_list args;
   va_start(args, fmt);
-  std::vsnprintf(msg, sizeof(msg), fmt, args);
+  EngineLogfV(fmt, args);
   va_end(args);
-  char line[4160] = {};
-  std::snprintf(line, sizeof(line), "%s %s", ts, msg);
-#if K6WP_VERBOSE
-  std::fprintf(stdout, "%s\n", line);
-  std::fflush(stdout);
-#endif
-  // Todo 11: mirror every line to engine.log (append, flushed; ODS fallback inside).
-  AppendEngineLogLine(line);
 }
 
 struct MonitorRects {

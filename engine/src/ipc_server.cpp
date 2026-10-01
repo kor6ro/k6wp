@@ -67,27 +67,10 @@ struct SaGuard {
 #endif
 
 void Log(const char* fmt, ...) {
-  static std::mutex mutex;
-  std::lock_guard<std::mutex> lock(mutex);
-  SYSTEMTIME st{};
-  GetLocalTime(&st);
-  char ts[64] = {};
-  std::snprintf(ts, sizeof(ts), "[%02u:%02u:%02u.%03u]", static_cast<unsigned>(st.wHour),
-                static_cast<unsigned>(st.wMinute), static_cast<unsigned>(st.wSecond),
-                static_cast<unsigned>(st.wMilliseconds));
-  char msg[4096] = {};
   va_list args;
   va_start(args, fmt);
-  std::vsnprintf(msg, sizeof(msg), fmt, args);
+  EngineLogfV(fmt, args);
   va_end(args);
-  char line[4160] = {};
-  std::snprintf(line, sizeof(line), "%s %s", ts, msg);
-#if K6WP_VERBOSE
-  std::fprintf(stdout, "%s\n", line);
-  std::fflush(stdout);
-#endif
-  // Todo 11: mirror every line to engine.log (append, flushed; ODS fallback inside).
-  AppendEngineLogLine(line);
 }
 
 // Minimal JSON string escaper for {"error":"..."} payloads.

@@ -1,7 +1,8 @@
 #pragma once
 
+#include <cstdarg>
+
 // Engine file-log sink (Todo 11, GUI-subsystem follow-up).
-//
 // GUI-subsystem exes have no console, so EngineApp::Log / tray Log route
 // every line here. The stdout mirror in each Log() is compiled in only with
 // K6WP_VERBOSE (root CMake option, default OFF); production builds are
@@ -22,6 +23,10 @@
 namespace k6wp {
 
 void AppendEngineLogLine(const char* line, bool important = false);
+// One timestamped log line ("[HH:MM:SS.mmm] msg"), the shared sink for engine
+// TUs: the file mutex and the K6WP_VERBOSE stderr mirror live here instead of
+// in four private copies that had already drifted. `important` flushes at once.
+void EngineLogfV(const char* fmt, va_list args, bool important = false);
 void FlushEngineLog();
 // Crash-filter variant: best-effort flush that never blocks. Safe to call
 // from SetUnhandledExceptionFilter (returns at once when the log mutex is

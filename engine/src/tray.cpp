@@ -88,26 +88,10 @@ void Log(const char* fmt, ...);
 #endif
 
 void Log(const char* fmt, ...) {
-  SYSTEMTIME st{};
-  GetLocalTime(&st);
-  char ts[64] = {};
-  std::snprintf(ts, sizeof(ts), "[%02u:%02u:%02u.%03u]", static_cast<unsigned>(st.wHour),
-                static_cast<unsigned>(st.wMinute), static_cast<unsigned>(st.wSecond),
-                static_cast<unsigned>(st.wMilliseconds));
-  char msg[4096] = {};
   va_list args;
   va_start(args, fmt);
-  std::vsnprintf(msg, sizeof(msg), fmt, args);
+  EngineLogfV(fmt, args);
   va_end(args);
-  char line[4160] = {};
-  std::snprintf(line, sizeof(line), "%s %s", ts, msg);
-#if K6WP_VERBOSE
-  std::fprintf(stdout, "%s\n", line);
-  std::fflush(stdout);
-#endif
-  // Todo 11: same file mirror as EngineApp::Log (tray owns the
-  // `using embedded app icon` proof line, so it must reach engine.log too).
-  AppendEngineLogLine(line);
 }
 
 // Loads the app icon for the given state (Todo 9). Prefers the embedded .rc
