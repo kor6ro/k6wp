@@ -33,6 +33,7 @@
 #include "playlist.hpp"
 #include "playlist_controller.hpp"
 #include "test_simulator.hpp"
+#include "tray_actions.hpp"
 #include "power.hpp"
 #include "timer_ids.hpp"
 #include "tray.hpp"
@@ -343,8 +344,6 @@ class EngineApp {
   // --- Tray menu actions (Todo 35, all run on the UI thread via WndProc) ----
   void OnTrayTogglePause();                 // Pause/Resume item + dbl-click
   void OnTrayQuickSwitch(std::size_t idx);  // quick-switch submenu index
-  void OnTrayOpenStudio();                  // launches <exe_dir>/studio.exe
-  void OnTraySupport();                     // opens K6WP_DONATE_URL in browser
   // Tray icon (Todo 35): owned by value (RAII: NIM_DELETE in dtor/Shutdown),
   // installed on the existing hidden window in Init(). Non-fatal when
   // Explorer is absent — engine keeps running, TaskbarCreated re-adds it.

@@ -9,6 +9,7 @@ add_executable(engine
   src/pin_verify_schedule.cpp
   src/playlist_controller.cpp
   src/test_simulator.cpp
+  src/tray_actions.cpp
   src/log_file.cpp
   src/os_wallpaper.cpp
   src/working_set_trim.cpp
