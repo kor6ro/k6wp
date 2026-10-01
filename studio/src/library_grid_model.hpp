@@ -38,8 +38,7 @@ class LibraryGridModel : public QAbstractListModel {
 
  public:
   enum Roles {
-    kNameRole = Qt::UserRole + 1,
-    kLabelRole,
+    kLabelRole = Qt::UserRole + 1,
     kThumbUrlRole,
     kResRole,
     kDstRole,
@@ -47,7 +46,6 @@ class LibraryGridModel : public QAbstractListModel {
     kCodecRole,
     kFpsRole,
     kSizeRole,
-    kBrokenRole,
   };
   Q_ENUM(Roles)
 

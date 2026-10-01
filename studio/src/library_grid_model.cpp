@@ -53,7 +53,6 @@ int LibraryGridModel::rowCount(const QModelIndex& parent) const {
 
 QHash<int, QByteArray> LibraryGridModel::roleNames() const {
   return {
-      {kNameRole, "name"},
       {kLabelRole, "label"},
       {kThumbUrlRole, "thumbUrl"},
       {kResRole, "res"},
@@ -62,7 +61,6 @@ QHash<int, QByteArray> LibraryGridModel::roleNames() const {
       {kCodecRole, "codec"},
       {kFpsRole, "fps"},
       {kSizeRole, "sizeBytes"},
-      {kBrokenRole, "broken"},
   };
 }
 
@@ -73,8 +71,6 @@ QVariant LibraryGridModel::data(const QModelIndex& index, int role) const {
   }
   const LibraryEntry& e = items_[static_cast<std::size_t>(visible_[static_cast<std::size_t>(row)])];
   switch (role) {
-    case kNameRole:
-      return QString::fromStdWString(e.dst.filename().wstring());
     case kLabelRole:
       return QString::fromStdString(EntryLabel(e));
     case kThumbUrlRole:
@@ -93,8 +89,6 @@ QVariant LibraryGridModel::data(const QModelIndex& index, int role) const {
       return e.fps;
     case kSizeRole:
       return static_cast<qulonglong>(e.size);
-    case kBrokenRole:
-      return e.broken;
     default:
       return QVariant();
   }
