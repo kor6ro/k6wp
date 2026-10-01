@@ -514,10 +514,21 @@ void PreviewWidget::StopWorker() {
   if (worker_ == nullptr) return;
   stop_.store(true);
   if (worker_->isRunning()) {
-    worker_->wait(3000);
+    // The loop polls mpv_wait_event with a 100 ms timeout, so it exits almost
+    // immediately once stop_ is set. Never terminate() (unsafe while holding
+    // mutex_ / inside mpv) and never reset() a running QThread (Qt aborts): if
+    // the graceful wait truly times out, leak the thread object instead.
+    worker_->wait(5000);
     if (worker_->isRunning()) {
-      worker_->terminate();
-      worker_->wait(3000);
+      std::fprintf(stderr,
+                   "[preview] worker did not stop within 5s; leaking it rather "
+                   "than terminating\n");
+      std::fflush(stderr);
+      (void)worker_.release();
+      started_.store(false);
+      start_polls_ = 0;
+      if (status_timer_ != nullptr) status_timer_->stop();
+      return;
     }
   }
   worker_.reset();
