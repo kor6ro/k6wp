@@ -197,6 +197,20 @@ int main(int argc, char** argv) {
     opts.out = default_dir / opts.in.filename();
   }
 
+  // ParseCli's in-place guard ran before --out was defaulted, so re-check now
+  // that it is concrete: with --out omitted and the input already in the
+  // default output dir, in == out and ffmpeg -y would truncate the source
+  // (and remove_partial() would delete it on failure).
+  if (!opts.dry_run &&
+      k6wp::compressor::PathsReferToSameFile(opts.in, opts.out)) {
+    std::fprintf(stderr, "{\"error\":\"%s\"}\n",
+                 JsonEscape("--out resolves to the input file (refusing to "
+                            "overwrite the source): " +
+                            opts.in.u8string())
+                     .c_str());
+    return 1;
+  }
+
   if (opts.dry_run) {
     std::printf("{\"ok\":true,\"in\":\"%s\",\"out\":\"%s\",\"dry_run\":true}\n",
                 JsonEscape(opts.in.u8string()).c_str(),
@@ -285,12 +299,14 @@ int main(int argc, char** argv) {
     return 1;
   }
   if (!cache_key.empty()) {
+    // Cache is an optimization, not the job contract: a store failure must
+    // not turn a successful encode into a reported failure (match the
+    // skip-optimal branch above).
     std::string store_error;
     if (k6wp::compressor::CacheStoreFromOut(cache_key, opts.out,
                                             store_error) != 0) {
-      std::fprintf(stderr, "{\"error\":\"%s\"}\n",
+      std::fprintf(stderr, "{\"warning\":\"cache store failed: %s\"}\n",
                    JsonEscape(store_error).c_str());
-      return 1;
     }
   }
   std::printf(
