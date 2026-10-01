@@ -141,8 +141,9 @@ add_executable(engine_state_test
   ../tests/engine_state_test.cpp
   src/pin_verify_schedule.cpp
   src/playlist_controller.cpp
+  src/occlusion_poke_scheduler.cpp
 )
-target_link_libraries(engine_state_test PRIVATE k6wp_shared)
+target_link_libraries(engine_state_test PRIVATE k6wp_shared user32)
 target_include_directories(engine_state_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 add_test(NAME engine_state_test COMMAND engine_state_test)
 endif()

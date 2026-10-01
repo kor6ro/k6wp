@@ -2,6 +2,7 @@
 // EngineApp: PinVerifySchedule (deadline + revert counter) and
 // PlaylistController (reload + snapshot + one-shot rotation) with fake hooks.
 
+#include "occlusion_poke_scheduler.hpp"
 #include "pin_verify_schedule.hpp"
 #include "playlist_controller.hpp"
 
@@ -130,6 +131,20 @@ int main() {
     Check(!pc.get_enabled(), "pl: missing file -> snapshot disabled");
     Check(pc.get_size() == 0, "pl: missing file -> size 0");
     Check(!pc.Fire(), "pl: missing file -> Fire false");
+  }
+
+  // OcclusionPokeScheduler: the timer handler runs the check only when live.
+  {
+    k6wp::OcclusionPokeScheduler s;
+    int checks = 0;
+    bool live = true;
+    s.SetHooks(nullptr, [&]() { return live; }, [&]() { return true; },
+               [&]() { ++checks; });
+    s.OnTimer();
+    Check(checks == 1, "poke: OnTimer runs the check when live");
+    live = false;
+    s.OnTimer();
+    Check(checks == 1, "poke: OnTimer skips the check when not live");
   }
 
   std::printf(g_failures == 0 ? "RESULT: ALL ENGINE-STATE CHECKS PASSED\n"
