@@ -372,8 +372,10 @@ void CompressService::HandleStderrLine(const QString& line) {
       return;
     }
   }
-  // Keep the last non-empty stderr line as fallback context.
-  if (!line.isEmpty()) {
+  // Fill the fallback only when no structured {"error"} was captured, and keep
+  // the FIRST line: later ffmpeg chatter (size=... time=...) must not overwrite
+  // the actual reason the friendly-error mapping looks for.
+  if (error_text_.isEmpty() && !line.isEmpty()) {
     error_text_ = line;
   }
 }
