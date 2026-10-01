@@ -813,24 +813,20 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
 <context>
     <name>QObject</name>
     <message>
-        <location filename="../src/compress_errors.cpp" line="+83"/>
         <source>Video Panjang</source>
-        <translation>Long Video</translation>
+        <translation type="vanished">Long Video</translation>
     </message>
     <message>
-        <location line="+1"/>
         <source>Video %1 berdurasi %2 menit (lebih dari 10). Kompres tetap?</source>
-        <translation>Video %1 is %2 minutes long (over 10). Compress anyway?</translation>
+        <translation type="vanished">Video %1 is %2 minutes long (over 10). Compress anyway?</translation>
     </message>
     <message>
-        <location line="+3"/>
         <source>Video panjang butuh waktu lama dan memakai --force-long.</source>
-        <translation>Long videos take a while and use --force-long.</translation>
+        <translation type="vanished">Long videos take a while and use --force-long.</translation>
     </message>
     <message>
-        <location line="+5"/>
         <source>Jangan tanya lagi sesi ini</source>
-        <translation>Don&apos;t ask again this session</translation>
+        <translation type="vanished">Don&apos;t ask again this session</translation>
     </message>
 </context>
 <context>
@@ -938,7 +934,7 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
 <context>
     <name>k6wp::CompressError</name>
     <message>
-        <location filename="../src/compress_errors.cpp" line="-64"/>
+        <location filename="../src/compress_errors.cpp" line="+26"/>
         <source>ffmpeg tidak ditemukan di folder aplikasi. Ekstrak ulang atau pasang ulang K6WP.</source>
         <translation>ffmpeg was not found in the app folder. Re-extract or reinstall K6WP.</translation>
     </message>
@@ -961,39 +957,32 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
 <context>
     <name>k6wp::FirstRunPickPage</name>
     <message>
-        <location filename="../src/first_run_wizard.cpp" line="+27"/>
         <source>Pilih video pertama Anda</source>
-        <translation>Pick your first video</translation>
+        <translation type="vanished">Pick your first video</translation>
     </message>
     <message>
-        <location line="+1"/>
         <source>Pilih satu video dari komputer Anda. File asli tidak dipindah atau diubah.</source>
-        <translation>Choose one video from your computer. The original file is never moved or modified.</translation>
+        <translation type="vanished">Choose one video from your computer. The original file is never moved or modified.</translation>
     </message>
     <message>
-        <location line="+4"/>
         <source>Format yang didukung: mp4, webm, avi, mkv, mov, wmv.</source>
-        <translation>Supported formats: mp4, webm, avi, mkv, mov, wmv.</translation>
+        <translation type="vanished">Supported formats: mp4, webm, avi, mkv, mov, wmv.</translation>
     </message>
     <message>
-        <location line="+3"/>
         <source>Pilih video...</source>
-        <translation>Choose video...</translation>
+        <translation type="vanished">Choose video...</translation>
     </message>
     <message>
-        <location line="+4"/>
         <source>Belum ada video dipilih.</source>
-        <translation>No video chosen yet.</translation>
+        <translation type="vanished">No video chosen yet.</translation>
     </message>
     <message>
-        <location line="+8"/>
         <source>Pilih Video</source>
-        <translation>Choose Video</translation>
+        <translation type="vanished">Choose Video</translation>
     </message>
     <message>
-        <location line="+1"/>
         <source>Video (*.mp4 *.webm *.avi *.mkv *.mov *.wmv);;Semua File (*)</source>
-        <translation>Video (*.mp4 *.webm *.avi *.mkv *.mov *.wmv);;All Files (*)</translation>
+        <translation type="vanished">Video (*.mp4 *.webm *.avi *.mkv *.mov *.wmv);;All Files (*)</translation>
     </message>
 </context>
 <context>
