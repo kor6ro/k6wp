@@ -22,6 +22,7 @@
 #include "multi_monitor.hpp"
 #include "occlusion_watch.hpp"
 #include "pause_controller.hpp"
+#include "pending_queue.hpp"
 #include "power.hpp"
 #include "timer_ids.hpp"
 #include "tray.hpp"
@@ -360,16 +361,8 @@ class EngineApp {
   // written by the main-thread set_video/boot executors, read by the
   // verify pass (main) and get_state-adjacent paths.
   std::atomic<bool> headless_owns_decode_{false};
-  // CRIT-2 marshal queue: the IPC worker stashes one pending set_video
-  // path / set_monitor target here and posts kSetVideoMessage /
-  // kSetMonitorMessage; the main thread pops + executes. One slot each is
-  // enough (pipe serves one client at a time; last write wins and execution
-  // is idempotent). Guarded by marshal_mutex_ on both threads.
-  mutable std::mutex marshal_mutex_;
-  std::string pending_video_;
-  bool has_pending_video_ = false;
-  std::string pending_monitor_;
-  bool has_pending_monitor_ = false;
+  // CRIT-2 worker->main handoff; one slot each (last write wins, idempotent).
+  PendingCommandQueue pending_;
   // Serializes the get_state payload (raw JSON object text).
   std::string BuildStateJson() const;
   // --- Tray menu actions (Todo 35, all run on the UI thread via WndProc) ----

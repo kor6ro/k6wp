@@ -1040,19 +1040,13 @@ bool EngineApp::QueueSetVideo(const std::string& payload_json) {
     return false;
   }
   const HWND hwnd = g_message_hwnd.load(std::memory_order_acquire);
-  {
-    std::lock_guard<std::mutex> lock(marshal_mutex_);
-    pending_video_ = payload_json;
-    has_pending_video_ = true;
-  }
+  pending_.SetVideo(payload_json);
   // Post AFTER storing: the main thread pops under the same mutex, so it
   // can never observe the flag without the payload. g_message_hwnd is
   // atomic and Shutdown nulls it only after ipc_server_.Stop() joined this
   // worker, so null here means teardown already started — drop loudly.
   if (hwnd == nullptr || !PostMessageW(hwnd, kSetVideoMessage, 0, 0)) {
-    std::lock_guard<std::mutex> lock(marshal_mutex_);
-    has_pending_video_ = false;
-    pending_video_.clear();
+    pending_.ClearVideo();
     Log("warning: set_video post failed (error %lu), command dropped",
         GetLastError());
     return false;
@@ -1067,15 +1061,9 @@ bool EngineApp::QueueSetMonitor(const std::string& payload_json) {
     return false;
   }
   const HWND hwnd = g_message_hwnd.load(std::memory_order_acquire);
-  {
-    std::lock_guard<std::mutex> lock(marshal_mutex_);
-    pending_monitor_ = payload_json;
-    has_pending_monitor_ = true;
-  }
+  pending_.SetMonitor(payload_json);
   if (hwnd == nullptr || !PostMessageW(hwnd, kSetMonitorMessage, 0, 0)) {
-    std::lock_guard<std::mutex> lock(marshal_mutex_);
-    has_pending_monitor_ = false;
-    pending_monitor_.clear();
+    pending_.ClearMonitor();
     Log("warning: set_monitor post failed (error %lu), command dropped",
         GetLastError());
     return false;
@@ -1086,15 +1074,9 @@ bool EngineApp::QueueSetMonitor(const std::string& payload_json) {
 
 void EngineApp::ApplyPendingSetVideo() {
   std::string payload;
-  {
-    std::lock_guard<std::mutex> lock(marshal_mutex_);
-    if (!has_pending_video_) {
-      Log("ipc: set_video main-loop wake with empty queue (ignoring)");
-      return;
-    }
-    payload = std::move(pending_video_);
-    pending_video_.clear();
-    has_pending_video_ = false;
+  if (!pending_.TakeVideo(&payload)) {
+    Log("ipc: set_video main-loop wake with empty queue (ignoring)");
+    return;
   }
   // The executor re-validates (the file may have vanished between queue and
   // execution); a late reject only logs — the {"ok":true} ack already meant
@@ -1104,15 +1086,9 @@ void EngineApp::ApplyPendingSetVideo() {
 
 void EngineApp::ApplyPendingSetMonitor() {
   std::string payload;
-  {
-    std::lock_guard<std::mutex> lock(marshal_mutex_);
-    if (!has_pending_monitor_) {
-      Log("ipc: set_monitor main-loop wake with empty queue (ignoring)");
-      return;
-    }
-    payload = std::move(pending_monitor_);
-    pending_monitor_.clear();
-    has_pending_monitor_ = false;
+  if (!pending_.TakeMonitor(&payload)) {
+    Log("ipc: set_monitor main-loop wake with empty queue (ignoring)");
+    return;
   }
   HandleSetMonitor(payload);
 }
