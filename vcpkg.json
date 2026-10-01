@@ -4,7 +4,6 @@
   // nlohmann/json) - see vendor/VERSIONS.md (Todo 2). vcpkg is intentionally
   // NOT used for builds; this file only documents the manifest shape.
   "name": "k6wp",
-  "version-string": "1.0.0",
   "description": "K6WP - Windows live-wallpaper engine + studio (C++17).",
   "dependencies": []
 }
