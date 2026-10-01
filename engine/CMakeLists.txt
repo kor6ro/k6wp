@@ -134,4 +134,15 @@ add_executable(engine_units_test
 )
 target_include_directories(engine_units_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 add_test(NAME engine_units_test COMMAND engine_units_test)
+
+# engine_state_test (P0-2): the extracted PinVerifySchedule deadline/counter and
+# PlaylistController reload/snapshot/rotation, driven through fake hooks.
+add_executable(engine_state_test
+  ../tests/engine_state_test.cpp
+  src/pin_verify_schedule.cpp
+  src/playlist_controller.cpp
+)
+target_link_libraries(engine_state_test PRIVATE k6wp_shared)
+target_include_directories(engine_state_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+add_test(NAME engine_state_test COMMAND engine_state_test)
 endif()
