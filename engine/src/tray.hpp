@@ -148,6 +148,10 @@ class TrayIcon {
   bool AddIconLocked();
   void DeleteIconLocked();
   void ModifyIconLocked();
+  // Fills cbSize/hWnd/uID/flags/icon/tip; extra_flags is OR'd into uFlags
+  // (NIF_MESSAGE for the initial ADD). Replaces the previous owned icon.
+  // Takes the NOTIFYICONDATAW by void* so the header stays windows.h-free.
+  void PrepareIconLocked(void* nid, unsigned extra_flags);
 
   // Computes whether the tray should show the paused (off) icon.
   // Returns true when paused_ == true (error_ never borrows the amber icon;

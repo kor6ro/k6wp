@@ -374,21 +374,26 @@ std::string TrayIcon::RecentAt(std::size_t idx) const {
   return idx < recent_utf8_.size() ? recent_utf8_[idx] : std::string();
 }
 
-bool TrayIcon::AddIconLocked() {
-  NOTIFYICONDATAW nid{};
-  nid.cbSize = sizeof(nid);
-  nid.hWnd = static_cast<HWND>(hwnd_);
-  nid.uID = kIconId;
-  nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP | NIF_SHOWTIP;
-  nid.uCallbackMessage = static_cast<UINT>(kTrayCallbackMessage);
+void TrayIcon::PrepareIconLocked(void* nid_void, unsigned extra_flags) {
+  auto* nid = static_cast<NOTIFYICONDATAW*>(nid_void);
+  nid->cbSize = sizeof(*nid);
+  nid->hWnd = static_cast<HWND>(hwnd_);
+  nid->uID = kIconId;
+  nid->uFlags = NIF_ICON | NIF_TIP | NIF_SHOWTIP | extra_flags;
   bool owned = false;
-  nid.hIcon = LoadAppIcon(ResolveShouldShowPausedLocked(), &owned);
+  nid->hIcon = LoadAppIcon(ResolveShouldShowPausedLocked(), &owned);
   if (icon_owned_) DestroyIcon(static_cast<HICON>(icon_));  // replace old owned
-  icon_ = nid.hIcon;
+  icon_ = nid->hIcon;
   icon_owned_ = owned;
   const wchar_t* tip = error_ ? L"K6WP Engine - Injection failed (headless)"
                      : paused_ ? L"K6WP Engine - Paused" : L"K6WP Engine";
-  wcsncpy_s(nid.szTip, tip, _TRUNCATE);
+  wcsncpy_s(nid->szTip, tip, _TRUNCATE);
+}
+
+bool TrayIcon::AddIconLocked() {
+  NOTIFYICONDATAW nid{};
+  PrepareIconLocked(&nid, NIF_MESSAGE);
+  nid.uCallbackMessage = static_cast<UINT>(kTrayCallbackMessage);
   return Shell_NotifyIconW(NIM_ADD, &nid) != FALSE;
 }
 
@@ -408,18 +413,7 @@ void TrayIcon::DeleteIconLocked() {
 
 void TrayIcon::ModifyIconLocked() {
   NOTIFYICONDATAW nid{};
-  nid.cbSize = sizeof(nid);
-  nid.hWnd = static_cast<HWND>(hwnd_);
-  nid.uID = kIconId;
-  nid.uFlags = NIF_ICON | NIF_TIP | NIF_SHOWTIP;
-  bool owned = false;
-  nid.hIcon = LoadAppIcon(ResolveShouldShowPausedLocked(), &owned);
-  if (icon_owned_) DestroyIcon(static_cast<HICON>(icon_));  // replace old owned
-  icon_ = nid.hIcon;
-  icon_owned_ = owned;
-  const wchar_t* tip = error_ ? L"K6WP Engine - Injection failed (headless)"
-                     : paused_ ? L"K6WP Engine - Paused" : L"K6WP Engine";
-  wcsncpy_s(nid.szTip, tip, _TRUNCATE);
+  PrepareIconLocked(&nid, 0);
   if (!Shell_NotifyIconW(NIM_MODIFY, &nid)) {
     // Explorer may have restarted without us seeing TaskbarCreated yet;
     // try a fresh ADD so the icon comes back.
