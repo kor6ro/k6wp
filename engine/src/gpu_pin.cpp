@@ -19,10 +19,20 @@ namespace k6wp {
 namespace {
 
 std::string Narrow(const wchar_t* w) {
-  char b[128] = {};
-  WideCharToMultiByte(CP_UTF8, 0, w, -1, b, (int)sizeof(b), nullptr,
-                      nullptr);
-  return std::string(b);
+  if (w == nullptr) return {};
+  // DXGI_ADAPTER_DESC1::Description is up to 128 wchar_t; its UTF-8 form can
+  // exceed the old fixed 128-byte buffer, and the unchecked failure returned an
+  // empty description (silently breaking adapter pinning). Size the buffer from
+  // the actual conversion instead.
+  const int needed =
+      WideCharToMultiByte(CP_UTF8, 0, w, -1, nullptr, 0, nullptr, nullptr);
+  if (needed <= 0) return {};
+  std::string out(static_cast<std::size_t>(needed), '\0');
+  const int written = WideCharToMultiByte(CP_UTF8, 0, w, -1, out.data(), needed,
+                                          nullptr, nullptr);
+  if (written <= 0) return {};
+  out.resize(static_cast<std::size_t>(written - 1));
+  return out;
 }
 
 bool IsIntegrated(unsigned vendor, const std::string& desc,
