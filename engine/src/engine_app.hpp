@@ -23,6 +23,7 @@
 #include "mpv_renderer.hpp"
 #include "multi_monitor.hpp"
 #include "occlusion_watch.hpp"
+#include "os_wallpaper.hpp"
 #include "pause_controller.hpp"
 #include "pending_queue.hpp"
 #include "playlist.hpp"
@@ -267,10 +268,8 @@ class EngineApp {
   // tick (no dedicated timer — Check runs on the unpaused-loop wake),
   // per-slot PauseSlot only, atomic arm/disarm via ApplyPauseState.
   OcclusionWatch occlusion_watch_;
-  // Todo 15: snapshot of the OS wallpaper path taken at Init time.
-  // Empty/invalid = no restore capability (Shutdown skips gracefully).
-  std::wstring saved_wallpaper_;
-  bool saved_wallpaper_valid_ = false;
+  // Todo 15: OS wallpaper captured at Init, restored at Shutdown.
+  OsWallpaperGuard os_wallpaper_{&EngineApp::Log};
   // Build the live surface (MultiMonitor::Init PerMonitor) + feed it the
   // current video/fit when available. Never fatal: attach failure degrades
   // to headless renderers slot-by-slot inside MultiMonitor.
@@ -294,12 +293,6 @@ class EngineApp {
   // check (each simulate disarms once fired; exit-after stays armed — the
   // loop ends on it anyway). True ⇒ test run ⇒ 50 ms timeout.
   bool AnySimulateArmed() const;
-  // OS wallpaper save/restore (Todo 15): Init snapshots the active desktop
-  // wallpaper path (SPI_GETDESKWALLPAPER); normal Shutdown() restores it
-  // (SPI_SETDESKWALLPAPER). Never fatal: an unreadable path logs + proceeds
-  // WITHOUT restore capability. Crash-path shutdown is untouched.
-  void SaveOsWallpaper();
-  void RestoreOsWallpaper();
   // Fan a WallpaperConfig fit_mode out to renderer_ + all live slots.
   void ApplyFitMode(const std::string& fit_mode);
   // --- Wallpaper playlist + rotation -----------------------------------------

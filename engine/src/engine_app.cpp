@@ -97,7 +97,7 @@ bool EngineApp::Init(int argc, char** argv) {
   // Todo 15: snapshot the active OS wallpaper path BEFORE the engine touches
   // the desktop (adjacent to the Todo 14 mutex block; that block is untouched).
   // Never fatal: an unreadable path logs + Init proceeds WITHOUT restore.
-  SaveOsWallpaper();
+  os_wallpaper_.Save();
 
   hinstance_ = GetModuleHandleW(nullptr);
   if (!RegisterWindowClass()) return false;
@@ -467,36 +467,6 @@ DWORD EngineApp::ComputeWaitTimeoutMs() const {
   if (AnySimulateArmed()) return 50;
   if (SlotsPaused()) return INFINITE;
   return 1500;
-}
-
-void EngineApp::SaveOsWallpaper() {
-  wchar_t buf[MAX_PATH] = {};
-  if (SystemParametersInfoW(SPI_GETDESKWALLPAPER, MAX_PATH, buf, 0) &&
-      buf[0] != L'\0') {
-    saved_wallpaper_.assign(buf);
-    saved_wallpaper_valid_ = true;
-    Log("engine: saved OS wallpaper '%ls'", saved_wallpaper_.c_str());
-  } else {
-    saved_wallpaper_.clear();
-    saved_wallpaper_valid_ = false;
-    Log("warning: could not read OS wallpaper (error %lu), continuing without restore",
-        GetLastError());
-  }
-}
-
-void EngineApp::RestoreOsWallpaper() {
-  if (!saved_wallpaper_valid_ || saved_wallpaper_.empty()) {
-    Log("engine: no saved OS wallpaper, skipping restore");
-    return;
-  }
-  if (SystemParametersInfoW(SPI_SETDESKWALLPAPER, 0,
-                            const_cast<LPWSTR>(saved_wallpaper_.c_str()),
-                            SPIF_UPDATEINIFILE | SPIF_SENDCHANGE)) {
-    Log("engine: restored OS wallpaper '%ls'", saved_wallpaper_.c_str());
-  } else {
-    Log("warning: could not restore OS wallpaper '%ls' (error %lu)",
-        saved_wallpaper_.c_str(), GetLastError());
-  }
 }
 
 void EngineApp::ApplyFitMode(const std::string& fit_mode) {
@@ -1066,7 +1036,7 @@ void EngineApp::Shutdown() {
   // (never TerminateThread); no join runs from inside an mpv callback.
   StopHeadlessRenderer();
   ShutdownWallpaperSurface();
-  RestoreOsWallpaper();
+  os_wallpaper_.Restore();
   tray_.Remove();  // NIM_DELETE while message_hwnd_ is still valid
   fullscreen_watch_.Stop();
   occlusion_watch_.SetNotifyWindow(nullptr);

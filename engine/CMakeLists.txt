@@ -6,6 +6,7 @@ add_executable(engine
   src/cli_options.cpp
   src/test_simulator.cpp
   src/log_file.cpp
+  src/os_wallpaper.cpp
   src/desktop_inject.cpp
   src/bench_hook.cpp
   src/mpv_renderer.cpp
