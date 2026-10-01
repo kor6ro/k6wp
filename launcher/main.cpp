@@ -36,6 +36,8 @@
 #include <aclapi.h>
 #include <tlhelp32.h>
 
+#include "win32_raii.hpp"
+
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -91,39 +93,6 @@ constexpr DWORD kPipeProbeTimeoutMs = 2000;
 constexpr DWORD kPipeReadyWaitMs = 10000;
 constexpr DWORD kPipeReadyPollMs = 250;
 constexpr wchar_t kEngineMutexName[] = L"Local\\K6WP-Engine-Singleton";
-
-// RAII guard for a Win32 HANDLE (cf. shared HandleGuard pattern).
-class HandleGuard {
- public:
-  explicit HandleGuard(HANDLE h) : handle_(h) {}
-  HandleGuard(const HandleGuard&) = delete;
-  HandleGuard& operator=(const HandleGuard&) = delete;
-  HandleGuard(HandleGuard&& other) noexcept : handle_(other.handle_) {
-    other.handle_ = nullptr;
-  }
-  HandleGuard& operator=(HandleGuard&& other) noexcept {
-    if (this != &other) {
-      if (handle_ != nullptr && handle_ != INVALID_HANDLE_VALUE) {
-        CloseHandle(handle_);
-      }
-      handle_ = other.handle_;
-      other.handle_ = nullptr;
-    }
-    return *this;
-  }
-  ~HandleGuard() {
-    if (handle_ != nullptr && handle_ != INVALID_HANDLE_VALUE) {
-      CloseHandle(handle_);
-    }
-  }
-  HANDLE get() const { return handle_; }
-  bool valid() const {
-    return handle_ != nullptr && handle_ != INVALID_HANDLE_VALUE;
-  }
-
- private:
-  HANDLE handle_;
-};
 
 struct Options {
   bool want_studio = true;   // default + --studio
