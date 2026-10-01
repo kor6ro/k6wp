@@ -252,8 +252,7 @@ Rectangle {
             anchors.fill: parent
             spacing: 0
 
-            MenuBar {
-                id: menuBar
+                MenuBar {
 
                 Menu {
                     title: qsTr("&Berkas")
@@ -288,7 +287,6 @@ Rectangle {
             }
 
             Label {
-                id: updateCheckMessageLabel
                 Layout.fillWidth: true
                 Layout.leftMargin: 16
                 Layout.rightMargin: 16
@@ -320,7 +318,6 @@ Rectangle {
             }
 
             StackLayout {
-                id: pages
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 currentIndex: tabBar.currentIndex
@@ -329,7 +326,6 @@ Rectangle {
                 // Wallpaper
                 // ---------------------------------------------------------
                 Item {
-                    id: wallpaperPage
 
                     // Two columns instead of one tall stack: the old layout
                     // pushed everything full-width down the page, so a 1936px
@@ -389,7 +385,6 @@ Rectangle {
                                 // Image.Ready` keeps a missing/blank file
                                 // silent.
                                 Image {
-                                    id: poster
                                     anchors.fill: parent
                                     fillMode: Image.PreserveAspectFit
                                     asynchronous: true
@@ -411,7 +406,6 @@ Rectangle {
                                 }
 
                                 TextField {
-                                    id: librarySearch
                                     Layout.fillWidth: true
                                     placeholderText: qsTr("Cari video...")
                                     onTextChanged: Library.filter = text
@@ -629,7 +623,6 @@ Rectangle {
                                         }
 
                                         SpinBox {
-                                            id: intervalSpin
                                             Layout.preferredWidth: root.spinWidth
                                             from: 1
                                             to: 1440
@@ -759,7 +752,6 @@ Rectangle {
                                         }
 
                                         Label {
-                                            id: statusLabel
                                             Layout.fillWidth: true
                                             elide: Text.ElideMiddle
                                             text: Studio.engineStatusDetail
@@ -1030,7 +1022,6 @@ Rectangle {
                                         clip: true
 
                                         TextArea {
-                                            id: logView
                                             readOnly: true
                                             wrapMode: TextArea.NoWrap
                                             selectByMouse: true
@@ -1053,7 +1044,6 @@ Rectangle {
                 // Kompresor
                 // ---------------------------------------------------------
                 Item {
-                    id: compressorPage
 
                     // The long-video gate. AskLongVideoConsent is a QMessageBox
                     // in C++, so the decision is routed through QML instead.
@@ -1534,7 +1524,6 @@ Rectangle {
                                     }
 
                                     ComboBox {
-                                        id: sFitCombo
                                         Layout.fillWidth: true
                                         Layout.maximumWidth: root.controlWidth
                                         model: [qsTr("Isi layar (potong bila perlu)"),
@@ -2022,7 +2011,6 @@ Rectangle {
             implicitHeight: 340
 
             StackLayout {
-                id: firstRunPages
                 anchors.fill: parent
                 currentIndex: firstRunDialog.page
 

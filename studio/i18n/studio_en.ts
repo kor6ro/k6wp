@@ -4,7 +4,7 @@
 <context>
     <name>Main</name>
     <message>
-        <location filename="../qml/Main.qml" line="+259"/>
+        <location filename="../qml/Main.qml" line="+258"/>
         <source>&amp;Berkas</source>
         <translation>&amp;File</translation>
     </message>
@@ -34,7 +34,7 @@
         <translation>&amp;About K6WP Studio</translation>
     </message>
     <message>
-        <location line="+28"/>
+        <location line="+27"/>
         <source>Wallpaper</source>
         <translation>Wallpaper</translation>
     </message>
@@ -49,7 +49,7 @@
         <translation>Settings</translation>
     </message>
     <message>
-        <location line="+37"/>
+        <location line="+35"/>
         <source>Pratinjau:</source>
         <translation>Preview:</translation>
     </message>
@@ -59,12 +59,12 @@
         <translation>Click to pause/play</translation>
     </message>
     <message>
-        <location line="+25"/>
+        <location line="+24"/>
         <source>Perpustakaan:</source>
         <translation>Library:</translation>
     </message>
     <message>
-        <location line="+7"/>
+        <location line="+6"/>
         <source>Cari video...</source>
         <translation>Search videos...</translation>
     </message>
@@ -105,13 +105,13 @@
     </message>
     <message>
         <location line="+4"/>
-        <location line="+173"/>
-        <location line="+154"/>
+        <location line="+172"/>
+        <location line="+153"/>
         <source>Hapus</source>
         <translation>Remove</translation>
     </message>
     <message>
-        <location line="-319"/>
+        <location line="-317"/>
         <source>Hapus Entri Perpustakaan</source>
         <translation>Remove Library Entry</translation>
     </message>
@@ -164,7 +164,7 @@ File dipindahkan ke Recycle Bin.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+12"/>
+        <location line="+11"/>
         <source>Menit antar pergantian (1-1440)</source>
         <translation type="unfinished"></translation>
     </message>
@@ -204,7 +204,7 @@ File dipindahkan ke Recycle Bin.</source>
         <translation>Engine status:</translation>
     </message>
     <message>
-        <location line="+20"/>
+        <location line="+19"/>
         <source>Video saat ini:</source>
         <translation>Current video:</translation>
     </message>
@@ -285,30 +285,30 @@ File dipindahkan ke Recycle Bin.</source>
     </message>
     <message>
         <location line="+14"/>
-        <location line="+589"/>
+        <location line="+587"/>
         <source>Isi layar:</source>
         <translation>Fill screen:</translation>
     </message>
     <message>
-        <location line="-581"/>
-        <location line="+589"/>
+        <location line="-579"/>
+        <location line="+586"/>
         <source>Isi layar (potong bila perlu)</source>
         <translation>Fill screen (crop if needed)</translation>
     </message>
     <message>
-        <location line="-588"/>
-        <location line="+589"/>
+        <location line="-585"/>
+        <location line="+586"/>
         <source>Sesuaikan (seluruh video terlihat)</source>
         <translation>Fit (whole video visible)</translation>
     </message>
     <message>
-        <location line="-588"/>
-        <location line="+589"/>
+        <location line="-585"/>
+        <location line="+586"/>
         <source>Regang (isi penuh)</source>
         <translation>Stretch (fill)</translation>
     </message>
     <message>
-        <location line="-588"/>
+        <location line="-585"/>
         <source>Tengah (ukuran asli)</source>
         <translation>Center (original size)</translation>
     </message>
@@ -319,37 +319,37 @@ File dipindahkan ke Recycle Bin.</source>
     </message>
     <message>
         <location line="+4"/>
-        <location line="+587"/>
+        <location line="+584"/>
         <source>Layar:</source>
         <translation>Screen:</translation>
     </message>
     <message>
-        <location line="-561"/>
-        <location line="+514"/>
-        <location line="+620"/>
+        <location line="-558"/>
+        <location line="+512"/>
+        <location line="+618"/>
         <source>Jalankan saat Windows menyala</source>
         <translation>Start when Windows starts</translation>
     </message>
     <message>
-        <location line="-1126"/>
-        <location line="+513"/>
+        <location line="-1122"/>
+        <location line="+511"/>
         <source>Hemat baterai (wallpaper berhenti saat pakai baterai)</source>
         <translation>Save battery (wallpaper stops on battery power)</translation>
     </message>
     <message>
-        <location line="-493"/>
-        <location line="+823"/>
+        <location line="-491"/>
+        <location line="+820"/>
         <source>Detail teknis (log)</source>
         <translation>Technical details (log)</translation>
     </message>
     <message>
-        <location line="-803"/>
-        <location line="+818"/>
+        <location line="-801"/>
+        <location line="+816"/>
         <source>Log terapkan muncul di sini...</source>
         <translation>Apply log appears here...</translation>
     </message>
     <message>
-        <location line="-746"/>
+        <location line="-745"/>
         <source>Sumber:</source>
         <translation>Source:</translation>
     </message>
@@ -369,12 +369,12 @@ File dipindahkan ke Recycle Bin.</source>
     </message>
     <message>
         <location line="+4"/>
-        <location line="+477"/>
+        <location line="+476"/>
         <source>Folder output:</source>
         <translation>Output folder:</translation>
     </message>
     <message>
-        <location line="-461"/>
+        <location line="-460"/>
         <source>&amp;Ganti folder...</source>
         <translation>&amp;Change folder...</translation>
     </message>
@@ -541,7 +541,7 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
         <translation>General settings</translation>
     </message>
     <message>
-        <location line="+75"/>
+        <location line="+74"/>
         <source>Offset bingkai (detik):</source>
         <translation>Frame offset (seconds):</translation>
     </message>
@@ -702,12 +702,12 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
         <translation>Apply the engine changes that need a restart</translation>
     </message>
     <message>
-        <location line="-684"/>
+        <location line="-683"/>
         <source>(belum dipilih — klik Jelajahi)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+691"/>
+        <location line="+690"/>
         <source>Mulai ulang engine supaya perubahan inti CPU / GPU langsung berlaku</source>
         <translation>Restart the engine so CPU / GPU core changes take effect immediately</translation>
     </message>
@@ -785,7 +785,7 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
     </message>
     <message>
         <location line="+19"/>
-        <location line="+41"/>
+        <location line="+40"/>
         <source>Selamat datang di K6WP</source>
         <translation>Welcome to K6WP</translation>
     </message>
