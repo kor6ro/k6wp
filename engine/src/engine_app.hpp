@@ -31,6 +31,7 @@
 #include "pause_controller.hpp"
 #include "pending_queue.hpp"
 #include "playlist.hpp"
+#include "playlist_controller.hpp"
 #include "test_simulator.hpp"
 #include "power.hpp"
 #include "timer_ids.hpp"
@@ -299,30 +300,10 @@ class EngineApp {
   // Fan a WallpaperConfig fit_mode out to renderer_ + all live slots.
   void ApplyFitMode(const std::string& fit_mode);
   // --- Wallpaper playlist + rotation -----------------------------------------
-  // playlist.json is engine-read and Studio-written. The loop reloads it when
-  // its mtime/size change (MaybeReloadPlaylist) and fires FireRotation when the
-  // interval elapses while NOT paused. playlist_ is touched ONLY on the main
-  // loop thread; the playlist_*_atomic fields are the get_state (IPC worker)
-  // snapshot, refreshed whenever playlist_ changes.
-  std::filesystem::path ResolvePlaylistPath() const;
-  void MaybeReloadPlaylist();
-  void ArmRotation();
-  bool FireRotation();
-  PlaylistConfig playlist_;
-  std::filesystem::file_time_type playlist_mtime_{};
-  std::uintmax_t playlist_size_ = 0;
-  bool playlist_mtime_valid_ = false;
-  bool playlist_missing_logged_ = false;
-  std::uint64_t rotate_rng_ = 0x9E3779B97F4A7C15ull;
-  std::atomic<bool> rotate_armed_{false};
-  // Rotation deadline (state_mutex_ guards the timestamp; rotate_armed_ is the
-  // atomic armed flag) + the resume-edge detector (loop thread only) that
-  // restarts the interval when the wallpaper comes back from a pause.
-  std::chrono::steady_clock::time_point next_rotate_at_{};
-  bool was_slots_paused_ = false;
-  std::atomic<bool> playlist_enabled_atomic_{false};
-  std::atomic<long long> playlist_size_atomic_{0};
-  std::atomic<long long> playlist_index_atomic_{-1};
+  // playlist.json is engine-read and Studio-written; the controller reloads it
+  // when its mtime/size change and fires rotation when the interval elapses
+  // while NOT paused.
+  PlaylistController playlist_{&EngineApp::Log};
   // P3L.3 pin verify scheduling (PATCH A): armed after every (re)load,
   // fired once post-start in the Run loop. 6 s covers vo-configured +
   // first frame settle; the pass itself requires EverStarted so a
@@ -350,7 +331,6 @@ class EngineApp {
   // P3L.3 verify scheduling (PATCH A): armed with a steady-clock deadline
   // after every (re)load; fired once by the Run loop.
   PinVerifySchedule pin_verify_;
-  mutable std::mutex state_mutex_;
   // True while the headless renderer_ (not the slots) owns decode: the
   // headless half of the verify pass only runs then. CRIT-1: atomic —
   // written by the main-thread set_video/boot executors, read by the

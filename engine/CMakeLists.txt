@@ -7,6 +7,7 @@ add_executable(engine
   src/cpu_affinity.cpp
   src/occlusion_poke_scheduler.cpp
   src/pin_verify_schedule.cpp
+  src/playlist_controller.cpp
   src/test_simulator.cpp
   src/log_file.cpp
   src/os_wallpaper.cpp
