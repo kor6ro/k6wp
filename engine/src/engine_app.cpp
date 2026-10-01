@@ -152,10 +152,7 @@ bool EngineApp::Init(int argc, char** argv) {
   // Todo 11: start the config watcher from CliOptions. Empty --config falls
   // back to %LOCALAPPDATA%/K6WP/config.json. Corrupt JSON keeps the
   // last-valid config (logged, never fatal).
-  const std::filesystem::path config_path =
-      options_.config_path.empty()
-          ? DefaultConfigPath()
-          : std::filesystem::path(options_.config_path);
+  const std::filesystem::path config_path = ResolvedConfigPath();
   config_watcher_.Start(config_path, [this](const WallpaperConfig& cfg) {
     Log("config: active (video='%ls' fit=%s speed=%.1f monitor=%d)",
         cfg.video_path.c_str(), cfg.fit_mode.c_str(), cfg.speed,
@@ -1226,6 +1223,14 @@ void EngineApp::ApplyPendingSetMonitor() {
   HandleSetMonitor(payload);
 }
 
+std::filesystem::path EngineApp::ResolvedConfigPath() const {
+  std::lock_guard<std::mutex> lock(options_mutex_);
+  if (!options_.config_path.empty()) {
+    return std::filesystem::path(options_.config_path);
+  }
+  return DefaultConfigPath();
+}
+
 bool EngineApp::HandleSetVideo(const std::string& payload_json, bool rotation) {
   // Payload shape matches IpcClient::SetVideo: {"path": "<utf8>"}. Re-validate
   // through the shared helper (the file may have vanished since queueing); a
@@ -1272,17 +1277,8 @@ bool EngineApp::HandleSetVideo(const std::string& payload_json, bool rotation) {
   }
 
   // Persist the new video_path to config.json so the engine restarts with
-  // the correct wallpaper.  Config path: options_.config_path if set, else
-  // DefaultConfigPath() — matching how ConfigWatcher is started in Init().
-  std::filesystem::path config_path;
-  {
-    std::lock_guard<std::mutex> lock(options_mutex_);
-    if (!options_.config_path.empty()) {
-      config_path = std::filesystem::path(options_.config_path);
-    } else {
-      config_path = DefaultConfigPath();
-    }
-  }
+  // the correct wallpaper.
+  const std::filesystem::path config_path = ResolvedConfigPath();
 
   // HIGH-4: single-field atomic persist — JSON-level merge preserves
   // unknown/future keys (no struct round-trip), publishes via .tmp +
@@ -1354,15 +1350,7 @@ bool EngineApp::HandleSetMonitor(const std::string& payload_json) {
   // Persist the new target to config.json (preserve-merge, same path rule
   // as set_video). Best-effort: the live state already changed, so a
   // persist failure only warns while the ack stays ok.
-  std::filesystem::path config_path;
-  {
-    std::lock_guard<std::mutex> lock(options_mutex_);
-    if (!options_.config_path.empty()) {
-      config_path = std::filesystem::path(options_.config_path);
-    } else {
-      config_path = DefaultConfigPath();
-    }
-  }
+  const std::filesystem::path config_path = ResolvedConfigPath();
   // HIGH-4: single-field atomic persist (same .tmp + MoveFileExW path as
   // set_video). Best-effort: the live state already changed, so a persist
   // failure only warns while the ack stays ok.

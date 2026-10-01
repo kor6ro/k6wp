@@ -12,6 +12,7 @@
 #include <chrono>
 #include <cstdarg>
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <string>
 
@@ -169,6 +170,7 @@ class EngineApp {
   // (HandleMessage); the IPC worker path goes through
   // ParseSetMonitorPayload + QueueSetMonitor instead.
   bool HandleSetMonitor(const std::string& payload_json);
+  std::filesystem::path ResolvedConfigPath() const;
   // CRIT-2 worker-side halves: validate (pure, ipc_marshal.hpp) + stash the
   // pending target under marshal_mutex_ + PostMessageW the private UINT to
   // the hidden window. Return false (→ {"error"} ack) when validation fails
