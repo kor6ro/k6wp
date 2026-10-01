@@ -937,12 +937,12 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
     </message>
     <message>
         <location line="+4"/>
-        <location line="+434"/>
+        <location line="+433"/>
         <source>Mengompres %1 ...</source>
         <translation>Compressing %1 ...</translation>
     </message>
     <message>
-        <location line="-404"/>
+        <location line="-403"/>
         <source>Kompres gagal: %1</source>
         <translation>Compression failed: %1</translation>
     </message>
@@ -987,7 +987,7 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
         <translation>%1 waiting</translation>
     </message>
     <message>
-        <location line="+35"/>
+        <location line="+34"/>
         <source>Pilih video dulu dengan Impor Video atau Pilih Video.</source>
         <translation>Pick a video first with Import Video or Choose Video.</translation>
     </message>
@@ -1230,7 +1230,7 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
         <translation>Disconnected - try again</translation>
     </message>
     <message>
-        <location line="+88"/>
+        <location line="+87"/>
         <source>Semua layar</source>
         <translation>All screens</translation>
     </message>

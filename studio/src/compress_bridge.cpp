@@ -310,10 +310,9 @@ void CompressBridge::AppendLog(const QString& line) {
 }
 
 void CompressBridge::SetLastError(const QString& error) {
-  if (last_error_ == error) {
+  if (!SetChangedError(last_error_, error)) {
     return;
   }
-  last_error_ = error;
   emit lastErrorChanged();
   if (!error.isEmpty()) {
     AppendLog(error);
