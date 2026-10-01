@@ -1581,6 +1581,69 @@ std::string EngineApp::BuildStateJson() const {
   return state.dump();
 }
 
+void EngineApp::HandlePowerBroadcast(WPARAM wParam, LPARAM lParam) {
+  switch (wParam) {
+    case PBT_APMSUSPEND:
+      Log("power: PBT_APMSUSPEND received");
+      OnSuspend();
+      return;
+    case PBT_APMRESUMEAUTOMATIC:
+      Log("power: PBT_APMRESUMEAUTOMATIC received");
+      OnResume();
+      // Sleep may have recreated the desktop windows: re-anchor the
+      // live surface onto the current targets.
+      if (wallpaper_surface_live_.load(std::memory_order_acquire)) multi_monitor_.Reanchor();
+      UpdateTrayErrorStatus();
+      return;
+    case PBT_APMPOWERSTATUSCHANGE:
+      Log("power: PBT_APMPOWERSTATUSCHANGE received");
+      if (power_saver_) power_saver_->Update();
+      return;
+    case PBT_POWERSETTINGCHANGE: {
+      // P2.3: monitor power (GUID_MONITOR_POWER_ON). Data: 0 = off →
+      // screen-off pause, 1 = on → clear, 2 = dim → ignore. Any other
+      // GUID (or a null/short payload) is ignored: no pause change,
+      // no crash. Suspend/resume still route via OnSuspend/OnResume
+      // (resume constant is PBT_APMRESUMEAUTOMATIC — no PBT_APMRESUME).
+      const auto* setting = reinterpret_cast<POWERBROADCAST_SETTING*>(lParam);
+      if (setting == nullptr ||
+          !IsEqualGUID(setting->PowerSetting, GUID_MONITOR_POWER_ON)) {
+        Log("power: PBT_POWERSETTINGCHANGE unknown GUID (ignored, no pause change)");
+        return;
+      }
+      if (setting->DataLength < sizeof(DWORD)) {
+        Log("power: PBT_POWERSETTINGCHANGE monitor payload too short (%lu, ignored)",
+            static_cast<unsigned long>(setting->DataLength));
+        return;
+      }
+      DWORD data = 0;
+      std::memcpy(&data, setting->Data, sizeof(data));
+      switch (data) {
+        case 0:
+          LogImportant("power: monitor off (Data=0), pausing decode");
+          SetPauseOwner(kPauseScreenOff, true);
+          break;
+        case 1:
+          LogImportant("power: monitor on (Data=1), resuming decode");
+          SetPauseOwner(kPauseScreenOff, false);
+          break;
+        case 2:
+          Log("power: monitor dimmed (Data=2, ignored)");
+          break;
+        default:
+          Log("power: monitor unknown Data=%lu (ignored)",
+              static_cast<unsigned long>(data));
+          break;
+      }
+      return;
+    }
+    default:
+      Log("power: WM_POWERBROADCAST wParam=0x%llX (ignored)",
+          static_cast<unsigned long long>(wParam));
+      return;
+  }
+}
+
 LRESULT EngineApp::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
   // Todo 35: Explorer-restart survival (QA-fail path). The value is captured
   // at tray Install(); 0 means "not installed yet" — never matches a real msg.
@@ -1596,67 +1659,8 @@ LRESULT EngineApp::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
   }
   switch (msg) {
     case WM_POWERBROADCAST:
-      switch (wParam) {
-        case PBT_APMSUSPEND:
-          Log("power: PBT_APMSUSPEND received");
-          OnSuspend();
-          return TRUE;
-        case PBT_APMRESUMEAUTOMATIC:
-          Log("power: PBT_APMRESUMEAUTOMATIC received");
-          OnResume();
-          // Sleep may have recreated the desktop windows: re-anchor the
-          // live surface onto the current targets.
-          if (wallpaper_surface_live_.load(std::memory_order_acquire)) multi_monitor_.Reanchor();
-          UpdateTrayErrorStatus();
-          return TRUE;
-        case PBT_APMPOWERSTATUSCHANGE:
-          Log("power: PBT_APMPOWERSTATUSCHANGE received");
-          if (power_saver_) power_saver_->Update();
-          return TRUE;
-        case PBT_POWERSETTINGCHANGE: {
-          // P2.3: monitor power (GUID_MONITOR_POWER_ON). Data: 0 = off →
-          // screen-off pause, 1 = on → clear, 2 = dim → ignore. Any other
-          // GUID (or a null/short payload) is ignored: no pause change,
-          // no crash. Suspend/resume still route via OnSuspend/OnResume
-          // (resume constant is PBT_APMRESUMEAUTOMATIC — no PBT_APMRESUME).
-          const auto* setting =
-              reinterpret_cast<POWERBROADCAST_SETTING*>(lParam);
-          if (setting == nullptr ||
-              !IsEqualGUID(setting->PowerSetting, GUID_MONITOR_POWER_ON)) {
-            Log("power: PBT_POWERSETTINGCHANGE unknown GUID (ignored, no pause change)");
-            return TRUE;
-          }
-          if (setting->DataLength < sizeof(DWORD)) {
-            Log("power: PBT_POWERSETTINGCHANGE monitor payload too short (%lu, ignored)",
-                static_cast<unsigned long>(setting->DataLength));
-            return TRUE;
-          }
-          DWORD data = 0;
-          std::memcpy(&data, setting->Data, sizeof(data));
-          switch (data) {
-            case 0:
-              LogImportant("power: monitor off (Data=0), pausing decode");
-              SetPauseOwner(kPauseScreenOff, true);
-              break;
-            case 1:
-              LogImportant("power: monitor on (Data=1), resuming decode");
-              SetPauseOwner(kPauseScreenOff, false);
-              break;
-            case 2:
-              Log("power: monitor dimmed (Data=2, ignored)");
-              break;
-            default:
-              Log("power: monitor unknown Data=%lu (ignored)",
-                  static_cast<unsigned long>(data));
-              break;
-          }
-          return TRUE;
-        }
-        default:
-          Log("power: WM_POWERBROADCAST wParam=0x%llX (ignored)",
-              static_cast<unsigned long long>(wParam));
-          return TRUE;
-      }
+      HandlePowerBroadcast(wParam, lParam);
+      return TRUE;
     case WM_CLOSE:
       Log("window: WM_CLOSE received");
       RequestShutdown();

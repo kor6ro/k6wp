@@ -133,6 +133,7 @@ class EngineApp {
   // diagnostics must never miss after a taskkill.
   static void LogImportant(const char* fmt, ...);
 
+  void HandlePowerBroadcast(WPARAM wParam, LPARAM lParam);
   LRESULT HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
   bool RegisterWindowClass();
   bool CreateMessageWindow();
