@@ -66,12 +66,12 @@ struct SingletonMutexGuard {
   SingletonMutexGuard& operator=(const SingletonMutexGuard&) = delete;
 };
 
-// Resident wallpaper engine application skeleton (Wave 1).
+// Resident wallpaper engine application.
 //
-// Owns the Win32 message loop, a hidden message-only window (HWND_MESSAGE),
-// power-broadcast handling (PBT_APMSUSPEND / PBT_APMRESUMEAUTOMATIC) and the
-// device-lost / recreate hook points. The renderer (Todo 10) overrides the
-// virtual hooks; the wallpaper window itself arrives in Todo 9.
+// Owns the Win32 message loop, a hidden WS_POPUP top-level window that receives
+// the IPC/tray/power messages, power-broadcast handling (PBT_APMSUSPEND /
+// PBT_APMRESUMEAUTOMATIC), the device-lost / recreate hook points, and the
+// injected per-monitor wallpaper surface (MultiMonitor).
 class EngineApp {
  public:
   EngineApp() = default;
@@ -80,8 +80,8 @@ class EngineApp {
   EngineApp(const EngineApp&) = delete;
   EngineApp& operator=(const EngineApp&) = delete;
 
-  // Parses CLI, registers the window class, creates the hidden message-only
-  // window and installs the Ctrl+C handler. Returns false on failure; use
+  // Parses CLI, registers the window class, creates the hidden window and
+  // installs the Ctrl+C handler. Returns false on failure; use
   // InitExitCode() for the process exit code (0 = --help, 2 = parse error).
   bool Init(int argc, char** argv);
 
@@ -400,7 +400,7 @@ class EngineApp {
   void OnTrayOpenStudio();                  // launches <exe_dir>/studio.exe
   void OnTraySupport();                     // opens K6WP_DONATE_URL in browser
   // Tray icon (Todo 35): owned by value (RAII: NIM_DELETE in dtor/Shutdown),
-  // installed on the existing message-only window in Init(). Non-fatal when
+  // installed on the existing hidden window in Init(). Non-fatal when
   // Explorer is absent — engine keeps running, TaskbarCreated re-adds it.
   TrayIcon tray_;
   // Pause state shared between the UI thread (tray menu, power broadcasts,
