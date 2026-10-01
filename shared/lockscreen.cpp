@@ -76,10 +76,6 @@ std::filesystem::path LockscreenDir() {
 
 std::filesystem::path LockscreenJpgPath() { return LockscreenDir() / L"lockscreen.jpg"; }
 
-std::filesystem::path LockscreenBackupPath() {
-  return LockscreenDir() / L"lockscreen_policy_backup.json";
-}
-
 bool IsLockscreenSyncEnabled() noexcept {
   // LOW-16 ENGINE-READ CONTRACT (dev-contracts.md §3): the Engine may
   // observe exactly two studio_settings.json fields — `lockscreen_sync`

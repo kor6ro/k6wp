@@ -26,10 +26,6 @@ std::filesystem::path LockscreenDir();
 // %PROGRAMDATA%\K6WP\lockscreen.jpg — the single static lockscreen frame.
 std::filesystem::path LockscreenJpgPath();
 
-// %PROGRAMDATA%\K6WP\lockscreen_policy_backup.json — the launcher's backup of
-// the previous LockScreenImage policy value. Never throws.
-std::filesystem::path LockscreenBackupPath();
-
 // True when the user opted in via studio_settings.json (lockscreen_sync).
 // Best-effort read; false on missing/corrupt settings. Never throws.
 bool IsLockscreenSyncEnabled() noexcept;
@@ -51,14 +47,5 @@ double LockscreenOffsetSec() noexcept;
 // blocked. Any failure (sync off, missing compressor, spawn error) only emits
 // an OutputDebugStringW line — never throws, never crashes the caller.
 void FireLockscreenSyncAsync(const std::filesystem::path& video_path) noexcept;
-
-// Compatibility aliases (same behavior, alternate names used across the
-// codebase). Inline so they cost no extra translation unit.
-inline std::filesystem::path LockscreenImagePath() {
-  return LockscreenJpgPath();
-}
-inline void RequestLockscreenSync(const std::wstring& video_path) noexcept {
-  FireLockscreenSyncAsync(std::filesystem::path(video_path));
-}
 
 }  // namespace k6wp

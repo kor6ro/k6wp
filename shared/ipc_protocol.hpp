@@ -27,10 +27,6 @@ inline constexpr int kProtocolVersion = 1;
 // below. The singleton mutex stays session-agnostic on purpose:
 // Local\K6WP-Engine-Singleton (see engine/src/engine_app.hpp).
 inline constexpr const wchar_t* PipeNameBase = L"\\\\.\\pipe\\k6wp-engine";
-// Legacy alias of the unsuffixed base (kept so existing references keep
-// compiling; new code must use the session-suffixed helper — the engine only
-// listens on the suffixed name).
-inline constexpr const wchar_t* PipeName = PipeNameBase;
 
 // Returns L"\\.\pipe\k6wp-engine-<session_id>" for the given session.
 // (unsigned long is DWORD on Windows; the header stays windows.h-free by

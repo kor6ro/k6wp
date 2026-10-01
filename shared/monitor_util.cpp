@@ -85,21 +85,6 @@ MonitorInfo GetPrimaryMonitor() noexcept {
   return MonitorInfo{};
 }
 
-std::pair<int, int> GetTargetResolution(int monitor_id) noexcept {
-  const auto monitors = ListMonitors();
-  if (monitors.empty()) return {0, 0};
-
-  for (const auto& m : monitors) {
-    if (m.id == monitor_id) return {m.width, m.height};
-  }
-
-  // Unknown id -> fall back to the primary monitor's resolution.
-  for (const auto& m : monitors) {
-    if (m.is_primary) return {m.width, m.height};
-  }
-  return {monitors.front().width, monitors.front().height};
-}
-
 bool SetProcessDpiAwarenessContextPMDA() noexcept {
   return ::SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) !=
          FALSE;

@@ -27,12 +27,6 @@ std::vector<MonitorInfo> ListMonitors() noexcept;
 // monitor exists.
 MonitorInfo GetPrimaryMonitor() noexcept;
 
-// Returns the current resolution of the given monitor id (as reported by
-// ListMonitors). Unknown ids fall back to the primary monitor's resolution;
-// returns {0, 0} only when no monitor exists at all. Used as the compress
-// target resolution.
-std::pair<int, int> GetTargetResolution(int monitor_id) noexcept;
-
 // Sets per-monitor DPI awareness (DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
 // user32, Windows 10 1703+). Returns true on success. Call once at startup,
 // before any window is created.
