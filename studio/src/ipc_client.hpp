@@ -128,6 +128,13 @@ class IpcClient {
   std::atomic<bool> cancel_{false};
 
   void AppendLog(const std::string& line);
+  // Mutex-held variants: the public entry points lock and delegate, and the
+  // internal Send path (which already holds mutex_) calls these directly so
+  // Disconnect()/Connect()/IsConnected() can be safe from any thread without
+  // deadlocking on a nested lock.
+  bool IsConnectedLocked() const;
+  void DisconnectLocked();
+  bool ConnectLocked(std::string* error_out);
   // Ensures a live connection (connects when needed). False → not running.
   bool EnsureConnected(std::string* error_out);
   // LOW-6: stamps the last-use clock after a Send (called with mutex_

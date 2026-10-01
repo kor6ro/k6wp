@@ -129,10 +129,20 @@ IpcClient& IpcClient::operator=(IpcClient&& other) noexcept {
 void IpcClient::AppendLog(const std::string& line) { log_.push_back(line); }
 
 bool IpcClient::IsConnected() const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return IsConnectedLocked();
+}
+
+bool IpcClient::IsConnectedLocked() const {
   return impl_ != nullptr && impl_->connected();
 }
 
 void IpcClient::Disconnect() {
+  std::lock_guard<std::mutex> lock(mutex_);
+  DisconnectLocked();
+}
+
+void IpcClient::DisconnectLocked() {
   if (impl_ != nullptr) {
     impl_->Close();
   }
@@ -154,12 +164,17 @@ void IpcClient::ReapIdleConnection() {
   const auto idle = std::chrono::steady_clock::now() - impl_->last_use;
   if (idle > std::chrono::milliseconds(kIdleDisconnectMs)) {
     AppendLog("Ipc: idle timeout, disconnecting");
-    Disconnect();
+    DisconnectLocked();
   }
 }
 
 bool IpcClient::Connect(std::string* error_out) {
-  if (IsConnected()) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return ConnectLocked(error_out);
+}
+
+bool IpcClient::ConnectLocked(std::string* error_out) {
+  if (IsConnectedLocked()) {
     return true;
   }
   // Per-session pipe (MED-12): the engine listens on
@@ -233,10 +248,10 @@ bool IpcClient::Connect(std::string* error_out) {
 }
 
 bool IpcClient::EnsureConnected(std::string* error_out) {
-  if (IsConnected()) {
+  if (IsConnectedLocked()) {
     return true;
   }
-  return Connect(error_out);
+  return ConnectLocked(error_out);
 }
 
 IpcResult IpcClient::Send(Cmd cmd, const nlohmann::json& payload) {
@@ -294,7 +309,7 @@ IpcResult IpcClient::Send(Cmd cmd, const nlohmann::json& payload) {
     // Broken pipe → drop the handle so the next Send reconnects; map a
     // broken pipe on write to not-running (engine died mid-session).
     if (code == ERROR_BROKEN_PIPE || code == ERROR_PIPE_NOT_CONNECTED) {
-      Disconnect();
+      DisconnectLocked();
       out.status = IpcStatus::kNotRunning;
       out.error += " (engine closed the pipe)";
       AppendLog("Ipc: pipe broken; offer Start via RestartEngine");
@@ -317,7 +332,7 @@ IpcResult IpcClient::Send(Cmd cmd, const nlohmann::json& payload) {
       AppendLog(out.error);
       // Drop the connection: the engine may still answer later, and that late
       // ack would otherwise be read as the reply to the NEXT command.
-      Disconnect();
+      DisconnectLocked();
       return out;
     }
     DWORD bytes_left = 0;
@@ -330,7 +345,7 @@ IpcResult IpcClient::Send(Cmd cmd, const nlohmann::json& payload) {
           "Ipc: PeekNamedPipe failed: " + WinError(code);
       AppendLog(out.error);
       if (code == ERROR_BROKEN_PIPE || code == ERROR_PIPE_NOT_CONNECTED) {
-        Disconnect();
+        DisconnectLocked();
         out.status = IpcStatus::kNotRunning;
       }
       return out;
@@ -345,7 +360,7 @@ IpcResult IpcClient::Send(Cmd cmd, const nlohmann::json& payload) {
       AppendLog(out.error);
       // A late ack stays queued in the message-mode pipe; without dropping the
       // handle it would be consumed as the reply to the next Send (desync).
-      Disconnect();
+      DisconnectLocked();
       return out;
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -362,7 +377,7 @@ IpcResult IpcClient::Send(Cmd cmd, const nlohmann::json& payload) {
     AppendLog(out.error);
     if (code == ERROR_BROKEN_PIPE || code == ERROR_PIPE_NOT_CONNECTED ||
         code == ERROR_MORE_DATA) {
-      Disconnect();
+      DisconnectLocked();
       if (code != ERROR_MORE_DATA) {
         out.status = IpcStatus::kNotRunning;
       }
