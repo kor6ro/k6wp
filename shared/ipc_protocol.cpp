@@ -61,7 +61,8 @@ bool CmdFromString(const char* s, Cmd& out) noexcept {
   if (s == nullptr) {
     return false;
   }
-  for (int i = 0; i < 6; ++i) {
+  constexpr std::size_t kCmdCount = sizeof(kCmdNames) / sizeof(kCmdNames[0]);
+  for (std::size_t i = 0; i < kCmdCount; ++i) {
     if (std::strcmp(s, kCmdNames[i]) == 0) {
       out = static_cast<Cmd>(i);
       return true;
@@ -84,7 +85,13 @@ std::string Encode(const IpcMessage& msg) {
       {"cmd", cmd_name},
       {"payload", msg.payload},
   };
-  return root.dump() + "\n";
+  // Cap the wire FRAME, not just the payload: the documented 64 KiB limit is
+  // on the NDJSON line, and the envelope adds key/version overhead.
+  const std::string frame = root.dump();
+  if (frame.size() > kMaxPayloadBytes) {
+    throw IpcError("Encode: frame exceeds kMaxPayloadBytes (64 KiB)");
+  }
+  return frame + "\n";
 }
 
 bool Decode(const std::string& line, IpcMessage& out) {
