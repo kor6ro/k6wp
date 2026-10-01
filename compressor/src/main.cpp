@@ -138,7 +138,21 @@ int main(int argc, char** argv) {
     for (auto& e : encoders) {
       e.works = k6wp::compressor::Probe1Frame(e.name);
     }
-    const std::string chosen = k6wp::compressor::PickEncoder();
+    // Pick from the probes already run (candidate order) instead of calling
+    // PickEncoder(), which would re-probe every candidate a second time.
+    std::string chosen;
+    for (const auto& e : encoders) {
+      if (e.works) {
+        chosen = e.name;
+        break;
+      }
+    }
+    if (chosen.empty()) {
+      std::fprintf(stderr,
+                   "warning: all hardware encoders failed 1-frame probe; "
+                   "falling back to libx264\n");
+      chosen = "libx264";
+    }
 
     std::printf("{\"encoders\":[");
     for (size_t i = 0; i < encoders.size(); ++i) {
