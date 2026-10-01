@@ -28,7 +28,7 @@ PowerSaver::PowerSaver(CapApplier cap, Reader reader, LogFn log)
     : cap_(std::move(cap)), reader_(std::move(reader)), log_(std::move(log)) {}
 
 void PowerSaver::Update() {
-  if (!reader_) return;
+  if (!reader_ || !cap_) return;
   const PowerReading reading = reader_();
   const int restore =
       (reading.fps_restore >= 1 && reading.fps_restore <= 30)
