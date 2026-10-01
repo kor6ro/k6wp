@@ -22,6 +22,7 @@
 #include "ipc_server.hpp"
 #include "mpv_renderer.hpp"
 #include "multi_monitor.hpp"
+#include "cpu_affinity.hpp"
 #include "occlusion_watch.hpp"
 #include "os_wallpaper.hpp"
 #include "working_set_trim.hpp"
@@ -338,11 +339,6 @@ class EngineApp {
   // check. win_event is logged for the event→poke→check→resume chain.
   void ScheduleOcclusionPoke(unsigned long win_event);
   void OnOcclusionPokeTimer();
-  // P3L.2: E-core affinity. mode = config cpu_affinity ("auto" | "all").
-  // auto + hybrid CPU (distinct EfficiencyClass values present) pins the
-  // process to the min-class (E-core) set; anything else is a logged no-op.
-  // Never fatal: enumeration or mask failures only log.
-  void ApplyCpuAffinity(const std::string& mode);
   // Current video path (UTF-8), guarded by video_mutex_. Post-CRIT-2 the
   // executor runs on the main thread (Init() and HandleSetVideo both write
   // there; BuildStateJson reads on the main loop) — the mutex remains as
