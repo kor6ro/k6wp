@@ -78,9 +78,12 @@ double ProbeDuration(const std::filesystem::path& in) {
     out.pop_back();
   }
   if (out.empty()) return -1.0;
+  // Parse the leading number only: ffprobe can emit a warning line before the
+  // value, and the old whole-string check failed on any trailing noise.
+  const char* p = out.c_str();
   char* end = nullptr;
-  const double d = std::strtod(out.c_str(), &end);
-  if (end == out.c_str() || *end != '\0') return -1.0;
+  const double d = std::strtod(p, &end);
+  if (end == p) return -1.0;
   return d;
 }
 
