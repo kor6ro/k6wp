@@ -750,25 +750,6 @@ void EngineApp::OnSuspend() { SetPauseOwner(kPauseSuspend, true); }
 
 void EngineApp::OnResume() { SetPauseOwner(kPauseSuspend, false); }
 
-const char* EngineApp::PauseOwnerName(int bit) {
-  switch (bit) {
-    case EngineApp::kPauseUser:
-      return "user";
-    case EngineApp::kPauseFullscreen:
-      return "fullscreen";
-    case EngineApp::kPauseSuspend:
-      return "suspend";
-    case EngineApp::kPausePower:
-      return "power";
-    case EngineApp::kPauseSessionLock:
-      return "session-lock";
-    case EngineApp::kPauseScreenOff:
-      return "screen-off";
-    default:
-      return "unknown";
-  }
-}
-
 void EngineApp::SetPauseOwner(int bit, bool on) {
   if (!pause_.SetBit(bit, on)) {
     return;

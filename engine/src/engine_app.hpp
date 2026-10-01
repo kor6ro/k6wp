@@ -363,7 +363,6 @@ class EngineApp {
   // state out to renderer_, the live slots, and the tray.
   void SetPauseOwner(int bit, bool on);
   void ApplyPauseState(const char* owner);
-  static const char* PauseOwnerName(int bit);
   PauseController pause_;
 };
 

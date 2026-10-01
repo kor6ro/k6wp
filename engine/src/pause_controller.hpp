@@ -44,4 +44,24 @@ class PauseController {
   std::atomic<int> mask_{0};
 };
 
+// Human-readable name for a kUser..kScreenOff bit (logs). "unknown" otherwise.
+inline const char* PauseOwnerName(int bit) {
+  switch (bit) {
+    case PauseController::kUser:
+      return "user";
+    case PauseController::kFullscreen:
+      return "fullscreen";
+    case PauseController::kSuspend:
+      return "suspend";
+    case PauseController::kPower:
+      return "power";
+    case PauseController::kSessionLock:
+      return "session-lock";
+    case PauseController::kScreenOff:
+      return "screen-off";
+    default:
+      return "unknown";
+  }
+}
+
 }  // namespace k6wp
