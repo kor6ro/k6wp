@@ -836,7 +836,7 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
 <context>
     <name>k6wp::ApplyManager</name>
     <message>
-        <location filename="../src/apply_manager.cpp" line="+320"/>
+        <location filename="../src/apply_manager.cpp" line="+324"/>
         <source>Apply: engine mati saat sinkron layar — klik Start Engine dulu</source>
         <translation>Apply: engine stopped during screen sync - click Start Engine first</translation>
     </message>
@@ -865,12 +865,12 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
     </message>
     <message>
         <location line="+4"/>
-        <location line="+434"/>
+        <location line="+438"/>
         <source>Mengompres %1 ...</source>
         <translation>Compressing %1 ...</translation>
     </message>
     <message>
-        <location line="-404"/>
+        <location line="-408"/>
         <source>Kompres gagal: %1</source>
         <translation>Compression failed: %1</translation>
     </message>
@@ -915,7 +915,7 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
         <translation>%1 waiting</translation>
     </message>
     <message>
-        <location line="+35"/>
+        <location line="+39"/>
         <source>Pilih video dulu dengan Impor Video atau Pilih Video.</source>
         <translation>Pick a video first with Import Video or Choose Video.</translation>
     </message>
@@ -1022,7 +1022,7 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
         <translation>file not found: %1</translation>
     </message>
     <message>
-        <location line="+248"/>
+        <location line="+259"/>
         <source>Memuat pratinjau...</source>
         <translation>Loading preview...</translation>
     </message>
@@ -1044,7 +1044,7 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
 <context>
     <name>k6wp::StudioBridge</name>
     <message>
-        <location filename="../src/studio_bridge.cpp" line="+206"/>
+        <location filename="../src/studio_bridge.cpp" line="+215"/>
         <location line="+11"/>
         <source>(belum ada video aktif)</source>
         <translation>(no active video yet)</translation>
@@ -1092,7 +1092,7 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
         <translation>Disconnected - try again</translation>
     </message>
     <message>
-        <location line="+88"/>
+        <location line="+92"/>
         <source>Semua layar</source>
         <translation>All screens</translation>
     </message>
@@ -1133,7 +1133,7 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
         <translation>Resume failed: %1</translation>
     </message>
     <message>
-        <location line="+79"/>
+        <location line="+85"/>
         <location line="+33"/>
         <source>Cek pembaruan dimatikan di Pengaturan → Pembaruan.</source>
         <translation>Update check is turned off in Settings → Updates.</translation>
