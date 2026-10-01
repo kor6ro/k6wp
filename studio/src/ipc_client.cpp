@@ -315,6 +315,9 @@ IpcResult IpcClient::Send(Cmd cmd, const nlohmann::json& payload) {
       out.status = IpcStatus::kError;
       out.error = "Ipc: Send " + cmd_name + " cancelled";
       AppendLog(out.error);
+      // Drop the connection: the engine may still answer later, and that late
+      // ack would otherwise be read as the reply to the NEXT command.
+      Disconnect();
       return out;
     }
     DWORD bytes_left = 0;
@@ -340,6 +343,9 @@ IpcResult IpcClient::Send(Cmd cmd, const nlohmann::json& payload) {
       out.error = "Ipc: ack timeout (2s) for " + cmd_name +
                   " (engine sent no complete line)";
       AppendLog(out.error);
+      // A late ack stays queued in the message-mode pipe; without dropping the
+      // handle it would be consumed as the reply to the next Send (desync).
+      Disconnect();
       return out;
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
