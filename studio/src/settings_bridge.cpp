@@ -376,7 +376,8 @@ void SettingsBridge::setAutoCompressOnImport(bool on) {
 
 void SettingsBridge::setCompressOutputDir(const QString& dir) {
   if (dir.isEmpty()) {
-    return;  // validation rejects an empty dir; ignore rather than save junk
+    SetLastError(tr("Folder output tidak boleh kosong."));
+    return;
   }
   studio_.compress_output_dir = dir.toStdWString();
   emit changed();
@@ -384,6 +385,7 @@ void SettingsBridge::setCompressOutputDir(const QString& dir) {
 
 void SettingsBridge::setDefaultCrf(int value) {
   if (value < 16 || value > 28) {
+    SetLastError(tr("CRF bawaan harus 16-28."));
     return;
   }
   studio_.default_crf = value;
@@ -392,6 +394,7 @@ void SettingsBridge::setDefaultCrf(int value) {
 
 void SettingsBridge::setDefaultFps(int value) {
   if (value < 1 || value > 30) {
+    SetLastError(tr("FPS bawaan harus 1-30."));
     return;
   }
   studio_.default_fps = value;
@@ -402,6 +405,7 @@ void SettingsBridge::setDefaultResolutionMode(const QString& mode) {
   static const QStringList kModes = {"match_monitor", "source", "720p", "1080p",
                                      "2160p"};
   if (!kModes.contains(mode)) {
+    SetLastError(tr("Mode resolusi tidak dikenal."));
     return;
   }
   studio_.default_resolution_mode = mode.toStdString();
@@ -475,6 +479,7 @@ void SettingsBridge::setLanguage(const QString& code) {
 void SettingsBridge::setFitMode(const QString& mode) {
   static const QStringList kModes = {"fill", "cover", "fit", "stretch", "center"};
   if (!kModes.contains(mode)) {
+    SetLastError(tr("Mode pengisian layar tidak dikenal."));
     return;
   }
   config_.fit_mode = mode.toStdString();
@@ -483,6 +488,7 @@ void SettingsBridge::setFitMode(const QString& mode) {
 
 void SettingsBridge::setMonitorId(int id) {
   if (id < -1) {
+    SetLastError(tr("Monitor tidak valid."));
     return;
   }
   config_.monitor_id = id;
@@ -496,6 +502,7 @@ void SettingsBridge::setBatterySaver(bool on) {
 
 void SettingsBridge::setBatteryMode(const QString& mode) {
   if (mode != "cap24" && mode != "static") {
+    SetLastError(tr("Mode baterai tidak dikenal."));
     return;
   }
   config_.battery_mode = mode.toStdString();
@@ -504,6 +511,7 @@ void SettingsBridge::setBatteryMode(const QString& mode) {
 
 void SettingsBridge::setCpuAffinity(const QString& mode) {
   if (mode != "auto" && mode != "all") {
+    SetLastError(tr("Afinitas CPU tidak dikenal."));
     return;
   }
   config_.cpu_affinity = mode.toStdString();
@@ -512,6 +520,7 @@ void SettingsBridge::setCpuAffinity(const QString& mode) {
 
 void SettingsBridge::setGpuAdapter(const QString& mode) {
   if (mode != "auto" && mode != "integrated" && mode != "discrete") {
+    SetLastError(tr("Pilihan GPU tidak dikenal."));
     return;
   }
   config_.gpu_adapter = mode.toStdString();
@@ -520,6 +529,7 @@ void SettingsBridge::setGpuAdapter(const QString& mode) {
 
 void SettingsBridge::setFpsCap(int value) {
   if (value < 1 || value > 30) {
+    SetLastError(tr("Batas FPS harus 1-30."));
     return;
   }
   config_.fps_cap = value;
@@ -528,6 +538,7 @@ void SettingsBridge::setFpsCap(int value) {
 
 void SettingsBridge::setCrf(int value) {
   if (value < 16 || value > 28) {
+    SetLastError(tr("CRF harus 16-28."));
     return;
   }
   config_.crf = value;
@@ -536,6 +547,7 @@ void SettingsBridge::setCrf(int value) {
 
 void SettingsBridge::setSpeed(double value) {
   if (value < 0.5 || value > 2.0) {
+    SetLastError(tr("Kecepatan harus 0.5-2.0."));
     return;
   }
   config_.speed = value;
@@ -544,6 +556,7 @@ void SettingsBridge::setSpeed(double value) {
 
 void SettingsBridge::setResolutionW(int value) {
   if (value < 0) {
+    SetLastError(tr("Lebar resolusi tidak boleh negatif."));
     return;
   }
   config_.resolution_w = value;
@@ -552,6 +565,7 @@ void SettingsBridge::setResolutionW(int value) {
 
 void SettingsBridge::setResolutionH(int value) {
   if (value < 0) {
+    SetLastError(tr("Tinggi resolusi tidak boleh negatif."));
     return;
   }
   config_.resolution_h = value;
