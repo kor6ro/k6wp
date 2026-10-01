@@ -37,7 +37,7 @@ class ConfigError : public std::runtime_error {
 struct WallpaperConfig {
   int version = kConfigSchemaVersion;
   std::wstring video_path;  // UTF-8 on disk, wide in memory (Win32-friendly)
-  std::string fit_mode = "fill";  // fill | cover | fit | stretch | center
+  std::string fit_mode = "cover";  // cover | fill (legacy alias) | fit | stretch | center
   double speed = 1.0;             // 0.5 - 2.0
   int monitor_id = -1;            // -1 = all screens; >=0 = that monitor only
   int crf = 22;                   // 16 - 28
