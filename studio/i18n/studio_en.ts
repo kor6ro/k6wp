@@ -908,7 +908,7 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
 <context>
     <name>k6wp::ApplyManager</name>
     <message>
-        <location filename="../src/apply_manager.cpp" line="+324"/>
+        <location filename="../src/apply_manager.cpp" line="+321"/>
         <source>Apply: engine mati saat sinkron layar — klik Start Engine dulu</source>
         <translation>Apply: engine stopped during screen sync - click Start Engine first</translation>
     </message>
@@ -1245,7 +1245,7 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
         <translation> (primary)</translation>
     </message>
     <message>
-        <location line="+276"/>
+        <location line="+270"/>
         <source>Engine paused (IPC)</source>
         <translation>Engine paused (IPC)</translation>
     </message>

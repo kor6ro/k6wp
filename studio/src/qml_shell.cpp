@@ -7,9 +7,7 @@
 #include <QDragEnterEvent>
 #include <QDragMoveEvent>
 #include <QDropEvent>
-#include <QEvent>
 #include <QIcon>
-#include <QLine>
 #include <QMimeData>
 #include <QPoint>
 #include <QQmlEngine>

@@ -67,8 +67,6 @@ class LibraryManager {
   // Test override: K6WP_LIBRARY_JSON env var wins when non-empty.
   static std::filesystem::path DefaultLibraryJsonPath();
 
-  [[nodiscard]] std::filesystem::path JsonPath() const;
-
   // Loads entries from disk. Missing file => empty library (first run).
   // Corrupt main file falls back to the .bak; throws only when neither parses.
   void Load();

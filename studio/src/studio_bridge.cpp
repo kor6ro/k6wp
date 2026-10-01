@@ -541,12 +541,6 @@ void StudioBridge::applyWallpaper(const QString& path) {
     if (!outcome.ok && outcome.error.isEmpty()) {
       outcome.error = QString::fromStdString(res.first_error);
     }
-    if (!outcome.ok && outcome.error.isEmpty()) {
-      // The manager reported neither a message nor a first_error. Leave it
-      // empty: FriendlyApplyError turns that into actionable wording, so the
-      // failure is still named and no fake line reaches the log.
-      outcome.error.clear();
-    }
     return outcome;
   }));
 }

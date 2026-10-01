@@ -2,7 +2,6 @@
 
 #include <chrono>
 #include <filesystem>
-#include <thread>
 
 // windows.h for the PID-targeted RestartEngine (OpenProcess /
 // WaitForSingleObject / TerminateProcess + WaitNamedPipeW polling).
@@ -18,10 +17,8 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
-#include <QFutureWatcher>
 #include <QProcess>
 #include <QString>
-#include <QtConcurrent>
 
 #include "ipc_client.hpp"
 #include "lockscreen.hpp"

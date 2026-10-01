@@ -149,8 +149,6 @@ std::filesystem::path LibraryManager::DefaultLibraryJsonPath() {
   throw LibraryError("LOCALAPPDATA and USERPROFILE are both unset");
 }
 
-std::filesystem::path LibraryManager::JsonPath() const { return json_path_; }
-
 void LibraryManager::Load() {
   bool exists = false;
   std::string text;

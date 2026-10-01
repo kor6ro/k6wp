@@ -87,16 +87,8 @@ class CompressService final : public QObject {
   //                  launch; its Finished(false, ...) is already queued
   enum class EnqueueResult { kStarted, kQueued, kInvalid, kStartFailed };
 
-  // Appends a job (assigns meta.job_id). Starts it immediately when idle.
-  // Returns false + *error_out when the request/launch is invalid; the job
-  // is not queued then. (True also covers the rare start-failure path,
-  // where the job was dequeued but the process failed to launch — see
-  // EnqueueResult::kStartFailed.)
-  bool Enqueue(const CompressRequest& req, JobMeta& meta,
-               QString* error_out = nullptr);
-
-  // Same dispatch as Enqueue, with the outcome spelled out for callers
-  // that need to distinguish launched-now / queued / launch-failed.
+  // Dispatch, with the outcome spelled out for callers that need to
+  // distinguish launched-now / queued / launch-failed.
   EnqueueResult EnqueueDetailed(const CompressRequest& req, JobMeta& meta,
                                 QString* error_out = nullptr);
 
@@ -157,8 +149,6 @@ class CompressService final : public QObject {
   QString error_text_;
   QString stdout_buf_;
   QString stderr_buf_;
-  int last_progress_ = 0;
-  int last_eta_s_ = -1;
   // Batch accounting for QueueSummary.
   bool batch_active_ = false;
   int batch_ok_ = 0;

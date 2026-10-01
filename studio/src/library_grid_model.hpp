@@ -20,7 +20,6 @@
 
 #include <QtQml/qqmlregistration.h>
 
-#include <memory>
 #include <vector>
 
 #include "library_manager.hpp"

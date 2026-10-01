@@ -77,11 +77,6 @@ QString CompressService::ResolveCompressorPath() {
   return QDir::cleanPath(fallback);
 }
 
-bool CompressService::Enqueue(const CompressRequest& req, JobMeta& meta,
-                              QString* error_out) {
-  return EnqueueDetailed(req, meta, error_out) != EnqueueResult::kInvalid;
-}
-
 CompressService::EnqueueResult CompressService::EnqueueDetailed(
     const CompressRequest& req, JobMeta& meta, QString* error_out) {
   const auto fail = [this, error_out](const QString& msg) {
@@ -180,8 +175,6 @@ bool CompressService::StartNext() {
   error_text_.clear();
   stdout_buf_.clear();
   stderr_buf_.clear();
-  last_progress_ = 0;
-  last_eta_s_ = -1;
 
   process_.setProgram(exe_path);
   process_.setArguments(args);
@@ -341,8 +334,6 @@ void CompressService::HandleStdoutLine(const QString& line) {
     if (pct < 0 || pct > 100) {
       return;
     }
-    last_progress_ = pct;
-    last_eta_s_ = eta;
     emit Progress(pct, eta);
     return;
   }
