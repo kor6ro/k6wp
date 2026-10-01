@@ -75,11 +75,7 @@ bool EngineApp::Init(int argc, char** argv) {
     init_exit_code_ = (parse_rc == 1) ? 0 : 2;
     return false;
   }
-  exit_after_ms_ = options_.exit_after_ms;
-  simulate_device_lost_after_ms_ = options_.simulate_device_lost_after_ms;
-  simulate_suspend_after_ms_ = options_.simulate_suspend_after_ms;
-  simulate_dc_after_ms_ = options_.simulate_dc_after_ms;
-  simulate_monitor_off_after_ms_ = options_.simulate_monitor_off_after_ms;
+  sim_.Configure(options_);
 
   // Todo 14: single-instance guard, acquired BEFORE any window, IPC pipe,
   // or tray icon exists and held for the process lifetime via the RAII
@@ -146,7 +142,7 @@ bool EngineApp::Init(int argc, char** argv) {
 
   Log("engine init: video='%ls' config='%ls' wallpaper-mode=%s exit-after-ms=%d",
       options_.video_path.c_str(), options_.config_path.c_str(),
-      WallpaperModeToString(options_.wallpaper_mode), exit_after_ms_);
+      WallpaperModeToString(options_.wallpaper_mode), sim_.exit_after_ms());
   if (options_.minimized) {
     // The engine never shows a window (message-only HWND + tray icon only),
     // so --minimized is a no-op marker from the HKCU Run entry — logged so an
@@ -268,7 +264,7 @@ bool EngineApp::Init(int argc, char** argv) {
       },
       [this]() -> PowerReading {
         const WallpaperConfig cfg = config_watcher_.GetConfig();
-        if (simulate_dc_latched_) {
+        if (sim_.dc_latched()) {
           PowerReading forced;
           forced.ac_online = false;
           forced.ac_unknown = false;
@@ -454,14 +450,7 @@ void EngineApp::StopHeadlessRenderer() {
   LogImportant("engine shutdown: headless renderer event thread stopped (join timing above)");
 }
 
-bool EngineApp::AnySimulateArmed() const {
-  if (exit_after_ms_ > 0) return true;
-  if (simulate_device_lost_after_ms_ > 0 && !device_lost_simulated_) return true;
-  if (simulate_suspend_after_ms_ > 0 && !resume_simulated_) return true;
-  if (simulate_dc_after_ms_ > 0 && !dc_restored_) return true;
-  if (simulate_monitor_off_after_ms_ > 0 && !monitor_on_simulated_) return true;
-  return false;
-}
+bool EngineApp::AnySimulateArmed() const { return sim_.AnyArmed(); }
 
 DWORD EngineApp::ComputeWaitTimeoutMs() const {
   // 50 ms ONLY while a test flag is armed (never a permanent short sleep);
@@ -775,48 +764,36 @@ int EngineApp::Run() {
                                 std::chrono::steady_clock::now() - start)
                                 .count();
 
-    if (simulate_device_lost_after_ms_ > 0 && !device_lost_simulated_ &&
-        elapsed_ms >= simulate_device_lost_after_ms_) {
-      device_lost_simulated_ = true;
+    const TestSimulator::Fired fired = sim_.Tick(elapsed_ms);
+    if (fired.device_lost) {
       Log("test: --simulate-device-lost-after-ms=%d reached, firing OnDeviceLost()",
-          simulate_device_lost_after_ms_);
+          sim_.device_lost_after_ms());
       OnDeviceLost();
     }
-    if (simulate_suspend_after_ms_ > 0 && !suspend_simulated_ && elapsed_ms >= simulate_suspend_after_ms_) {
-      suspend_simulated_ = true;
+    if (fired.suspend) {
       Log("test: --simulate-suspend-after-ms=%d reached, posting PBT_APMSUSPEND",
-          simulate_suspend_after_ms_);
+          sim_.suspend_after_ms());
       PostMessageW(message_hwnd_, WM_POWERBROADCAST, PBT_APMSUSPEND, 0);
     }
-    if (simulate_suspend_after_ms_ > 0 && !resume_simulated_ &&
-        elapsed_ms >= simulate_suspend_after_ms_ + 2000) {
-      resume_simulated_ = true;
+    if (fired.resume) {
       Log("test: posting PBT_APMRESUMEAUTOMATIC");
       PostMessageW(message_hwnd_, WM_POWERBROADCAST, PBT_APMRESUMEAUTOMATIC, 0);
     }
-    if (simulate_dc_after_ms_ > 0 && !dc_simulated_ &&
-        elapsed_ms >= simulate_dc_after_ms_) {
-      dc_simulated_ = true;
-      simulate_dc_latched_ = true;
+    if (fired.dc_on) {
       Log("test: --simulate-dc-after-ms=%d reached, latching forced DC + posting PBT_APMPOWERSTATUSCHANGE",
-          simulate_dc_after_ms_);
+          sim_.dc_after_ms());
       PostMessageW(message_hwnd_, WM_POWERBROADCAST, PBT_APMPOWERSTATUSCHANGE, 0);
     }
-    if (simulate_dc_after_ms_ > 0 && !dc_restored_ &&
-        elapsed_ms >= simulate_dc_after_ms_ + 2000) {
-      dc_restored_ = true;
-      simulate_dc_latched_ = false;
+    if (fired.dc_restore) {
       Log("test: clearing DC override, posting PBT_APMPOWERSTATUSCHANGE (AC restore)");
       PostMessageW(message_hwnd_, WM_POWERBROADCAST, PBT_APMPOWERSTATUSCHANGE, 0);
     }
     // P2.3: monitor-off QA sequence — delivers the SAME PBT_POWERSETTINGCHANGE
     // off/on pair the OS would send, so the real parse path is exercised
     // headless (off at N via Data=0, on at N+2s via Data=1).
-    if (simulate_monitor_off_after_ms_ > 0 && !monitor_off_simulated_ &&
-        elapsed_ms >= simulate_monitor_off_after_ms_) {
-      monitor_off_simulated_ = true;
+    if (fired.monitor_off) {
       Log("test: --simulate-monitor-off-after-ms=%d reached, sending PBT_POWERSETTINGCHANGE Data=0 (monitor off)",
-          simulate_monitor_off_after_ms_);
+          sim_.monitor_off_after_ms());
       // WM_POWERBROADCAST is sync-only: PostMessageW fails with
       // ERROR_MESSAGE_SYNC_ONLY (1159). SendMessageW to our own loop thread
       // dispatches synchronously, exactly like the OS broadcast.
@@ -825,9 +802,7 @@ int EngineApp::Run() {
       SendMessageW(message_hwnd_, WM_POWERBROADCAST, PBT_POWERSETTINGCHANGE,
                    reinterpret_cast<LPARAM>(&off_setting.base));
     }
-    if (simulate_monitor_off_after_ms_ > 0 && !monitor_on_simulated_ &&
-        elapsed_ms >= simulate_monitor_off_after_ms_ + 2000) {
-      monitor_on_simulated_ = true;
+    if (fired.monitor_on) {
       Log("test: sending PBT_POWERSETTINGCHANGE Data=1 (monitor on)");
       MonitorPowerSetting on_setting{};
       InitMonitorPowerSetting(on_setting, 1);
@@ -849,8 +824,8 @@ int EngineApp::Run() {
     if (fire_pin_verify) {
       RunPinVerifyPass();
     }
-    if (exit_after_ms_ > 0 && elapsed_ms >= exit_after_ms_) {
-      Log("test: --exit-after-ms=%d reached, requesting shutdown", exit_after_ms_);
+    if (sim_.ExitReached(elapsed_ms)) {
+      Log("test: --exit-after-ms=%d reached, requesting shutdown", sim_.exit_after_ms());
       RequestShutdown();
       break;
     }

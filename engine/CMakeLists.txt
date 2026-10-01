@@ -4,6 +4,7 @@ add_executable(engine
   src/crash_dump_prune.cpp
   src/engine_app.cpp
   src/cli_options.cpp
+  src/test_simulator.cpp
   src/log_file.cpp
   src/desktop_inject.cpp
   src/bench_hook.cpp

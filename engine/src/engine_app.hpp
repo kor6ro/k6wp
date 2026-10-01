@@ -23,6 +23,7 @@
 #include "occlusion_watch.hpp"
 #include "pause_controller.hpp"
 #include "pending_queue.hpp"
+#include "test_simulator.hpp"
 #include "power.hpp"
 #include "timer_ids.hpp"
 #include "tray.hpp"
@@ -196,26 +197,15 @@ class EngineApp {
   // creation, renderer calls, or config I/O.
   mutable std::mutex options_mutex_;
   CliOptions options_;
-  int exit_after_ms_ = 0;
-  int simulate_device_lost_after_ms_ = 0;
-  int simulate_suspend_after_ms_ = 0;
-  int simulate_dc_after_ms_ = 0;  // Todo 40: forced-DC power-broadcast sim
-  int simulate_monitor_off_after_ms_ = 0;  // P2.3: monitor-off sim (off at N, on at N+2s)
-  bool monitor_off_simulated_ = false;
-  bool monitor_on_simulated_ = false;
+  // Hidden QA test flags; Run() drives it each loop.
+  TestSimulator sim_;
   // P2.3: GUID_MONITOR_POWER_ON registration handle (HPOWERNOTIFY per
   // WinUser.h; Register in Init, Unregister in Shutdown — balanced, no
   // threads involved).
   HPOWERNOTIFY monitor_power_notify_ = nullptr;
-  bool dc_simulated_ = false;
-  bool dc_restored_ = false;
-  bool simulate_dc_latched_ = false;  // true = reader reports DC regardless
   // Battery saver (Todo 40): owns the AC/DC cap logic; refs renderer_ +
   // config_watcher_ (both outlive it). Null until Init() builds it.
   std::unique_ptr<PowerSaver> power_saver_;
-  bool device_lost_simulated_ = false;
-  bool suspend_simulated_ = false;
-  bool resume_simulated_ = false;
   // CRIT-1: read by BuildStateJson on the IPC worker thread, written by the
   // main loop (Run/RequestShutdown). Plain bool was a data race.
   std::atomic<bool> running_{false};
