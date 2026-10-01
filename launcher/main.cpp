@@ -605,7 +605,7 @@ PipeSendResult SendEngineCommand(const std::string& line, DWORD ack_timeout_ms,
   if (!done.valid()) {
     return PipeSendResult::kError;
   }
-  char buf[512] = {};
+  char buf[16 * 1024] = {};
   OVERLAPPED ov{};
   ov.hEvent = done.get();
   if (ReadFile(pipe.get(), buf, sizeof(buf) - 1, nullptr, &ov) == 0 &&
