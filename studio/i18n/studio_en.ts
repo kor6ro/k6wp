@@ -1042,6 +1042,79 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
     </message>
 </context>
 <context>
+    <name>k6wp::SettingsBridge</name>
+    <message>
+        <location filename="../src/settings_bridge.cpp" line="+379"/>
+        <source>Folder output tidak boleh kosong.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>CRF bawaan harus 16-28.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>FPS bawaan harus 1-30.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+11"/>
+        <source>Mode resolusi tidak dikenal.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+74"/>
+        <source>Mode pengisian layar tidak dikenal.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>Monitor tidak valid.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+14"/>
+        <source>Mode baterai tidak dikenal.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>Afinitas CPU tidak dikenal.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>Pilihan GPU tidak dikenal.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>Batas FPS harus 1-30.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>CRF harus 16-28.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>Kecepatan harus 0.5-2.0.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>Lebar resolusi tidak boleh negatif.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>Tinggi resolusi tidak boleh negatif.</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>k6wp::StudioBridge</name>
     <message>
         <location filename="../src/studio_bridge.cpp" line="+215"/>
