@@ -188,6 +188,13 @@ class MultiMonitor {
   // Current virtual-screen geometry (GetSystemMetrics in the .cpp).
   static SpanGeometry GetSpanGeometry() noexcept;
 
+  // Test-only seam (row 11 failure QA): when non-null, GetSpanGeometry()
+  // returns *g instead of the live GetSystemMetrics values, so a headless
+  // suite can force the non-positive virtual-screen fixture that drives
+  // ReattachSpanLocked's primary-resolution fallback. Production never
+  // calls this; pass nullptr to restore the live metrics.
+  static void SetSpanGeometryOverride(const SpanGeometry* g);
+
  private:
   // MpvRenderer holds a std::mutex (non-movable), so both RAII members are
   // held via unique_ptr — no raw new/delete anywhere.
@@ -274,6 +281,14 @@ class MultiMonitor {
   // passes so Reanchor/OnDisplayChange survivors get the fresh resolution and
   // row 11 can compare the measured client_rect against the live host.
   SharedHost shared_host_;
+  // Row 11: host client_rect the live slots were last attached against.
+  // Written ONLY at the end of Init/OnDisplayChange/Reanchor (pass-end),
+  // never by ResolveHostForPass - OnDisplayChange compares the freshly
+  // resolved shared_host_.client_rect against this to detect a moved or
+  // recreated host while every monitor rect is unchanged. Update-in-
+  // ResolveHostForPass would make that comparison vacuous (the pass refresh
+  // would also refresh the snapshot before the survivor loop runs).
+  PlacementRect attached_host_rect_{};
   std::atomic<bool> global_paused_{false};
   Slot* SlotAt(size_t idx);
   const Slot* SlotAt(size_t idx) const;

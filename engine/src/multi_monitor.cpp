@@ -43,6 +43,14 @@ std::vector<MonitorInfo> FilterMonitors(int active) {
   return out;
 }
 
+// Row 11: test-only GetSpanGeometry override (SetSpanGeometryOverride).
+const SpanGeometry* g_span_geometry_override = nullptr;
+
+bool SamePlacementRect(const PlacementRect& a, const PlacementRect& b) {
+  return a.left == b.left && a.top == b.top && a.right == b.right &&
+         a.bottom == b.bottom;
+}
+
 }  // namespace
 
 MultiMonitor::MultiMonitor(LogFn log, SlotFactory factory)
@@ -64,6 +72,7 @@ MultiMonitor::MultiMonitor(MultiMonitor&& other) noexcept
       initialized_(other.initialized_),
       headless_host_(other.headless_host_),
       shared_host_(other.shared_host_),
+      attached_host_rect_(other.attached_host_rect_),
       global_paused_(other.global_paused_.load(std::memory_order_relaxed)) {
   other.initialized_ = false;
 }
@@ -85,6 +94,7 @@ MultiMonitor& MultiMonitor::operator=(MultiMonitor&& other) noexcept {
     initialized_ = other.initialized_;
     headless_host_ = other.headless_host_;
     shared_host_ = other.shared_host_;
+    attached_host_rect_ = other.attached_host_rect_;
     global_paused_.store(other.global_paused_.load(std::memory_order_relaxed),
                          std::memory_order_relaxed);
     other.initialized_ = false;
@@ -93,12 +103,19 @@ MultiMonitor& MultiMonitor::operator=(MultiMonitor&& other) noexcept {
 }
 
 SpanGeometry MultiMonitor::GetSpanGeometry() noexcept {
+  if (g_span_geometry_override != nullptr) {
+    return *g_span_geometry_override;
+  }
   SpanGeometry g;
   g.x = ::GetSystemMetrics(SM_XVIRTUALSCREEN);
   g.y = ::GetSystemMetrics(SM_YVIRTUALSCREEN);
   g.width = ::GetSystemMetrics(SM_CXVIRTUALSCREEN);
   g.height = ::GetSystemMetrics(SM_CYVIRTUALSCREEN);
   return g;
+}
+
+void MultiMonitor::SetSpanGeometryOverride(const SpanGeometry* g) {
+  g_span_geometry_override = g;
 }
 
 void MultiMonitor::ClearSlots() {
@@ -296,11 +313,13 @@ bool MultiMonitor::Init(MultiMonitorMode mode) {
     if (AttachSpanSlot()) {
       initialized_ = true;
     }
+    attached_host_rect_ = shared_host_.client_rect;
     filter_armed_ = true;
     return initialized_;
   }
   ApplyActiveFilter(FilterMonitors(active_monitor_.load(std::memory_order_acquire)));
   filter_armed_ = true;
+  attached_host_rect_ = shared_host_.client_rect;
   if (!initialized_) {
     LogLine(log_, "multi_monitor: Init found no monitors, engine keeps running");
   }
@@ -314,27 +333,37 @@ void MultiMonitor::OnDisplayChange() {
   // attach failures degrade to fewer live slots, never an exception.
   try {
     if (mode_ == MultiMonitorMode::Span) {
-      const SpanGeometry g = GetSpanGeometry();
       const auto it = slots_.find(kSpanSlotId);
       if (it == slots_.end()) {
         AttachSpanSlot();
+        attached_host_rect_ = shared_host_.client_rect;
         return;
       }
+      // Row 11: resolve the host BEFORE the change checks - the host-rect
+      // comparison needs a live measurement, and row 7 treats pass entries
+      // as unconditional resolutions.
+      ResolveHostForPass();
+      const SpanGeometry g = GetSpanGeometry();
       Slot& slot = it->second;
-      if (slot.info.x == g.x && slot.info.y == g.y &&
-          slot.info.width == g.width && slot.info.height == g.height) {
-        return;  // Geometry unchanged — nothing to do.
+      const bool geometry_changed =
+          !(slot.info.x == g.x && slot.info.y == g.y &&
+            slot.info.width == g.width && slot.info.height == g.height);
+      const bool host_moved =
+          !SamePlacementRect(shared_host_.client_rect, attached_host_rect_);
+      if (!geometry_changed && !host_moved) {
+        return;  // Geometry and host unchanged — nothing to do.
       }
-      // Re-attach the injector at the new span size, keep the renderer
-      // instance (no video reload needed — SetHWND re-points it).
+      // Re-attach the injector at the current span size against the
+      // refreshed host, keep the renderer instance (no video reload needed —
+      // SetHWND re-points it).
       if (slot.injector) {
-        ResolveHostForPass();
         ReattachSpanLocked(slot, g.x, g.y, g.width, g.height, /*reassert=*/false);
       }
       slot.info.x = g.x;
       slot.info.y = g.y;
       slot.info.width = g.width;
       slot.info.height = g.height;
+      attached_host_rect_ = shared_host_.client_rect;
       return;
     }
     const std::vector<MonitorInfo> desired =
@@ -343,6 +372,11 @@ void MultiMonitor::OnDisplayChange() {
     //    monitors torn down, filtered-out monitors removed, newcomers
     //    attached). Reuses the OnDisplayChange teardown/attach pattern.
     ApplyActiveFilter(desired);
+    // Row 11: a host that moved or was recreated (Explorer restart, DPI
+    // change) must re-place survivors even when every monitor rect is
+    // unchanged - children are parented to the host client origin.
+    const bool host_moved =
+        !SamePlacementRect(shared_host_.client_rect, attached_host_rect_);
     // 2. Refresh sizes of survivors.
     for (const MonitorInfo& mi : desired) {
       const auto it = slots_.find(mi.id);
@@ -355,7 +389,7 @@ void MultiMonitor::OnDisplayChange() {
                               it->second.info.x != mi.x ||
                               it->second.info.y != mi.y);
         it->second.info = mi;
-        if (resized && it->second.injector) {
+        if ((resized || host_moved) && it->second.injector) {
           it->second.injector->SetSharedHost(shared_host_);
           it->second.injector->OnDisplayChange(mi.x, mi.y, mi.width, mi.height);
           if (it->second.renderer) {
@@ -372,6 +406,7 @@ void MultiMonitor::OnDisplayChange() {
         }
       }
     }
+    attached_host_rect_ = shared_host_.client_rect;
     initialized_ = !slots_.empty();
   } catch (...) {
     LogLine(log_, "multi_monitor: OnDisplayChange failed, keeping live slots");
@@ -532,6 +567,7 @@ void MultiMonitor::Reanchor() {
         ReattachSpanLocked(it->second, it->second.info.x, it->second.info.y,
                            g.width, g.height, /*reassert=*/true);
       }
+      attached_host_rect_ = shared_host_.client_rect;
       initialized_ = !slots_.empty();
       return;
     }
@@ -563,6 +599,7 @@ void MultiMonitor::Reanchor() {
         }
       }
     }
+    attached_host_rect_ = shared_host_.client_rect;
     initialized_ = !slots_.empty();
   } catch (...) {
     LogLine(log_, "multi_monitor: Reanchor failed, keeping live slots");
