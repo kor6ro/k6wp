@@ -163,6 +163,12 @@ struct IpcServer::Impl {
           if (!handlers.set_monitor(payload)) return ErrorAck("set_monitor handler rejected the command");
           return "{\"ok\":true}\n";
         }
+        case Cmd::set_display_video: {
+          const std::string payload = msg.payload.dump();
+          if (!handlers.set_display_video) return ErrorAck("set_display_video handler not installed");
+          if (!handlers.set_display_video(payload)) return ErrorAck("set_display_video handler rejected the command");
+          return "{\"ok\":true}\n";
+        }
         case Cmd::pause:
           if (!handlers.pause) return ErrorAck("pause handler not installed");
           handlers.pause();

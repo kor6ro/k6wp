@@ -276,16 +276,19 @@ bool EngineApp::Init(int argc, char** argv) {
   power_saver_->Update();
 
   // Todo 28: start the overlapped IPC pipe server. pause / resume own the
-  // user bit (Step 3.1), set_video / set_monitor VALIDATE on the worker and
-  // queue for the main loop (CRIT-2: Queue* posts a private UINT to the
-  // hidden window; the {"ok":true} ack means "diterima", verified later via
-  // get_state), get_state reports the live engine state.
+  // user bit (Step 3.1), set_video / set_monitor / set_display_video VALIDATE
+  // on the worker and queue for the main loop (CRIT-2: Queue* posts a private
+  // UINT to the hidden window; the {"ok":true} ack means "diterima", verified
+  // later via get_state), get_state reports the live engine state.
   IpcHandlers handlers;
   handlers.set_video = [this](const std::string& payload) {
     return ipc_marshal_.QueueVideo(payload);
   };
   handlers.set_monitor = [this](const std::string& payload) {
     return ipc_marshal_.QueueMonitor(payload);
+  };
+  handlers.set_display_video = [this](const std::string& payload) {
+    return ipc_marshal_.QueueDisplayVideo(payload);
   };
   handlers.pause = [this]() { SetPauseOwner(kPauseUser, true); };
   handlers.resume = [this]() { SetPauseOwner(kPauseUser, false); };
@@ -1215,6 +1218,21 @@ LRESULT EngineApp::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
       // mutates the same slot set, so it rides the same queue.)
       ApplyPendingSetVideo();
       return 0;
+    case kSetDisplayVideoMessage: {
+      // CRIT-2: queued set_display_video from the IPC worker (validated
+      // there with ParseSetDisplayVideoPayload; ack "diterima"). Consumed
+      // here on the main loop thread. HandleSetDisplayVideo's per-slot
+      // apply + displays.json persist is row 15; this consume site only
+      // routes the accepted payload off the marshal queue — no desktop
+      // mutation runs on this path until that executor lands.
+      std::string display_video_payload;
+      if (ipc_marshal_.TakeDisplayVideo(&display_video_payload)) {
+        Log("ipc: set_display_video consumed on main loop (executor pending row 15)");
+      } else {
+        Log("ipc: set_display_video main-loop wake with empty queue (ignoring)");
+      }
+      return 0;
+    }
     case kShutdownMessage:
       Log("window: shutdown message received");
       RequestShutdown();

@@ -175,6 +175,66 @@ int main() {
           "marshal: non-integer monitor rejected");
   }
 
+  // Row 14: set_display_video rides the same CRIT-2 marshal path. Reject
+  // shape (row 13 contract): clear+path together is a strict reject, so
+  // nothing is queued. Failure shape (mirrors set_monitor without window):
+  // a valid assign payload is validated then dropped when no hidden window
+  // is set. Happy shape: with a message-only window, QueueDisplayVideo
+  // posts kSetDisplayVideoMessage (WM_APP+0x56) and TakeDisplayVideo
+  // returns the payload byte-identically — the main-loop consume path.
+  {
+    k6wp::IpcCommandMarshal m;
+    std::string out;
+
+    Check(!m.QueueDisplayVideo(
+              R"({"device":"\\\\.\\DISPLAY1","path":"C:/a.mp4","clear":true})"),
+          "marshal: clear+path display video rejected");
+    Check(!m.TakeDisplayVideo(&out),
+          "marshal: nothing queued after display video reject");
+
+    const std::string assign =
+        R"({"device":"\\\\.\\DISPLAY1","path":"C:/Videos/a.mp4"})";
+    Check(!m.QueueDisplayVideo(assign),
+          "marshal: display video dropped without a window");
+    Check(!m.TakeDisplayVideo(&out),
+          "marshal: dropped display video not left queued");
+
+    Check(k6wp::kSetDisplayVideoMessage == WM_APP + 0x56u,
+          "marshal: display video message id is WM_APP+0x56");
+    Check(k6wp::kSetDisplayVideoMessage != k6wp::kSetMonitorMessage &&
+              k6wp::kSetDisplayVideoMessage != k6wp::kSetVideoMessage,
+          "marshal: display video message id distinct from monitor/video");
+
+    WNDCLASSW wc{};
+    wc.lpfnWndProc = DefWindowProcW;
+    wc.hInstance = GetModuleHandleW(nullptr);
+    wc.lpszClassName = L"K6WP.EngineStateTest.DisplayVideoWindow";
+    const ATOM atom = RegisterClassW(&wc);
+    HWND hwnd = nullptr;
+    if (atom != 0) {
+      hwnd = CreateWindowExW(0, wc.lpszClassName, L"", 0, 0, 0, 0, 0,
+                             HWND_MESSAGE, nullptr, wc.hInstance, nullptr);
+    }
+    Check(hwnd != nullptr, "marshal: test message window created");
+    if (hwnd != nullptr) {
+      m.SetWindow(hwnd);
+      Check(m.QueueDisplayVideo(assign),
+            "marshal: valid display video queued with a window");
+      MSG msg{};
+      const BOOL got = PeekMessageW(&msg, hwnd, k6wp::kSetDisplayVideoMessage,
+                                    k6wp::kSetDisplayVideoMessage, PM_REMOVE);
+      Check(got == TRUE && msg.message == k6wp::kSetDisplayVideoMessage,
+            "marshal: WM_APP+0x56 posted to the hidden window");
+      Check(m.TakeDisplayVideo(&out) && out == assign,
+            "marshal: display video round-trips byte-identically");
+      m.ClearWindow();
+      DestroyWindow(hwnd);
+    }
+    if (atom != 0) {
+      UnregisterClassW(wc.lpszClassName, wc.hInstance);
+    }
+  }
+
   std::printf(g_failures == 0 ? "RESULT: ALL ENGINE-STATE CHECKS PASSED\n"
                               : "RESULT: %d CHECK(S) FAILED\n",
               g_failures);
