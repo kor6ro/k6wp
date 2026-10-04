@@ -216,4 +216,27 @@ add_executable(desktop_zorder_test
 target_link_libraries(desktop_zorder_test PRIVATE user32 gdi32)
 target_include_directories(desktop_zorder_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 add_test(NAME desktop_zorder_test COMMAND desktop_zorder_test)
+
+# multi_monitor_placement_test (multi-monitor extend setup, row 12): the
+# placement matrix - 1/2/3 monitors, negative origins (left/above primary),
+# portrait secondary, duplicate mode (shared physical rect) and mixed-DPI.
+# Same link model as multi_monitor_factory_test (row 6): src/multi_monitor.cpp
+# + src/desktop_placement.cpp against TU-level DesktopInjector / MpvRenderer /
+# ListMonitors stubs, so the binary never links desktop_inject.cpp,
+# mpv_renderer.cpp or mpv.lib - target_link_libraries below must never grow
+# an mpv entry. k6wp_shared is linked ONLY for DetectKeyCollision (row 5,
+# shared/displays_schema.hpp); the TU still owns ListMonitors /
+# GetPrimaryMonitor so monitor_util.obj is never pulled. user32:
+# GetSystemMetrics in MultiMonitor::GetSpanGeometry.
+add_executable(multi_monitor_placement_test
+  ../tests/multi_monitor_placement_test.cpp
+  src/multi_monitor.cpp
+  src/desktop_placement.cpp
+)
+target_link_libraries(multi_monitor_placement_test PRIVATE user32 k6wp_shared)
+target_include_directories(multi_monitor_placement_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_SOURCE_DIR}/shared
+)
+add_test(NAME multi_monitor_placement_test COMMAND multi_monitor_placement_test)
 endif()
