@@ -149,4 +149,14 @@ add_executable(engine_state_test
 target_link_libraries(engine_state_test PRIVATE k6wp_shared user32)
 target_include_directories(engine_state_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 add_test(NAME engine_state_test COMMAND engine_state_test)
+
+# desktop_placement_test (multi-monitor extend setup, row 3): pure geometry
+# helpers extracted from DesktopInjector::CreateAndAttach (the :261-265
+# inline offset math). windows.h-free; no engine/mpv link deps.
+add_executable(desktop_placement_test
+  ../tests/desktop_placement_test.cpp
+  src/desktop_placement.cpp
+)
+target_include_directories(desktop_placement_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+add_test(NAME desktop_placement_test COMMAND desktop_placement_test)
 endif()
