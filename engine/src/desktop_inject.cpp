@@ -516,6 +516,69 @@ struct DesktopInjector::Impl {
         return nullptr;
       }
     }
+    // Row 9: honest post-attach verification. CreateAndAttach returning true
+    // (first attempt OR Progman-fallback retry) is not proof the child
+    // covers its monitor - a clipped/out-of-bounds child is a FALSE SUCCESS
+    // that would suppress the existing headless indicator (GAP-8). Read the
+    // FINAL child rect back with GetWindowRect (SCREEN coordinates) and
+    // compare it DIRECTLY against the requested monitor rect (also SCREEN
+    // coordinates: the x/y/width/height Attach was called with). Do NOT
+    // convert through host-client space - that would flag every
+    // negative-origin monitor as clipped (row 3 issues.md
+    // consistent-mapping trap / oracle note 2). CoversMonitor's parameters
+    // are named *_in_client but document "both rects in the same space";
+    // two screen-space rects are the same space. On kOutOfBounds or any
+    // kClipped*: log `placement: RETRY-FALSE-SUCCESS` + the honest reason,
+    // destroy the non-covering child (so injected_hwnd()==nullptr drives
+    // the headless census), and return nullptr -> Attach() false ->
+    // AttachSlot headless path. On kCovered: proceed as today. An unreadable
+    // child rect is also a false success - coverage that cannot be proven is
+    // not success.
+    {
+      RECT final_rc{};
+      if (!injected || !GetWindowRect(injected, &final_rc)) {
+        last_coverage_reason_ = "placement: OUT-OF-BOUNDS";
+        Logf("placement: RETRY-FALSE-SUCCESS reason=child-rect-unreadable "
+             "monitor=(%d,%d,%d,%d)",
+             x, y, x + width, y + height);
+        // Same teardown as DesktopInjector::Detach (Impl cannot call the
+        // outer method): destroy the non-covering child and clear the
+        // handles so injected_hwnd()==nullptr drives the headless census.
+        if (injected) {
+          if (!DestroyWindow(injected)) {
+            Logf("desktop-inject: DestroyWindow(0x%p) failed (GetLastError=%lu)",
+                 injected, static_cast<unsigned long>(GetLastError()));
+          }
+          injected = nullptr;
+          layered_path = false;
+        }
+        return nullptr;
+      }
+      const PlacementRect child_screen{final_rc.left, final_rc.top,
+                                       final_rc.right, final_rc.bottom};
+      const PlacementRect mon_screen{x, y, x + width, y + height};
+      const CoverageVerdict v = CoversMonitor(child_screen, mon_screen);
+      if (v != CoverageVerdict::kCovered) {
+        const char* reason = CoverageReason(v);
+        // Row 4 chain stays honest: last_coverage_reason_ must carry the
+        // REAL final verdict (AttachSlot copies it into Slot::coverage_reason
+        // after Attach returns) - not LogPlacement's modelled one.
+        last_coverage_reason_ = reason ? reason : "";
+        Logf("placement: RETRY-FALSE-SUCCESS reason=%s "
+             "child=(%ld,%ld,%ld,%ld) monitor=(%d,%d,%d,%d)",
+             last_coverage_reason_.c_str(), final_rc.left, final_rc.top,
+             final_rc.right, final_rc.bottom, x, y, x + width, y + height);
+        if (injected) {
+          if (!DestroyWindow(injected)) {
+            Logf("desktop-inject: DestroyWindow(0x%p) failed (GetLastError=%lu)",
+                 injected, static_cast<unsigned long>(GetLastError()));
+          }
+          injected = nullptr;
+          layered_path = false;
+        }
+        return nullptr;
+      }
+    }
     layered_path = layered;
     Logf("desktop-inject: attached 0x%p to 0x%p (%ls), layered=%s", injected,
          target, ClassOf(target).c_str(), layered ? "YES" : "NO");

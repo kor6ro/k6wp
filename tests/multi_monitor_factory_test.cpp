@@ -54,6 +54,9 @@ struct InjState {
   int detach_calls = 0;
   int reassert_calls = 0;
   int on_display_change_calls = 0;
+  // Row 9: last CoverageReason token the attach path produced (mirrors
+  // DesktopInjector::last_coverage_reason / last_coverage_reason_).
+  std::string last_cov;
 };
 
 // Per-instance MpvRenderer recording.
@@ -93,6 +96,11 @@ InjectMode g_resolve_mode = InjectMode::kAuto;
 // Log capture so the failure test can assert the EXISTING headless fallback
 // line (multi_monitor.cpp:117-122) without a real LogFn.
 std::vector<std::string> g_logs;
+// Row 9: per-attach-call "reported child rect" fixture (SCREEN space, what
+// production reads back with GetWindowRect after CreateAndAttach). Consumed
+// in Attach call order; an empty queue skips the coverage check so every
+// pre-row-9 scenario keeps its exact behaviour.
+std::vector<PlacementRect> g_reported_child_queue;
 
 // Sentinel passed to SetHeadlessHost: must be the hwnd Create() receives
 // when injection failed, and must never appear when injection succeeded.
@@ -122,6 +130,7 @@ void ResetStubs() {
   g_attach_rects.clear();
   g_create_hwnds.clear();
   g_logs.clear();
+  g_reported_child_queue.clear();
   g_attach_ok = true;
   g_inj_ctors = g_inj_dtors = 0;
   g_ren_ctors = g_ren_dtors = 0;
