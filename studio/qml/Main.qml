@@ -458,6 +458,7 @@ Rectangle {
                                 boundsBehavior: Flickable.StopAtBounds
 
                                 delegate: Item {
+                                    id: libraryCell
                                     width: libraryGrid.cellWidth
                                     height: libraryGrid.cellHeight
 
@@ -465,6 +466,21 @@ Rectangle {
                                     required property string label
                                     required property string thumbUrl
                                     required property string dst
+
+                                    // Drag source for monitor assignment (row 22).
+                                    // B1: DropArea.keys filters on Drag.keys, NOT on the
+                                    // MIME map, so BOTH Drag.keys and Drag.mimeData must
+                                    // carry the same custom key or the DropArea rejects
+                                    // the drag and onDropped never fires.
+                                    Drag.active: dragArea.drag.active
+                                    Drag.source: dragArea
+                                    Drag.keys: ["application/x-k6wp-assignment"]
+                                    Drag.mimeData: ({ "application/x-k6wp-assignment": dst })
+                                    Drag.dragType: Drag.Automatic
+                                    // Drag-in-progress cue: the row stays put (it is the
+                                    // drag target only while the drag is active) and dims
+                                    // instead of vanishing.
+                                    opacity: dragArea.drag.active ? 0.5 : 1.0
 
                                     // thumbUrl stays empty until a thumbnail
                                     // exists, and an Image with no source never
@@ -510,9 +526,18 @@ Rectangle {
                                         }
 
                                         MouseArea {
+                                            id: dragArea
                                             anchors.fill: parent
                                             hoverEnabled: true
                                             acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                            // Drag only when there is a real path to carry.
+                                            // A broken entry (empty dst, the [file hilang]
+                                            // case) leaves drag.target null, so no drag can
+                                            // start. Qt's Drag attached type has NO `enabled`
+                                            // property (qmllint: missing-property), so this
+                                            // conditional target IS the non-empty-path gate.
+                                            drag.target: libraryCell.dst.length > 0
+                                                         ? libraryCell : null
                                             onDoubleClicked: Library.applyAt(index)
                                             onClicked: function (mouse) {
                                                 if (mouse.button === Qt.RightButton)
@@ -678,12 +703,27 @@ Rectangle {
                                         spacing: 2
 
                                         delegate: RowLayout {
+                                            id: playlistCell
                                             required property var modelData
                                             required property int index
 
                                             width: playlistList.width
                                             spacing: 6
-                                            opacity: modelData.exists === false ? 0.6 : 1.0
+                                            // Existing missing-file dim combined with the
+                                            // drag-in-progress cue in one binding (a
+                                            // property cannot carry two bindings).
+                                            opacity: (modelData.exists === false ? 0.6 : 1.0)
+                                                     * (playlistDragArea.drag.active ? 0.5 : 1.0)
+
+                                            // Drag source for monitor assignment (row 22).
+                                            // Both Drag.keys and Drag.mimeData are required:
+                                            // DropArea.keys filters on Drag.keys, not on the
+                                            // MIME map (B1).
+                                            Drag.active: playlistDragArea.drag.active
+                                            Drag.source: playlistDragArea
+                                            Drag.keys: ["application/x-k6wp-assignment"]
+                                            Drag.mimeData: ({ "application/x-k6wp-assignment": modelData.path })
+                                            Drag.dragType: Drag.Automatic
 
                                             Label {
                                                 Layout.fillWidth: true
@@ -692,6 +732,19 @@ Rectangle {
                                                 color: modelData.exists === false
                                                        ? "red"
                                                        : Material.foreground
+
+                                                // The label is the drag handle; the Naik /
+                                                // Turun / Hapus buttons must stay clickable,
+                                                // so they deliberately have no MouseArea.
+                                                MouseArea {
+                                                    id: playlistDragArea
+                                                    anchors.fill: parent
+                                                    // A row with no path cannot start a
+                                                    // drag: drag.target null keeps
+                                                    // Drag.active false.
+                                                    drag.target: playlistCell.modelData.path.length > 0
+                                                                 ? playlistCell : null
+                                                }
                                             }
 
                                             Button {
