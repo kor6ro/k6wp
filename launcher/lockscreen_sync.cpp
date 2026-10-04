@@ -22,12 +22,6 @@ namespace k6wp::launcher {
 
 namespace {
 
-// Wait budget: the worker itself does a handful of registry + ACL calls
-// (milliseconds), so the only unbounded input is the human reading the UAC
-// consent dialog. 2 minutes is generous for that, and a hard bound matters
-// because a user who walks away must not hang the uninstaller forever.
-constexpr DWORD kElevatedWorkerWaitMs = 120000;
-
 bool GrantK6wpFolderWriteAccess(const std::wstring& dir,
                                std::wstring& error_out) {
   PACL old_dacl = nullptr;
