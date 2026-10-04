@@ -198,4 +198,22 @@ add_executable(workerw_span_test
 target_link_libraries(workerw_span_test PRIVATE user32 gdi32)
 target_include_directories(workerw_span_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 add_test(NAME workerw_span_test COMMAND workerw_span_test)
+
+# desktop_zorder_test (multi-monitor extend setup, row 8): the ONE z-order
+# contract across injection branches. Drives the REAL
+# k6wp::ResolveZOrderInsertAfter from desktop_inject.cpp (the GetParent
+# sibling guard, k6wp linkage per the row-10 pattern; desktop_inject.hpp
+# stays windows.h-free) over a hidden parent/child hierarchy: the DefView
+# handle is returned ONLY when GetParent(DefView)==GetParent(target);
+# anything else falls back to HWND_BOTTOM with reason
+# "z-order: sibling-mismatch-fallback". user32/gdi32 mirror
+# workerw_span_test (same desktop_inject.cpp link closure).
+add_executable(desktop_zorder_test
+  ../tests/desktop_zorder_test.cpp
+  src/desktop_inject.cpp
+  src/desktop_placement.cpp
+)
+target_link_libraries(desktop_zorder_test PRIVATE user32 gdi32)
+target_include_directories(desktop_zorder_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+add_test(NAME desktop_zorder_test COMMAND desktop_zorder_test)
 endif()
