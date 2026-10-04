@@ -67,4 +67,12 @@ const char* CoverageReason(CoverageVerdict verdict) {
   return "placement: OUT-OF-BOUNDS";
 }
 
+bool WorkerWSpansRect(const PlacementRect& worker_rect,
+                      const PlacementRect& virtual_rect) {
+  return worker_rect.left <= virtual_rect.left &&
+         worker_rect.top <= virtual_rect.top &&
+         worker_rect.right >= virtual_rect.right &&
+         worker_rect.bottom >= virtual_rect.bottom;
+}
+
 }  // namespace k6wp

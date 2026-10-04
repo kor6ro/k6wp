@@ -67,4 +67,14 @@ CoverageVerdict CoversMonitor(const PlacementRect& child_in_client,
 // "placement: CLIPPED-left", ...). Returns a string literal; never null.
 const char* CoverageReason(CoverageVerdict verdict);
 
+// Row 10: strategy-B span gate, pure half. True when the candidate
+// WorkerW rect fully contains the virtual-screen union rect (touching
+// edges count as containing). Both rects are virtual-screen coordinates
+// (left/top/right/bottom). The Win32 half - reading the candidate's
+// GetWindowRect and the four SM_*VIRTUALSCREEN metrics GetSpanGeometry
+// reads - is the k6wp::WorkerWSpansVirtualScreen(HWND) wrapper in
+// desktop_inject.cpp, which also null-guards the handle.
+bool WorkerWSpansRect(const PlacementRect& worker_rect,
+                      const PlacementRect& virtual_rect);
+
 }  // namespace k6wp

@@ -30,6 +30,12 @@
 #include <vector>
 
 namespace k6wp {
+
+// Row 10: defined after the anonymous namespace at k6wp linkage so the
+// workerw_span_test can prove the null guard; the strategy-B sweep below
+// calls through this declaration.
+bool WorkerWSpansVirtualScreen(HWND hwnd);
+
 namespace {
 
 constexpr wchar_t kProgmanClass[] = L"Progman";
@@ -122,9 +128,17 @@ HWND FindWorkerWStrategyA(const DesktopWindows& d) {
   return nullptr;
 }
 
+// Row 10: LogShared is defined after the strategy helpers; the strategy-B
+// sweep logs its `placement:` line through this declaration.
+void LogShared(LogFn log, const char* fmt, ...);
+
 // Strategy B: the empty WorkerW spawned by 0x052C. Prefer the WorkerW directly
 // behind Progman in z-order (GW_HWNDNEXT); else any empty WorkerW.
-HWND FindWorkerWStrategyB(const DesktopWindows& d) {
+// Row 10: the last-resort sweep over arbitrary top-level WorkerWs only
+// accepts a candidate whose window rect spans the virtual-screen union
+// (WorkerWSpansVirtualScreen) - a non-spanning WorkerW would clip the span
+// child. Returns nullptr when nothing qualifies; callers degrade honestly.
+HWND FindWorkerWStrategyB(const DesktopWindows& d, LogFn log = nullptr) {
   if (!d.progman) return nullptr;
   for (HWND w : d.progman_worker_ws) {
     if (GetWindow(w, GW_CHILD) == nullptr) return w;
@@ -138,7 +152,21 @@ HWND FindWorkerWStrategyB(const DesktopWindows& d) {
     return above;
   }
   for (HWND w : d.worker_ws) {
-    if (GetWindow(w, GW_CHILD) == nullptr) return w;
+    if (GetWindow(w, GW_CHILD) != nullptr) continue;
+    if (!WorkerWSpansVirtualScreen(w)) continue;
+    RECT rc{};
+    if (GetWindowRect(w, &rc)) {
+      LogShared(log,
+                "placement: strategy-b workerw=(%ld,%ld,%ld,%ld) spans "
+                "virtual screen",
+                rc.left, rc.top, rc.right, rc.bottom);
+    } else {
+      LogShared(log,
+                "placement: strategy-b workerw=0x%p spans virtual screen "
+                "(rect unreadable)",
+                w);
+    }
+    return w;
   }
   return nullptr;
 }
@@ -152,14 +180,14 @@ struct SpawnWorkerWResult {
   HWND workerw = nullptr;
   HWND def_view = nullptr;
 };
-SpawnWorkerWResult SpawnWorkerWViaProgman(HWND progman) {
+SpawnWorkerWResult SpawnWorkerWViaProgman(HWND progman, LogFn log = nullptr) {
   DWORD_PTR result = 0;
   if (!SendMessageTimeoutW(progman, kSpawnWorkerW, kSpawnWorkerWWParam,
                            kSpawnWorkerWLParam, SMTO_NORMAL, 1000, &result)) {
     return {false, nullptr, nullptr};
   }
   const DesktopWindows after = FindDesktopWindows();
-  return {true, FindWorkerWStrategyB(after), after.def_view};
+  return {true, FindWorkerWStrategyB(after, log), after.def_view};
 }
 
 // 24H2 detection: Progman carries WS_EX_NOREDIRECTIONBITMAP.
@@ -225,6 +253,27 @@ void LogShared(LogFn log, const char* fmt, ...) {
 }
 
 }  // namespace
+
+// Row 10: Win32 half of the strategy-B span gate (k6wp linkage so the
+// workerw_span_test can prove the null guard). Reads the candidate's
+// window rect and the virtual-screen union via the same four
+// GetSystemMetrics(SM_*VIRTUALSCREEN) calls GetSpanGeometry reads; the
+// containment itself is the pure WorkerWSpansRect. Null or unreadable
+// handles are not spanning (false, never a crash).
+bool WorkerWSpansVirtualScreen(HWND hwnd) {
+  if (!hwnd) return false;
+  RECT rc{};
+  if (!GetWindowRect(hwnd, &rc)) return false;
+  const PlacementRect worker{rc.left, rc.top, rc.right, rc.bottom};
+  const int vs_left = ::GetSystemMetrics(SM_XVIRTUALSCREEN);
+  const int vs_top = ::GetSystemMetrics(SM_YVIRTUALSCREEN);
+  PlacementRect vs;
+  vs.left = vs_left;
+  vs.top = vs_top;
+  vs.right = vs_left + ::GetSystemMetrics(SM_CXVIRTUALSCREEN);
+  vs.bottom = vs_top + ::GetSystemMetrics(SM_CYVIRTUALSCREEN);
+  return WorkerWSpansRect(worker, vs);
+}
 
 struct DesktopInjector::Impl {
   LogFn log;
@@ -522,7 +571,7 @@ SharedHost ResolveSharedHost(InjectMode mode, LogFn log) {
       layered = true;
       LogShared(log, "desktop-inject: strategy forced workerw -> Strategy A WorkerW 0x%p", a);
     } else {
-      const SpawnWorkerWResult spawn = SpawnWorkerWViaProgman(d.progman);
+      const SpawnWorkerWResult spawn = SpawnWorkerWViaProgman(d.progman, log);
       if (spawn.workerw) {
         target = spawn.workerw;
         insert_after = HWND_BOTTOM;
@@ -544,7 +593,7 @@ SharedHost ResolveSharedHost(InjectMode mode, LogFn log) {
     // (our surface above the wallpaper layer, below the icons). Without one,
     // fall back to a layered child of Progman directly below DefView.
     branch = "24H2 path";
-    const SpawnWorkerWResult spawn = SpawnWorkerWViaProgman(d.progman);
+    const SpawnWorkerWResult spawn = SpawnWorkerWViaProgman(d.progman, log);
     if (spawn.workerw) {
       target = spawn.workerw;
       insert_after = spawn.def_view ? spawn.def_view : HWND_BOTTOM;
@@ -571,7 +620,7 @@ SharedHost ResolveSharedHost(InjectMode mode, LogFn log) {
       LogShared(log, "desktop-inject: Strategy A -> WorkerW 0x%p (hosts DefView)", a);
     } else {
       // Try to spawn a WorkerW via 0x052C (Strategy B).
-      const SpawnWorkerWResult spawn = SpawnWorkerWViaProgman(d.progman);
+      const SpawnWorkerWResult spawn = SpawnWorkerWViaProgman(d.progman, log);
       if (spawn.workerw) {
         target = spawn.workerw;
         insert_after = HWND_BOTTOM;

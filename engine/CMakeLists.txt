@@ -168,9 +168,13 @@ add_test(NAME desktop_placement_test COMMAND desktop_placement_test)
 # headless MultiMonitor links WITHOUT desktop_inject.cpp, mpv_renderer.cpp
 # or mpv.lib - target_link_libraries below must never grow an mpv entry.
 # user32: GetSystemMetrics in MultiMonitor::GetSpanGeometry.
+# Row 9: src/desktop_placement.cpp is linked so the false-success test can
+# drive the REAL CoversMonitor/CoverageReason on screen-space rects; still
+# no mpv, still no desktop_inject.cpp.
 add_executable(multi_monitor_factory_test
   ../tests/multi_monitor_factory_test.cpp
   src/multi_monitor.cpp
+  src/desktop_placement.cpp
 )
 target_link_libraries(multi_monitor_factory_test PRIVATE user32)
 target_include_directories(multi_monitor_factory_test PRIVATE
@@ -178,4 +182,20 @@ target_include_directories(multi_monitor_factory_test PRIVATE
   ${CMAKE_SOURCE_DIR}/shared
 )
 add_test(NAME multi_monitor_factory_test COMMAND multi_monitor_factory_test)
+
+# workerw_span_test (multi-monitor extend setup, row 10): the strategy-B
+# span gate. Pure containment k6wp::WorkerWSpansRect (desktop_placement,
+# windows.h-free, synthetic rects) plus the thin HWND wrapper
+# k6wp::WorkerWSpansVirtualScreen from desktop_inject.cpp (GetWindowRect +
+# the four SM_*VIRTUALSCREEN metrics), incl. the nullptr -> false no-crash
+# guard. user32: window/metric APIs in desktop_inject.cpp; gdi32:
+# GetStockObject in its RegisterClass path.
+add_executable(workerw_span_test
+  ../tests/workerw_span_test.cpp
+  src/desktop_inject.cpp
+  src/desktop_placement.cpp
+)
+target_link_libraries(workerw_span_test PRIVATE user32 gdi32)
+target_include_directories(workerw_span_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+add_test(NAME workerw_span_test COMMAND workerw_span_test)
 endif()
