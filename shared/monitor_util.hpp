@@ -47,6 +47,33 @@ MonitorInfo GetPrimaryMonitor() noexcept;
 // scale failure path, which cannot be forced through the real API.
 int ResolveScalePercent(int dsf_value, bool api_ok) noexcept;
 
+// Virtual-screen union in pixels, same contract as
+// MultiMonitor::GetSpanGeometry (origin + extents, never throws).
+struct VirtualScreenGeometry {
+  int x = 0;
+  int y = 0;
+  int width = 0;
+  int height = 0;
+};
+
+// Reads the live virtual screen via the four GetSystemMetrics
+// (SM_X/YVIRTUALSCREEN, SM_CX/CYVIRTUALSCREEN) calls GetSpanGeometry uses.
+// Returns zeros (never throws) when the query yields a non-positive size,
+// mirroring AttachSpanSlot's fallback contract.
+VirtualScreenGeometry GetVirtualScreenGeometry() noexcept;
+
+// Pure JSON formatter for the monitor list (monitor_dump's output):
+// {"monitors":[{id,x,y,width,height,is_primary,device_name (UTF-8,
+// JSON-escaped),orientation,refresh_hz,scale_pct},...],
+//  "virtual_screen":{x,y,width,height}}.
+// The two-arg overload formats with an explicit virtual screen (the
+// unit-test seam); the one-arg overload reads the live screen via
+// GetVirtualScreenGeometry(). Empty input yields {"monitors":[],...}
+// with a non-positive virtual_screen and never throws.
+std::string FormatMonitorsJson(const std::vector<MonitorInfo>& monitors,
+                               const VirtualScreenGeometry& virtual_screen);
+std::string FormatMonitorsJson(const std::vector<MonitorInfo>& monitors);
+
 // Sets per-monitor DPI awareness (DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
 // user32, Windows 10 1703+). Returns true on success. Call once at startup,
 // before any window is created.
