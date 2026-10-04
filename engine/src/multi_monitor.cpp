@@ -113,6 +113,9 @@ bool MultiMonitor::AttachSlot(const MonitorInfo& mi) {
   // own framed window (Todo 2). A monitor that refuses injection must not
   // kill the engine or the surviving monitors.
   const bool attached = slot.injector->Attach(mi.x, mi.y, mi.width, mi.height);
+  // Row 4: persist the attach path's coverage verdict on the slot so rows
+  // 15/19 can surface it as get_state display_coverage (logging only here).
+  slot.coverage_reason = slot.injector->last_coverage_reason();
   if (!attached) {
     char buf[160];
     std::snprintf(buf, sizeof(buf),
@@ -552,6 +555,12 @@ int MultiMonitor::headless_slot_count() const {
     }
   }
   return n;
+}
+
+std::string MultiMonitor::SlotCoverageReason(int monitor_id) const {
+  const auto it = slots_.find(monitor_id);
+  if (it == slots_.end()) return {};
+  return it->second.coverage_reason;
 }
 
 std::vector<int> MultiMonitor::monitor_ids() const {

@@ -16,6 +16,7 @@
 // std types + an opaque handle (void*).
 
 #include <memory>
+#include <string>
 
 namespace k6wp {
 
@@ -63,6 +64,11 @@ class DesktopInjector {
   // Selects the injection strategy for subsequent Attach() calls (Step 4).
   // Sticky per injector: OnDisplayChange/Reanchor re-attaches keep it.
   void SetInjectMode(InjectMode mode);
+
+  // Row 4: last CoverageReason token logged by the attach path
+  // ("placement: covered", ...). Empty before the first attempt. Read by
+  // MultiMonitor::SlotCoverageReason for get_state display_coverage.
+  std::string last_coverage_reason() const;
 
   // Remove the injected window from the desktop and destroy it.
   // Idempotent. After this, injected_hwnd() returns nullptr.

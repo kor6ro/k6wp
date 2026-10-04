@@ -138,6 +138,11 @@ class MultiMonitor {
   // slots whose injection failed. Unchanged behavior for has_headless_slots().
   int headless_slot_count() const;
 
+  // Row 4: last CoverageReason token recorded for a slot's attach attempts
+  // ("" when the monitor id has no live slot). Rows 15/19 map it to the
+  // get_state display_coverage field.
+  std::string SlotCoverageReason(int monitor_id) const;
+
   // Current virtual-screen geometry (GetSystemMetrics in the .cpp).
   static SpanGeometry GetSpanGeometry() noexcept;
 
@@ -149,13 +154,18 @@ class MultiMonitor {
     std::unique_ptr<DesktopInjector> injector;
     std::unique_ptr<MpvRenderer> renderer;
     std::atomic<bool> paused{false};
+    // Row 4: last CoverageReason token from this slot's attach path
+    // (DesktopInjector::last_coverage_reason, copied in AttachSlot).
+    // Rows 15/19 map it to the get_state display_coverage field.
+    std::string coverage_reason;
     Slot() = default;
     Slot(const Slot&) = delete;
     Slot& operator=(const Slot&) = delete;
     Slot(Slot&& other) noexcept
         : info(std::move(other.info)),
           injector(std::move(other.injector)),
-          renderer(std::move(other.renderer)) {
+          renderer(std::move(other.renderer)),
+          coverage_reason(std::move(other.coverage_reason)) {
       paused.store(other.paused.load(std::memory_order_relaxed),
                    std::memory_order_relaxed);
     }
@@ -164,6 +174,7 @@ class MultiMonitor {
         info = std::move(other.info);
         injector = std::move(other.injector);
         renderer = std::move(other.renderer);
+        coverage_reason = std::move(other.coverage_reason);
         paused.store(other.paused.load(std::memory_order_relaxed),
                      std::memory_order_relaxed);
       }

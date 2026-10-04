@@ -21,6 +21,7 @@
 #include <windows.h>
 
 #include "desktop_inject.hpp"
+#include "desktop_placement.hpp"
 
 #include <cstdarg>
 #include <cstdio>
@@ -220,6 +221,10 @@ struct DesktopInjector::Impl {
   bool class_registered = false;
   HINSTANCE hinstance = nullptr;
   InjectMode inject_mode = InjectMode::kAuto;
+  // Row 4: last CoverageReason token emitted by LogPlacement ("" before the
+  // first attempt). Copied per slot by MultiMonitor::AttachSlot; rows 15/19
+  // surface it as get_state display_coverage.
+  std::string last_coverage_reason_;
 
   void Logf(const char* fmt, ...) {
     if (!log) return;
@@ -317,6 +322,60 @@ struct DesktopInjector::Impl {
     return true;
   }
 
+  // Row 4: structured per-attempt placement facts. Logging only — no
+  // control flow. Every line carries the stable `placement:` prefix plus the
+  // CoverageReason token (row 3) so Select-String extracts exactly these.
+  // Verdict mapping (row 3 issues.md consistent-mapping trap): the child is
+  // placed from the host WINDOW origin (as CreateAndAttach does) while the
+  // monitor is mapped from the host CLIENT origin; deriving both from the
+  // same origin would yield kCovered by construction.
+  void LogPlacement(const char* branch, HWND target, int req_x, int req_y,
+                    int req_w, int req_h, bool ok) {
+    RECT host_win{};
+    GetWindowRect(target, &host_win);
+    RECT host_cli{};
+    GetClientRect(target, &host_cli);
+    POINT cli_org{0, 0};
+    ClientToScreen(target, &cli_org);
+    const PlacementRect host_win_pr{host_win.left, host_win.top, host_win.right,
+                                    host_win.bottom};
+    const PlacementRect host_cli_pr{
+        cli_org.x, cli_org.y,
+        cli_org.x + (host_cli.right - host_cli.left),
+        cli_org.y + (host_cli.bottom - host_cli.top)};
+    const PlacementRect mon_pr{req_x, req_y, req_x + req_w, req_y + req_h};
+    const ClientOffset delta = HostClientOffset(host_win_pr, mon_pr);
+    const PlacementRect child_in_client =
+        ChildRectInClient(delta, mon_pr, host_cli_pr);
+    const PlacementRect mon_as_client{mon_pr.left - cli_org.x,
+                                      mon_pr.top - cli_org.y,
+                                      mon_pr.right - cli_org.x,
+                                      mon_pr.bottom - cli_org.y};
+    const CoverageVerdict verdict =
+        CoversMonitor(child_in_client, mon_as_client);
+    const char* reason = CoverageReason(verdict);
+    last_coverage_reason_ = reason ? reason : "";
+    RECT final_rc{};
+    const bool have_final =
+        (injected != nullptr) && (GetWindowRect(injected, &final_rc) != FALSE);
+    char final_buf[64];
+    if (have_final) {
+      std::snprintf(final_buf, sizeof(final_buf), "(%ld,%ld,%ld,%ld)",
+                    final_rc.left, final_rc.top, final_rc.right,
+                    final_rc.bottom);
+    } else {
+      std::snprintf(final_buf, sizeof(final_buf), "(none)");
+    }
+    Logf("placement: branch=%s ok=%d reason=%s host=%ls(0x%p) "
+         "host_win=(%ld,%ld,%ld,%ld) host_client=(%d,%d,%d,%d) "
+         "monitor=(%d,%d,%d,%d) delta=(%d,%d) child_final=%s",
+         branch ? branch : "?", ok ? 1 : 0, last_coverage_reason_.c_str(),
+         ClassOf(target).c_str(), target, host_win.left, host_win.top,
+         host_win.right, host_win.bottom, host_cli_pr.left, host_cli_pr.top,
+         host_cli_pr.right, host_cli_pr.bottom, req_x, req_y, req_w, req_h,
+         delta.dx, delta.dy, final_buf);
+  }
+
   // The full attach sequence. Returns the target HWND used, or nullptr.
   HWND AttachToDesktop(int x, int y, int width, int height) {
     const DesktopWindows d = FindDesktopWindows();
@@ -333,10 +392,13 @@ struct DesktopInjector::Impl {
     HWND target = nullptr;
     HWND insert_after = HWND_BOTTOM;
     bool layered = false;
+    // Row 4: which attach branch was taken (logged via LogPlacement).
+    const char* branch = "unknown";
 
     if (inject_mode == InjectMode::kProgman) {
       // Forced Progman: straight to the validated 24H2 layered recipe, no
       // WorkerW probing at all.
+      branch = "forced progman";
       target = d.progman;
       insert_after = d.def_view ? d.def_view : HWND_BOTTOM;
       layered = true;
@@ -344,6 +406,7 @@ struct DesktopInjector::Impl {
     } else if (inject_mode == InjectMode::kWorkerW) {
       // Forced WorkerW: Strategy A then B. No usable WorkerW is an honest
       // headless slot — never a silent Progman fallback.
+      branch = "forced workerw";
       HWND a = FindWorkerWStrategyA(d);
       if (a) {
         target = a;
@@ -372,6 +435,7 @@ struct DesktopInjector::Impl {
       // it and prefer it when it appears -- that is Microsoft's arrangement
       // (our surface above the wallpaper layer, below the icons). Without one,
       // fall back to a layered child of Progman directly below DefView.
+      branch = "24H2 path";
       const SpawnWorkerWResult spawn = SpawnWorkerWViaProgman(d.progman);
       if (spawn.workerw) {
         target = spawn.workerw;
@@ -390,6 +454,7 @@ struct DesktopInjector::Impl {
     } else {
       // Classic path: Strategy A (WorkerW hosting DefView), then Strategy B
       // (0x052C-spawned empty WorkerW), then Progman fallback.
+      branch = "classic path";
       HWND a = FindWorkerWStrategyA(d);
       if (a) {
         target = a;
@@ -417,7 +482,11 @@ struct DesktopInjector::Impl {
       }
     }
 
-    if (!CreateAndAttach(target, insert_after, x, y, width, height, layered)) {
+    // Row 4: structured placement facts per attempt (logging only).
+    const bool first_ok =
+        CreateAndAttach(target, insert_after, x, y, width, height, layered);
+    LogPlacement(branch, target, x, y, width, height, first_ok);
+    if (!first_ok) {
       // Attach to a WorkerW failed (SetParent/create): retry once against
       // Progman before giving up. CreateAndAttach already logged the error.
       // The 24H2/forced-progman paths target Progman already, so no retry
@@ -431,7 +500,12 @@ struct DesktopInjector::Impl {
         target = d.progman;
         insert_after = d.def_view ? d.def_view : HWND_BOTTOM;
         layered = true;
-        if (!CreateAndAttach(target, insert_after, x, y, width, height, layered)) {
+        // Row 4: log the retry attempt too (the false-success site).
+        const bool retry_ok =
+            CreateAndAttach(target, insert_after, x, y, width, height, layered);
+        LogPlacement("Progman fallback retry", target, x, y, width, height,
+                     retry_ok);
+        if (!retry_ok) {
           return nullptr;
         }
       } else {
@@ -483,6 +557,11 @@ bool DesktopInjector::Attach(int x, int y, int width, int height) {
 void DesktopInjector::SetInjectMode(InjectMode mode) {
   if (!impl_) return;
   impl_->inject_mode = mode;
+}
+
+std::string DesktopInjector::last_coverage_reason() const {
+  if (!impl_) return {};
+  return impl_->last_coverage_reason_;
 }
 
 void DesktopInjector::Detach() {

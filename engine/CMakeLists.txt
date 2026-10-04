@@ -15,6 +15,7 @@ add_executable(engine
   src/lockscreen_glue.cpp
   src/working_set_trim.cpp
   src/desktop_inject.cpp
+  src/desktop_placement.cpp
   src/bench_hook.cpp
   src/mpv_renderer.cpp
   src/config_watch.cpp
