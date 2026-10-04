@@ -36,4 +36,21 @@ std::optional<int> ParseSetMonitorPayload(const std::string& payload_json);
 std::optional<std::string> ValidateSetVideoPayload(
     const std::string& payload_json);
 
+// Row 13: per-monitor assignment for set_display_video.
+//
+// Accepts {"device":"\\\\.\\DISPLAY1","path":"C:/.../a.mp4"} (non-empty
+// device matching a \\.\DISPLAYn shape, non-empty UTF-8 path) or
+// {"device":"\\\\.\\DISPLAY1","clear":true} (drop that device's assignment).
+// The device shape matches the displays.json assignment keys (GDI device
+// name, MONITORINFOEXW.szDevice). Returns nullopt + caller logs an ipc:
+// reject on any invalid shape (mirror ParseSetMonitorPayload). Rejects
+// payloads over kMaxPayloadBytes the way Decode does. Pure, no side effects.
+struct DisplayVideoCommand {
+  std::string device;  // GDI device name, e.g. \\.\DISPLAY1
+  std::string path;    // UTF-8 video path; empty when clear == true
+  bool clear = false;  // true -> drop the assignment for `device`
+};
+std::optional<DisplayVideoCommand> ParseSetDisplayVideoPayload(
+    const std::string& payload_json);
+
 }  // namespace k6wp

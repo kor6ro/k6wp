@@ -35,6 +35,7 @@ constexpr const char* kCmdNames[] = {
     "set_monitor",
     "get_state",
     "quit",
+    "set_display_video",
 };
 
 }  // namespace
@@ -53,6 +54,8 @@ const char* CmdToString(Cmd cmd) noexcept {
       return "get_state";
     case Cmd::quit:
       return "quit";
+    case Cmd::set_display_video:
+      return "set_display_video";
   }
   return nullptr;
 }
