@@ -54,6 +54,11 @@ struct InjState {
   int detach_calls = 0;
   int reassert_calls = 0;
   int on_display_change_calls = 0;
+  // Row 11: per-instance last Attach rect + last OnDisplayChange args, so a
+  // host-rect-only scenario can tell WHICH slot re-placed and with what
+  // monitor rect (the global g_attach_rects has no injector identity).
+  int att_x = 0, att_y = 0, att_w = 0, att_h = 0;
+  int odc_x = 0, odc_y = 0, odc_w = 0, odc_h = 0;
   // Row 9: last CoverageReason token the attach path produced (mirrors
   // DesktopInjector::last_coverage_reason / last_coverage_reason_).
   std::string last_cov;
@@ -120,6 +125,18 @@ SharedHost MakeStubSharedHost() {
   sh.client_rect.top = 0;
   sh.client_rect.right = 1920;
   sh.client_rect.bottom = 1080;
+  return sh;
+}
+
+// Row 11: same host handles, client rect shifted +5px in screen space -
+// the Explorer-restart / DPI-change shape where the HOST moved but every
+// monitor rect is untouched.
+SharedHost MakeMovedHost() {
+  SharedHost sh = MakeStubSharedHost();
+  sh.client_rect.left = 5;
+  sh.client_rect.top = 5;
+  sh.client_rect.right = 1925;
+  sh.client_rect.bottom = 1085;
   return sh;
 }
 
@@ -232,15 +249,43 @@ bool DesktopInjector::Attach(int x, int y, int width, int height) {
   // shared host is unresolved (null Progman) - that refusal is exactly what
   // drives AttachSlot's existing headless fallback line.
   const bool host_ok = s.shared_set && s.shared.host != nullptr;
-  s.hwnd = (g_attach_ok && host_ok) ? NextStubHwnd() : nullptr;
+  const bool base_ok = g_attach_ok && host_ok;
   Rect4 r;
   r.x = x;
   r.y = y;
   r.w = width;
   r.h = height;
   g_attach_rects.push_back(r);
+  s.att_x = x; s.att_y = y; s.att_w = width; s.att_h = height;
   g_events.push_back("attach");
-  return g_attach_ok && host_ok;
+  // Row 9 production contract mirrored here (desktop_inject.cpp
+  // AttachToDesktop): when the fixture supplies a "reported child rect" for
+  // this Attach call, compare it against the requested monitor rect in
+  // SCREEN space via the REAL CoversMonitor. Not covered -> false success:
+  // honest RETRY-FALSE-SUCCESS log, no injected hwnd (headless census),
+  // return false so AttachSlot degrades the slot. Empty queue = legacy
+  // scenarios unchanged.
+  const size_t call_idx = g_attach_rects.size() - 1;
+  if (base_ok && call_idx < g_reported_child_queue.size()) {
+    const PlacementRect child_screen = g_reported_child_queue[call_idx];
+    const PlacementRect mon_screen{x, y, x + width, y + height};
+    const CoverageVerdict v = CoversMonitor(child_screen, mon_screen);
+    const char* reason = CoverageReason(v);
+    s.last_cov = reason ? reason : "";
+    if (v != CoverageVerdict::kCovered) {
+      s.hwnd = nullptr;
+      if (s.log) {
+        s.log("placement: RETRY-FALSE-SUCCESS reason=%s "
+              "child=(%d,%d,%d,%d) monitor=(%d,%d,%d,%d)",
+              s.last_cov.c_str(), child_screen.left, child_screen.top,
+              child_screen.right, child_screen.bottom, x, y, x + width,
+              y + height);
+      }
+      return false;
+    }
+  }
+  s.hwnd = base_ok ? NextStubHwnd() : nullptr;
+  return base_ok;
 }
 
 void DesktopInjector::Detach() {
@@ -250,9 +295,10 @@ void DesktopInjector::Detach() {
   g_events.push_back("detach");
 }
 
-void DesktopInjector::OnDisplayChange(int /*x*/, int /*y*/, int /*width*/,
-                                      int /*height*/) {
-  ++g_inj[this].on_display_change_calls;
+void DesktopInjector::OnDisplayChange(int x, int y, int width, int height) {
+  InjState& s = g_inj[this];
+  ++s.on_display_change_calls;
+  s.odc_x = x; s.odc_y = y; s.odc_w = width; s.odc_h = height;
   g_events.push_back("on-display-change");
 }
 
@@ -268,8 +314,12 @@ void DesktopInjector::ReassertFrameless() {
 
 // Row 4 wiring: MultiMonitor::AttachSlot copies this into Slot.coverage_reason.
 // Returns by value like the real one; no event so the construction-order
-// assertion above stays purely about slot construction.
-std::string DesktopInjector::last_coverage_reason() const { return {}; }
+// assertion above stays purely about slot construction. Row 9: returns the
+// stub's last recorded verdict token ("" until an attach path sets one).
+std::string DesktopInjector::last_coverage_reason() const {
+  const auto it = g_inj.find(this);
+  return it == g_inj.end() ? std::string{} : it->second.last_cov;
+}
 
 // ---- link-level stub: row 7 shared-host plumbing (desktop_inject.cpp NOT linked)
 
@@ -652,6 +702,305 @@ void TestNullSharedHostDegradesHeadless() {
   }
 }
 
+// Row 9 (GAP-8): honest Progman retry / post-attach verification. A child
+// rect that does not cover its monitor is a FALSE SUCCESS: the injector must
+// return false so AttachSlot takes its headless path (headless_slot_count(),
+// tray error, Studio kDegraded) instead of reporting a live slot.
+//
+// Layer 1 locks the SCREEN-space rule with the REAL desktop_placement.cpp
+// (linked into this suite): disjoint screen rect -> kOutOfBounds; a child
+// that fully covers a NEGATIVE-origin monitor in screen space -> kCovered
+// (oracle note 2: comparing in host-client space would mis-flag it).
+//
+// Layer 2 drives the seam contract: the stub injector is handed a
+// non-covering "reported child rect" for monitor 1 via
+// g_reported_child_queue; AttachSlot must end with headless_slot_count()==1,
+// an honest SlotCoverageReason, and a `placement: RETRY-FALSE-SUCCESS` log
+// line - then print the get_state-shaped JSON the engine would serve.
+void TestFalseSuccessHeadless() {
+  // Layer 1: real CoversMonitor / CoverageReason, screen space.
+  {
+    const PlacementRect child_oob{0, 0, 100, 100};
+    const PlacementRect mon1{1920, 0, 4480, 1440};
+    const CoverageVerdict v = CoversMonitor(child_oob, mon1);
+    Check(v == CoverageVerdict::kOutOfBounds,
+          "false-success geom: disjoint screen rect -> kOutOfBounds");
+    Check(std::string(CoverageReason(v)) == "placement: OUT-OF-BOUNDS",
+          "false-success geom: kOutOfBounds reason token");
+    const PlacementRect child_neg{-1920, 0, 0, 1080};
+    const PlacementRect mon_neg{-1920, 0, 0, 1080};
+    Check(CoversMonitor(child_neg, mon_neg) == CoverageVerdict::kCovered,
+          "false-success geom: negative-origin screen rect fully covered -> "
+          "kCovered (screen space, not host-client)");
+  }
+
+  // Layer 2: seam contract. Monitor 0's child covers; monitor 1's child is
+  // disjoint (the plan's out-of-bounds failure scenario).
+  ResetStubs();
+  g_attach_ok = true;
+  g_logs.clear();
+  g_reported_child_queue = {
+      PlacementRect{0, 0, 1920, 1080},      // monitor 0: exact cover
+      PlacementRect{0, 0, 100, 100},        // monitor 1: disjoint -> OOB
+  };
+
+  MultiMonitor mm(&RecordLog, MakeRecordingFactory());
+  mm.SetHeadlessHost(kHeadlessHost);
+  const bool ok = mm.Init(MultiMonitorMode::PerMonitor);
+  Check(ok, "false-success: Init still returns true (headless counts as live)");
+  Check(mm.slot_count() == 2, "false-success: slot_count()==2");
+  Check(mm.headless_slot_count() == 1,
+        "false-success: headless_slot_count()==1 (only the non-covering slot)");
+  Check(mm.has_headless_slots(),
+        "false-success: has_headless_slots()==true");
+  Check(LogContains("placement: RETRY-FALSE-SUCCESS"),
+        "false-success: log contains placement: RETRY-FALSE-SUCCESS");
+  Check(mm.SlotCoverageReason(1) == "placement: OUT-OF-BOUNDS",
+        "false-success: SlotCoverageReason(1) carries the honest OOB token");
+  Check(mm.SlotCoverageReason(0) == "placement: covered",
+        "false-success: SlotCoverageReason(0) stays 'placement: covered'");
+  int headless_creates = 0;
+  int injected_creates = 0;
+  for (void* h : g_create_hwnds) {
+    if (h == kHeadlessHost) {
+      ++headless_creates;
+    } else if (h != nullptr) {
+      ++injected_creates;
+    }
+  }
+  Check(headless_creates == 1 && injected_creates == 1,
+        "false-success: one Create() got the hidden host (non-covering slot), "
+        "one got the covering slot's injected hwnd");
+
+  const int headless = mm.headless_slot_count();
+  const bool live = mm.slot_count() > 0;
+  std::printf("get_state: {\"state\":{\"headless_slots\":%d,\"live\":%s}}\n",
+              headless, live ? "true" : "false");
+  Check(headless == 1 && live,
+        "false-success: get_state shape is headless_slots:1 live:true");
+
+  mm.Shutdown();
+  Check(mm.slot_count() == 0, "false-success: Shutdown clears all slots");
+  for (const std::string& l : g_logs) {
+    if (l.find("RETRY-FALSE-SUCCESS") != std::string::npos) {
+      std::cout << "[LOG] " << l << "\n";
+    }
+  }
+}
+
+// Row 11 happy QA: two-monitor fixture, HOST rect changes ONLY, every
+// monitor rect untouched (Explorer restart / DPI change shape). The row-11
+// regression: OnDisplayChange used to compare only the monitor rect against
+// Slot.info and skipped the re-attach when unchanged - children stayed
+// parented to a stale host client origin. Assert the stub injectors'
+// OnDisplayChange is re-invoked (it would NOT be on the pre-row-11 code).
+void TestHostMoveTriggersReattach() {
+  ResetStubs();
+  g_attach_ok = true;
+  MultiMonitor mm(&QuietLog, MakeRecordingFactory());
+  mm.SetHeadlessHost(kHeadlessHost);
+  const bool ok = mm.Init(MultiMonitorMode::PerMonitor);
+  Check(ok, "hostmove: Init(PerMonitor) returns true");
+  Check(mm.slot_count() == 2, "hostmove: slot_count()==2 after Init");
+  bool baseline = g_inj.size() == 2;
+  for (const auto& kv : g_inj) {
+    baseline = baseline && kv.second.attach_calls == 1 &&
+               kv.second.on_display_change_calls == 0;
+  }
+  Check(baseline,
+        "hostmove: baseline attach_calls==1 / on_display_change_calls==0");
+
+  g_resolve_result = MakeMovedHost();
+  mm.OnDisplayChange();
+
+  Check(mm.slot_count() == 2, "hostmove: OnDisplayChange keeps both slots");
+  bool reattached = g_inj.size() == 2;
+  int odc_total = 0;
+  for (const auto& kv : g_inj) {
+    reattached = reattached && kv.second.on_display_change_calls == 1;
+    odc_total += kv.second.on_display_change_calls;
+  }
+  Check(reattached,
+        "hostmove: host-rect-only change re-invoked OnDisplayChange on BOTH "
+        "injectors (regression: pre-row-11 code skips when the monitor rect "
+        "is unchanged)");
+  Check(odc_total == 2,
+        "hostmove: exactly one re-attach per survivor (no storm, no skip)");
+  Check(mm.slots().count(0) == 1 && mm.slots().count(1) == 1,
+        "hostmove: both monitor slots still live (survivors, not re-created)");
+  bool shared_new = g_inj.size() == 2;
+  for (const auto& kv : g_inj) {
+    shared_new = shared_new && kv.second.shared_set &&
+                 kv.second.shared.host == g_resolve_result.host &&
+                 kv.second.shared.client_rect.left ==
+                     g_resolve_result.client_rect.left &&
+                 kv.second.shared.client_rect.top ==
+                     g_resolve_result.client_rect.top &&
+                 kv.second.shared.client_rect.right ==
+                     g_resolve_result.client_rect.right &&
+                 kv.second.shared.client_rect.bottom ==
+                     g_resolve_result.client_rect.bottom;
+  }
+  Check(shared_new,
+        "hostmove: injectors received the refreshed shared host (client_rect "
+        "B) before re-attach");
+  bool odc_path = g_inj.size() == 2;
+  for (const auto& kv : g_inj) {
+    odc_path = odc_path && kv.second.attach_calls == 1 &&
+               kv.second.on_display_change_calls == 1;
+  }
+  Check(odc_path,
+        "hostmove: re-place went through injector->OnDisplayChange "
+        "(attach_calls stays 1, not Detach+Attach)");
+  mm.Shutdown();
+  Check(mm.slot_count() == 0, "hostmove: Shutdown clears all slots");
+}
+
+// Row 11 companion: monitor-only path unchanged by the fix - a monitor rect
+// change with an unchanged host rect re-invokes ONLY the affected slot's
+// OnDisplayChange, carrying the NEW monitor rect.
+void TestMonitorOnlyReattachUnchanged() {
+  ResetStubs();
+  g_attach_ok = true;
+  MultiMonitor mm(&QuietLog, MakeRecordingFactory());
+  mm.SetHeadlessHost(kHeadlessHost);
+  const bool ok = mm.Init(MultiMonitorMode::PerMonitor);
+  Check(ok, "mononly: Init(PerMonitor) returns true");
+  g_monitors[0].height = 1440;
+  mm.OnDisplayChange();
+  const InjState* mon0 = nullptr;
+  const InjState* mon1 = nullptr;
+  for (const auto& kv : g_inj) {
+    if (kv.second.att_x == 0 && kv.second.att_y == 0 && kv.second.att_w == 1920) {
+      mon0 = &kv.second;
+    } else {
+      mon1 = &kv.second;
+    }
+  }
+  Check(mon0 != nullptr && mon1 != nullptr,
+        "mononly: both injectors identified by their Init attach rect");
+  Check(mon0 != nullptr && mon0->on_display_change_calls == 1 &&
+            mon0->odc_x == 0 && mon0->odc_y == 0 && mon0->odc_w == 1920 &&
+            mon0->odc_h == 1440,
+        "mononly: monitor 0 got OnDisplayChange with the NEW rect (0,0,1920x1440)");
+  Check(mon1 != nullptr && mon1->on_display_change_calls == 0,
+        "mononly: monitor 1 (unchanged rect) got NO re-attach");
+  Check(mon0 != nullptr && mon0->attach_calls == 1 && mon1 != nullptr &&
+            mon1->attach_calls == 1,
+        "mononly: monitor-only path kept attach_calls==1 "
+        "(OnDisplayChange, not Detach+Attach)");
+  g_monitors[0].height = 1080;
+  mm.Shutdown();
+}
+
+// Row 11 guard: neither geometry nor host moved -> NO re-attach. Locks the
+// skip path so the host-move fix can never degrade into unconditional re-placing.
+void TestNoGeometryOrHostChangeSkips() {
+  ResetStubs();
+  g_attach_ok = true;
+  MultiMonitor mm(&QuietLog, MakeRecordingFactory());
+  mm.SetHeadlessHost(kHeadlessHost);
+  const bool ok = mm.Init(MultiMonitorMode::PerMonitor);
+  Check(ok, "nochange: Init(PerMonitor) returns true");
+  mm.OnDisplayChange();
+  bool none = g_inj.size() == 2;
+  int odc = 0;
+  for (const auto& kv : g_inj) {
+    none = none && kv.second.on_display_change_calls == 0;
+    odc += kv.second.on_display_change_calls;
+  }
+  Check(none, "nochange: unchanged monitor+host rect skips re-attach entirely");
+  Check(odc == 0, "nochange: on_display_change_calls stays 0");
+  mm.Shutdown();
+}
+
+// Row 11 span host-move: identical virtual-screen geometry, HOST rect moved
+// only. The span slot must re-attach Detach+Attach style (Reanchor's
+// ReattachSpanLocked funnel) against the refreshed shared host - not via
+// injector->OnDisplayChange, and not skipped.
+void TestSpanHostMoveReattaches() {
+  ResetStubs();
+  static SpanGeometry fake{0, 0, 1920, 1080};
+  MultiMonitor::SetSpanGeometryOverride(&fake);
+  g_attach_ok = true;
+  MultiMonitor mm(&QuietLog, MakeRecordingFactory());
+  mm.SetHeadlessHost(kHeadlessHost);
+  const bool ok = mm.Init(MultiMonitorMode::Span);
+  Check(ok, "spanhost: Init(Span) returns true");
+  Check(mm.slot_count() == 1, "spanhost: slot_count()==1 after Init");
+  const InjState* inj = nullptr;
+  for (const auto& kv : g_inj) inj = &kv.second;
+  Check(inj != nullptr && inj->attach_calls == 1 &&
+            inj->on_display_change_calls == 0,
+        "spanhost: baseline one Attach, zero OnDisplayChange");
+
+  g_resolve_result = MakeMovedHost();
+  mm.OnDisplayChange();
+
+  Check(mm.slot_count() == 1, "spanhost: span slot survives");
+  Check(inj != nullptr && inj->attach_calls == 2,
+        "spanhost: host-move re-attached via Detach+Attach (attach_calls==2)");
+  Check(inj != nullptr && inj->on_display_change_calls == 0,
+        "spanhost: span re-attach did NOT go through injector->OnDisplayChange");
+  Check(inj != nullptr && inj->detach_calls >= 1,
+        "spanhost: Detach ran before the re-Attach");
+  Check(inj != nullptr && inj->shared_set &&
+            inj->shared.client_rect.left == 5 &&
+            inj->shared.client_rect.right == 1925,
+        "spanhost: span re-attach received the refreshed host client_rect B");
+  MultiMonitor::SetSpanGeometryOverride(nullptr);
+  mm.Shutdown();
+}
+
+// Row 11 failure QA: virtual-screen query yields non-positive dimensions
+// (SetSpanGeometryOverride {0,0,0,0}) AND the resolved host client_rect is
+// non-positive too. OnDisplayChange must not throw (catch at OnDisplayChange)
+// and ReattachSpanLocked must still fall back to the primary resolution
+// (same policy as AttachSpanSlot's virtual-screen fallback).
+void TestSpanNonPositiveGeometryPrimaryFallback() {
+  ResetStubs();
+  static SpanGeometry zero{0, 0, 0, 0};
+  MultiMonitor::SetSpanGeometryOverride(&zero);
+  SharedHost broken = MakeStubSharedHost();
+  broken.client_rect = {0, 0, 0, 0};
+  g_resolve_result = broken;
+  g_logs.clear();
+  const MonitorInfo primary = GetPrimaryMonitor();
+
+  MultiMonitor mm(&RecordLog, MakeRecordingFactory());
+  mm.SetHeadlessHost(kHeadlessHost);
+  const bool ok = mm.Init(MultiMonitorMode::Span);
+  Check(ok, "spanfail: Init(Span) returns true with non-positive span geometry");
+  Check(mm.slot_count() == 1, "spanfail: one span slot after primary fallback");
+  const InjState* inj = nullptr;
+  for (const auto& kv : g_inj) inj = &kv.second;
+  Check(inj != nullptr && inj->att_x == primary.x && inj->att_y == primary.y &&
+            inj->att_w == primary.width && inj->att_h == primary.height,
+        "spanfail: Init fell back to primary resolution "
+        "(AttachSpanSlot virtual-screen fallback)");
+
+  broken.client_rect = {1, 1, 0, 0};
+  g_resolve_result = broken;
+  bool threw = false;
+  try {
+    mm.OnDisplayChange();
+  } catch (...) {
+    threw = true;
+  }
+  Check(!threw, "spanfail: OnDisplayChange did not throw (catch swallows)");
+  Check(mm.slot_count() == 1, "spanfail: span slot still live");
+  Check(inj != nullptr && inj->attach_calls == 2,
+        "spanfail: re-attach attempted after the host-rect change");
+  Check(inj != nullptr && inj->att_x == primary.x && inj->att_y == primary.y &&
+            inj->att_w == primary.width && inj->att_h == primary.height,
+        "spanfail: ReattachSpanLocked fell back to primary resolution "
+        "(non-positive w/h -> GetPrimaryMonitor)");
+  Check(inj != nullptr && inj->shared_set && inj->shared.host == broken.host,
+        "spanfail: refreshed shared host was still passed down");
+  MultiMonitor::SetSpanGeometryOverride(nullptr);
+  mm.Shutdown();
+}
+
 }  // namespace k6wp
 
 int main(int argc, char** argv) {
@@ -668,6 +1017,24 @@ int main(int argc, char** argv) {
   }
   if (sel == "all" || sel == "nullhost") {
     k6wp::TestNullSharedHostDegradesHeadless();
+  }
+  if (sel == "all" || sel == "false-success") {
+    k6wp::TestFalseSuccessHeadless();
+  }
+  if (sel == "all" || sel == "hostmove") {
+    k6wp::TestHostMoveTriggersReattach();
+  }
+  if (sel == "all" || sel == "mononly") {
+    k6wp::TestMonitorOnlyReattachUnchanged();
+  }
+  if (sel == "all" || sel == "nochange") {
+    k6wp::TestNoGeometryOrHostChangeSkips();
+  }
+  if (sel == "all" || sel == "spanhost") {
+    k6wp::TestSpanHostMoveReattaches();
+  }
+  if (sel == "all" || sel == "spanfail") {
+    k6wp::TestSpanNonPositiveGeometryPrimaryFallback();
   }
   std::cout << k6wp::g_checks << " checks, " << k6wp::g_failures
             << " failures\n";
