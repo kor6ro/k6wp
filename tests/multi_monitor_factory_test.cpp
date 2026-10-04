@@ -20,6 +20,7 @@
 // MpvRenderer in the binary).
 #include <cstdarg>
 #include <cstdint>
+#include <cstdio>
 #include <iostream>
 #include <map>
 #include <memory>
@@ -43,6 +44,11 @@ struct InjState {
   LogFn log = nullptr;
   InjectMode mode = InjectMode::kAuto;
   bool mode_set = false;
+  // Row 7: the pass's shared host as received via SetSharedHost (recorded
+  // per injector; deliberately NOT a g_events entry so row 6's verbatim
+  // construction-order assertion stays untouched).
+  bool shared_set = false;
+  SharedHost shared{};
   void* hwnd = nullptr;  // injected_hwnd() while "attached"
   int attach_calls = 0;
   int detach_calls = 0;
@@ -77,10 +83,37 @@ bool g_attach_ok = true;
 int g_inj_ctors = 0, g_inj_dtors = 0;
 int g_ren_ctors = 0, g_ren_dtors = 0;
 int g_factory_injectors = 0, g_factory_renderers = 0;
+// Row 7: what the link-level ResolveSharedHost stub returns for the whole
+// attach pass (real ResolveSharedHost lives in desktop_inject.cpp, NOT
+// linked here). Default = a fake resolved host; the null-host failure test
+// clears it to simulate ResolveSharedHost finding no Progman.
+SharedHost g_resolve_result{};
+int g_resolve_calls = 0;
+InjectMode g_resolve_mode = InjectMode::kAuto;
+// Log capture so the failure test can assert the EXISTING headless fallback
+// line (multi_monitor.cpp:117-122) without a real LogFn.
+std::vector<std::string> g_logs;
 
 // Sentinel passed to SetHeadlessHost: must be the hwnd Create() receives
 // when injection failed, and must never appear when injection succeeded.
 void* const kHeadlessHost = reinterpret_cast<void*>(static_cast<uintptr_t>(0x77));
+
+// Non-null fake resolved host handed out by the ResolveSharedHost stub unless
+// a test clears it (null-Progman fixture).
+SharedHost MakeStubSharedHost() {
+  SharedHost sh;
+  sh.host = reinterpret_cast<void*>(static_cast<uintptr_t>(0xBEEF));
+  sh.progman = reinterpret_cast<void*>(static_cast<uintptr_t>(0xFEED));
+  sh.def_view = reinterpret_cast<void*>(static_cast<uintptr_t>(0xDEA1));
+  sh.insert_after = sh.def_view;
+  sh.layered = true;
+  sh.branch = "stub branch";
+  sh.client_rect.left = 0;
+  sh.client_rect.top = 0;
+  sh.client_rect.right = 1920;
+  sh.client_rect.bottom = 1080;
+  return sh;
+}
 
 void ResetStubs() {
   g_inj.clear();
@@ -88,10 +121,14 @@ void ResetStubs() {
   g_events.clear();
   g_attach_rects.clear();
   g_create_hwnds.clear();
+  g_logs.clear();
   g_attach_ok = true;
   g_inj_ctors = g_inj_dtors = 0;
   g_ren_ctors = g_ren_dtors = 0;
   g_factory_injectors = g_factory_renderers = 0;
+  g_resolve_result = MakeStubSharedHost();
+  g_resolve_calls = 0;
+  g_resolve_mode = InjectMode::kAuto;
 }
 
 // Unique non-null fake HWND handed out by the stub Attach on success.
@@ -116,6 +153,24 @@ void Check(bool cond, const std::string& name) {
 
 // The LogFn under test: identity-compared against what the stub ctors saw.
 void QuietLog(const char* /*fmt*/, ...) {}
+
+// Recording LogFn for the null-host failure test: captures the EXISTING
+// headless fallback line verbatim (multi_monitor.cpp:117-122).
+void RecordLog(const char* fmt, ...) {
+  char buf[512];
+  va_list args;
+  va_start(args, fmt);
+  std::vsnprintf(buf, sizeof(buf), fmt, args);
+  va_end(args);
+  g_logs.push_back(buf);
+}
+
+bool LogContains(const std::string& needle) {
+  for (const std::string& line : g_logs) {
+    if (line.find(needle) != std::string::npos) return true;
+  }
+  return false;
+}
 
 void SetupMonitors() {
   MonitorInfo a;
@@ -164,7 +219,11 @@ void DesktopInjector::SetInjectMode(InjectMode mode) {
 bool DesktopInjector::Attach(int x, int y, int width, int height) {
   InjState& s = g_inj[this];
   ++s.attach_calls;
-  s.hwnd = g_attach_ok ? NextStubHwnd() : nullptr;
+  // Row 7 production contract mirrored here: Attach refuses when the pass's
+  // shared host is unresolved (null Progman) - that refusal is exactly what
+  // drives AttachSlot's existing headless fallback line.
+  const bool host_ok = s.shared_set && s.shared.host != nullptr;
+  s.hwnd = (g_attach_ok && host_ok) ? NextStubHwnd() : nullptr;
   Rect4 r;
   r.x = x;
   r.y = y;
@@ -172,7 +231,7 @@ bool DesktopInjector::Attach(int x, int y, int width, int height) {
   r.h = height;
   g_attach_rects.push_back(r);
   g_events.push_back("attach");
-  return g_attach_ok;
+  return g_attach_ok && host_ok;
 }
 
 void DesktopInjector::Detach() {
@@ -202,6 +261,26 @@ void DesktopInjector::ReassertFrameless() {
 // Returns by value like the real one; no event so the construction-order
 // assertion above stays purely about slot construction.
 std::string DesktopInjector::last_coverage_reason() const { return {}; }
+
+// ---- link-level stub: row 7 shared-host plumbing (desktop_inject.cpp NOT linked)
+
+// MultiMonitor resolves the host ONCE per attach pass and hands the result to
+// every slot injector through this before Attach (AttachSlot,
+// ReattachSpanLocked, Reanchor's survivor loop).
+void DesktopInjector::SetSharedHost(const SharedHost& host) {
+  InjState& s = g_inj[this];
+  s.shared = host;
+  s.shared_set = true;
+}
+
+// The free ResolveSharedHost stub: counts calls (the "one resolution per pass
+// regardless of slot count" contract) and returns the configurable fixture -
+// g_resolve_result = {} simulates ResolveSharedHost finding no Progman.
+SharedHost ResolveSharedHost(InjectMode mode, LogFn /*log*/) {
+  ++g_resolve_calls;
+  g_resolve_mode = mode;
+  return g_resolve_result;
+}
 
 // ---- link-level stubs: MpvRenderer (mpv_renderer.cpp/mpv.lib NOT linked) --
 
@@ -369,6 +448,22 @@ void TestHappyInjectedFactory() {
   Check(logs_ok, "happy: every injector got the MultiMonitor LogFn argument");
   Check(modes_ok, "happy: SetInjectMode(kProgman) reached both injectors");
 
+  // Row 7: ONE ResolveSharedHost for the whole 2-slot pass, thread mode
+  // through, and the resolved host delivered to every slot injector.
+  Check(g_resolve_calls == 1,
+        "happy: ResolveSharedHost ran exactly once for 2 slots");
+  Check(g_resolve_mode == InjectMode::kProgman,
+        "happy: ResolveSharedHost received the injector mode (kProgman)");
+  bool shared_ok = g_inj.size() == 2;
+  for (const auto& kv : g_inj) {
+    shared_ok = shared_ok && kv.second.shared_set &&
+                kv.second.shared.host == g_resolve_result.host &&
+                kv.second.shared.host != nullptr && kv.second.shared.layered;
+  }
+  Check(shared_ok,
+        "happy: both injectors received the pass's shared host via "
+        "SetSharedHost");
+
   Check(g_attach_rects.size() == 2, "happy: Attach called exactly twice");
   if (g_attach_rects.size() == 2) {
     Check(g_attach_rects[0].x == 0 && g_attach_rects[0].y == 0 &&
@@ -482,6 +577,72 @@ void TestHeadlessFallbackContract() {
   Check(mm.slot_count() == 0, "headless: Shutdown clears all slots");
 }
 
+// Row 7 failure scenario: ResolveSharedHost with a null Progman (fixture
+// g_resolve_result cleared -> the stub returns a null host) must (a) return
+// null, (b) be passed down to every injector by AttachSlot, and (c) leave
+// AttachSlot on its EXISTING headless path - the
+// "Attach failed for monitor N ..., headless renderer fallback" line
+// (multi_monitor.cpp:117-122) - with no crash, both renderers embedded in
+// the hidden host.
+void TestNullSharedHostDegradesHeadless() {
+  ResetStubs();
+  g_attach_ok = true;                    // injectors are willing...
+  g_resolve_result = SharedHost{};       // ...but ResolveSharedHost found no Progman
+  g_logs.clear();
+
+  MultiMonitor mm(&RecordLog, MakeRecordingFactory());
+  mm.SetHeadlessHost(kHeadlessHost);
+
+  Check(!g_resolve_result.host,
+        "nullhost: fixture ResolveSharedHost returns a null host (null Progman)");
+  const bool ok = mm.Init(MultiMonitorMode::PerMonitor);
+  Check(ok, "nullhost: Init still returns true (headless slots count as live)");
+  Check(mm.slot_count() == 2,
+        "nullhost: slot_count()==2 (no crash, both slots exist)");
+  Check(g_resolve_calls == 1,
+        "nullhost: ResolveSharedHost ran exactly once for 2 slots");
+
+  bool passed_null = g_inj.size() == 2;
+  for (const auto& kv : g_inj) {
+    passed_null =
+        passed_null && kv.second.shared_set && kv.second.shared.host == nullptr;
+  }
+  Check(passed_null,
+        "nullhost: AttachSlot passed the null host down via SetSharedHost");
+
+  Check(LogContains("Attach failed for monitor 0") &&
+            LogContains("Attach failed for monitor 1") &&
+            LogContains("headless renderer fallback"),
+        "nullhost: existing headless fallback line (multi_monitor.cpp:117-122) "
+        "emitted for both monitors");
+
+  Check(mm.headless_slot_count() == 2,
+        "nullhost: headless_slot_count()==2");
+  Check(mm.has_headless_slots(), "nullhost: has_headless_slots()==true");
+  bool host_ok = g_create_hwnds.size() == 2;
+  for (void* h : g_create_hwnds) {
+    host_ok = host_ok && (h == kHeadlessHost);
+  }
+  Check(host_ok,
+        "nullhost: renderer Create() got the hidden host for both slots");
+  for (const auto& kv : g_inj) {
+    Check(kv.second.attach_calls == 1,
+          "nullhost: Attach was attempted exactly once per injector");
+    Check(kv.second.hwnd == nullptr,
+          "nullhost: injector reports no injected hwnd (headless)");
+  }
+
+  mm.Shutdown();
+  Check(mm.slot_count() == 0, "nullhost: Shutdown clears all slots");
+  // Print the captured fallback lines verbatim so the failure evidence file
+  // carries the actual log output, not just the assertion that it matched.
+  for (const std::string& l : g_logs) {
+    if (l.find("Attach failed") != std::string::npos) {
+      std::cout << "[LOG] " << l << "\n";
+    }
+  }
+}
+
 }  // namespace k6wp
 
 int main(int argc, char** argv) {
@@ -495,6 +656,9 @@ int main(int argc, char** argv) {
   }
   if (sel == "all" || sel == "headless") {
     k6wp::TestHeadlessFallbackContract();
+  }
+  if (sel == "all" || sel == "nullhost") {
+    k6wp::TestNullSharedHostDegradesHeadless();
   }
   std::cout << k6wp::g_checks << " checks, " << k6wp::g_failures
             << " failures\n";

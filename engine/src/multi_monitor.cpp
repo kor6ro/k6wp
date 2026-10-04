@@ -63,6 +63,7 @@ MultiMonitor::MultiMonitor(MultiMonitor&& other) noexcept
       slots_(std::move(other.slots_)),
       initialized_(other.initialized_),
       headless_host_(other.headless_host_),
+      shared_host_(other.shared_host_),
       global_paused_(other.global_paused_.load(std::memory_order_relaxed)) {
   other.initialized_ = false;
 }
@@ -83,6 +84,7 @@ MultiMonitor& MultiMonitor::operator=(MultiMonitor&& other) noexcept {
     slots_ = std::move(other.slots_);
     initialized_ = other.initialized_;
     headless_host_ = other.headless_host_;
+    shared_host_ = other.shared_host_;
     global_paused_.store(other.global_paused_.load(std::memory_order_relaxed),
                          std::memory_order_relaxed);
     other.initialized_ = false;
@@ -106,11 +108,21 @@ void MultiMonitor::ClearSlots() {
   initialized_ = false;
 }
 
+// Row 7: resolve the desktop host once for the current attach pass. Every
+// subsequent SetSharedHost in this pass hands the SAME SharedHost to each
+// slot injector - no per-slot FindDesktopWindows / 0x052C spawn.
+void MultiMonitor::ResolveHostForPass() {
+  shared_host_ = ResolveSharedHost(inject_mode_, log_);
+}
+
 bool MultiMonitor::AttachSlot(const MonitorInfo& mi) {
   Slot slot;
   slot.info = mi;
   slot.injector = factory_.make_injector(log_);
   slot.injector->SetInjectMode(inject_mode_);
+  // Row 7: pass the pass's resolved host down before Attach - Attach itself
+  // no longer discovers or spawns a host.
+  slot.injector->SetSharedHost(shared_host_);
   // Attach failure degrades to a headless renderer: it embeds mpv into the
   // hidden host (headless_host_, set by EngineApp) so mpv never spawns its
   // own framed window (Todo 2). A monitor that refuses injection must not
@@ -172,6 +184,7 @@ bool MultiMonitor::AttachSpanSlot() {
       return false;
     }
   }
+  ResolveHostForPass();
   return AttachSlot(mi);
 }
 
@@ -189,6 +202,9 @@ void MultiMonitor::ReattachSpanLocked(Slot& slot, int x, int y, int w, int h,
     w = primary.width;
     h = primary.height;
   }
+  // Row 7: the span re-anchor reuses the pass's shared host too (its caller
+  // resolved it before reaching this funnel).
+  slot.injector->SetSharedHost(shared_host_);
   slot.injector->Detach();
   if (slot.injector->Attach(x, y, w, h) && slot.renderer) {
     if (reassert) {
@@ -238,6 +254,10 @@ int MultiMonitor::active_monitor() const {
 }
 
 void MultiMonitor::ApplyActiveFilter(const std::vector<MonitorInfo>& desired) {
+  // Row 7: one host resolution covers this whole pass - the teardown below,
+  // every newcomer AttachSlot, and (when this is Init/OnDisplayChange/Reanchor
+  // converging the set) the survivors re-attached by the caller.
+  ResolveHostForPass();
   // Tear down slots outside the desired set (vanished monitor or filtered
   // out by the active target).
   for (auto it = slots_.begin(); it != slots_.end();) {
@@ -308,6 +328,7 @@ void MultiMonitor::OnDisplayChange() {
       // Re-attach the injector at the new span size, keep the renderer
       // instance (no video reload needed — SetHWND re-points it).
       if (slot.injector) {
+        ResolveHostForPass();
         ReattachSpanLocked(slot, g.x, g.y, g.width, g.height, /*reassert=*/false);
       }
       slot.info.x = g.x;
@@ -335,6 +356,7 @@ void MultiMonitor::OnDisplayChange() {
                               it->second.info.y != mi.y);
         it->second.info = mi;
         if (resized && it->second.injector) {
+          it->second.injector->SetSharedHost(shared_host_);
           it->second.injector->OnDisplayChange(mi.x, mi.y, mi.width, mi.height);
           if (it->second.renderer) {
             void* hwnd = it->second.injector->injected_hwnd();
@@ -506,6 +528,7 @@ void MultiMonitor::Reanchor() {
         AttachSpanSlot();
       } else if (it->second.injector) {
         const SpanGeometry g = GetSpanGeometry();
+        ResolveHostForPass();
         ReattachSpanLocked(it->second, it->second.info.x, it->second.info.y,
                            g.width, g.height, /*reassert=*/true);
       }
@@ -526,6 +549,9 @@ void MultiMonitor::Reanchor() {
         continue;
       } else if (it->second.injector) {
         it->second.info = mi;
+        // Row 7: survivors take the pass's shared host too (ApplyActiveFilter
+        // above resolved it for this Reanchor pass).
+        it->second.injector->SetSharedHost(shared_host_);
         it->second.injector->Detach();
         if (it->second.injector->Attach(mi.x, mi.y, mi.width, mi.height) &&
             it->second.renderer) {

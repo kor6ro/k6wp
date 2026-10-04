@@ -234,6 +234,11 @@ class MultiMonitor {
   void ClearSlots();
   bool AttachSlot(const MonitorInfo& mi);
   bool AttachSpanSlot();
+  // Row 7: resolve the desktop host ONCE for the current attach pass and
+  // store it in shared_host_. Called at each pass entry that attaches or
+  // re-attaches (ApplyActiveFilter, the span paths); every slot then receives
+  // the SAME host via SetSharedHost instead of spawning its own.
+  void ResolveHostForPass();
   // Shared span re-anchor for OnDisplayChange (reassert=false) and Reanchor
   // (reassert=true): primary-resolution size fallback + hidden-host attach
   // fallback. `slot.injector` must be non-null. No logging here so the
@@ -265,6 +270,10 @@ class MultiMonitor {
   std::map<int, Slot> slots_;
   bool initialized_ = false;
   void* headless_host_ = nullptr;
+  // Row 7: the attach pass's shared host (ResolveSharedHost). Persists across
+  // passes so Reanchor/OnDisplayChange survivors get the fresh resolution and
+  // row 11 can compare the measured client_rect against the live host.
+  SharedHost shared_host_;
   std::atomic<bool> global_paused_{false};
   Slot* SlotAt(size_t idx);
   const Slot* SlotAt(size_t idx) const;

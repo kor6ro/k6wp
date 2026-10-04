@@ -212,6 +212,18 @@ LRESULT CALLBACK InjectedWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
   return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
+// Null-tolerant variadic logging for the free ResolveSharedHost (row 7):
+// same shape as Impl::Logf but usable outside the pimpl.
+void LogShared(LogFn log, const char* fmt, ...) {
+  if (!log) return;
+  va_list args;
+  va_start(args, fmt);
+  char buf[1024];
+  std::vsnprintf(buf, sizeof(buf), fmt, args);
+  va_end(args);
+  log("%s", buf);
+}
+
 }  // namespace
 
 struct DesktopInjector::Impl {
@@ -221,6 +233,11 @@ struct DesktopInjector::Impl {
   bool class_registered = false;
   HINSTANCE hinstance = nullptr;
   InjectMode inject_mode = InjectMode::kAuto;
+  // Row 7: the attach pass's resolved host (ResolveSharedHost). Install via
+  // SetSharedHost before Attach; has_shared_host_ distinguishes "pass ran,
+  // host unresolved (null Progman)" from "SetSharedHost never called".
+  SharedHost shared_host_;
+  bool has_shared_host_ = false;
   // Row 4: last CoverageReason token emitted by LogPlacement ("" before the
   // first attempt). Copied per slot by MultiMonitor::AttachSlot; rows 15/19
   // surface it as get_state display_coverage.
@@ -259,15 +276,22 @@ struct DesktopInjector::Impl {
   // with error 5), then SetParent to the target.
   bool CreateAndAttach(HWND target, HWND insert_after, int x, int y, int width,
                        int height, bool layered) {
-    // Child coords are relative to the desktop host's client origin; the
-    // caller passes virtual-screen coords (monitor rect). Convert by
-    // subtracting the host's window origin so the child lands exactly on its
-    // monitor's screen rect regardless of where the virtual origin sits.
-    RECT host{};
-    if (GetWindowRect(target, &host)) {
-      x -= host.left;
-      y -= host.top;
+    // Row 7: screen -> host-client conversion via MapWindowPoints (MS: SetWindowPos
+    // takes coordinates "in client coordinates"; a NULL from-window means screen
+    // coordinates). Replaces the hand-rolled `x -= host.left; y -= host.top`
+    // subtraction, which ignored the client-origin/DPI mapping the OS does for
+    // us. Fallback keeps the old arithmetic if the mapping fails, so behaviour
+    // degrades to pre-row-7 rather than to a wrong placement.
+    POINT pt{x, y};
+    if (MapWindowPoints(nullptr, target, &pt, 1) == 0) {
+      RECT host{};
+      if (GetWindowRect(target, &host)) {
+        pt.x = x - host.left;
+        pt.y = y - host.top;
+      }
     }
+    x = pt.x;
+    y = pt.y;
     const DWORD ex_style = layered ? (WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE) : 0;
     HWND wnd = CreateWindowExW(ex_style, kInjectedClass, L"K6WP Wallpaper",
                                WS_POPUP | WS_CLIPCHILDREN, x, y, width, height,
@@ -344,9 +368,23 @@ struct DesktopInjector::Impl {
         cli_org.x + (host_cli.right - host_cli.left),
         cli_org.y + (host_cli.bottom - host_cli.top)};
     const PlacementRect mon_pr{req_x, req_y, req_x + req_w, req_y + req_h};
-    const ClientOffset delta = HostClientOffset(host_win_pr, mon_pr);
+    // Row 4 verdict split (kept verbatim): the child model is placed from the
+    // host WINDOW origin while the monitor is mapped from the host CLIENT
+    // origin - deriving both from the same origin would yield kCovered by
+    // construction (row 3 issues.md).
+    const ClientOffset placed = HostClientOffset(host_win_pr, mon_pr);
     const PlacementRect child_in_client =
-        ChildRectInClient(delta, mon_pr, host_cli_pr);
+        ChildRectInClient(placed, mon_pr, host_cli_pr);
+    // Row 7: the logged delta is now the MapWindowPoints screen->client
+    // conversion - the exact coordinates handed to SetWindowPos (row 4's
+    // "MapWindowPoints delta once todo 7 lands"). On the borderless desktop
+    // hosts (WorkerW/Progman) it equals `placed`; the fallback keeps the row-4
+    // value if the mapping fails.
+    POINT mp{req_x, req_y};
+    const ClientOffset delta =
+        MapWindowPoints(nullptr, target, &mp, 1) != 0
+            ? ClientOffset{mp.x, mp.y}
+            : placed;
     const PlacementRect mon_as_client{mon_pr.left - cli_org.x,
                                       mon_pr.top - cli_org.y,
                                       mon_pr.right - cli_org.x,
@@ -376,111 +414,27 @@ struct DesktopInjector::Impl {
          delta.dx, delta.dy, final_buf);
   }
 
-  // The full attach sequence. Returns the target HWND used, or nullptr.
+  // The full attach sequence against the attach pass's resolved host (row 7).
+  // FindDesktopWindows + strategy selection now live in ResolveSharedHost
+  // (called once per pass by MultiMonitor, delivered via SetSharedHost);
+  // this per-slot path only creates/positions the child.
+  // Returns the target HWND used, or nullptr.
   HWND AttachToDesktop(int x, int y, int width, int height) {
-    const DesktopWindows d = FindDesktopWindows();
-    if (!d.progman) {
-      Logf("desktop-inject: Progman not found, skipping attach (retry on re-anchor), engine keeps running");
+    if (!has_shared_host_) {
+      Logf("desktop-inject: no shared host set (row 7: ResolveSharedHost once per attach pass), skipping attach");
       return nullptr;
     }
-    const bool is_24h2 = IsWin11_24H2(d.progman);
-    Logf("desktop-inject: progman=0x%p defView=0x%p defViewHost=0x%p (%ls) 24H2=%s",
-         d.progman, d.def_view, d.def_view_host, ClassOf(d.def_view_host).c_str(),
-         is_24h2 ? "YES" : "NO");
-    Logf("desktop-inject: strategy=%s", InjectModeToString(inject_mode));
-
-    HWND target = nullptr;
-    HWND insert_after = HWND_BOTTOM;
-    bool layered = false;
-    // Row 4: which attach branch was taken (logged via LogPlacement).
-    const char* branch = "unknown";
-
-    if (inject_mode == InjectMode::kProgman) {
-      // Forced Progman: straight to the validated 24H2 layered recipe, no
-      // WorkerW probing at all.
-      branch = "forced progman";
-      target = d.progman;
-      insert_after = d.def_view ? d.def_view : HWND_BOTTOM;
-      layered = true;
-      Logf("desktop-inject: strategy forced progman -> layered child into Progman");
-    } else if (inject_mode == InjectMode::kWorkerW) {
-      // Forced WorkerW: Strategy A then B. No usable WorkerW is an honest
-      // headless slot — never a silent Progman fallback.
-      branch = "forced workerw";
-      HWND a = FindWorkerWStrategyA(d);
-      if (a) {
-        target = a;
-        insert_after = d.def_view ? d.def_view : HWND_BOTTOM;
-        layered = true;
-        Logf("desktop-inject: strategy forced workerw -> Strategy A WorkerW 0x%p", a);
-      } else {
-        const SpawnWorkerWResult spawn = SpawnWorkerWViaProgman(d.progman);
-        if (spawn.workerw) {
-          target = spawn.workerw;
-          insert_after = HWND_BOTTOM;
-          layered = true;
-          Logf("desktop-inject: strategy forced workerw -> Strategy B empty WorkerW 0x%p",
-               spawn.workerw);
-        } else if (!spawn.sent) {
-          Logf("desktop-inject: 0x052C SendMessageTimeoutW timeout/failed (error %lu)",
-               GetLastError());
-        }
-        if (!target) {
-          Logf("desktop-inject: strategy forced workerw: no usable WorkerW");
-          return nullptr;
-        }
-      }
-    } else if (is_24h2) {
-      // 24H2: the shell's wallpaper WorkerW is parented to Progman, so ask for
-      // it and prefer it when it appears -- that is Microsoft's arrangement
-      // (our surface above the wallpaper layer, below the icons). Without one,
-      // fall back to a layered child of Progman directly below DefView.
-      branch = "24H2 path";
-      const SpawnWorkerWResult spawn = SpawnWorkerWViaProgman(d.progman);
-      if (spawn.workerw) {
-        target = spawn.workerw;
-        insert_after = spawn.def_view ? spawn.def_view : HWND_BOTTOM;
-        layered = true;
-        Logf("desktop-inject: 24H2 path -> wallpaper WorkerW 0x%p (Progman child)",
-             spawn.workerw);
-      }
-      if (!target) {
-        target = d.progman;
-        insert_after = d.def_view ? d.def_view : HWND_BOTTOM;
-        layered = true;
-        Logf("desktop-inject: 24H2 path -> layered child into Progman "
-             "(no wallpaper WorkerW)");
-      }
-    } else {
-      // Classic path: Strategy A (WorkerW hosting DefView), then Strategy B
-      // (0x052C-spawned empty WorkerW), then Progman fallback.
-      branch = "classic path";
-      HWND a = FindWorkerWStrategyA(d);
-      if (a) {
-        target = a;
-        insert_after = d.def_view ? d.def_view : HWND_BOTTOM;
-        layered = true;
-        Logf("desktop-inject: Strategy A -> WorkerW 0x%p (hosts DefView)", a);
-      } else {
-        // Try to spawn a WorkerW via 0x052C (Strategy B).
-        const SpawnWorkerWResult spawn = SpawnWorkerWViaProgman(d.progman);
-        if (spawn.workerw) {
-          target = spawn.workerw;
-          insert_after = HWND_BOTTOM;
-          layered = true;
-          Logf("desktop-inject: Strategy B -> empty WorkerW 0x%p", spawn.workerw);
-        } else if (!spawn.sent) {
-          Logf("desktop-inject: 0x052C SendMessageTimeoutW timeout/failed (error %lu), falling back to Progman",
-               GetLastError());
-        }
-        if (!target) {
-          target = d.progman;
-          insert_after = d.def_view ? d.def_view : HWND_BOTTOM;
-          layered = true;
-          Logf("desktop-inject: fallback -> Progman");
-        }
-      }
+    const SharedHost& sh = shared_host_;
+    if (!sh.host) {
+      Logf("desktop-inject: shared host unresolved, skipping attach (retry on re-anchor), engine keeps running");
+      return nullptr;
     }
+    HWND target = static_cast<HWND>(sh.host);
+    HWND insert_after = static_cast<HWND>(sh.insert_after);
+    bool layered = sh.layered;
+    const char* branch =
+        (sh.branch != nullptr && sh.branch[0] != '\0') ? sh.branch
+                                                       : "shared host";
 
     // Row 4: structured placement facts per attempt (logging only).
     const bool first_ok =
@@ -495,10 +449,11 @@ struct DesktopInjector::Impl {
         Logf("desktop-inject: strategy forced workerw: attach failed, no Progman fallback");
         return nullptr;
       }
-      if (target != d.progman && d.progman) {
+      if (target != static_cast<HWND>(sh.progman) && sh.progman) {
         Logf("desktop-inject: attach to WorkerW failed, retrying Progman fallback");
-        target = d.progman;
-        insert_after = d.def_view ? d.def_view : HWND_BOTTOM;
+        target = static_cast<HWND>(sh.progman);
+        insert_after =
+            sh.def_view ? static_cast<HWND>(sh.def_view) : HWND_BOTTOM;
         layered = true;
         // Row 4: log the retry attempt too (the false-success site).
         const bool retry_ok =
@@ -518,6 +473,148 @@ struct DesktopInjector::Impl {
     return target;
   }
 };
+
+// Row 7: ONE host resolution per attach pass. This is the strategy selection
+// AttachToDesktop used to run on EVERY slot attach - including the 0x052C
+// SpawnWorkerWViaProgman call, which spawned one fresh WorkerW per monitor.
+// MultiMonitor calls this exactly once per pass and shares the result across
+// all slots via DesktopInjector::SetSharedHost. Emits exactly ONE
+// `placement: host-resolution` log line per call (the acceptance token).
+SharedHost ResolveSharedHost(InjectMode mode, LogFn log) {
+  SharedHost sh;
+  const DesktopWindows d = FindDesktopWindows();
+  if (!d.progman) {
+    LogShared(log,
+              "desktop-inject: Progman not found, host unresolved (retry on "
+              "re-anchor), engine keeps running");
+    LogShared(log, "placement: host-resolution branch=none host=(null)");
+    return sh;
+  }
+  const bool is_24h2 = IsWin11_24H2(d.progman);
+  LogShared(log,
+            "desktop-inject: progman=0x%p defView=0x%p defViewHost=0x%p (%ls) 24H2=%s",
+            d.progman, d.def_view, d.def_view_host,
+            ClassOf(d.def_view_host).c_str(), is_24h2 ? "YES" : "NO");
+  LogShared(log, "desktop-inject: strategy=%s", InjectModeToString(mode));
+
+  HWND target = nullptr;
+  HWND insert_after = HWND_BOTTOM;
+  bool layered = false;
+  // Row 4: which attach branch was taken (logged via LogPlacement).
+  const char* branch = "unknown";
+
+  if (mode == InjectMode::kProgman) {
+    // Forced Progman: straight to the validated 24H2 layered recipe, no
+    // WorkerW probing at all.
+    branch = "forced progman";
+    target = d.progman;
+    insert_after = d.def_view ? d.def_view : HWND_BOTTOM;
+    layered = true;
+    LogShared(log, "desktop-inject: strategy forced progman -> layered child into Progman");
+  } else if (mode == InjectMode::kWorkerW) {
+    // Forced WorkerW: Strategy A then B. No usable WorkerW is an honest
+    // headless slot — never a silent Progman fallback.
+    branch = "forced workerw";
+    HWND a = FindWorkerWStrategyA(d);
+    if (a) {
+      target = a;
+      insert_after = d.def_view ? d.def_view : HWND_BOTTOM;
+      layered = true;
+      LogShared(log, "desktop-inject: strategy forced workerw -> Strategy A WorkerW 0x%p", a);
+    } else {
+      const SpawnWorkerWResult spawn = SpawnWorkerWViaProgman(d.progman);
+      if (spawn.workerw) {
+        target = spawn.workerw;
+        insert_after = HWND_BOTTOM;
+        layered = true;
+        LogShared(log, "desktop-inject: strategy forced workerw -> Strategy B empty WorkerW 0x%p",
+                  spawn.workerw);
+      } else if (!spawn.sent) {
+        LogShared(log, "desktop-inject: 0x052C SendMessageTimeoutW timeout/failed (error %lu)",
+                  GetLastError());
+      }
+      if (!target) {
+        LogShared(log, "desktop-inject: strategy forced workerw: no usable WorkerW");
+        return sh;
+      }
+    }
+  } else if (is_24h2) {
+    // 24H2: the shell's wallpaper WorkerW is parented to Progman, so ask for
+    // it and prefer it when it appears -- that is Microsoft's arrangement
+    // (our surface above the wallpaper layer, below the icons). Without one,
+    // fall back to a layered child of Progman directly below DefView.
+    branch = "24H2 path";
+    const SpawnWorkerWResult spawn = SpawnWorkerWViaProgman(d.progman);
+    if (spawn.workerw) {
+      target = spawn.workerw;
+      insert_after = spawn.def_view ? spawn.def_view : HWND_BOTTOM;
+      layered = true;
+      LogShared(log, "desktop-inject: 24H2 path -> wallpaper WorkerW 0x%p (Progman child)",
+                spawn.workerw);
+    }
+    if (!target) {
+      target = d.progman;
+      insert_after = d.def_view ? d.def_view : HWND_BOTTOM;
+      layered = true;
+      LogShared(log, "desktop-inject: 24H2 path -> layered child into Progman "
+                     "(no wallpaper WorkerW)");
+    }
+  } else {
+    // Classic path: Strategy A (WorkerW hosting DefView), then Strategy B
+    // (0x052C-spawned empty WorkerW), then Progman fallback.
+    branch = "classic path";
+    HWND a = FindWorkerWStrategyA(d);
+    if (a) {
+      target = a;
+      insert_after = d.def_view ? d.def_view : HWND_BOTTOM;
+      layered = true;
+      LogShared(log, "desktop-inject: Strategy A -> WorkerW 0x%p (hosts DefView)", a);
+    } else {
+      // Try to spawn a WorkerW via 0x052C (Strategy B).
+      const SpawnWorkerWResult spawn = SpawnWorkerWViaProgman(d.progman);
+      if (spawn.workerw) {
+        target = spawn.workerw;
+        insert_after = HWND_BOTTOM;
+        layered = true;
+        LogShared(log, "desktop-inject: Strategy B -> empty WorkerW 0x%p", spawn.workerw);
+      } else if (!spawn.sent) {
+        LogShared(log, "desktop-inject: 0x052C SendMessageTimeoutW timeout/failed (error %lu), falling back to Progman",
+                  GetLastError());
+      }
+      if (!target) {
+        target = d.progman;
+        insert_after = d.def_view ? d.def_view : HWND_BOTTOM;
+        layered = true;
+        LogShared(log, "desktop-inject: fallback -> Progman");
+      }
+    }
+  }
+
+  sh.host = target;
+  sh.progman = d.progman;
+  sh.def_view = d.def_view;
+  sh.insert_after = insert_after;
+  sh.layered = layered;
+  sh.branch = branch;
+  // Measure the host's client rect in screen coordinates: the shared
+  // "measured host" baseline (row 11 compares it across passes) and the
+  // frame of reference MapWindowPoints maps child coordinates into.
+  RECT cli{};
+  POINT org{0, 0};
+  if (GetClientRect(target, &cli) && ClientToScreen(target, &org)) {
+    sh.client_rect.left = org.x;
+    sh.client_rect.top = org.y;
+    sh.client_rect.right = org.x + (cli.right - cli.left);
+    sh.client_rect.bottom = org.y + (cli.bottom - cli.top);
+  }
+  LogShared(log,
+            "placement: host-resolution branch=%s host=%ls(0x%p) "
+            "insert_after=0x%p layered=%s client=(%d,%d,%d,%d)",
+            branch, ClassOf(target).c_str(), target, insert_after,
+            layered ? "YES" : "NO", sh.client_rect.left, sh.client_rect.top,
+            sh.client_rect.right, sh.client_rect.bottom);
+  return sh;
+}
 
 DesktopInjector::DesktopInjector(LogFn log) : impl_(std::make_unique<Impl>()) {
   impl_->log = log;
@@ -557,6 +654,12 @@ bool DesktopInjector::Attach(int x, int y, int width, int height) {
 void DesktopInjector::SetInjectMode(InjectMode mode) {
   if (!impl_) return;
   impl_->inject_mode = mode;
+}
+
+void DesktopInjector::SetSharedHost(const SharedHost& host) {
+  if (!impl_) return;
+  impl_->shared_host_ = host;
+  impl_->has_shared_host_ = true;
 }
 
 std::string DesktopInjector::last_coverage_reason() const {

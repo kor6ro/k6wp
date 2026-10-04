@@ -18,6 +18,8 @@
 #include <memory>
 #include <string>
 
+#include "desktop_placement.hpp"
+
 namespace k6wp {
 
 // Logging callback. Plain function pointer (not std::function): variadic
@@ -33,6 +35,38 @@ enum class InjectMode {
              // silent Progman.
   kProgman,  // Layered child straight into Progman (validated 24H2 recipe).
 };
+
+// Row 7: ONE measured desktop host per attach pass, shared by every slot.
+// Produced by ResolveSharedHost() - the strategy selection (Strategy A/B,
+// 0x052C spawn, 24H2/classic/forced branches) runs exactly once per pass
+// instead of once per slot - and installed on each slot injector via
+// DesktopInjector::SetSharedHost() before Attach().
+// `client_rect` is the host's measured client rect in SCREEN coordinates
+// (left/top = client origin in screen space, the target space of the
+// MapWindowPoints screen->client conversion); row 11 compares it across
+// passes to detect a moved/recreated host.
+// host == nullptr means "unresolved" (no Progman): the next Attach fails
+// honestly and MultiMonitor degrades that slot to its existing headless
+// fallback - never a crash, never a fresh per-slot spawn.
+struct SharedHost {
+  void* host = nullptr;          // chosen desktop host HWND
+  void* progman = nullptr;       // Progman (Progman-fallback retry input)
+  void* def_view = nullptr;      // SHELLDLL_DefView (z-order hint source)
+  void* insert_after = nullptr;  // resolved SetWindowPos hWndInsertAfter hint
+  bool layered = false;          // WS_EX_LAYERED child path (all branches)
+  const char* branch = "";       // row 4 branch label consumed by LogPlacement
+  PlacementRect client_rect{};   // measured client rect, screen coordinates
+};
+
+// Resolve the desktop host ONCE per attach pass (row 7). Performs the full
+// strategy selection AttachToDesktop used to run per slot (FindDesktopWindows
+// + FindWorkerWStrategyA/B + SpawnWorkerWViaProgman + the forced/24H2/classic
+// branches), measures the chosen host's client rect, and logs ONE
+// `placement: host-resolution` line (plus the moved strategy lines).
+// `log` may be nullptr (logging disabled, matching LogFn semantics).
+// Returns SharedHost{} when no Progman exists - callers treat that as
+// "attach will fail", not as a crash.
+SharedHost ResolveSharedHost(InjectMode mode, LogFn log);
 
 // Find desktop windows and attach a child window behind desktop icons.
 //
@@ -64,6 +98,14 @@ class DesktopInjector {
   // Selects the injection strategy for subsequent Attach() calls (Step 4).
   // Sticky per injector: OnDisplayChange/Reanchor re-attaches keep it.
   void SetInjectMode(InjectMode mode);
+
+  // Row 7: install the attach pass's resolved host (ResolveSharedHost).
+  // Call before Attach(): Attach no longer discovers/spawns a host per call -
+  // the per-slot spawn is the bug this replaces. host == nullptr (unresolved
+  // pass) makes the next Attach fail honestly, which routes the slot to
+  // MultiMonitor's headless fallback. Survives Detach(): Reanchor's
+  // Detach/Attach pair reuses this pass's host.
+  void SetSharedHost(const SharedHost& host);
 
   // Row 4: last CoverageReason token logged by the attach path
   // ("placement: covered", ...). Empty before the first attempt. Read by
