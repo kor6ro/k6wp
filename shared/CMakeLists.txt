@@ -29,6 +29,10 @@ target_link_libraries(k6wp_shared PRIVATE user32)
 # propagate to consumers.
 target_link_libraries(k6wp_shared PRIVATE advapi32)
 
+# monitor_util uses GetScaleFactorForMonitor (Shcore.dll, a Windows system DLL,
+# not a third-party library). PRIVATE is fine for the same reason.
+target_link_libraries(k6wp_shared PRIVATE Shcore)
+
 # monitor_dump - prints the monitor list as JSON (QA tool for Todo 7).
 # Hidden from distribution builds; enable with -DBUILD_TESTING=ON
 # (msvc-dev preset default) or -DK6WP_BUILD_TOOLS=ON.
@@ -74,4 +78,11 @@ add_executable(playlist_test ../tests/playlist_test.cpp)
 target_link_libraries(playlist_test PRIVATE k6wp_shared)
 target_include_directories(playlist_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 add_test(NAME playlist_test COMMAND playlist_test)
+
+# monitor_util_test - MonitorInfo orientation/refresh/scale plus the
+# IsPortrait/ScalePercent pure helpers and the scale fallback seam.
+add_executable(monitor_util_test ../tests/monitor_util_test.cpp)
+target_link_libraries(monitor_util_test PRIVATE k6wp_shared)
+target_include_directories(monitor_util_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+add_test(NAME monitor_util_test COMMAND monitor_util_test)
 endif()

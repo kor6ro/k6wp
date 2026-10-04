@@ -2,6 +2,8 @@
 
 #include <windows.h>
 
+#include <shellscalingapi.h>
+
 #include <algorithm>
 #include <cstddef>
 
@@ -43,6 +45,8 @@ BOOL CALLBACK OnMonitorEnum(HMONITOR hmon, HDC /*hdc*/, LPRECT /*rect*/,
   if (::EnumDisplaySettingsExW(mi.szDevice, ENUM_CURRENT_SETTINGS, &dm, 0)) {
     info.width = static_cast<int>(dm.dmPelsWidth);
     info.height = static_cast<int>(dm.dmPelsHeight);
+    info.orientation = static_cast<int>(dm.dmDisplayOrientation);
+    info.refresh_hz = static_cast<int>(dm.dmDisplayFrequency);
   } else {
     // Driver refused the current mode (mirrored/RDP edge): fall back to the
     // monitor rect so a real monitor never reports 0x0.
@@ -50,11 +54,24 @@ BOOL CALLBACK OnMonitorEnum(HMONITOR hmon, HDC /*hdc*/, LPRECT /*rect*/,
     info.height = static_cast<int>(mi.rcMonitor.bottom - mi.rcMonitor.top);
   }
 
+  // DEVICE_SCALE_FACTOR is already a percent (100 = 100%, 125 = 125%),
+  // so it is stored directly with no DPI arithmetic. GetDpiForMonitor stays
+  // unused: it is documented "not DPI aware" under PerMonitorV2.
+  DEVICE_SCALE_FACTOR dsf = SCALE_100_PERCENT;
+  const HRESULT scale_hr = ::GetScaleFactorForMonitor(hmon, &dsf);
+  info.scale_pct =
+      ResolveScalePercent(static_cast<int>(dsf), scale_hr == S_OK);
+
   ctx->out->push_back(std::move(info));
   return TRUE;
 }
 
 }  // namespace
+
+int ResolveScalePercent(int dsf_value, bool api_ok) noexcept {
+  if (!api_ok || dsf_value == -1) return 100;
+  return dsf_value;
+}
 
 std::vector<MonitorInfo> ListMonitors() noexcept {
   std::vector<MonitorInfo> monitors;
