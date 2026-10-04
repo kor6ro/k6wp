@@ -45,7 +45,8 @@ std::vector<MonitorInfo> FilterMonitors(int active) {
 
 }  // namespace
 
-MultiMonitor::MultiMonitor(LogFn log) : log_(log) {}
+MultiMonitor::MultiMonitor(LogFn log, SlotFactory factory)
+    : log_(log), factory_(std::move(factory)) {}
 
 MultiMonitor::~MultiMonitor() { ClearSlots(); }
 
@@ -58,6 +59,7 @@ MultiMonitor::MultiMonitor(MultiMonitor&& other) noexcept
       active_monitor_(other.active_monitor_.load(std::memory_order_relaxed)),
       span_filter_logged_(other.span_filter_logged_),
       filter_armed_(other.filter_armed_),
+      factory_(std::move(other.factory_)),
       slots_(std::move(other.slots_)),
       initialized_(other.initialized_),
       headless_host_(other.headless_host_),
@@ -77,6 +79,7 @@ MultiMonitor& MultiMonitor::operator=(MultiMonitor&& other) noexcept {
                           std::memory_order_relaxed);
     span_filter_logged_ = other.span_filter_logged_;
     filter_armed_ = other.filter_armed_;
+    factory_ = std::move(other.factory_);
     slots_ = std::move(other.slots_);
     initialized_ = other.initialized_;
     headless_host_ = other.headless_host_;
@@ -106,7 +109,7 @@ void MultiMonitor::ClearSlots() {
 bool MultiMonitor::AttachSlot(const MonitorInfo& mi) {
   Slot slot;
   slot.info = mi;
-  slot.injector = std::make_unique<DesktopInjector>(log_);
+  slot.injector = factory_.make_injector(log_);
   slot.injector->SetInjectMode(inject_mode_);
   // Attach failure degrades to a headless renderer: it embeds mpv into the
   // hidden host (headless_host_, set by EngineApp) so mpv never spawns its
@@ -124,7 +127,7 @@ bool MultiMonitor::AttachSlot(const MonitorInfo& mi) {
                   mi.id, mi.width, mi.height);
     LogLine(log_, buf);
   }
-  slot.renderer = std::make_unique<MpvRenderer>();
+  slot.renderer = factory_.make_renderer();
   if (!adapter_pin_.empty()) slot.renderer->SetAdapterPin(adapter_pin_);
   void* hwnd = attached ? slot.injector->injected_hwnd() : headless_host_;
   if (!slot.renderer->Create(hwnd)) {
@@ -203,6 +206,10 @@ void MultiMonitor::SetInjectMode(InjectMode mode) { inject_mode_ = mode; }
 
 void MultiMonitor::SetAdapterPin(const std::string& substr) {
   adapter_pin_ = substr;
+}
+
+void MultiMonitor::SetSlotFactory(SlotFactory factory) {
+  factory_ = std::move(factory);
 }
 
 void MultiMonitor::SetActiveMonitor(int id) {
@@ -377,7 +384,7 @@ int MultiMonitor::VerifyPinAndRevert() {
                   "reverting to unpinned",
                   kv.first);
     LogLine(log_, buf);
-    auto fresh = std::make_unique<MpvRenderer>();
+    auto fresh = factory_.make_renderer();
     void* hwnd = (slot.injector && slot.injector->injected_hwnd() != nullptr)
                      ? slot.injector->injected_hwnd()
                      : headless_host_;

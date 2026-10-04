@@ -14,6 +14,7 @@
 
 #include <atomic>
 #include <cstddef>
+#include <functional>
 #include <map>
 #include <memory>
 #include <string>
@@ -35,9 +36,43 @@ struct SpanGeometry {
   int height = 0;
 };
 
+// Injectable per-slot construction seam (extend-setup row 6, GAP-11/IS-5):
+// MultiMonitor asks a SlotFactory to build each slot's DesktopInjector and
+// MpvRenderer instead of calling make_unique inline, so tests can swap the
+// construction without touching desktop_inject.cpp / mpv_renderer.cpp (and
+// therefore without libmpv) at link time. Production passes
+// DefaultSlotFactory() - identical objects, arguments and call order as the
+// pre-seam code (the test suite asserts that order verbatim).
+struct SlotFactory {
+  // Builds a slot's DesktopInjector; receives MultiMonitor's LogFn (the
+  // pre-seam code passed log_ to make_unique<DesktopInjector>).
+  std::function<std::unique_ptr<DesktopInjector>(LogFn)> make_injector;
+  // Builds a slot's MpvRenderer (AttachSlot and the pin-revert recreate).
+  std::function<std::unique_ptr<MpvRenderer>()> make_renderer;
+};
+
+// The production factory: make_unique<DesktopInjector>(log) and
+// make_unique<MpvRenderer>() - exactly what AttachSlot/VerifyPinAndRevert
+// called before the seam. inline so the make_unique calls are emitted ONLY
+// in TUs that materialise the MultiMonitor constructor's default argument
+// (engine_app.cpp in production); multi_monitor.cpp itself never references
+// them, so a test linking multi_monitor.cpp without libmpv still links.
+inline SlotFactory DefaultSlotFactory() {
+  SlotFactory factory;
+  factory.make_injector = [](LogFn log) {
+    return std::make_unique<DesktopInjector>(log);
+  };
+  factory.make_renderer = []() { return std::make_unique<MpvRenderer>(); };
+  return factory;
+}
+
 class MultiMonitor {
  public:
-  explicit MultiMonitor(LogFn log = nullptr);
+  // `factory` defaults to DefaultSlotFactory() (production behaviour).
+  // Tests inject a fake here or via SetSlotFactory(); both members must be
+  // non-empty (the default argument guarantees that in production).
+  explicit MultiMonitor(LogFn log = nullptr,
+                        SlotFactory factory = DefaultSlotFactory());
   ~MultiMonitor();
 
   MultiMonitor(const MultiMonitor&) = delete;
@@ -69,6 +104,13 @@ class MultiMonitor {
   // Empty = unpinned. Survives OnDisplayChange/Reanchor (instances kept);
   // VerifyPinAndRevert() drops it per-slot on revert.
   void SetAdapterPin(const std::string& substr);
+
+  // Test seam (row 6): replace the per-slot construction. Call before
+  // Init(); affects slots created AFTER the call only (live slots keep
+  // their instances, like SetAdapterPin). Both members must be non-empty -
+  // an empty std::function makes the next slot creation throw
+  // std::bad_function_call. Production never calls this.
+  void SetSlotFactory(SlotFactory factory);
 
   // Enumerate via ListMonitors() and attach. PerMonitor: one slot per
   // monitor; Span: a single slot across the virtual screen. Returns true
@@ -182,6 +224,13 @@ class MultiMonitor {
     }
   };
 
+ public:
+  // Live slot map (monitor id -> slot) for tests/diagnostics (row 6). The
+  // slot payload stays private; hold the reference only across read-only
+  // checks, never across Init/OnDisplayChange/Shutdown.
+  const std::map<int, Slot>& slots() const { return slots_; }
+
+ private:
   void ClearSlots();
   bool AttachSlot(const MonitorInfo& mi);
   bool AttachSpanSlot();
@@ -210,6 +259,9 @@ class MultiMonitor {
   // stores; Init attaches) from a live retarget to an empty set (must
   // re-attach immediately so recovery from an absent id restores slots).
   bool filter_armed_ = false;
+  // Row 6: per-slot construction seam; non-empty via the constructor's
+  // DefaultSlotFactory() default argument (production) or SetSlotFactory.
+  SlotFactory factory_;
   std::map<int, Slot> slots_;
   bool initialized_ = false;
   void* headless_host_ = nullptr;

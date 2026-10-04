@@ -160,4 +160,22 @@ add_executable(desktop_placement_test
 )
 target_include_directories(desktop_placement_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 add_test(NAME desktop_placement_test COMMAND desktop_placement_test)
+
+# multi_monitor_factory_test (multi-monitor extend setup, row 6): the
+# injectable SlotFactory seam. Compiles src/multi_monitor.cpp standalone
+# against link-level DesktopInjector / MpvRenderer / ListMonitors stubs
+# defined in the test TU (tests/occlusion_test.cpp pattern), proving a
+# headless MultiMonitor links WITHOUT desktop_inject.cpp, mpv_renderer.cpp
+# or mpv.lib - target_link_libraries below must never grow an mpv entry.
+# user32: GetSystemMetrics in MultiMonitor::GetSpanGeometry.
+add_executable(multi_monitor_factory_test
+  ../tests/multi_monitor_factory_test.cpp
+  src/multi_monitor.cpp
+)
+target_link_libraries(multi_monitor_factory_test PRIVATE user32)
+target_include_directories(multi_monitor_factory_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_SOURCE_DIR}/shared
+)
+add_test(NAME multi_monitor_factory_test COMMAND multi_monitor_factory_test)
 endif()
