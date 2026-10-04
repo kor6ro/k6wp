@@ -4,6 +4,7 @@ add_library(k6wp_shared STATIC
   config_schema.cpp
   studio_settings.cpp
   playlist.cpp
+  displays_schema.cpp
   ipc_protocol.cpp
   monitor_util.cpp
   autostart.cpp
@@ -78,6 +79,13 @@ add_executable(playlist_test ../tests/playlist_test.cpp)
 target_link_libraries(playlist_test PRIVATE k6wp_shared)
 target_include_directories(playlist_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 add_test(NAME playlist_test COMMAND playlist_test)
+
+# displays_schema_test - per-monitor assignment store (displays.json io,
+# validation, migration, .bak contract, DetectKeyCollision IS-7 rules).
+add_executable(displays_schema_test ../tests/displays_schema_test.cpp)
+target_link_libraries(displays_schema_test PRIVATE k6wp_shared)
+target_include_directories(displays_schema_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+add_test(NAME displays_schema_test COMMAND displays_schema_test)
 
 # monitor_util_test - MonitorInfo orientation/refresh/scale plus the
 # IsPortrait/ScalePercent pure helpers and the scale fallback seam.

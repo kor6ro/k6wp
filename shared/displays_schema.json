@@ -1,0 +1,42 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://k6wp.local/schemas/displays.schema.json",
+  "title": "K6WP DisplaysConfig",
+  "description": "Per-monitor assignment store for the K6WP wallpaper engine. Stored at %LOCALAPPDATA%/K6WP/displays.json. Deliberately separate from config.json: older Studio builds rewrite config.json from their own WallpaperConfig struct and would erase an assignment map stored there (same rationale as playlist.json). Engine reads the file (and watches it); Studio writes it. Version 0 (legacy/absent) is migrated to version 1 by the loader. On migration (or corrupt input) the loader backs up the original bytes to <file>.bak and rewrites the file at the current version.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version"],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Schema version. 0 = legacy (missing fields are defaulted on load), 1 = current."
+    },
+    "assignments": {
+      "type": "object",
+      "default": {},
+      "description": "Per-monitor video assignments, keyed by the GDI device name as returned by MONITORINFOEXW.szDevice (e.g. \\\\.\\DISPLAY1). Each value names the video file that plays on that monitor. Empty object = no per-monitor assignment (engine falls back to config.json playback state).",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["path"],
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Absolute path to the wallpaper video file, UTF-8 encoded. Must be non-empty and must not contain a '..' path component; values outside those rules are rejected by ValidateDisplays."
+          },
+          "exists": {
+            "type": "boolean",
+            "default": false,
+            "description": "Studio-side existence hint recorded at write time (matches the {path,exists} QML shape of playlist items). The engine re-checks the filesystem at apply time and does not trust this flag."
+          }
+        }
+      }
+    },
+    "displays": {
+      "type": "array",
+      "default": [],
+      "description": "Display-only metadata Studio may write (orientation notes, friendly names, ...). The engine IGNORES this array; it is preserved as raw JSON across load/save round-trips."
+    }
+  }
+}
