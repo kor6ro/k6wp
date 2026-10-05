@@ -1,13 +1,5 @@
 #pragma once
 
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
-
 #include <string>
 
 #include "cli.hpp"
@@ -19,7 +11,7 @@ namespace k6wp::launcher {
 // (milliseconds), so the only unbounded input is the human reading the UAC
 // consent dialog. 2 minutes is generous for that, and a hard bound matters
 // because a user who walks away must not hang the uninstaller forever.
-inline constexpr DWORD kElevatedWorkerWaitMs = 120000;
+inline constexpr unsigned long kElevatedWorkerWaitMs = 120000;
 
 enum class ElevatedWaitOutcome {
   kRestored,      // the worker finished the policy restore
