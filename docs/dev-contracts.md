@@ -294,7 +294,7 @@ doc — when in doubt, read the code.
   live monitor list (Windows Duplicate/clone mode reports the same `szDevice`
   for two `HMONITOR`s). Such a map must be refused rather than let two videos
   stack on one rect; the enforcement path is locked by the
-  assignment-lifecycle suite (see `display_assignment_test` in §4, landing
+  assignment-lifecycle suite (see `display_assignment_test` in §4, landed
   with plan row 18). The user-facing statement is in
   `packaging/known-limitations.md` §2.
 - Validation + write: `ValidateDisplays` rejects a version outside `[0, 1]`,
@@ -365,9 +365,9 @@ doc — when in doubt, read the code.
 | `desktop_zorder_test` (16 checks) | `tests/desktop_zorder_test.cpp` | `BUILD_TESTING=ON` (`engine/CMakeLists.txt`) | 2026-10-05: 16 checks, 0 failures — one z-order contract across injection branches (plan row 8) |
 | `workerw_span_test` (3 checks) | `tests/workerw_span_test.cpp` | `BUILD_TESTING=ON` (`engine/CMakeLists.txt`) | 2026-10-05: 3 checks, 0 failures — non-spanning WorkerW refused (plan row 8) |
 | `multi_monitor_placement_test` (86 checks) | `tests/multi_monitor_placement_test.cpp` | `BUILD_TESTING=ON` (`engine/CMakeLists.txt`) | 2026-10-05: 86 checks, 0 failures — negative origins, portrait, shared host, `DetectKeyCollision` (plan row 12) |
-| `engine_state_test` (58 checks) | `tests/engine_state_test.cpp` | `BUILD_TESTING=ON` (`engine/CMakeLists.txt`) | 2026-10-05: 58 PASS lines, 0 failures — plan row 15 appended the display get_state checks (`display_capability` / `display_assignments` / `display_coverage`, additive defaults) |
+| `engine_state_test` (75 checks) | `tests/engine_state_test.cpp` | `BUILD_TESTING=ON` (`engine/CMakeLists.txt`) | 2026-10-05: 75 PASS lines, 0 failures — plan row 15 appended the display get_state checks (`display_capability` / `display_assignments` / `display_coverage`, additive defaults); plan row 17 appended the boot-time assignment-convergence checks (absent-monitor retention, missing-file degraded state) |
 | `engine_units_test` (62 checks) | `tests/engine_units_test.cpp` | `BUILD_TESTING=ON` (`engine/CMakeLists.txt`) | 2026-10-05: 62 PASS lines, 0 failures — plan row 16 appended the second-file watcher checks (`CheckSecondForChange`, no callback after Stop) |
-| `display_assignment_test` (planned) | not created yet (plan row 18) | NOT REGISTERED YET (plan row 18; add the `add_test` in `engine/CMakeLists.txt` when it lands) | — (row 18 is not landed; do not present this suite as existing) |
+| `display_assignment_test` (38 checks) | `tests/display_assignment_test.cpp` | `BUILD_TESTING=ON` (`engine/CMakeLists.txt`) | 2026-10-05: 38 checks, 0 failures — per-monitor assignment lifecycle + legacy regression (plan row 18) |
 | `monitor_dump` | `shared/monitor_dump.cpp` | always built (QA tool, prints monitor list as JSON) | — |
 
 - Run: `cmake --preset msvc-dev` (with `-DBUILD_TESTING=ON` for the
@@ -425,3 +425,4 @@ doc — when in doubt, read the code.
   generator-expression path quoting) and asserts exit 0 + `"dry_run":true`
   on stdout. Adding a flag emission to the builder without a parser update
   turns this test RED (vector mismatch AND parser rejection).
+
