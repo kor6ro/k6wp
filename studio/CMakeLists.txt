@@ -85,11 +85,17 @@ target_link_libraries(studio PRIVATE k6wp_shared Qt6::Widgets Qt6::Quick Qt6::Qm
 # generated .qrc/qmldir in build/msvc-dev/studio/.qt/rcc/ (see qml_shell.cpp,
 # which loads exactly that URL and asserts QQuickWidget::status()).
 set_source_files_properties(qml/Main.qml PROPERTIES QT_RESOURCE_ALIAS Main.qml)
+# Row 20: same alias treatment as Main.qml - the source lives in qml/ but the
+# generated qmldir declares the bare file name, so the resource must land at
+# /qt/qml/K6WP/DisplayCanvas.qml next to it.
+set_source_files_properties(qml/DisplayCanvas.qml PROPERTIES QT_RESOURCE_ALIAS DisplayCanvas.qml)
 qt_add_qml_module(studio
   URI K6WP
   VERSION 1.0
   RESOURCE_PREFIX "/qt/qml"
-  QML_FILES qml/Main.qml
+  QML_FILES
+    qml/Main.qml
+    qml/DisplayCanvas.qml
 )
 
 # About dialog version string (canonical K6WP_VERSION lives in the root
@@ -199,6 +205,51 @@ target_include_directories(studio_async_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
 target_compile_options(studio_async_test PRIVATE /Zc:__cplusplus /permissive-)
 add_test(NAME studio_async_test COMMAND studio_async_test)
 set_tests_properties(studio_async_test PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+endif()
+
+# display_canvas_test (row 20): the offscreen QQmlComponent harness for
+# qml/DisplayCanvas.qml. QGuiApplication, NOT studio_logic_test's
+# QCoreApplication: instantiating QtQuick items needs a QPA platform (that is
+# why studio_logic_test's environment at :237-239 deliberately omits the
+# offscreen plugin), so this suite carries the same
+# QT_QPA_PLATFORM=offscreen env property as studio_async_test.
+#
+# The QML file is loaded from SOURCE through the K6WP_DISPLAY_CANVAS_QML
+# compile definition: the compiled copy is a resource of the studio target,
+# not of this test executable, and the component takes its data through its
+# own properties, so no Studio singleton or IPC engine is involved.
+if(BUILD_TESTING)
+add_executable(display_canvas_test
+  ../tests/display_canvas_test.cpp
+)
+target_link_libraries(display_canvas_test PRIVATE k6wp_shared
+  Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2)
+target_compile_definitions(display_canvas_test PRIVATE
+  "K6WP_DISPLAY_CANVAS_QML=\"${CMAKE_CURRENT_SOURCE_DIR}/qml/DisplayCanvas.qml\"")
+target_compile_options(display_canvas_test PRIVATE /Zc:__cplusplus /permissive-)
+# Offscreen QPA deployment: studio's windeployqt POST_BUILD deploys the
+# app-local runtime into the same flat directory, which makes Qt resolve its
+# prefix to the build dir and drop the Qt-install fallback for platform
+# plugins. The deployed platforms/ dir then only holds qwindowsd.dll, so
+# QT_QPA_PLATFORM=offscreen fails ("Could not find the Qt platform plugin
+# offscreen") and Qt's fatal handler blocks in a modal dialog. Copying the
+# offscreen plugin beside the deployed windows one puts it where the same
+# loader looks.
+if(TARGET Qt6::QOffscreenIntegrationPlugin)
+  add_custom_command(TARGET display_canvas_test POST_BUILD
+    COMMAND "${CMAKE_COMMAND}" -E make_directory
+            "$<TARGET_FILE_DIR:display_canvas_test>/platforms"
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "$<TARGET_FILE:Qt6::QOffscreenIntegrationPlugin>"
+            "$<TARGET_FILE_DIR:display_canvas_test>/platforms/$<TARGET_FILE_NAME:Qt6::QOffscreenIntegrationPlugin>"
+    COMMENT "Copying the offscreen QPA plugin next to display_canvas_test.exe"
+    VERBATIM
+  )
+else()
+  message(WARNING "Qt6::QOffscreenIntegrationPlugin not found; display_canvas_test needs it for QT_QPA_PLATFORM=offscreen.")
+endif()
+add_test(NAME display_canvas_test COMMAND display_canvas_test)
+set_tests_properties(display_canvas_test PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endif()
 
 # thumbnailer_test (MED-13): unit tests for the thumbnailer pure helpers
