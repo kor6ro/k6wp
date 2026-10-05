@@ -132,6 +132,26 @@ class MultiMonitor {
   // force=true re-issues loadfile on every slot (device-lost recovery).
   bool LoadLoopAll(const std::string& path, bool force = false);
 
+  // Row 15: true when a live slot's GDI device name matches `device`
+  // (UTF-8, e.g. \\.\DISPLAY1). The set_display_video resolve predicate:
+  // an unknown/absent key returns false and the caller rejects the command
+  // before touching any slot or displays.json. Does not read
+  // displays.json — "assignment" here means a live slot for that device
+  // key, not a persisted path.
+  bool HasAssignment(const std::string& device) const;
+
+  // Row 15: per-slot variant of LoadLoopAll — load+loop `path` on the ONE
+  // live slot whose GDI device name matches `device`, then apply
+  // `fit_mode` to that slot only (empty = leave the slot's fit mode
+  // alone). Returns true when that slot's renderer accepted the path;
+  // false when no slot matches the key (unknown device), the path is
+  // empty, or the renderer refused. Does not touch other slots and does
+  // NOT update last_video_ (a per-slot assignment is not the global
+  // load; pin-revert keeps reloading last_video_ — rows 16/17 own the
+  // assignment re-apply story).
+  bool LoadLoopSlot(const std::string& device, const std::string& path,
+                    const std::string& fit_mode = std::string());
+
   // P3L.3 pin verify/revert pass (PATCH A). For each slot created WITH a
   // pin that has started playback but reports hwdec inactive ("no" is only
   // meaningful post-start; "dxva2" counts as active and never reverts):

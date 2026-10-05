@@ -3,10 +3,15 @@
 // PlaylistController (reload + snapshot + one-shot rotation) with fake hooks.
 
 #include "ipc_command_marshal.hpp"
+#include "ipc_marshal.hpp"
 #include "occlusion_poke_scheduler.hpp"
 #include "pin_verify_schedule.hpp"
 #include "playlist_controller.hpp"
 
+// Row 15: EngineState additive display fields + displays.json io (linked
+// via k6wp_shared PUBLIC include of shared/).
+#include "displays_schema.hpp"
+#include "ipc_protocol.hpp"
 #include "playlist.hpp"
 #include "thirdparty/json.hpp"
 
@@ -233,6 +238,105 @@ int main() {
     if (atom != 0) {
       UnregisterClassW(wc.lpszClassName, wc.hInstance);
     }
+  }
+
+  // Row 15: additive get_state display fields + displays.json round-trip.
+  //
+  // (i) Old-engine compat: a get_state payload WITHOUT the new keys parses
+  //     with display_capability 0 and empty maps (Studio feature-detect).
+  // (ii) With keys present, ParseEngineState surfaces capability + maps.
+  // (iii) Unknown-device contract for HandleSetDisplayVideo: \\.\DISPLAY9 is
+  //      shape-valid for row 13's validator (assign AND clear forms), so the
+  //      handler's false + "ipc: set_display_video rejected (unknown
+  //      device)" + displays.json byte-identity come from slot resolution
+  //      (MultiMonitor::HasAssignment / LoadLoopSlot), not payload parsing.
+  //      This suite links the validator + shared schema but NOT engine_app /
+  //      multi_monitor (engine/CMakeLists.txt test blocks are row 12's
+  //      concurrent lane; no CMake edit this row); the handler-level
+  //      observable is proven live in the task's failure evidence.
+  // (iv) A valid assignment round-trips through SaveDisplays/LoadDisplays
+  //      (row 5 store) — the persist path HandleSetDisplayVideo uses
+  //      instead of PersistConfigField.
+  {
+    nlohmann::json old_raw;
+    old_raw["state"] = {{"pid", 42ULL},
+                        {"video", "C:/v.mp4"},
+                        {"paused", false},
+                        {"headless_slots", 0},
+                        {"live", true}};
+    const k6wp::EngineState old_s = k6wp::ParseEngineState(old_raw);
+    Check(old_s.pid == 42ULL, "state: old-engine pid preserved");
+    Check(old_s.video == "C:/v.mp4", "state: old-engine video preserved");
+    Check(old_s.display_capability == 0,
+          "state: old-engine payload -> display_capability 0");
+    Check(old_s.display_assignments.empty(),
+          "state: old-engine payload -> empty display_assignments");
+    Check(old_s.display_coverage.empty(),
+          "state: old-engine payload -> empty display_coverage");
+
+    nlohmann::json new_raw;
+    new_raw["state"] = {
+        {"pid", 7ULL},
+        {"display_capability", 1},
+        {"display_assignments",
+         {{"\\\\.\\DISPLAY1", "C:/Videos/a.mp4"},
+          {"\\\\.\\DISPLAY2", "C:/Videos/b.mp4"}}},
+        {"display_coverage",
+         {{"\\\\.\\DISPLAY1", "covered"},
+          {"\\\\.\\DISPLAY2", "clipped-left"}}},
+    };
+    const k6wp::EngineState new_s = k6wp::ParseEngineState(new_raw);
+    Check(new_s.pid == 7ULL, "state: extended payload pid preserved");
+    Check(new_s.display_capability == 1,
+          "state: display_capability parsed as 1");
+    Check(new_s.display_assignments.size() == 2,
+          "state: display_assignments size 2");
+    Check(new_s.display_assignments.at("\\\\.\\DISPLAY1") ==
+              "C:/Videos/a.mp4",
+          "state: display_assignments DISPLAY1 -> a.mp4");
+    Check(new_s.display_coverage.at("\\\\.\\DISPLAY2") == "clipped-left",
+          "state: display_coverage DISPLAY2 -> clipped-left");
+
+    nlohmann::json bad_raw;
+    bad_raw["state"] = {{"display_capability", "nope"},
+                        {"display_assignments", nlohmann::json::array()},
+                        {"display_coverage", 3}};
+    const k6wp::EngineState bad_s = k6wp::ParseEngineState(bad_raw);
+    Check(bad_s.display_capability == 0,
+          "state: wrong-type capability -> default 0");
+    Check(bad_s.display_assignments.empty(),
+          "state: wrong-type assignments -> empty map");
+    Check(bad_s.display_coverage.empty(),
+          "state: wrong-type coverage -> empty map");
+
+    const auto unk = k6wp::ParseSetDisplayVideoPayload(
+        R"({"device":"\\\\.\\DISPLAY9","path":"C:/Videos/a.mp4"})");
+    Check(unk.has_value(),
+          "display: unknown-device assign payload parses (shape valid)");
+    Check(unk && unk->device == "\\\\.\\DISPLAY9" && !unk->clear,
+          "display: unknown-device assign carries device + clear=false");
+    const auto unk_clear = k6wp::ParseSetDisplayVideoPayload(
+        R"({"device":"\\\\.\\DISPLAY9","clear":true})");
+    Check(unk_clear.has_value() && unk_clear->clear &&
+              unk_clear->path.empty(),
+          "display: unknown-device clear payload parses (same reject layer)");
+
+    const auto dir = TempDir();
+    const auto file = dir / "displays.json";
+    k6wp::DisplaysConfig cfg;
+    k6wp::MonitorAssignment a;
+    a.path = L"C:\\Videos\\a.mp4";
+    a.exists = true;
+    cfg.assignments[L"\\\\.\\DISPLAY1"] = a;
+    k6wp::SaveDisplays(file, cfg);
+    const k6wp::DisplaysConfig loaded = k6wp::LoadDisplays(file);
+    Check(loaded.assignments.count(L"\\\\.\\DISPLAY1") == 1,
+          "display: assignment survives SaveDisplays/LoadDisplays");
+    Check(loaded.assignments.at(L"\\\\.\\DISPLAY1").path ==
+              L"C:\\Videos\\a.mp4",
+          "display: round-trip path intact");
+    Check(loaded.assignments.at(L"\\\\.\\DISPLAY1").exists,
+          "display: round-trip exists flag intact");
   }
 
   std::printf(g_failures == 0 ? "RESULT: ALL ENGINE-STATE CHECKS PASSED\n"

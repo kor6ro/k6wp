@@ -51,6 +51,19 @@ bool SamePlacementRect(const PlacementRect& a, const PlacementRect& b) {
          a.bottom == b.bottom;
 }
 
+// Row 15: UTF-8 GDI device key -> wide (MonitorInfo::device_name is wide,
+// MONITORINFOEXW.szDevice). Empty/undecodable input -> empty wide key,
+// which no slot matches (unknown device).
+std::wstring WidenDeviceKey(const std::string& device) {
+  if (device.empty()) return {};
+  const int n =
+      MultiByteToWideChar(CP_UTF8, 0, device.c_str(), -1, nullptr, 0);
+  if (n <= 0) return {};
+  std::wstring out(static_cast<std::size_t>(n - 1), L'\0');
+  MultiByteToWideChar(CP_UTF8, 0, device.c_str(), -1, out.data(), n);
+  return out;
+}
+
 }  // namespace
 
 MultiMonitor::MultiMonitor(LogFn log, SlotFactory factory)
@@ -422,6 +435,37 @@ bool MultiMonitor::LoadLoopAll(const std::string& path, bool force) {
   }
   if (any && !path.empty()) last_video_ = path;
   return any;
+}
+
+bool MultiMonitor::HasAssignment(const std::string& device) const {
+  const std::wstring key = WidenDeviceKey(device);
+  if (key.empty()) return false;
+  for (const auto& kv : slots_) {
+    if (kv.second.info.device_name == key) return true;
+  }
+  return false;
+}
+
+bool MultiMonitor::LoadLoopSlot(const std::string& device,
+                                const std::string& path,
+                                const std::string& fit_mode) {
+  const std::wstring key = WidenDeviceKey(device);
+  if (key.empty() || path.empty()) return false;
+  for (auto& kv : slots_) {
+    Slot& slot = kv.second;
+    if (slot.info.device_name != key) continue;
+    if (!slot.renderer || !slot.renderer->LoadLoop(path)) return false;
+    if (!fit_mode.empty()) {
+      double aspect = 0.0;
+      if (slot.info.width > 0 && slot.info.height > 0) {
+        aspect = static_cast<double>(slot.info.width) /
+                 static_cast<double>(slot.info.height);
+      }
+      slot.renderer->SetFitMode(fit_mode, aspect);
+    }
+    return true;
+  }
+  return false;
 }
 
 int MultiMonitor::VerifyPinAndRevert() {

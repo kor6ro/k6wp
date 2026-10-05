@@ -176,6 +176,19 @@ class EngineApp {
   // (HandleMessage); the IPC worker path goes through
   // ParseSetMonitorPayload + IpcCommandMarshal::QueueMonitor instead.
   bool HandleSetMonitor(const std::string& payload_json);
+  // Row 15: per-monitor assignment executor for set_display_video. Payload
+  // via ParseSetDisplayVideoPayload (row 13): {"device","path"} assigns,
+  // {"device","clear":true} drops the override. clear -> erase the device's
+  // displays.json assignment and reload current_video_utf8_ onto that slot;
+  // assign -> MultiMonitor::LoadLoopSlot onto the slot whose GDI device name
+  // matches, fit mode applied to that slot only. Persisted atomically via
+  // SaveDisplays (displays.json; NOT PersistConfigField — that is
+  // config.json-only). Unknown device key -> false +
+  // "ipc: set_display_video rejected (unknown device)" BEFORE any mutation
+  // (displays.json stays byte-identical). MAIN THREAD ONLY (HandleMessage
+  // kSetDisplayVideoMessage consume site); the IPC worker path validates
+  // with ParseSetDisplayVideoPayload + IpcCommandMarshal::QueueDisplayVideo.
+  bool HandleSetDisplayVideo(const std::string& payload_json);
   std::filesystem::path ResolvedConfigPath() const;
   // CRIT-2 main-thread halves: pop the pending value (IpcCommandMarshal)
   // and run the matching Handle* executor above. Called from HandleMessage

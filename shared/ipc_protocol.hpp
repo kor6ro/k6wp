@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <map>
 #include <stdexcept>
 #include <string>
 
@@ -88,6 +89,19 @@ struct EngineState {
   bool paused = false;
   int headless_slots = 0;
   bool live = true;
+  // Row 15, additive: per-monitor assignment map (GDI device name ->
+  // utf-8 video path) from displays.json. Missing key -> empty (engines
+  // older than row 15 never emit it).
+  std::map<std::string, std::string> display_assignments;
+  // Row 15, additive: feature-detect Studio reads before trusting the two
+  // maps. 0 = engine predates the display get_state fields (or emitted a
+  // wrong-type value); 1 = display_assignments / display_coverage are
+  // meaningful. Missing key -> 0.
+  int display_capability = 0;
+  // Row 15, additive: per-device placement verdict ("covered",
+  // "clipped-left/top/right/bottom", "headless") from row 4's
+  // Slot::coverage_reason chain. Missing key -> empty.
+  std::map<std::string, std::string> display_coverage;
 };
 EngineState ParseEngineState(const nlohmann::json& raw);
 

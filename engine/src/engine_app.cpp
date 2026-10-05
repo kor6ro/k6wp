@@ -1,5 +1,6 @@
 #include "engine_app.hpp"
 #include "bench_hook.hpp"
+#include "displays_schema.hpp"
 #include "gpu_pin.hpp"
 #include "ipc_marshal.hpp"
 #include "links.hpp"
@@ -47,6 +48,44 @@ unsigned long long CurrentHandleCount() {
   DWORD n = 0;
   if (!GetProcessHandleCount(GetCurrentProcess(), &n)) return 0;
   return static_cast<unsigned long long>(n);
+}
+
+// Row 15: UTF-8 <-> wide for GDI device keys and assignment paths at the
+// displays.json boundary (MonitorAssignment carries std::wstring; the wire
+// and get_state are UTF-8). MultiByteToWideChar directly — never
+// filesystem::u8path for device keys, whose "\\.\DISPLAYn" shape is not a
+// filesystem path.
+std::wstring WidenUtf8(const std::string& s) {
+  if (s.empty()) return {};
+  const int n = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, nullptr, 0);
+  if (n <= 0) return {};
+  std::wstring out(static_cast<std::size_t>(n - 1), L'\0');
+  MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, out.data(), n);
+  return out;
+}
+
+std::string NarrowUtf8(const std::wstring& w) {
+  if (w.empty()) return {};
+  const int n =
+      WideCharToMultiByte(CP_UTF8, 0, w.c_str(), -1, nullptr, 0, nullptr, nullptr);
+  if (n <= 0) return {};
+  std::string out(static_cast<std::size_t>(n - 1), '\0');
+  WideCharToMultiByte(CP_UTF8, 0, w.c_str(), -1, out.data(), n, nullptr, nullptr);
+  return out;
+}
+
+// Row 15: map row 4's coverage_reason tokens onto the get_state
+// display_coverage vocabulary {covered, clipped-*, headless}.
+std::string DisplayCoverageVerdict(const std::string& reason) {
+  const std::size_t clipped = reason.find("CLIPPED-");
+  if (clipped != std::string::npos) {
+    std::string suffix = reason.substr(clipped + 8);
+    const std::size_t end = suffix.find_first_of(" \t\r\n");
+    if (end != std::string::npos) suffix.resize(end);
+    if (!suffix.empty()) return "clipped-" + suffix;
+  }
+  if (reason.find("covered") != std::string::npos) return "covered";
+  return "headless";
 }
 
 // P2.3: --simulate-monitor-off-after-ms payload. Built by value at the call
@@ -973,6 +1012,81 @@ bool EngineApp::HandleSetMonitor(const std::string& payload_json) {
   return true;
 }
 
+bool EngineApp::HandleSetDisplayVideo(const std::string& payload_json) {
+  // Row 15: payload shape from IpcClient's set_display_video, re-validated
+  // through row 13's shared helper (the file may have vanished since
+  // queueing). {"device","path"} assigns; {"device","clear":true} drops
+  // the override. clear+path together is already a strict reject there.
+  const std::optional<k6wp::DisplayVideoCommand> parsed =
+      ParseSetDisplayVideoPayload(payload_json);
+  if (!parsed) {
+    Log("ipc: set_display_video rejected (missing/invalid device, path or clear)");
+    return false;
+  }
+  const k6wp::DisplayVideoCommand cmd = *parsed;
+
+  // Resolve BEFORE any mutation: an unknown device key must leave
+  // displays.json byte-identical (row 15 failure QA contract).
+  if (!multi_monitor_.HasAssignment(cmd.device)) {
+    Log("ipc: set_display_video rejected (unknown device)");
+    return false;
+  }
+
+  const std::filesystem::path displays_path = DefaultDisplaysPath();
+  k6wp::DisplaysConfig cfg;
+  try {
+    cfg = k6wp::LoadDisplays(displays_path);
+  } catch (const k6wp::ConfigError& e) {
+    Log("warning: displays.json load failed (%s), starting fresh", e.what());
+    cfg = k6wp::DisplaysConfig{};
+  }
+
+  std::string current;
+  {
+    std::lock_guard<std::mutex> lock(video_mutex_);
+    current = current_video_utf8_;
+  }
+  const std::string fit_mode = config_watcher_.GetConfig().fit_mode;
+
+  if (cmd.clear) {
+    cfg.assignments.erase(WidenUtf8(cmd.device));
+    // The map erase is the contract even when no default video is loaded;
+    // the slot reload is best-effort onto current_video_utf8_.
+    if (!current.empty() &&
+        !multi_monitor_.LoadLoopSlot(cmd.device, current, fit_mode)) {
+      Log("warning: set_display_video clear could not reload default video on %s",
+          cmd.device.c_str());
+    }
+    try {
+      k6wp::SaveDisplays(displays_path, cfg);
+    } catch (const k6wp::ConfigError& e) {
+      Log("warning: displays.json persist failed: %s", e.what());
+    }
+    Log("display: cleared assignment for %s (default video: %s)",
+        cmd.device.c_str(), current.empty() ? "(none)" : current.c_str());
+    return true;
+  }
+
+  // Assign path: the slot renderer must accept the path before anything is
+  // persisted (per-slot form of set_video's decode-failed contract).
+  if (!multi_monitor_.LoadLoopSlot(cmd.device, cmd.path, fit_mode)) {
+    Log("ipc: set_display_video rejected (decode failed for '%s' on %s, keeping old)",
+        cmd.path.c_str(), cmd.device.c_str());
+    return false;
+  }
+  k6wp::MonitorAssignment assignment;
+  assignment.path = WidenUtf8(cmd.path);
+  assignment.exists = std::filesystem::exists(std::filesystem::u8path(cmd.path));
+  cfg.assignments[WidenUtf8(cmd.device)] = assignment;
+  try {
+    k6wp::SaveDisplays(displays_path, cfg);
+  } catch (const k6wp::ConfigError& e) {
+    Log("warning: displays.json persist failed: %s", e.what());
+  }
+  Log("display: slot assigned %s -> %s", cmd.device.c_str(), cmd.path.c_str());
+  return true;
+}
+
 void EngineApp::RecreateDevice() {
   std::string video;
   {
@@ -1054,6 +1168,31 @@ std::string EngineApp::BuildStateJson() const {
   // lock from the snapshot.
   const char* wallpaper_mode_str = WallpaperModeToString(wallpaper_mode_copy);
   const std::shared_ptr<MpvRenderer> renderer_snapshot = AcquireRenderer();
+  // Row 15: additive display fields, computed before the initializer so the
+  // object below stays a flat append-only list. Assignments come from
+  // displays.json (LoadDisplays best-effort; missing/corrupt -> empty map).
+  // Coverage reads row 4's verdict chain per live slot
+  // (MultiMonitor::Slot::coverage_reason via SlotCoverageReason) — same
+  // best-effort diagnostic class as the slot census above.
+  nlohmann::json display_assignments = nlohmann::json::object();
+  try {
+    const k6wp::DisplaysConfig displays_cfg =
+        k6wp::LoadDisplays(k6wp::DefaultDisplaysPath());
+    for (const auto& [key, a] : displays_cfg.assignments) {
+      display_assignments[NarrowUtf8(key)] = NarrowUtf8(a.path);
+    }
+  } catch (const k6wp::ConfigError&) {
+  } catch (const std::exception&) {
+  }
+  nlohmann::json display_coverage = nlohmann::json::object();
+  for (const auto& [id, slot] : multi_monitor_.slots()) {
+    const bool headless = slot.injector != nullptr &&
+                          slot.injector->injected_hwnd() == nullptr;
+    display_coverage[NarrowUtf8(slot.info.device_name)] =
+        headless ? "headless"
+                 : DisplayCoverageVerdict(
+                       multi_monitor_.SlotCoverageReason(id));
+  }
   const nlohmann::json state = {
       {"running", running_.load(std::memory_order_acquire)},
       {"paused", UiPaused()},
@@ -1080,6 +1219,13 @@ std::string EngineApp::BuildStateJson() const {
       {"playlist_enabled", playlist_.get_enabled()},
       {"playlist_size", playlist_.get_size()},
       {"playlist_index", playlist_.get_index()},
+      // Row 15, additive only (APPEND — never reorder existing keys):
+      // display_capability is the feature-detect Studio reads (1 = the two
+      // maps below are meaningful; old engines never emit these keys and
+      // ParseEngineState defaults capability 0 / empty maps).
+      {"display_capability", 1},
+      {"display_assignments", display_assignments},
+      {"display_coverage", display_coverage},
   };
   return state.dump();
 }
@@ -1221,13 +1367,12 @@ LRESULT EngineApp::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
     case kSetDisplayVideoMessage: {
       // CRIT-2: queued set_display_video from the IPC worker (validated
       // there with ParseSetDisplayVideoPayload; ack "diterima"). Consumed
-      // here on the main loop thread. HandleSetDisplayVideo's per-slot
-      // apply + displays.json persist is row 15; this consume site only
-      // routes the accepted payload off the marshal queue — no desktop
-      // mutation runs on this path until that executor lands.
+      // here on the main loop thread; HandleSetDisplayVideo applies the
+      // per-slot assignment / clear and persists displays.json via
+      // SaveDisplays (row 15).
       std::string display_video_payload;
       if (ipc_marshal_.TakeDisplayVideo(&display_video_payload)) {
-        Log("ipc: set_display_video consumed on main loop (executor pending row 15)");
+        HandleSetDisplayVideo(display_video_payload);
       } else {
         Log("ipc: set_display_video main-loop wake with empty queue (ignoring)");
       }
