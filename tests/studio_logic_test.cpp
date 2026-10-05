@@ -41,14 +41,18 @@
 #include "compress_controller.hpp"
 #include "compress_errors.hpp"
 #include "compress_first_offer.hpp"
+#include "displays_schema.hpp"
 #include "engine_status_controller.hpp"
 #include "ffmpeg_path.hpp"
 #include "first_run_wizard.hpp"
 #include "ipc_client.hpp"
+#include "ipc_protocol.hpp"
 #include "library_grid_model.hpp"
 #include "lockscreen.hpp"
+#include "monitor_util.hpp"
 #include "qml_shell.hpp"
 #include "settings_bridge.hpp"
+#include "studio_bridge.hpp"
 #include "studio_settings.hpp"
 #include "user_errors.hpp"
 
@@ -309,6 +313,17 @@ std::filesystem::path ToPath(const QString& p) {
   return std::filesystem::path(p.toStdWString());
 }
 
+// Whole file as bytes, or empty when unreadable - the yardstick for
+// "displays.json was (not) rewritten by assign/clear".
+std::vector<char> ReadAllBytes(const std::filesystem::path& p) {
+  std::ifstream f(p, std::ios::binary);
+  if (!f) {
+    return {};
+  }
+  return std::vector<char>((std::istreambuf_iterator<char>(f)),
+                           std::istreambuf_iterator<char>());
+}
+
 std::wstring LocalAppDataDir() {
   wchar_t buf[MAX_PATH] = {};
   const DWORD n = GetEnvironmentVariableW(L"LOCALAPPDATA", buf, MAX_PATH);
@@ -407,6 +422,13 @@ namespace k6wp {
 void SetActiveQmlShell(QmlShell*) {}
 QmlShell* ActiveQmlShell() { return nullptr; }
 void QmlShell::SetImportTarget(LibraryGridModel*) {}
+// Row 19: StudioBridge forwards the three preview invokables to the active
+// shell; studio_logic_test compiles studio_bridge.cpp but not qml_shell.cpp,
+// so the forward targets are stubbed here (headless: ActiveQmlShell() is
+// always null, so the stubs are never reached at runtime).
+void QmlShell::syncPreviewGeometry(int, int, int, int) {}
+void QmlShell::loadPreview(const QString&) {}
+void QmlShell::setPreviewPaused(bool) {}
 }  // namespace k6wp
 
 int main(int argc, char** argv) {
@@ -1691,6 +1713,323 @@ int main(int argc, char** argv) {
     Check(!HasSubstrQ(comp_exit, "3221225781"),
           "compress: exit code is not dumped into the visible message");
     safe_and_actionable(comp_exit, "compress");
+  }
+
+  // 21. Display model bridge (row 19): Studio.displays /
+  //     displayCapability / duplicateModeNotice plus assignVideoToMonitor /
+  //     clearMonitorAssignment. Acceptance (i)-(iv): fixture geometry through
+  //     the property, get_state capability detect, the IS-7 duplicate
+  //     notice, and persist-then-notify on assign (unknown key = no write +
+  //     Indonesian lastError + no displaysChanged).
+  {
+    // --- (ii) capability: pure decision over ParseEngineState -------------
+    const nlohmann::json without_cap = {{"state", {{"pid", 42ULL}}}};
+    Check(!k6wp::DisplayCapabilityFromState(k6wp::ParseEngineState(without_cap)),
+          "displayCapability false when get_state lacks the key");
+    const nlohmann::json with_cap = {
+        {"state", {{"pid", 42ULL}, {"display_capability", 1}}}};
+    Check(k6wp::DisplayCapabilityFromState(k6wp::ParseEngineState(with_cap)),
+          "displayCapability true when get_state carries display_capability:1");
+    const nlohmann::json wrong_type = {
+        {"state", {{"pid", 42ULL}, {"display_capability", "yes"}}}};
+    Check(!k6wp::DisplayCapabilityFromState(k6wp::ParseEngineState(wrong_type)),
+          "displayCapability false when the key has a non-integer value");
+
+    // --- fixture monitors: landscape primary + portrait secondary ----------
+    k6wp::MonitorInfo primary;
+    primary.id = 0;
+    primary.x = 0;
+    primary.y = 0;
+    primary.width = 1920;
+    primary.height = 1080;
+    primary.is_primary = true;
+    primary.device_name = L"\\\\.\\DISPLAY1";
+    primary.orientation = 0;
+    primary.refresh_hz = 60;
+    primary.scale_pct = 100;
+
+    k6wp::MonitorInfo portrait;
+    portrait.id = 1;
+    portrait.x = 1920;
+    portrait.y = 0;
+    portrait.width = 1080;
+    portrait.height = 1920;
+    portrait.is_primary = false;
+    portrait.device_name = L"\\\\.\\DISPLAY2";
+    portrait.orientation = 1;
+    portrait.refresh_hz = 60;
+    portrait.scale_pct = 125;
+
+    const std::vector<k6wp::MonitorInfo> fixture = {primary, portrait};
+    k6wp::DisplaysConfig empty_store;
+    const std::map<std::string, std::string> no_coverage;
+
+    // Pure builder (the seam refreshDisplays uses): entry shape + geometry.
+    const QVariantList pure =
+        k6wp::BuildDisplayEntries(fixture, empty_store, no_coverage);
+    Check(pure.size() == 2, "displays fixture: two entries for two monitors");
+    const QVariantMap e0 = pure.at(0).toMap();
+    const QVariantMap e1 = pure.at(1).toMap();
+    Check(e0.value("x").toInt() == 0 && e0.value("y").toInt() == 0 &&
+              e0.value("width").toInt() == 1920 &&
+              e0.value("height").toInt() == 1080,
+          "displays fixture: entry 0 carries primary x/y/w/h");
+    Check(e0.value("isPrimary").toBool(), "displays fixture: entry 0 isPrimary");
+    Check(e0.value("key").toString() ==
+              QString::fromStdWString(primary.device_name),
+          "displays fixture: entry 0 key is the GDI device name");
+    Check(e1.value("x").toInt() == 1920 && e1.value("y").toInt() == 0 &&
+              e1.value("width").toInt() == 1080 &&
+              e1.value("height").toInt() == 1920,
+          "displays fixture: entry 1 carries portrait x/y/w/h");
+    Check(!e1.value("isPrimary").toBool(),
+          "displays fixture: entry 1 is not primary");
+    Check(e1.value("orientation").toString() == QStringLiteral("portrait"),
+          "displays fixture: entry 1 orientation is portrait");
+    Check(e0.value("orientation").toString() == QStringLiteral("landscape"),
+          "displays fixture: entry 0 orientation is landscape");
+    Check(e0.value("scalePercent").toInt() == 100 &&
+              e1.value("scalePercent").toInt() == 125,
+          "displays fixture: scalePercent follows MonitorInfo.scale_pct");
+    Check(e1.value("refreshHz").toInt() == 60 &&
+              e1.value("resolutionLabel").toString() ==
+                  QStringLiteral("1080x1920"),
+          "displays fixture: refreshHz + resolutionLabel on the portrait entry");
+
+    // QA-HAPPY dump (task-19 evidence): full entry field dump.
+    std::printf("QA-HAPPY displays fixture entries:\n");
+    for (const QVariant& v : pure) {
+      const QVariantMap m = v.toMap();
+      std::printf(
+          "  key=%s label=%s x=%d y=%d width=%d height=%d isPrimary=%d "
+          "orientation=%s scalePercent=%d refreshHz=%d resolutionLabel=%s "
+          "assignedPath=%s assignedExists=%d coverage=%s\n",
+          m.value("key").toString().toUtf8().constData(),
+          m.value("label").toString().toUtf8().constData(), m.value("x").toInt(),
+          m.value("y").toInt(), m.value("width").toInt(),
+          m.value("height").toInt(), m.value("isPrimary").toBool() ? 1 : 0,
+          m.value("orientation").toString().toUtf8().constData(),
+          m.value("scalePercent").toInt(), m.value("refreshHz").toInt(),
+          m.value("resolutionLabel").toString().toUtf8().constData(),
+          m.value("assignedPath").toString().toUtf8().constData(),
+          m.value("assignedExists").toBool() ? 1 : 0,
+          m.value("coverage").toString().toUtf8().constData());
+    }
+
+    // Assignment join + coverage passthrough in the pure builder.
+    k6wp::DisplaysConfig assigned_store;
+    assigned_store.assignments[primary.device_name] =
+        k6wp::MonitorAssignment{L"C:\\Videos\\a.mp4", true};
+    const std::map<std::string, std::string> coverage = {
+        {"\\\\.\\DISPLAY2", "covered"}};
+    const QVariantList joined =
+        k6wp::BuildDisplayEntries(fixture, assigned_store, coverage);
+    const QVariantMap j0 = joined.at(0).toMap();
+    const QVariantMap j1 = joined.at(1).toMap();
+    Check(HasSubstrQ(j0.value("assignedPath").toString(), "a.mp4"),
+          "displays fixture: assignedPath joins the store for the key");
+    Check(j0.value("assignedExists").toBool(),
+          "displays fixture: assignedExists follows the store hint");
+    Check(j1.value("assignedPath").toString().isEmpty() &&
+              !j1.value("assignedExists").toBool(),
+          "displays fixture: an unassigned monitor reports empty path");
+    Check(j1.value("coverage").toString() == QStringLiteral("covered"),
+          "displays fixture: coverage is an opaque passthrough token");
+
+    // --- (iii) duplicateModeNotice: IS-7 collision ------------------------
+    k6wp::MonitorInfo clone_b = primary;
+    clone_b.id = 1;
+    clone_b.is_primary = false;
+    // Clone/duplicate mode: two HMONITORs report the same szDevice.
+    const std::vector<k6wp::MonitorInfo> colliding_monitors = {primary,
+                                                               clone_b};
+    k6wp::DisplaysConfig colliding_store;
+    colliding_store.assignments[primary.device_name] =
+        k6wp::MonitorAssignment{L"C:\\Videos\\a.mp4", true};
+    const auto colliding_keys =
+        k6wp::DetectKeyCollision(colliding_store, colliding_monitors);
+    Check(!colliding_keys.empty(),
+          "duplicate collision: DetectKeyCollision reports the key");
+    const QString notice = k6wp::DuplicateModeNoticeText(colliding_keys);
+    Check(!notice.isEmpty(),
+          "duplicateModeNotice non-empty for a colliding fixture");
+    Check(HasSubstrQ(notice, "duplikat") || HasSubstrQ(notice, "Duplikat"),
+          "duplicateModeNotice is the Indonesian IS-7 refusal sentence");
+    Check(k6wp::DuplicateModeNoticeText({}).isEmpty(),
+          "duplicateModeNotice empty when no keys collide");
+
+    k6wp::MonitorInfo second;
+    second.id = 1;
+    second.x = 1920;
+    second.y = 0;
+    second.width = 1080;
+    second.height = 1920;
+    second.is_primary = false;
+    second.device_name = L"\\\\.\\DISPLAY2";
+    second.scale_pct = 125;
+    k6wp::DisplaysConfig distinct_store;
+    distinct_store.assignments[primary.device_name] =
+        k6wp::MonitorAssignment{L"C:\\Videos\\a.mp4", true};
+    distinct_store.assignments[second.device_name] =
+        k6wp::MonitorAssignment{L"C:\\Videos\\b.mp4", true};
+    const auto distinct_keys =
+        k6wp::DetectKeyCollision(distinct_store, {primary, second});
+    Check(distinct_keys.empty() && k6wp::DuplicateModeNoticeText(distinct_keys)
+                                       .isEmpty(),
+          "duplicateModeNotice empty for a non-colliding pair");
+
+    // --- bridge instance over a redirected LOCALAPPDATA --------------------
+    const std::wstring real_localappdata = LocalAppDataDir();
+    QTemporaryDir fake_home;
+    Check(fake_home.isValid(), "display-bridge temp dir is valid");
+    const bool redirected =
+        fake_home.isValid() && SetLocalAppDataDir(fake_home.path());
+    Check(redirected, "display-bridge: LOCALAPPDATA redirected");
+    if (redirected) {
+      const QDir media(fake_home.path());
+      Check(QDir().mkpath(media.filePath(QStringLiteral("K6WP"))),
+            "display-bridge: fake K6WP data dir created");
+      // Startup path: studio_settings.json with the update check OFF so the
+      // ctor does not spawn a WinHTTP worker in this suite.
+      {
+        k6wp::StudioSettings s = k6wp::DefaultStudioSettings();
+        s.check_updates = false;
+        k6wp::SaveStudioSettings(k6wp::DefaultStudioSettingsPath(), s);
+      }
+      k6wp::StudioBridge bridge;
+      Check(!bridge.displayCapability(),
+            "displayCapability false before any successful get_state");
+
+      int displays_changed = 0;
+      QObject::connect(&bridge, &k6wp::StudioBridge::displaysChanged, &bridge,
+                       [&displays_changed]() { ++displays_changed; });
+
+      // (i) through the property: ApplyDisplayModel is the seam
+      // refreshDisplays() uses; tests feed it a fixture monitor list.
+      bridge.ApplyDisplayModel(fixture, empty_store, no_coverage);
+      const QVariantList entries = bridge.displays();
+      Check(entries.size() == 2, "bridge displays(): fixture yields two entries");
+      const QVariantMap b0 = entries.at(0).toMap();
+      const QVariantMap b1 = entries.at(1).toMap();
+      Check(b0.value("x").toInt() == 0 && b0.value("width").toInt() == 1920 &&
+                b0.value("isPrimary").toBool(),
+            "bridge displays(): entry 0 x/y/w/h + isPrimary per MonitorInfo");
+      Check(b1.value("x").toInt() == 1920 && b1.value("height").toInt() == 1920 &&
+                b1.value("orientation").toString() ==
+                    QStringLiteral("portrait") &&
+                b1.value("scalePercent").toInt() == 125,
+            "bridge displays(): portrait entry geometry + orientation + scale");
+      Check(displays_changed >= 1, "ApplyDisplayModel emits displaysChanged");
+
+      // (iii) through the bridge property.
+      bridge.ApplyDisplayModel(colliding_monitors, colliding_store,
+                               no_coverage);
+      Check(!bridge.duplicateModeNotice().isEmpty(),
+            "bridge duplicateModeNotice non-empty for colliding fixture");
+      bridge.ApplyDisplayModel({primary, second}, distinct_store, no_coverage);
+      Check(bridge.duplicateModeNotice().isEmpty(),
+            "bridge duplicateModeNotice empty for non-colliding fixture");
+      // Re-seat the fixture for the assign checks.
+      bridge.ApplyDisplayModel(fixture, empty_store, no_coverage);
+
+      // (iv) valid key: persist displays.json + emit displaysChanged.
+      const QString key1 = QString::fromStdWString(primary.device_name);
+      const QString video = media.filePath(QStringLiteral("wall.mp4"));
+      {
+        QFile f(video);
+        Check(f.open(QIODevice::WriteOnly | QIODevice::Truncate),
+              "assign: stand-in video file created");
+        f.write("x");
+        f.close();
+      }
+      const auto displays_path = k6wp::DefaultDisplaysPath();
+      Check(!std::filesystem::exists(displays_path),
+            "assign: displays.json absent before the first write");
+      const int changed_before = displays_changed;
+      bridge.assignVideoToMonitor(key1, video);
+      Check(std::filesystem::exists(displays_path),
+            "assign: displays.json written for a valid key");
+      k6wp::DisplaysConfig expected;
+      expected.assignments[primary.device_name] = k6wp::MonitorAssignment{
+          video.toStdWString(), true};
+      const auto expected_path =
+          fake_home.filePath(QStringLiteral("expected-displays.json"));
+      k6wp::SaveDisplays(ToPath(expected_path), expected);
+      const auto got = ReadAllBytes(displays_path);
+      const auto want = ReadAllBytes(ToPath(expected_path));
+      Check(!got.empty() && got == want,
+            "assign: displays.json byte-matches SaveDisplays of the expected "
+            "store");
+      Check(displays_changed > changed_before,
+            "assign: displaysChanged emitted on a valid-key assign");
+      Check(bridge.lastError().isEmpty(),
+            "assign: a valid-key assign clears lastError");
+      const QVariantMap after_assign = bridge.displays().at(0).toMap();
+      Check(HasSubstrQ(after_assign.value("assignedPath").toString(),
+                       "wall.mp4"),
+            "assign: the model entry carries the new assignedPath");
+
+      // QA-FAIL (unknown key): file unchanged, Indonesian lastError, no
+      // displaysChanged.
+      const auto before_unknown = ReadAllBytes(displays_path);
+      const int changed_before_unknown = displays_changed;
+      bridge.assignVideoToMonitor(QStringLiteral("\\\\.\\DISPLAY99"), video);
+      Check(ReadAllBytes(displays_path) == before_unknown,
+            "unknown-key assign: displays.json is byte-unchanged");
+      Check(displays_changed == changed_before_unknown,
+            "unknown-key assign: displaysChanged is NOT emitted");
+      Check(!bridge.lastError().isEmpty(), "unknown-key assign: lastError is set");
+      Check(HasSubstrQ(bridge.lastError(), "tidak dikenal"),
+            "unknown-key assign: lastError is an Indonesian message");
+      // QA-FAIL dump for the fail evidence file.
+      const auto after_unknown = ReadAllBytes(displays_path);
+      std::printf("QA-FAIL unknown-key assign:\n");
+      std::printf("  key=\\\\.\\DISPLAY99 path=%s\n", video.toUtf8().constData());
+      std::printf(
+          "  displays.json bytes before=%zu after=%zu (unchanged=%d)\n",
+          before_unknown.size(), after_unknown.size(),
+          before_unknown == after_unknown ? 1 : 0);
+      std::printf("  displaysChanged delta=%d (expected 0)\n",
+                  displays_changed - changed_before_unknown);
+      std::printf("  lastError=%s\n", bridge.lastError().toUtf8().constData());
+
+      // clearMonitorAssignment: erase + persist + notify.
+      const int changed_before_clear = displays_changed;
+      bridge.clearMonitorAssignment(key1);
+      k6wp::DisplaysConfig cleared;
+      const auto expected_cleared =
+          fake_home.filePath(QStringLiteral("expected-cleared.json"));
+      k6wp::SaveDisplays(ToPath(expected_cleared), cleared);
+      Check(ReadAllBytes(displays_path) == ReadAllBytes(ToPath(expected_cleared)),
+            "clear: displays.json byte-matches an empty store");
+      Check(displays_changed > changed_before_clear,
+            "clear: displaysChanged emitted");
+
+      // Live cross-check: refreshDisplays() rebuilds from ListMonitors() and
+      // every entry's geometry matches the MonitorInfo that produced it.
+      bridge.refreshDisplays();
+      const auto live = k6wp::ListMonitors();
+      const QVariantList live_entries = bridge.displays();
+      Check(live_entries.size() == static_cast<int>(live.size()),
+            "refreshDisplays: one entry per live monitor");
+      bool geometry_ok = !live.empty();
+      for (int i = 0; i < live_entries.size() &&
+                      i < static_cast<int>(live.size());
+           ++i) {
+        const QVariantMap m = live_entries.at(i).toMap();
+        const k6wp::MonitorInfo& info = live[static_cast<size_t>(i)];
+        if (m.value("x").toInt() != info.x || m.value("y").toInt() != info.y ||
+            m.value("width").toInt() != info.width ||
+            m.value("height").toInt() != info.height ||
+            m.value("isPrimary").toBool() != info.is_primary) {
+          geometry_ok = false;
+          break;
+        }
+      }
+      Check(geometry_ok,
+            "refreshDisplays: entry geometry matches ListMonitors()");
+    }
+    (void)SetLocalAppDataDir(QString::fromStdWString(real_localappdata));
   }
 
   std::printf("checks=%d failures=%d\n", g_checks, g_failures);

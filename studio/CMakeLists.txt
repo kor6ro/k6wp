@@ -278,9 +278,19 @@ add_executable(studio_logic_test
   # mapping that StudioBridge used to show raw. Included so the mapping itself
   # is unit-testable, not just its call sites.
   src/user_errors.cpp
+  # Row 19: the Display model bridge. studio_bridge.cpp + update_checker.cpp
+  # (the ctor's optional update check) are compiled here so the display
+  # surface (displays / displayCapability / duplicateModeNotice + the
+  # assign/clear invokables) is unit-testable in this suite; winhttp is what
+  # update_checker.cpp links against in the studio target too.
+  src/studio_bridge.cpp
+  src/update_checker.cpp
 )
-target_link_libraries(studio_logic_test PRIVATE k6wp_shared Qt6::Widgets Qt6::Concurrent Qt6::Qml shell32)
+target_link_libraries(studio_logic_test PRIVATE k6wp_shared Qt6::Widgets Qt6::Concurrent Qt6::Qml shell32 winhttp)
 target_include_directories(studio_logic_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+# studio_bridge.hpp stamps the About-dialog version the same way the studio
+# target does (K6WP_VERSION_STR; generated/version.h carries the same value).
+target_compile_definitions(studio_logic_test PRIVATE "K6WP_VERSION_STR=\"${K6WP_VERSION}\"")
 target_compile_options(studio_logic_test PRIVATE /Zc:__cplusplus /permissive-)
 add_test(NAME studio_logic_test COMMAND studio_logic_test)
 # MED-5 part 2: the live compress-queue leg needs compressor.exe next to the

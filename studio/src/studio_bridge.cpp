@@ -6,6 +6,7 @@
 #include "studio_bridge.hpp"
 #include "bridge_diagnostics.hpp"
 
+#include <QCoreApplication>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QTimer>
@@ -18,6 +19,7 @@
 #include "autostart.hpp"
 #include "compress_first_offer.hpp"
 #include "config_schema.hpp"
+#include "displays_schema.hpp"
 #include "engine_status_controller.hpp"
 #include "links.hpp"
 #include "monitor_util.hpp"
@@ -56,6 +58,71 @@ bool TakeResult(QFutureWatcher<T>* watcher, T* out, QString* error_out) {
 }
 
 }  // namespace
+
+// --- display model (row 19) --------------------------------------------------
+
+QVariantList BuildDisplayEntries(
+    const std::vector<MonitorInfo>& monitors, const DisplaysConfig& store,
+    const std::map<std::string, std::string>& coverage) {
+  QVariantList out;
+  for (const MonitorInfo& m : monitors) {
+    const std::string key8 = std::filesystem::path(m.device_name).u8string();
+    QString label =
+        QCoreApplication::translate("StudioBridge", "Layar %1").arg(m.id);
+    if (m.is_primary) {
+      label += QCoreApplication::translate("StudioBridge", " (utama)");
+    }
+    const auto assign_it = store.assignments.find(m.device_name);
+    const bool has_assign = assign_it != store.assignments.end();
+    const auto cov_it = coverage.find(key8);
+    out.append(QVariantMap{
+        {QStringLiteral("key"), QString::fromStdWString(m.device_name)},
+        {QStringLiteral("label"), label},
+        {QStringLiteral("x"), m.x},
+        {QStringLiteral("y"), m.y},
+        {QStringLiteral("width"), m.width},
+        {QStringLiteral("height"), m.height},
+        {QStringLiteral("isPrimary"), m.is_primary},
+        {QStringLiteral("orientation"), m.IsPortrait()
+                                            ? QStringLiteral("portrait")
+                                            : QStringLiteral("landscape")},
+        {QStringLiteral("scalePercent"), m.ScalePercent()},
+        {QStringLiteral("refreshHz"), m.refresh_hz},
+        {QStringLiteral("resolutionLabel"),
+         QStringLiteral("%1x%2").arg(m.width).arg(m.height)},
+        {QStringLiteral("assignedPath"), has_assign
+                                             ? QString::fromStdWString(
+                                                   assign_it->second.path)
+                                             : QString()},
+        {QStringLiteral("assignedExists"),
+         has_assign && assign_it->second.exists},
+        {QStringLiteral("coverage"),
+         cov_it != coverage.end() ? QString::fromStdString(cov_it->second)
+                                  : QString()},
+    });
+  }
+  return out;
+}
+
+QString DuplicateModeNoticeText(const std::vector<std::wstring>& keys) {
+  if (keys.empty()) {
+    return QString();
+  }
+  QStringList names;
+  names.reserve(static_cast<int>(keys.size()));
+  for (const std::wstring& k : keys) {
+    names.append(QString::fromStdWString(k));
+  }
+  return QCoreApplication::translate(
+             "StudioBridge",
+             "Mode duplikat terdeteksi (%1). Penugasan video per layar "
+             "dinonaktifkan sampai tampilan Windows diubah ke mode Perluas.")
+      .arg(names.join(QStringLiteral(", ")));
+}
+
+bool DisplayCapabilityFromState(const EngineState& state) {
+  return state.display_capability == 1;
+}
 
 StudioBridge::StudioBridge(QObject* parent) : QObject(parent) {
   // T15: ONE IpcClient per Studio process. It is a plain value member (not a
@@ -173,12 +240,26 @@ void StudioBridge::OnPollDone() {
     EngineStatusView failed;
     failed.kind = EngineStatusView::Kind::kDisconnected;
     ApplyStatus(failed);
+    display_capability_ = false;
+    display_coverage_.clear();
+    MergeCoverageIntoDisplays();
+    emit displaysChanged();
     return;
   }
   // The status DECISION is EngineStatusController::DecideEngineStatus (pure,
   // unit-tested by studio_logic_test); this class only maps the resulting view
   // onto QML properties and the Indonesian sentences MainWindow painted.
   ApplyStatus(DecideEngineStatus(res));
+  // Row 19: the additive display fields ride the same get_state ack.
+  // DecideEngineStatus parses EngineState internally but only carries the
+  // status view across, so display_capability / display_coverage are parsed
+  // once more here (ParseEngineState never throws and defaults old-engine
+  // absences to capability 0 / empty maps).
+  const EngineState state = ParseEngineState(res.raw);
+  display_capability_ = DisplayCapabilityFromState(state);
+  display_coverage_ = state.display_coverage;
+  MergeCoverageIntoDisplays();
+  emit displaysChanged();
 }
 
 void StudioBridge::ApplyStatus(const EngineStatusView& view) {
@@ -335,6 +416,151 @@ void StudioBridge::refreshQuickSettings() {
   }
   monitor_choices_ = choices;
   emit quickSettingsChanged();
+}
+
+// --- display model (row 19) --------------------------------------------------
+
+void StudioBridge::refreshDisplays() {
+  std::vector<MonitorInfo> monitors = ListMonitors();
+  DisplaysConfig store;
+  try {
+    store = LoadDisplays(DefaultDisplaysPath());
+  } catch (const ConfigError&) {
+    // Missing or corrupt displays.json: the same empty-store contract the
+    // engine applies when it cannot read the file (engine_app.cpp).
+    store = DisplaysConfig{};
+  }
+  ApplyDisplayModel(monitors, store, display_coverage_);
+}
+
+void StudioBridge::ApplyDisplayModel(
+    const std::vector<MonitorInfo>& monitors, const DisplaysConfig& store,
+    const std::map<std::string, std::string>& coverage) {
+  last_monitors_ = monitors;
+  displays_ = BuildDisplayEntries(monitors, store, coverage);
+  duplicate_mode_notice_ =
+      DuplicateModeNoticeText(DetectKeyCollision(store, monitors));
+  emit displaysChanged();
+}
+
+bool StudioBridge::IsKnownDisplayKey(const QString& key) const {
+  for (const QVariant& v : displays_) {
+    if (v.toMap().value(QStringLiteral("key")).toString() == key) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void StudioBridge::MergeCoverageIntoDisplays() {
+  for (QVariant& v : displays_) {
+    QVariantMap m = v.toMap();
+    const std::string key8 =
+        m.value(QStringLiteral("key")).toString().toStdString();
+    const auto it = display_coverage_.find(key8);
+    m[QStringLiteral("coverage")] =
+        it != display_coverage_.end() ? QString::fromStdString(it->second)
+                                      : QString();
+    v = QVariant(m);
+  }
+}
+
+void StudioBridge::assignVideoToMonitor(const QString& key,
+                                        const QString& path) {
+  if (key.isEmpty()) {
+    SetLastError(tr("Kunci monitor kosong."));
+    return;
+  }
+  if (path.isEmpty()) {
+    SetLastError(tr("Video kosong."));
+    return;
+  }
+  if (!IsKnownDisplayKey(key)) {
+    SetLastError(
+        tr("Monitor tidak dikenal: %1. Segarkan daftar layar dulu.").arg(key));
+    return;
+  }
+  DisplaysConfig store;
+  try {
+    store = LoadDisplays(DefaultDisplaysPath());
+  } catch (const ConfigError&) {
+    store = DisplaysConfig{};
+  }
+  MonitorAssignment assignment;
+  assignment.path = path.toStdWString();
+  assignment.exists = QFileInfo::exists(path);
+  store.assignments[key.toStdWString()] = assignment;
+  try {
+    SaveDisplays(DefaultDisplaysPath(), store);
+  } catch (const ConfigError& e) {
+    SetLastError(tr("Gagal menyimpan displays.json: %1")
+                     .arg(QString::fromUtf8(e.what())));
+    return;
+  }
+  // IPC push after the persist (SettingsBridge::setMonitorId's
+  // mutate-then-notify shape, with the SaveDisplays write in front of it).
+  // Best-effort: the engine also re-reads displays.json through its own
+  // watcher, so a dead engine never loses the assignment.
+  nlohmann::json payload;
+  payload["device"] = key.toStdString();
+  payload["path"] = path.toStdString();
+  const IpcResult res = ipc_.Send(Cmd::set_display_video, payload);
+  if (res.status == IpcStatus::kOk) {
+    AppendLog(tr("Penugasan layar dikirim ke engine: %1").arg(key));
+  } else if (res.status == IpcStatus::kNotRunning) {
+    AppendLog(tr("Engine mati — penugasan tersimpan di displays.json saja"));
+  } else {
+    AppendLog(tr("IPC set_display_video ditolak: %1")
+                  .arg(QString::fromStdString(res.error)));
+  }
+  ClearLastError();
+  ApplyDisplayModel(last_monitors_, store, display_coverage_);
+}
+
+void StudioBridge::clearMonitorAssignment(const QString& key) {
+  if (key.isEmpty()) {
+    SetLastError(tr("Kunci monitor kosong."));
+    return;
+  }
+  if (!IsKnownDisplayKey(key)) {
+    SetLastError(
+        tr("Monitor tidak dikenal: %1. Segarkan daftar layar dulu.").arg(key));
+    return;
+  }
+  DisplaysConfig store;
+  try {
+    store = LoadDisplays(DefaultDisplaysPath());
+  } catch (const ConfigError&) {
+    store = DisplaysConfig{};
+  }
+  const auto it = store.assignments.find(key.toStdWString());
+  if (it == store.assignments.end()) {
+    // Nothing persisted for this key: idempotent no-op, no file write.
+    ApplyDisplayModel(last_monitors_, store, display_coverage_);
+    return;
+  }
+  store.assignments.erase(it);
+  try {
+    SaveDisplays(DefaultDisplaysPath(), store);
+  } catch (const ConfigError& e) {
+    SetLastError(tr("Gagal menyimpan displays.json: %1")
+                     .arg(QString::fromUtf8(e.what())));
+    return;
+  }
+  nlohmann::json payload;
+  payload["device"] = key.toStdString();
+  payload["clear"] = true;
+  const IpcResult res = ipc_.Send(Cmd::set_display_video, payload);
+  if (res.status == IpcStatus::kOk) {
+    AppendLog(tr("Penugasan layar dihapus: %1").arg(key));
+  } else if (res.status == IpcStatus::kNotRunning) {
+    AppendLog(tr("Engine mati — penghapusan tersimpan di displays.json saja"));
+  } else {
+    AppendLog(tr("IPC set_display_video (clear) ditolak: %1")
+                  .arg(QString::fromStdString(res.error)));
+  }
+  ClearLastError();
+  ApplyDisplayModel(last_monitors_, store, display_coverage_);
 }
 
 void StudioBridge::setQuickFit(const QString& fit_mode) {
