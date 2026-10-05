@@ -35,6 +35,74 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Packaging: `packaging/playlist.json.example` staged in the ZIP and
     installer; stale `packaging/config.json.example` refreshed to schema v5.
 
+- **Multi-monitor placement fix, per-monitor video assignment, and a Studio
+  Display panel.** Under Windows Extend a second monitor could stay blank (or
+  one window could cover both) because the placement path assumed the host
+  window spanned the monitor. The injector now measures the host, converts
+  coordinates through Windows, verifies that the child actually covers its
+  monitor, and only then reports success. On top of that fix a saved video can
+  be assigned to one monitor and survives a restart; a live edit re-applies
+  without restarting the engine; and a monitor that disappears degrades to the
+  global video instead of going blank. The two-monitor live proof is NOT
+  claimed here: it still needs the run-book artifact from a real rig.
+  - Shared (`shared/displays_schema.{hpp,cpp,json}`, `shared/monitor_util.*`,
+    `shared/monitor_dump.cpp`): new `displays.json` (schema v1, draft-07,
+    `kDisplaysSchemaVersion`) stores a per-monitor `assignments` map keyed by
+    the GDI device name (`\\.\DISPLAY1`) as `{"path":...,"exists":...}`, with
+    `LoadDisplays` / `SaveDisplays` / `ValidateDisplays` / `MigrateDisplays`,
+    the same atomic `.tmp` + `MoveFileExW` publish and `.bak`-on-corrupt
+    contract as the other settings files, and a `DetectKeyCollision` guard for
+    Duplicate/clone mode. `MonitorInfo` gained orientation, refresh rate and
+    per-monitor DPI, and `monitor_dump` now emits the full geometry (`x`, `y`,
+    `device_name`, orientation, DPI) through a testable formatter instead of
+    only `id/width/height/is_primary`.
+  - Engine (`engine/src/desktop_inject.{hpp,cpp}`,
+    `engine/src/desktop_placement.{hpp,cpp}`,
+    `engine/src/multi_monitor.{hpp,cpp}`, `engine/src/engine_app.cpp`):
+    placement measures the shared host once, converts child coordinates with
+    `MapWindowPoints` instead of hand-rolled arithmetic, refuses to attach to
+    an arbitrary non-spanning `WorkerW`, and applies ONE z-order contract
+    across the `Progman` and `WorkerW` branches (the 24H2 path parented a level
+    too deep and sent the child to the wrong sibling). Every attach logs a
+    stable `placement:` line and coverage is checked against the child's
+    measured screen rect, so a clipped or out-of-bounds window is logged as
+    `RETRY-FALSE-SUCCESS` and retried rather than counted as covered. Per
+    monitor assignment is served by the additive `set_display_video` IPC
+    command (`{"device":...,"path":...}` to assign, `{"device":...,"clear":true}`
+    to drop), marshalled onto the main loop and persisted through
+    `SaveDisplays`. `displays.json` is watched through
+    `ConfigWatcher::WatchSecondFile` with event-only semantics, so it adds no
+    periodic wakeup; on boot the engine re-converges slots, keeps assignments
+    whose device name survives, and logs a retention warning with a fall back
+    to the global video for a re-keyed monitor. `get_state` gains the additive
+    fields `display_capability`, `display_assignments` and `display_coverage`.
+  - Studio (`studio/qml/Main.qml`, `studio/qml/DisplayCanvas.qml`): a new
+    **Display** tab hosts a read-only `DisplayCanvas` that draws each monitor
+    as a correctly-proportioned rectangle at its real virtual-desktop position,
+    marks the primary, and shows per-monitor scale, orientation and resolution
+    as Windows reports them. Library rows and playlist rows are drag sources
+    (custom `application/x-k6wp-assignment` MIME key) and each monitor
+    rectangle is a `DropArea`, so a saved video can be dragged onto exactly one
+    monitor. Scale and orientation are a readout, never a control.
+  - Tests: new CTest suites `displays_schema_test` (73 checks; io, migration,
+    validation, the `.bak` contract and `DetectKeyCollision`),
+    `monitor_util_test` (41 checks), `desktop_placement_test` (16 checks;
+    coverage verdicts), `desktop_zorder_test` (16 checks), `workerw_span_test`
+    (3 checks), `multi_monitor_factory_test` (106 checks; the injectable
+    `SlotFactory` seam), `multi_monitor_placement_test` (86 checks; negative
+    origins, portrait, shared host) and `display_assignment_test` (38 checks;
+    assignment lifecycle and legacy regression). `ipc_test`,
+    `ipc_marshal_test`, `engine_state_test` and `engine_units_test` gained the
+    new-protocol and second-file-watcher cases.
+  - Packaging (`docs/runbook-2monitor.md`, `tools/run_2monitor_evidence.ps1`):
+    a one-command run-book lets a non-developer collect the two-monitor
+    evidence bundle (`monitor_dump.json`, `placement.log`,
+    `injected_windows.json`, one screenshot per display mode and the rig's
+    Windows build). `docs/dev-contracts.md` now documents `displays.json` and
+    `set_display_video`, and `packaging/known-limitations.md` records the
+    corrected multi-monitor provenance plus the HDR, duplicate-mode and keying
+    limits.
+
 ## [1.2.0] - 2026-09-27
 
 79 commits landed after the `v1.1.0` tag, all between 2026-09-23 and
