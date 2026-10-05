@@ -27,8 +27,19 @@
 //   failure: single-monitor fixture (union == the only rect) renders with no
 //          divide-by-zero; zero-size and empty fixtures render no rects and
 //          raise no QML error.
+//
+// Row 23 adds the drop-acceptance coverage:
+//   * the gating the DropArea handlers delegate to (root.handleDrop): empty
+//     path, displayCapability=false, duplicateModeNotice, busy, missing file;
+//   * the per-rect dropActive highlight (root.setDropActive and the REAL
+//     onExited signal on the DropArea);
+//   * the signal contract row 21 binds (assignRequested / clearRequested) and
+//     the B2 source assertions (getDataAsString, never the drop's text
+//     property). The canvas still never touches the Studio singleton - the
+//     test acts as the row-21 connection and spies the signal.
 
 #include <QGuiApplication>
+#include <QJSValue>
 #include <QPointF>
 #include <QQmlComponent>
 #include <QQmlEngine>
@@ -164,10 +175,13 @@ struct Canvas {
 
 // Instantiates DisplayCanvas with the component-property contract the row-21
 // binding will use. Returns the root Item (nullptr on a hard failure).
+// extraProps carries the row-23 gates and the injected existence probe, so a
+// fixture never has to mutate the instance after creation.
 Canvas MakeCanvas(QQmlEngine* engine, QQmlComponent* component,
                   const QVariantList& model, double w, double h,
                   const QString& posterSource = QString(),
-                  const QString& posterPath = QString()) {
+                  const QString& posterPath = QString(),
+                  const QVariantMap& extraProps = QVariantMap()) {
   Q_UNUSED(engine);
   QVariantMap props;
   props[QStringLiteral("displaysModel")] = model;
@@ -179,10 +193,84 @@ Canvas MakeCanvas(QQmlEngine* engine, QQmlComponent* component,
   if (!posterPath.isEmpty()) {
     props[QStringLiteral("posterPath")] = posterPath;
   }
+  for (auto it = extraProps.constBegin(); it != extraProps.constEnd(); ++it) {
+    props[it.key()] = it.value();
+  }
   Canvas canvas;
   canvas.object = component->createWithInitialProperties(props);
   canvas.item = qobject_cast<QQuickItem*>(canvas.object);
   return canvas;
+}
+
+// Row 21 owns the real connection (`onAssignRequested:
+// Studio.assignVideoToMonitor`) in Main.qml, and the canvas is not allowed to
+// reference the Studio singleton. The harness plays that role instead: a tiny
+// inline QML object declares `Connections { target: canvas; function
+// onAssignRequested(...) }` and exposes the recorded emission as count/key/path
+// properties the C++ checks read back. (Qt 6.8 has no string-signal + functor
+// connect overload and this target does not link QtTest.)
+QObject* MakeAssignRecorder(QQmlEngine* engine, QObject* canvas) {
+  static const char kRecorderQml[] = R"QML(
+import QtQuick
+Item {
+    id: recorder
+    property int count: 0
+    property string key: ""
+    property string path: ""
+    property QtObject target: null
+    Connections {
+        target: recorder.target
+        function onAssignRequested(k, p) {
+            recorder.count = recorder.count + 1
+            recorder.key = k
+            recorder.path = p
+        }
+    }
+}
+)QML";
+  QQmlComponent component(engine);
+  component.setData(kRecorderQml,
+                    QUrl(QStringLiteral("inline:/assign_recorder.qml")));
+  if (component.status() != QQmlComponent::Ready) {
+    for (const QQmlError& e : component.errors()) {
+      std::printf("  recorder QML error: %s\n", qUtf8Printable(e.toString()));
+    }
+    return nullptr;
+  }
+  QVariantMap props;
+  props[QStringLiteral("target")] = QVariant::fromValue(canvas);
+  QObject* recorder = component.createWithInitialProperties(props);
+  if (recorder != nullptr && canvas != nullptr) {
+    recorder->setParent(canvas);
+  }
+  return recorder;
+}
+
+struct AssignSpy {
+  AssignSpy(QQmlEngine* engine, QObject* canvas)
+      : object(MakeAssignRecorder(engine, canvas)) {}
+  int Count() const {
+    return object != nullptr ? object->property("count").toInt() : 0;
+  }
+  QString Key() const {
+    return object != nullptr ? object->property("key").toString() : QString();
+  }
+  QString Path() const {
+    return object != nullptr ? object->property("path").toString() : QString();
+  }
+  QObject* object = nullptr;
+};
+
+// QML functions with untyped parameters are registered as QVariant arguments,
+// which is how the DropArea handlers (and the test) call into the root.
+bool CallQml(QObject* obj, const char* method, const QVariant& a1,
+             const QVariant& a2) {
+  return QMetaObject::invokeMethod(obj, method, Q_ARG(QVariant, a1),
+                                   Q_ARG(QVariant, a2));
+}
+
+QString RefusalOf(QQuickItem* canvas) {
+  return TextOf(Child(canvas, "refusalLabel"));
 }
 
 }  // namespace
@@ -204,6 +292,35 @@ int main(int argc, char** argv) {
   // form of acceptance (iii).
   Check(!source.empty() && source.find("Drag.active") == std::string::npos,
         "source: no Drag.active (rects are not draggable)");
+  // Row 23 / B2: the drop path must come from the custom MIME via
+  // DragEvent.getDataAsString. The row-22 drag sources set no text/plain, so
+  // the drop's text property would resolve to an empty string - a handler
+  // using it would fail these assertions and the engine would reject every
+  // assignment.
+  Check(!source.empty() &&
+            source.find("getDataAsString(\"application/x-k6wp-assignment\")") !=
+                std::string::npos,
+        "source: onDropped reads the assignment via "
+        "getDataAsString(\"application/x-k6wp-assignment\") (B2)");
+  Check(!source.empty() && source.find("drop.text") == std::string::npos,
+        "source: never uses the drop's text property as the assignment "
+        "source (B2)");
+  Check(!source.empty() &&
+            source.find("keys: [\"application/x-k6wp-assignment\"]") !=
+                std::string::npos,
+        "source: DropArea keys filter accepts only the assignment MIME");
+  Check(!source.empty() && source.find("onEntered") != std::string::npos &&
+            source.find("onExited") != std::string::npos &&
+            source.find("onDropped") != std::string::npos,
+        "source: onEntered / onExited / onDropped handlers are wired");
+  Check(!source.empty() &&
+            source.find("signal assignRequested(string key, string path)") !=
+                std::string::npos,
+        "source: assignRequested(key, path) signal declared for row 21");
+  Check(!source.empty() &&
+            source.find("signal clearRequested(string key)") !=
+                std::string::npos,
+        "source: clearRequested(key) signal declared for row 21/24");
 
   // --- component load -----------------------------------------------------
   QQmlEngine engine;
@@ -429,6 +546,167 @@ int main(int argc, char** argv) {
             QStringLiteral("hilang.mp4"),
         "fixture D: degraded assignment still shows its filename");
   dump_warnings("fixture D");
+
+  // === Fixture E: displayCapability == false refuses every drop ============
+  const QString display1 = QStringLiteral("\\\\.\\DISPLAY1");
+  const QString valid_path = QStringLiteral("C:\\Videos\\valid.mp4");
+
+  QVariantMap capability_off;
+  capability_off[QStringLiteral("displayCapability")] = false;
+  warnings.clear();
+  Canvas e = MakeCanvas(&engine, &component, one_monitor, 400.0, 300.0,
+                        QString(), QString(), capability_off);
+  Check(e.ok(), "fixture E: canvas instantiates with displayCapability=false");
+  if (!e.ok()) {
+    dump_warnings("fixture E");
+    return Finish();
+  }
+  AssignSpy e_spy(&engine, e.object);
+  QQuickItem* e_rect = RectByKey(e.item, display1);
+  Check(CallQml(e.item, "setDropActive", display1, true) &&
+            e_rect != nullptr &&
+            e_rect->property("dropActive").toBool(),
+        "fixture E: setDropActive raises the per-rect highlight (the "
+        "onEntered path)");
+  CallQml(e.item, "handleDrop", display1, valid_path);
+  std::printf("QA-FAIL(capability) emissions=%d refusal=\"%s\"\n", e_spy.Count(),
+              qUtf8Printable(RefusalOf(e.item)));
+  Check(e_spy.Count() == 0,
+        "fixture E: displayCapability=false -> zero assignRequested emissions");
+  Check(DeclaredVisible(Child(e.item, "refusalLabel")) &&
+            RefusalOf(e.item).contains(QStringLiteral("Engine lama")),
+        "fixture E: refusal label visible with the engine-age message");
+  Check(e.item->property("refusalMessage")
+            .toString()
+            .contains(QStringLiteral("Engine lama")),
+        "fixture E: refusalMessage root property carries the refused message");
+  Check(e_rect != nullptr && !e_rect->property("dropActive").toBool(),
+        "fixture E: the refused drop clears the highlight");
+
+  // The real onExited signal on the DropArea must clear the highlight too:
+  // invoke it through the meta-object exactly as Qt does when the drag
+  // leaves the rect.
+  QQuickItem* e_drop =
+      e_rect != nullptr ? Child(e_rect, "monitorDrop") : nullptr;
+  Check(e_drop != nullptr, "fixture E: monitorDrop DropArea is addressable");
+  if (e_drop != nullptr) {
+    CallQml(e.item, "setDropActive", display1, true);
+    QMetaObject::invokeMethod(e_drop, "exited");
+    Check(!e_rect->property("dropActive").toBool(),
+          "fixture E: the real onExited handler clears the highlight");
+  }
+  dump_warnings("fixture E");
+
+  // === Fixture F: an empty drop path refuses with a message ================
+  warnings.clear();
+  Canvas f = MakeCanvas(&engine, &component, one_monitor, 400.0, 300.0);
+  AssignSpy f_spy(&engine, f.object);
+  CallQml(f.item, "handleDrop", display1, QString());
+  std::printf("QA-FAIL(empty) emissions=%d refusal=\"%s\"\n", f_spy.Count(),
+              qUtf8Printable(RefusalOf(f.item)));
+  Check(f_spy.Count() == 0,
+        "fixture F: empty path -> zero assignRequested emissions");
+  Check(DeclaredVisible(Child(f.item, "refusalLabel")) &&
+            RefusalOf(f.item).contains(QStringLiteral("tidak dikenali")),
+        "fixture F: empty path shows a visible refusal message");
+
+  // === Fixture G: duplicateModeNotice refuses and echoes the notice =======
+  const QString duplicate_notice = QStringLiteral(
+      "Mode duplikat terdeteksi (\\\\.\\DISPLAY1). Penugasan video per layar "
+      "dinonaktifkan sampai tampilan Windows diubah ke mode Perluas.");
+  QVariantMap duplicate;
+  duplicate[QStringLiteral("duplicateModeNotice")] = duplicate_notice;
+  warnings.clear();
+  Canvas g = MakeCanvas(&engine, &component, one_monitor, 400.0, 300.0,
+                        QString(), QString(), duplicate);
+  AssignSpy g_spy(&engine, g.object);
+  CallQml(g.item, "handleDrop", display1, valid_path);
+  std::printf("QA-FAIL(duplicate) emissions=%d refusal=\"%s\"\n", g_spy.Count(),
+              qUtf8Printable(RefusalOf(g.item)));
+  Check(g_spy.Count() == 0,
+        "fixture G: duplicateModeNotice -> zero assignRequested emissions");
+  Check(DeclaredVisible(Child(g.item, "refusalLabel")) &&
+            RefusalOf(g.item) == duplicate_notice,
+        "fixture G: the refusal label echoes the duplicate-mode notice");
+
+  // === Fixture H: busy refuses with a brief message ========================
+  QVariantMap busy_flag;
+  busy_flag[QStringLiteral("busy")] = true;
+  warnings.clear();
+  Canvas h = MakeCanvas(&engine, &component, one_monitor, 400.0, 300.0,
+                        QString(), QString(), busy_flag);
+  AssignSpy h_spy(&engine, h.object);
+  CallQml(h.item, "handleDrop", display1, valid_path);
+  std::printf("QA-FAIL(busy) emissions=%d refusal=\"%s\"\n", h_spy.Count(),
+              qUtf8Printable(RefusalOf(h.item)));
+  Check(h_spy.Count() == 0,
+        "fixture H: busy -> zero assignRequested emissions");
+  Check(DeclaredVisible(Child(h.item, "refusalLabel")) &&
+            RefusalOf(h.item).contains(QStringLiteral("sibuk")),
+        "fixture H: busy shows a brief visible refusal message");
+
+  // === Fixture I: injected existence probe gates a missing file ===========
+  QVariantMap missing_probe;
+  missing_probe[QStringLiteral("fileExistsProbe")] = QVariant::fromValue(
+      engine.evaluate(QStringLiteral("(function(path) { return false })")));
+  warnings.clear();
+  Canvas i = MakeCanvas(&engine, &component, one_monitor, 400.0, 300.0,
+                        QString(), QString(), missing_probe);
+  AssignSpy i_spy(&engine, i.object);
+  CallQml(i.item, "handleDrop", display1,
+          QStringLiteral("C:\\Videos\\sudah-dihapus.mp4"));
+  std::printf("QA-FAIL(missing) emissions=%d refusal=\"%s\"\n", i_spy.Count(),
+              qUtf8Printable(RefusalOf(i.item)));
+  Check(i_spy.Count() == 0,
+        "fixture I: probe reports the dropped file missing -> zero "
+        "assignRequested emissions");
+  Check(DeclaredVisible(Child(i.item, "refusalLabel")) &&
+            RefusalOf(i.item).contains(QStringLiteral("tidak ditemukan")),
+        "fixture I: missing file shows a visible refusal message");
+  QVariantMap present_probe;
+  present_probe[QStringLiteral("fileExistsProbe")] = QVariant::fromValue(
+      engine.evaluate(QStringLiteral("(function(path) { return true })")));
+  warnings.clear();
+  Canvas i2 = MakeCanvas(&engine, &component, one_monitor, 400.0, 300.0,
+                         QString(), QString(), present_probe);
+  AssignSpy i2_spy(&engine, i2.object);
+  CallQml(i2.item, "handleDrop", display1, valid_path);
+  Check(i2_spy.Count() == 1,
+        "fixture I: probe reports the file present -> the drop is accepted");
+  dump_warnings("fixture I");
+
+  // === Fixture J: happy path emits assignRequested exactly once ===========
+  warnings.clear();
+  Canvas j = MakeCanvas(&engine, &component, one_monitor, 400.0, 300.0);
+  Check(j.ok(), "fixture J: happy canvas instantiates");
+  Check(j.item->metaObject()->indexOfSignal(
+            "assignRequested(QString,QString)") >= 0,
+        "fixture J: assignRequested(QString,QString) signal exists (row 21 "
+        "binds it)");
+  Check(j.item->metaObject()->indexOfSignal("clearRequested(QString)") >= 0,
+        "fixture J: clearRequested(QString) signal exists (row 21/24)");
+  AssignSpy j_spy(&engine, j.object);
+  QQuickItem* j_rect = RectByKey(j.item, display1);
+  const bool raised = CallQml(j.item, "setDropActive", display1, true);
+  CallQml(j.item, "handleDrop", display1, valid_path);
+  std::printf(
+      "QA-HAPPY(drop) setDropActive=%d emissions=%d key=\"%s\" path=\"%s\" "
+      "highlight=%d message=\"%s\"\n",
+      raised ? 1 : 0, j_spy.Count(), qUtf8Printable(j_spy.Key()),
+      qUtf8Printable(j_spy.Path()),
+      j_rect != nullptr && j_rect->property("dropActive").toBool() ? 1 : 0,
+      qUtf8Printable(RefusalOf(j.item)));
+  Check(raised && j_rect != nullptr &&
+            j_rect->property("dropActive").toBool() == false,
+        "fixture J: the accepted drop clears the raised highlight");
+  Check(j_spy.Count() == 1 && j_spy.Key() == display1 &&
+            j_spy.Path() == valid_path,
+        "fixture J: exactly one assignRequested(key, path) with the dropped "
+        "path");
+  Check(!DeclaredVisible(Child(j.item, "refusalLabel")) &&
+            j.item->property("refusalMessage").toString().isEmpty(),
+        "fixture J: an accepted drop shows no refusal");
+  dump_warnings("fixture J");
 
   return Finish();
 }
