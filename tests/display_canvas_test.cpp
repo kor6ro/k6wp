@@ -37,7 +37,19 @@
 //     the B2 source assertions (getDataAsString, never the drop's text
 //     property). The canvas still never touches the Studio singleton - the
 //     test acts as the row-21 connection and spies the signal.
+//
+// Row 24 completes the visible assignment state (IS-3 feedback loop):
+//   * assigned filename + cached thumbnail (fixture K seeds posterSource +
+//     posterPath so thumbFor() yields a non-empty Image source);
+//   * the 'ganti' replace affordance (re-arms the rect, mutates nothing) and
+//     the 'hapus' clear affordance (emits clearRequested(key) exactly once -
+//     the signal row 21 connects to Studio.clearMonitorAssignment);
+//   * degraded states: assignedExists === false -> the red-ish
+//     'file tidak ditemukan' label, coverage !== "covered" -> the
+//     'cek engine.log' warning, both visible simultaneously (fixture M);
+//   * empty assignedPath -> the neutral 'tarik video ke sini' drop hint.
 
+#include <QColor>
 #include <QGuiApplication>
 #include <QJSValue>
 #include <QPointF>
@@ -261,6 +273,56 @@ struct AssignSpy {
   QObject* object = nullptr;
 };
 
+// Row 24: the same inline-Connections pattern for clearRequested(key), the
+// signal the 'hapus' button emits (row 21 connects it to
+// Studio.clearMonitorAssignment).
+QObject* MakeClearRecorder(QQmlEngine* engine, QObject* canvas) {
+  static const char kRecorderQml[] = R"QML(
+import QtQuick
+Item {
+    id: recorder
+    property int count: 0
+    property string key: ""
+    property QtObject target: null
+    Connections {
+        target: recorder.target
+        function onClearRequested(k) {
+            recorder.count = recorder.count + 1
+            recorder.key = k
+        }
+    }
+}
+)QML";
+  QQmlComponent component(engine);
+  component.setData(kRecorderQml,
+                    QUrl(QStringLiteral("inline:/clear_recorder.qml")));
+  if (component.status() != QQmlComponent::Ready) {
+    for (const QQmlError& e : component.errors()) {
+      std::printf("  recorder QML error: %s\n", qUtf8Printable(e.toString()));
+    }
+    return nullptr;
+  }
+  QVariantMap props;
+  props[QStringLiteral("target")] = QVariant::fromValue(canvas);
+  QObject* recorder = component.createWithInitialProperties(props);
+  if (recorder != nullptr && canvas != nullptr) {
+    recorder->setParent(canvas);
+  }
+  return recorder;
+}
+
+struct ClearSpy {
+  ClearSpy(QQmlEngine* engine, QObject* canvas)
+      : object(MakeClearRecorder(engine, canvas)) {}
+  int Count() const {
+    return object != nullptr ? object->property("count").toInt() : 0;
+  }
+  QString Key() const {
+    return object != nullptr ? object->property("key").toString() : QString();
+  }
+  QObject* object = nullptr;
+};
+
 // QML functions with untyped parameters are registered as QVariant arguments,
 // which is how the DropArea handlers (and the test) call into the root.
 bool CallQml(QObject* obj, const char* method, const QVariant& a1,
@@ -321,6 +383,21 @@ int main(int argc, char** argv) {
             source.find("signal clearRequested(string key)") !=
                 std::string::npos,
         "source: clearRequested(key) signal declared for row 21/24");
+  // Row 24 state-surface wording, all qsTr-wrapped for row 25's catalogue:
+  // the degraded label matches the playlist exists wording and the coverage
+  // warning keeps the studio_bridge "cek engine.log" hint style.
+  Check(!source.empty() &&
+            source.find("qsTr(\"file tidak ditemukan\")") !=
+                std::string::npos,
+        "source: degraded label 'file tidak ditemukan' is qsTr-wrapped");
+  Check(!source.empty() &&
+            source.find("qsTr(\"tarik video ke sini\")") !=
+                std::string::npos,
+        "source: unassigned drop hint 'tarik video ke sini' is qsTr-wrapped");
+  Check(!source.empty() &&
+            source.find("qsTr(\"Ganti\")") != std::string::npos &&
+            source.find("qsTr(\"Hapus\")") != std::string::npos,
+        "source: 'Ganti'/'Hapus' affordance labels are qsTr-wrapped");
 
   // --- component load -----------------------------------------------------
   QQmlEngine engine;
@@ -707,6 +784,155 @@ int main(int argc, char** argv) {
             j.item->property("refusalMessage").toString().isEmpty(),
         "fixture J: an accepted drop shows no refusal");
   dump_warnings("fixture J");
+
+  // === Fixture K: assigned + existing -> filename, thumbnail, affordances ==
+  // The thumbnail rule is thumbFor(path) == posterPath only when path ==
+  // posterSource, so this fixture seeds BOTH root properties consistently.
+  const QVariantList assigned_existing = {
+      Monitor(display1, QStringLiteral("Layar 1 (utama)"), 0, 0, 1920, 1080,
+              true, QStringLiteral("landscape"), 100, 60, valid_path, true,
+              QStringLiteral("covered")),
+  };
+  warnings.clear();
+  Canvas k = MakeCanvas(&engine, &component, assigned_existing, 400.0, 300.0,
+                        valid_path,
+                        QStringLiteral("file:///C:/thumbs/valid.jpg"));
+  Check(k.ok(), "fixture K: assigned+existing canvas instantiates");
+  if (!k.ok()) {
+    dump_warnings("fixture K");
+    return Finish();
+  }
+  QQuickItem* kr = RectByKey(k.item, display1);
+  Check(kr != nullptr, "fixture K: the assigned rect is addressable by key");
+  if (kr == nullptr) {
+    dump_warnings("fixture K");
+    return Finish();
+  }
+  QQuickItem* k_assigned = Child(kr, "assignedLabel");
+  QQuickItem* k_thumb = Child(kr, "assignedThumb");
+  QQuickItem* k_ganti = Child(kr, "replaceAffordance");
+  QQuickItem* k_hapus = Child(kr, "clearButton");
+  const QString k_thumb_source =
+      k_thumb != nullptr ? k_thumb->property("source").toString() : QString();
+  std::printf(
+      "QA-HAPPY(assignment) filename=\"%s\" thumbSource=\"%s\" "
+      "ganti=\"%s\" hapus=\"%s\"\n",
+      qUtf8Printable(TextOf(k_assigned)), qUtf8Printable(k_thumb_source),
+      qUtf8Printable(TextOf(k_ganti)), qUtf8Printable(TextOf(k_hapus)));
+  Check(DeclaredVisible(k_assigned) &&
+            TextOf(k_assigned) == QStringLiteral("valid.mp4"),
+        "fixture K: assigned+existing shows the assigned filename label");
+  Check(DeclaredVisible(k_thumb) && !k_thumb_source.isEmpty() &&
+            k_thumb_source.contains(QStringLiteral("valid.jpg")),
+        "fixture K: posterSource/posterPath drive a non-empty thumbnail "
+        "source through thumbFor");
+  Check(!DeclaredVisible(Child(kr, "degradedLabel")),
+        "fixture K: an existing assignment shows no degraded label");
+  Check(!DeclaredVisible(Child(kr, "dropHint")),
+        "fixture K: an assigned rect shows no drop hint");
+  Check(!DeclaredVisible(Child(kr, "coverageWarning")),
+        "fixture K: a covered assignment shows no coverage warning");
+  Check(DeclaredVisible(k_ganti) && TextOf(k_ganti) == QStringLiteral("Ganti"),
+        "fixture K: the 'ganti' replace affordance is visible");
+  Check(DeclaredVisible(k_hapus) && TextOf(k_hapus) == QStringLiteral("Hapus"),
+        "fixture K: the 'hapus' clear affordance is visible");
+
+  // === Fixture K2: 'ganti' re-arms without mutating assignment state =======
+  AssignSpy k_assign(&engine, k.object);
+  ClearSpy k_clear(&engine, k.object);
+  const QString k_assigned_before = kr->property("assignedPath").toString();
+  if (k_ganti != nullptr) {
+    QMetaObject::invokeMethod(k_ganti, "clicked");
+  }
+  std::printf(
+      "QA-HAPPY(ganti) armed=%d assignEmissions=%d clearEmissions=%d "
+      "assignedPath=\"%s\"\n",
+      kr->property("dropActive").toBool() ? 1 : 0, k_assign.Count(),
+      k_clear.Count(), qUtf8Printable(kr->property("assignedPath").toString()));
+  Check(k_ganti != nullptr && kr->property("dropActive").toBool(),
+        "fixture K2: 'ganti' click re-arms the rect (dropActive raised)");
+  Check(k_assign.Count() == 0 && k_clear.Count() == 0,
+        "fixture K2: 'ganti' emits neither assignRequested nor clearRequested");
+  Check(kr->property("assignedPath").toString() == k_assigned_before &&
+            kr->property("hasAssignment").toBool(),
+        "fixture K2: 'ganti' mutates no assignment state");
+
+  // === Fixture K3: 'hapus' emits clearRequested(key) exactly once ==========
+  if (k_hapus != nullptr) {
+    QMetaObject::invokeMethod(k_hapus, "clicked");
+  }
+  std::printf("QA-HAPPY(clear) clearEmissions=%d key=\"%s\"\n",
+              k_clear.Count(), qUtf8Printable(k_clear.Key()));
+  Check(k_clear.Count() == 1 && k_clear.Key() == display1,
+        "fixture K3: 'hapus' click emits clearRequested(monitorKey) once");
+  Check(k_assign.Count() == 0,
+        "fixture K3: 'hapus' click emits no assignRequested");
+  dump_warnings("fixture K");
+
+  // === Fixture L: empty assignedPath -> neutral drop hint ==================
+  warnings.clear();
+  Canvas l = MakeCanvas(&engine, &component, one_monitor, 400.0, 300.0);
+  Check(l.ok(), "fixture L: unassigned canvas instantiates");
+  if (l.ok()) {
+    QQuickItem* lr = RectByKey(l.item, display1);
+    QQuickItem* l_hint = Child(lr, "dropHint");
+    std::printf("QA-HAPPY(hint) visible=%d text=\"%s\"\n",
+                DeclaredVisible(l_hint) ? 1 : 0,
+                qUtf8Printable(TextOf(l_hint)));
+    Check(DeclaredVisible(l_hint) &&
+              TextOf(l_hint).contains(QStringLiteral("tarik video ke sini")),
+          "fixture L: empty assignedPath shows the neutral drop hint");
+    Check(!DeclaredVisible(Child(lr, "assignedLabel")) &&
+              !DeclaredVisible(Child(lr, "degradedLabel")),
+          "fixture L: an unassigned rect shows no assignment/degraded label");
+    Check(!DeclaredVisible(Child(lr, "replaceAffordance")) &&
+              !DeclaredVisible(Child(lr, "clearButton")),
+          "fixture L: an unassigned rect hides replace/clear affordances");
+  }
+  dump_warnings("fixture L");
+
+  // === Fixture M (failure): deleted file -> BOTH warnings simultaneously ===
+  const QVariantList deleted = {
+      Monitor(display1, QStringLiteral("Layar 1 (utama)"), 0, 0, 1920, 1080,
+              true, QStringLiteral("landscape"), 100, 60,
+              QStringLiteral("C:\\Videos\\terhapus.mp4"), false,
+              QStringLiteral("headless")),
+  };
+  warnings.clear();
+  Canvas m = MakeCanvas(&engine, &component, deleted, 400.0, 300.0);
+  QQuickItem* mr = RectByKey(m.item, display1);
+  QQuickItem* m_degraded = Child(mr, "degradedLabel");
+  QQuickItem* m_coverage = Child(mr, "coverageWarning");
+  std::printf(
+      "QA-FAIL(deleted-file) degraded=\"%s\" visible=%d; coverage=\"%s\" "
+      "visible=%d; both=%d\n",
+      qUtf8Printable(TextOf(m_degraded)), DeclaredVisible(m_degraded) ? 1 : 0,
+      qUtf8Printable(TextOf(m_coverage)), DeclaredVisible(m_coverage) ? 1 : 0,
+      DeclaredVisible(m_degraded) && DeclaredVisible(m_coverage) ? 1 : 0);
+  Check(DeclaredVisible(m_degraded) &&
+            TextOf(m_degraded).contains(QStringLiteral("file tidak ditemukan")),
+        "fixture M: the deleted file shows the 'file tidak ditemukan' label");
+  if (m_degraded != nullptr) {
+    const QColor degraded_color =
+        m_degraded->property("color").value<QColor>();
+    Check(degraded_color.red() > degraded_color.green() &&
+              degraded_color.red() > degraded_color.blue(),
+          "fixture M: the degraded label is red-ish");
+  }
+  Check(DeclaredVisible(m_coverage) &&
+            TextOf(m_coverage).contains(QStringLiteral("cek engine.log")),
+        "fixture M: coverage != covered shows the 'cek engine.log' warning");
+  Check(DeclaredVisible(m_degraded) && DeclaredVisible(m_coverage),
+        "fixture M: the degraded label and coverage warning render "
+        "simultaneously (neither masks the other)");
+  Check(DeclaredVisible(Child(mr, "degradedOverlay")) &&
+            DeclaredVisible(Child(mr, "assignedLabel")) &&
+            TextOf(Child(mr, "assignedLabel")) ==
+                QStringLiteral("terhapus.mp4"),
+        "fixture M: the degraded tint and the stale filename stay visible");
+  Check(DeclaredVisible(Child(mr, "clearButton")),
+        "fixture M: the 'hapus' affordance is offered for a stale assignment");
+  dump_warnings("fixture M");
 
   return Finish();
 }

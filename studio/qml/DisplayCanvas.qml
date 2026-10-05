@@ -33,6 +33,14 @@
 //   Studio.assignVideoToMonitor. clearRequested(key) is the clear-affordance
 //   contract row 21/24 connect to Studio.clearMonitorAssignment.
 //
+// Row 24 completes the assignment state surface: the assigned filename +
+// cached thumbnail, the 'ganti' re-arm affordance (raises the drop highlight;
+// never mutates assignment state), the 'hapus' button (emits
+// clearRequested(monitorKey)), the 'file tidak ditemukan' label for a
+// vanished file, the 'cek engine.log' coverage warning, and the
+// 'tarik video ke sini' hint while assignedPath is empty. Every string is
+// qsTr() Indonesian (row 25 catalogues them).
+//
 // READ-ONLY by design (Q2): these rects mirror the Windows display topology
 // and are NEVER repositioned from here — this file contains no drag attached
 // properties, only the DropArea handlers that accept assignment drops. No
@@ -370,13 +378,34 @@ Item {
                       + " Hz"
             }
 
+            // Row 24: an unassigned rect advertises itself as a drop target
+            // instead of staying mute; the hint disappears the moment an
+            // assignment exists.
+            Label {
+                id: dropHint
+                objectName: "dropHint"
+                visible: !monitorRect.hasAssignment
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: infoLine.bottom
+                anchors.leftMargin: 6
+                anchors.rightMargin: 6
+                anchors.topMargin: 8
+                horizontalAlignment: Text.AlignHCenter
+                elide: Text.ElideRight
+                font.pixelSize: 10
+                opacity: 0.65
+                text: qsTr("tarik video ke sini")
+            }
+
             Image {
                 id: assignedThumb
                 objectName: "assignedThumb"
                 visible: monitorRect.thumbSource.length > 0
                 anchors.left: parent.left
                 anchors.right: parent.right
-                anchors.bottom: assignedLabel.top
+                anchors.bottom: assignActions.visible ? assignActions.top
+                                                      : assignmentStatus.top
                 anchors.leftMargin: 6
                 anchors.rightMargin: 6
                 anchors.bottomMargin: 2
@@ -391,40 +420,107 @@ Item {
                 sourceSize.height: 180
             }
 
-            Label {
-                id: assignedLabel
-                objectName: "assignedLabel"
-                visible: monitorRect.hasAssignment
+            // Row 24: the per-monitor status stack, bottom-anchored so the map
+            // geometry above it never shifts. A positioner skips invisible
+            // children, so an unassigned + covered rect collapses this to
+            // nothing. Top-to-bottom: coverage warning, missing-file label,
+            // assigned filename.
+            Column {
+                id: assignmentStatus
+                objectName: "assignmentStatus"
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
                 anchors.leftMargin: 6
                 anchors.rightMargin: 6
                 anchors.bottomMargin: 4
-                elide: Text.ElideMiddle
-                font.pixelSize: 10
-                color: monitorRect.degraded ? "red" : Material.foreground
-                text: root.fileName(monitorRect.assignedPath)
+                spacing: 2
+
+                // Anything not exactly "covered" (clipped-*, headless, or a
+                // missing token) is surfaced, never silent.
+                Label {
+                    id: coverageWarning
+                    objectName: "coverageWarning"
+                    visible: String(monitorRect.entry.coverage || "")
+                             !== "covered"
+                    width: assignmentStatus.width
+                    elide: Text.ElideRight
+                    font.pixelSize: 10
+                    color: "orange"
+                    text: qsTr("Cakupan: %1 \u2014 cek engine.log")
+                          .arg(String(monitorRect.entry.coverage || "tidak diketahui"))
+                }
+
+                // Row 24 degraded state: the assignment points at a file that
+                // no longer exists. Naming it explicitly (playlist's exists
+                // wording) keeps a vanished file from being silent.
+                Label {
+                    id: degradedLabel
+                    objectName: "degradedLabel"
+                    visible: monitorRect.degraded
+                    width: assignmentStatus.width
+                    elide: Text.ElideRight
+                    font.pixelSize: 10
+                    font.bold: true
+                    color: Material.color(Material.Red)
+                    text: qsTr("file tidak ditemukan")
+                }
+
+                Label {
+                    id: assignedLabel
+                    objectName: "assignedLabel"
+                    visible: monitorRect.hasAssignment
+                    width: assignmentStatus.width
+                    elide: Text.ElideMiddle
+                    font.pixelSize: 10
+                    color: monitorRect.degraded ? Material.color(Material.Red)
+                                                : Material.foreground
+                    text: root.fileName(monitorRect.assignedPath)
+                }
             }
 
-            // Anything not exactly "covered" (clipped-*, headless, or a
-            // missing token) is surfaced, never silent.
-            Label {
-                id: coverageWarning
-                objectName: "coverageWarning"
-                visible: String(monitorRect.entry.coverage || "")
-                         !== "covered"
-                anchors.left: parent.left
+            // Row 24 affordances, right-aligned above the status stack. Both
+            // stay hidden until an assignment exists.
+            Row {
+                id: assignActions
+                objectName: "assignActions"
+                visible: monitorRect.hasAssignment
                 anchors.right: parent.right
-                anchors.bottom: assignedLabel.top
-                anchors.leftMargin: 6
+                anchors.bottom: assignmentStatus.top
                 anchors.rightMargin: 6
                 anchors.bottomMargin: 2
-                elide: Text.ElideRight
-                font.pixelSize: 10
-                color: "orange"
-                text: qsTr("Cakupan: %1 \u2014 cek engine.log")
-                      .arg(String(monitorRect.entry.coverage || "tidak diketahui"))
+                spacing: 4
+
+                Button {
+                    id: replaceButton
+                    objectName: "replaceAffordance"
+                    text: qsTr("Ganti")
+                    flat: true
+                    padding: 4
+                    font.pixelSize: 10
+                    // Row 24 "ganti": re-arm this rect for a replacement drop
+                    // by raising the same dropActive highlight a drag-over
+                    // raises (and focusing the DropArea when it has a window).
+                    // This touches NO assignment state - only a real drop
+                    // through root.handleDrop can replace the file.
+                    onClicked: {
+                        monitorRect.dropActive = true
+                        monitorDrop.forceActiveFocus()
+                    }
+                }
+
+                Button {
+                    id: clearButton
+                    objectName: "clearButton"
+                    text: qsTr("Hapus")
+                    flat: true
+                    padding: 4
+                    font.pixelSize: 10
+                    // Row 24 "hapus": emit the already-declared root signal;
+                    // Main.qml (row 21) connects it to
+                    // Studio.clearMonitorAssignment.
+                    onClicked: root.clearRequested(monitorRect.monitorKey)
+                }
             }
 
             // Row 23: the keys filter stays so a foreign file drag never
