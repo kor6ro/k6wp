@@ -302,8 +302,13 @@ Rectangle {
 
                 // Re-read on entry: the Wallpaper tab's quick settings mirror
                 // config.json + the autostart registry, either of which the
-                // Pengaturan tab can change.
-                onCurrentIndexChanged: if (currentIndex === 0) Studio.refreshQuickSettings()
+                // Pengaturan tab can change. The Tampilan tab (index 3) re-reads
+                // the monitor topology for the same reason: displays.json can be
+                // rewritten while its page is off-screen.
+                onCurrentIndexChanged: {
+                    if (currentIndex === 0) Studio.refreshQuickSettings()
+                    if (currentIndex === 3) Studio.refreshDisplays()
+                }
 
                 // Tab labels are the existing Studio tab names.
                 TabButton {
@@ -314,6 +319,9 @@ Rectangle {
                 }
                 TabButton {
                     text: qsTr("Pengaturan")
+                }
+                TabButton {
+                    text: qsTr("Tampilan")
                 }
             }
 
@@ -1918,6 +1926,34 @@ Rectangle {
                                   .arg(Settings.cacheDir)
                             wrapMode: Text.WordWrap
                         }
+                    }
+                }
+
+                // ---------------------------------------------------------
+                // Tampilan (kanvas monitor)
+                // ---------------------------------------------------------
+                Item {
+                    // This page has no preview hole for the native mpv surface,
+                    // so push a 0x0 rect explicitly while it is shown. The
+                    // Wallpaper page's hole guard only fires when that page
+                    // hides, which is not the only path that can show this
+                    // page; without this the native PreviewWidget would float
+                    // over the DisplayCanvas.
+                    onVisibleChanged: if (visible) Studio.syncPreviewGeometry(0, 0, 0, 0)
+
+                    DisplayCanvas {
+                        anchors.fill: parent
+                        anchors.margins: 10
+
+                        displaysModel: Studio.displays
+                        posterPath: Studio.posterPath
+                        posterSource: Studio.activeVideoPath
+                        displayCapability: Studio.displayCapability
+                        duplicateModeNotice: Studio.duplicateModeNotice
+                        busy: Studio.busy
+
+                        onAssignRequested: (key, path) => Studio.assignVideoToMonitor(key, path)
+                        onClearRequested: (key) => Studio.clearMonitorAssignment(key)
                     }
                 }
             }
