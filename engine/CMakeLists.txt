@@ -253,4 +253,31 @@ target_include_directories(multi_monitor_placement_test PRIVATE
   ${CMAKE_SOURCE_DIR}/shared
 )
 add_test(NAME multi_monitor_placement_test COMMAND multi_monitor_placement_test)
+
+# display_assignment_test (multi-monitor extend setup, row 18): the full
+# per-monitor assignment lifecycle over the fake-pipe pattern
+# (tests/fake_pipe_test.cpp / studio_logic_test SyncMonitor dedup). Cases
+# (a)-(f): assign->get_state map, clear->default revert, unknown-device
+# reject, missing-path degraded coverage + reject, IS-7 collision refusal
+# via the REAL DetectKeyCollision, old-engine ParseEngineState defaults.
+# Link model (engine_state_test row-17 pattern): src/multi_monitor.cpp +
+# src/ipc_marshal.cpp compiled in; DesktopInjector / MpvRenderer /
+# ListMonitors stubs live in the test TU, so the binary never links
+# desktop_inject.cpp, mpv_renderer.cpp or mpv.lib. studio/src/ipc_client.cpp
+# is compiled in for the REAL IpcClient (Qt-free, fake_pipe_test pattern).
+# k6wp_shared: displays_schema (Save/Load/DetectKeyCollision) +
+# ipc_protocol (ParseEngineState). user32: GetSystemMetrics in
+# multi_monitor.cpp.
+add_executable(display_assignment_test
+  ../tests/display_assignment_test.cpp
+  ../studio/src/ipc_client.cpp
+  src/ipc_marshal.cpp
+  src/multi_monitor.cpp
+)
+target_link_libraries(display_assignment_test PRIVATE k6wp_shared user32)
+target_include_directories(display_assignment_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_SOURCE_DIR}/studio/src
+)
+add_test(NAME display_assignment_test COMMAND display_assignment_test)
 endif()
