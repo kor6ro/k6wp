@@ -454,19 +454,24 @@ set(K6WP_TS_EN "${CMAKE_CURRENT_SOURCE_DIR}/i18n/studio_en.ts")
 set(K6WP_QM_EN "${CMAKE_CURRENT_BINARY_DIR}/i18n/studio_en.qm")
 set(K6WP_I18N_STAMP "${CMAKE_CURRENT_BINARY_DIR}/i18n/lupdate.stamp")
 
-# lupdate needs the QML source, not just the C++: qsTr() in qml/Main.qml is
-# where the Studio UI text lives, and qt_add_qml_module compiles that file
-# into a qrc, so no on-disk .qml would be found by a build-tree scan. Passing
-# the file explicitly is safe for the lookup that matters - lupdate takes the
-# QML context from the file name alone (QQmlTranslation::
-# contextFromQmlFilename), so "qml/Main.qml" yields the same "Main" context the
-# QML engine asks for at runtime from /qt/qml/K6WP/Main.qml.
+# lupdate needs the QML sources, not just the C++: qsTr() in qml/Main.qml and
+# qml/DisplayCanvas.qml is where the Studio UI text lives, and qt_add_qml_module
+# compiles those files into a qrc, so no on-disk .qml would be found by a
+# build-tree scan. Passing each file explicitly is safe for the lookup that
+# matters - lupdate takes the QML context from the file name alone
+# (QQmlTranslation::contextFromQmlFilename), so "qml/Main.qml" yields the same
+# "Main" context the QML engine asks for at runtime from /qt/qml/K6WP/Main.qml,
+# and "qml/DisplayCanvas.qml" yields the matching "DisplayCanvas" context. The
+# Display panel lives in the second file (row 25), so both must be listed.
 #
 # Argument order is load-bearing in lupdate 6.8: sources must come BEFORE -ts.
 # The reverse order aborts with "File '...' has no recognized extension".
 file(GLOB K6WP_TR_SOURCES CONFIGURE_DEPENDS
   "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/*.hpp")
+set(K6WP_TR_QML_SOURCES
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/Main.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/DisplayCanvas.qml")
 
 # Both tools degrade to a clear no-op target instead of failing the configure:
 # a Studio that cannot translate is still a working Studio (main.cpp falls back
@@ -480,10 +485,10 @@ if(K6WP_LUPDATE)
     COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_CURRENT_SOURCE_DIR}/i18n"
     COMMAND "${K6WP_LUPDATE}" -locations relative
             -source-language id -target-language en
-            ${K6WP_TR_SOURCES} "${CMAKE_CURRENT_SOURCE_DIR}/qml/Main.qml"
+            ${K6WP_TR_SOURCES} ${K6WP_TR_QML_SOURCES}
             -ts "${K6WP_TS_EN}"
     COMMAND "${CMAKE_COMMAND}" -E touch "${K6WP_I18N_STAMP}"
-    DEPENDS ${K6WP_TR_SOURCES} "${CMAKE_CURRENT_SOURCE_DIR}/qml/Main.qml"
+    DEPENDS ${K6WP_TR_SOURCES} ${K6WP_TR_QML_SOURCES}
             "${K6WP_LUPDATE}"
     COMMENT "lupdate: extracting translatable strings into i18n/studio_en.ts"
     VERBATIM

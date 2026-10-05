@@ -2,6 +2,59 @@
 <!DOCTYPE TS>
 <TS version="2.1" language="en" sourcelanguage="id">
 <context>
+    <name>DisplayCanvas</name>
+    <message>
+        <location filename="../qml/DisplayCanvas.qml" line="+236"/>
+        <source>Drop tidak dikenali - tarik video dari pustaka atau playlist.</source>
+        <translation>Unrecognized drop - drag a video from the library or playlist.</translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>Engine lama - perbarui engine untuk fitur ini</source>
+        <translation>Older engine - update the engine for this feature</translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>Studio sedang sibuk - coba lagi sebentar lagi.</source>
+        <translation>Studio is busy - try again in a moment.</translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>File tidak ditemukan - video sudah dipindahkan atau dihapus.</source>
+        <translation>File not found - the video was moved or deleted.</translation>
+    </message>
+    <message>
+        <location line="+87"/>
+        <source>UTAMA</source>
+        <translation>PRIMARY</translation>
+    </message>
+    <message>
+        <location line="+56"/>
+        <source>tarik video ke sini</source>
+        <translation>drag a video here</translation>
+    </message>
+    <message>
+        <location line="+52"/>
+        <source>Cakupan: %1 — cek engine.log</source>
+        <translation>Coverage: %1 - check engine.log</translation>
+    </message>
+    <message>
+        <location line="+16"/>
+        <source>file tidak ditemukan</source>
+        <translation>file not found</translation>
+    </message>
+    <message>
+        <location line="+31"/>
+        <source>Ganti</source>
+        <translation>Replace</translation>
+    </message>
+    <message>
+        <location line="+18"/>
+        <source>Hapus</source>
+        <translation>Remove</translation>
+    </message>
+</context>
+<context>
     <name>Main</name>
     <message>
         <location filename="../qml/Main.qml" line="+258"/>
@@ -34,7 +87,7 @@
         <translation>&amp;About K6WP Studio</translation>
     </message>
     <message>
-        <location line="+27"/>
+        <location line="+32"/>
         <source>Wallpaper</source>
         <translation>Wallpaper</translation>
     </message>
@@ -47,6 +100,11 @@
         <location line="+3"/>
         <source>Pengaturan</source>
         <translation>Settings</translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Tampilan</source>
+        <translation>Display</translation>
     </message>
     <message>
         <location line="+35"/>
@@ -89,7 +147,7 @@
         <translation>No results for this search</translation>
     </message>
     <message>
-        <location line="+83"/>
+        <location line="+108"/>
         <source>Terapkan</source>
         <translation>Apply</translation>
     </message>
@@ -105,13 +163,13 @@
     </message>
     <message>
         <location line="+4"/>
-        <location line="+172"/>
+        <location line="+200"/>
         <location line="+153"/>
         <source>Hapus</source>
         <translation>Remove</translation>
     </message>
     <message>
-        <location line="-317"/>
+        <location line="-345"/>
         <source>Hapus Entri Perpustakaan</source>
         <translation>Remove Library Entry</translation>
     </message>
@@ -126,77 +184,77 @@ File dipindahkan ke Recycle Bin.</source>
     <message>
         <location line="+28"/>
         <source>Daftar putar (%1)</source>
-        <translation type="unfinished"></translation>
+        <translation>Playlist (%1)</translation>
     </message>
     <message>
         <location line="+9"/>
         <source>Tambah...</source>
-        <translation type="unfinished"></translation>
+        <translation>Add...</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>Tambah video ke daftar putar</source>
-        <translation type="unfinished"></translation>
+        <translation>Add a video to the playlist</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>Kosongkan</source>
-        <translation type="unfinished"></translation>
+        <translation>Clear</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>Hapus semua entri daftar putar</source>
-        <translation type="unfinished"></translation>
+        <translation>Remove all playlist entries</translation>
     </message>
     <message>
         <location line="+9"/>
         <source>Putar otomatis</source>
-        <translation type="unfinished"></translation>
+        <translation>Auto-play</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>Ganti wallpaper secara berkala</source>
-        <translation type="unfinished"></translation>
+        <translation>Change the wallpaper periodically</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>Interval:</source>
-        <translation type="unfinished"></translation>
+        <translation>Interval:</translation>
     </message>
     <message>
         <location line="+11"/>
         <source>Menit antar pergantian (1-1440)</source>
-        <translation type="unfinished"></translation>
+        <translation>Minutes between rotations (1-1440)</translation>
     </message>
     <message>
         <location line="+4"/>
         <source> menit</source>
-        <translation type="unfinished"></translation>
+        <translation> minutes</translation>
     </message>
     <message>
         <location line="+8"/>
         <source>Acak</source>
-        <translation type="unfinished"></translation>
+        <translation>Shuffle</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>Putar daftar putar dalam urutan acak</source>
-        <translation type="unfinished"></translation>
+        <translation>Play the playlist in random order</translation>
     </message>
     <message>
         <location line="+20"/>
         <source>Belum ada video di daftar putar — tambah dari perpustakaan atau berkas</source>
-        <translation type="unfinished"></translation>
+        <translation>No videos in the playlist yet - add them from the library or a file</translation>
     </message>
     <message>
-        <location line="+31"/>
+        <location line="+59"/>
         <source>Naik</source>
-        <translation type="unfinished"></translation>
+        <translation>Up</translation>
     </message>
     <message>
         <location line="+6"/>
         <source>Turun</source>
-        <translation type="unfinished"></translation>
+        <translation>Down</translation>
     </message>
     <message>
         <location line="+43"/>
@@ -327,12 +385,12 @@ File dipindahkan ke Recycle Bin.</source>
     <message>
         <location line="-558"/>
         <location line="+512"/>
-        <location line="+618"/>
+        <location line="+646"/>
         <source>Jalankan saat Windows menyala</source>
         <translation>Start when Windows starts</translation>
     </message>
     <message>
-        <location line="-1122"/>
+        <location line="-1150"/>
         <location line="+511"/>
         <source>Hemat baterai (wallpaper berhenti saat pakai baterai)</source>
         <translation>Save battery (wallpaper stops on battery power)</translation>
@@ -693,19 +751,19 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
         <translation>Restart engine</translation>
     </message>
     <message>
-        <location line="+145"/>
+        <location line="+173"/>
         <source>Update check contacts the releases host once per app start (never downloads/installs); disable in Settings → Pembaruan.</source>
         <translation>Update check contacts the releases host once per app start (never downloads/installs); disable in Settings → Updates.</translation>
     </message>
     <message>
-        <location line="-149"/>
+        <location line="-177"/>
         <source>Terapkan perubahan engine yang butuh restart</source>
         <translation>Apply the engine changes that need a restart</translation>
     </message>
     <message>
         <location line="-683"/>
         <source>(belum dipilih — klik Jelajahi)</source>
-        <translation type="unfinished"></translation>
+        <translation>(none selected yet - click Browse)</translation>
     </message>
     <message>
         <location line="+690"/>
@@ -734,7 +792,7 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
         <translation>Delete all temporary files in: %1</translation>
     </message>
     <message>
-        <location line="+12"/>
+        <location line="+40"/>
         <source>Video Besar</source>
         <translation>Large Video</translation>
     </message>
@@ -904,6 +962,24 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
     <message>
         <source>Jangan tanya lagi sesi ini</source>
         <translation type="vanished">Don&apos;t ask again this session</translation>
+    </message>
+</context>
+<context>
+    <name>StudioBridge</name>
+    <message>
+        <location filename="../src/studio_bridge.cpp" line="+71"/>
+        <source>Layar %1</source>
+        <translation>Screen %1</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source> (utama)</source>
+        <translation> (primary)</translation>
+    </message>
+    <message>
+        <location line="+43"/>
+        <source>Mode duplikat terdeteksi (%1). Penugasan video per layar dinonaktifkan sampai tampilan Windows diubah ke mode Perluas.</source>
+        <translation>Duplicate mode detected (%1). Per-monitor video assignment is disabled until the Windows display is changed to Extend mode.</translation>
     </message>
 </context>
 <context>
@@ -1112,78 +1188,78 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
     <message>
         <location filename="../src/settings_bridge.cpp" line="+131"/>
         <source>Folder output tidak boleh kosong.</source>
-        <translation type="unfinished"></translation>
+        <translation>Output folder must not be empty.</translation>
     </message>
     <message>
         <location line="+9"/>
         <source>CRF bawaan harus 16-28.</source>
-        <translation type="unfinished"></translation>
+        <translation>Default CRF must be 16-28.</translation>
     </message>
     <message>
         <location line="+9"/>
         <source>FPS bawaan harus 1-30.</source>
-        <translation type="unfinished"></translation>
+        <translation>Default FPS must be 1-30.</translation>
     </message>
     <message>
         <location line="+11"/>
         <source>Mode resolusi tidak dikenal.</source>
-        <translation type="unfinished"></translation>
+        <translation>Unknown resolution mode.</translation>
     </message>
     <message>
         <location line="+74"/>
         <source>Mode pengisian layar tidak dikenal.</source>
-        <translation type="unfinished"></translation>
+        <translation>Unknown screen fill mode.</translation>
     </message>
     <message>
         <location line="+9"/>
         <source>Monitor tidak valid.</source>
-        <translation type="unfinished"></translation>
+        <translation>Invalid monitor.</translation>
     </message>
     <message>
         <location line="+14"/>
         <source>Mode baterai tidak dikenal.</source>
-        <translation type="unfinished"></translation>
+        <translation>Unknown battery mode.</translation>
     </message>
     <message>
         <location line="+9"/>
         <source>Afinitas CPU tidak dikenal.</source>
-        <translation type="unfinished"></translation>
+        <translation>Unknown CPU affinity.</translation>
     </message>
     <message>
         <location line="+9"/>
         <source>Pilihan GPU tidak dikenal.</source>
-        <translation type="unfinished"></translation>
+        <translation>Unknown GPU choice.</translation>
     </message>
     <message>
         <location line="+9"/>
         <source>Batas FPS harus 1-30.</source>
-        <translation type="unfinished"></translation>
+        <translation>FPS limit must be 1-30.</translation>
     </message>
     <message>
         <location line="+9"/>
         <source>CRF harus 16-28.</source>
-        <translation type="unfinished"></translation>
+        <translation>CRF must be 16-28.</translation>
     </message>
     <message>
         <location line="+9"/>
         <source>Kecepatan harus 0.5-2.0.</source>
-        <translation type="unfinished"></translation>
+        <translation>Speed must be 0.5-2.0.</translation>
     </message>
     <message>
         <location line="+9"/>
         <source>Lebar resolusi tidak boleh negatif.</source>
-        <translation type="unfinished"></translation>
+        <translation>Resolution width must not be negative.</translation>
     </message>
     <message>
         <location line="+9"/>
         <source>Tinggi resolusi tidak boleh negatif.</source>
-        <translation type="unfinished"></translation>
+        <translation>Resolution height must not be negative.</translation>
     </message>
 </context>
 <context>
     <name>k6wp::StudioBridge</name>
     <message>
-        <location filename="../src/studio_bridge.cpp" line="+216"/>
+        <location filename="../src/studio_bridge.cpp" line="+181"/>
         <location line="+11"/>
         <source>(belum ada video aktif)</source>
         <translation>(no active video yet)</translation>
@@ -1244,6 +1320,59 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
         <location line="+4"/>
         <source> (utama)</source>
         <translation> (primary)</translation>
+    </message>
+    <message>
+        <location line="+57"/>
+        <location line="+51"/>
+        <source>Kunci monitor kosong.</source>
+        <translation>Monitor key is empty.</translation>
+    </message>
+    <message>
+        <location line="-47"/>
+        <source>Video kosong.</source>
+        <translation>Video is empty.</translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <location line="+47"/>
+        <source>Monitor tidak dikenal: %1. Segarkan daftar layar dulu.</source>
+        <translation>Unknown monitor: %1. Refresh the display list first.</translation>
+    </message>
+    <message>
+        <location line="-31"/>
+        <location line="+50"/>
+        <source>Gagal menyimpan displays.json: %1</source>
+        <translation>Failed to save displays.json: %1</translation>
+    </message>
+    <message>
+        <location line="-37"/>
+        <source>Penugasan layar dikirim ke engine: %1</source>
+        <translation>Display assignment sent to the engine: %1</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Engine mati — penugasan tersimpan di displays.json saja</source>
+        <translation>Engine stopped - assignment saved to displays.json only</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>IPC set_display_video ditolak: %1</source>
+        <translation>IPC set_display_video refused: %1</translation>
+    </message>
+    <message>
+        <location line="+42"/>
+        <source>Penugasan layar dihapus: %1</source>
+        <translation>Display assignment cleared: %1</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Engine mati — penghapusan tersimpan di displays.json saja</source>
+        <translation>Engine stopped - clear saved to displays.json only</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>IPC set_display_video (clear) ditolak: %1</source>
+        <translation>IPC set_display_video (clear) refused: %1</translation>
     </message>
     <message>
         <location line="+270"/>
