@@ -24,10 +24,14 @@
 // IpcClient (fake_pipe_test pattern, Qt-free).
 //
 // IS-7 / missing-path contract notes (see evidence + issues.md):
-//  - EngineApp::HandleSetDisplayVideo (engine_app.cpp:1075-1158) does not
-//    call DetectKeyCollision; docs/dev-contracts.md:291-299 assigns the
-//    enforcement lock to THIS suite. The harness handler therefore
-//    implements the plan contract on top of the real DetectKeyCollision.
+//  - Row 33 wired the engine-side gate: MultiMonitor::
+//    DetectKeyCollisionForCommand (command path) + DropCollidingAssignments
+//    (load path) in multi_monitor.cpp run the REAL DetectKeyCollision.
+//    EngineApp::HandleSetDisplayVideo (engine_app.cpp) calls the command
+//    gate before mutating; boot convergence + OnDisplaysFileChanged call
+//    the load gate before apply/converge. This suite drives BOTH gates
+//    through the production functions (case (e) command path, case (g)
+//    load path) — not a harness copy of the collision logic.
 //  - Production assign-path persist is gated on LoadLoopSlot success
 //    (row 15 decisions); a missing path is a reject with no write. The
 //    "map records it" half of case (d) is the Studio-written
@@ -212,6 +216,7 @@ std::vector<std::string> g_mm_loads;  // successful LoadLoop paths, in order
 std::map<const k6wp::MpvRenderer*, std::string> g_mm_last_path;
 std::map<const k6wp::DesktopInjector*, std::string> g_mm_inj_reason;
 std::vector<k6wp::MonitorInfo> g_mm_monitors;  // ListMonitors fixture
+std::vector<std::string> g_mm_log_lines;  // production-gate LogFn capture
 bool g_mm_loadloop_ok = true;
 k6wp::SharedHost g_mm_resolve_host{};
 struct MmInjState {
@@ -229,6 +234,7 @@ void MmReset() {
   g_mm_inj_reason.clear();
   g_mm_monitors.clear();
   g_mm_inj.clear();
+  g_mm_log_lines.clear();
   g_mm_loadloop_ok = true;
   k6wp::SharedHost sh;
   sh.host = reinterpret_cast<void*>(static_cast<uintptr_t>(0xBEEF));
@@ -243,6 +249,15 @@ void MmReset() {
 }
 
 void MmQuietLog(const char* /*fmt*/, ...) {}
+
+void MmCaptureLog(const char* fmt, ...) {
+  char buf[1024];
+  va_list args;
+  va_start(args, fmt);
+  std::vsnprintf(buf, sizeof(buf), fmt, args);
+  va_end(args);
+  g_mm_log_lines.push_back(buf);
+}
 
 k6wp::MonitorInfo MmMakeMonitor(int id, const wchar_t* device, int x, int y,
                                 int w, int h) {
@@ -270,9 +285,11 @@ std::string MmLastPathForDevice(const k6wp::MultiMonitor& mm,
 
 // In-process fake engine: composes the REAL production pieces in the
 // production order (ParseSetDisplayVideoPayload -> HasAssignment ->
-// LoadLoopSlot/SaveDisplays -> get_state display_* fields) behind the
-// named-pipe ack surface. See the file banner for the two documented
-// harness-vs-product gaps (IS-7 refusal, degraded coverage token).
+// row-33 collision gates -> LoadLoopSlot/SaveDisplays -> get_state
+// display_* fields) behind the named-pipe ack surface. The IS-7 refusal
+// is no longer a harness copy: both gates are the production functions
+// engine_app.cpp calls (see file banner). Remaining harness-vs-product
+// gap: the case-(d) degraded coverage token.
 class FakeEngine {
  public:
   FakeEngine(std::filesystem::path displays_path, std::string default_video)
@@ -284,15 +301,21 @@ class FakeEngine {
     monitors_ = g_mm_monitors;
   }
 
-  // Mirrors production boot: Init -> LoadLoopAll(default) ->
-  // ApplyBootAssignments(seed) when a seed is supplied.
+  // Mirrors production boot order (engine_app.cpp InitWallpaperSurface):
+  // seed -> DropCollidingAssignments (row 33 IS-7 keep-first gate) ->
+  // ApplyBootAssignments. The gate is the PRODUCTION function; the seed is
+  // sanitized in memory only (displays.json on disk is never rewritten —
+  // the store stays dumb).
   bool Boot(const k6wp::DisplaysConfig* seed) {
     mm_ = std::make_unique<k6wp::MultiMonitor>(MmQuietLog);
     mm_->SetHeadlessHost(kMmHeadlessHost);
     if (!mm_->Init(k6wp::MultiMonitorMode::PerMonitor)) return false;
     if (!mm_->LoadLoopAll(default_video_)) return false;
     if (seed != nullptr) {
-      mm_->ApplyBootAssignments(*seed, "");
+      k6wp::DisplaysConfig sanitized = *seed;
+      k6wp::MultiMonitor::DropCollidingAssignments(
+          sanitized, k6wp::ListMonitors(), &MmCaptureLog);
+      mm_->ApplyBootAssignments(sanitized, "");
     }
     return true;
   }
@@ -301,8 +324,10 @@ class FakeEngine {
   const std::filesystem::path& displays_path() const { return displays_path_; }
   const std::string& default_video() const { return default_video_; }
 
-  // Production HandleSetDisplayVideo logic + the IS-7 refusal this suite
-  // locks (engine_app.cpp:1075-1158, minus the pieces EngineApp owns).
+  // Production HandleSetDisplayVideo order (engine_app.cpp:1075-1158,
+  // minus the pieces EngineApp owns). The refusal decision comes from the
+  // PRODUCTION gate MultiMonitor::DetectKeyCollisionForCommand — the same
+  // function EngineApp::HandleSetDisplayVideo calls — not a harness copy.
   std::string HandleSetDisplayVideo(const std::string& payload_json) {
     const std::optional<k6wp::DisplayVideoCommand> parsed =
         k6wp::ParseSetDisplayVideoPayload(payload_json);
@@ -324,23 +349,17 @@ class FakeEngine {
       cfg = k6wp::DisplaysConfig{};
     }
 
-    // IS-7 (plan row 18 / docs/dev-contracts.md:291-299): refuse a
-    // prospective map that the REAL DetectKeyCollision flags, rather than
-    // overwriting into a colliding pair. EngineApp::HandleSetDisplayVideo
-    // does not yet call DetectKeyCollision - reported, not fixed here.
-    k6wp::DisplaysConfig prospective = cfg;
-    if (cmd.clear) {
-      prospective.assignments.erase(WidenUtf8(cmd.device));
-    } else {
-      k6wp::MonitorAssignment a;
-      a.path = WidenUtf8(cmd.path);
-      a.exists = std::filesystem::exists(std::filesystem::u8path(cmd.path));
-      prospective.assignments[WidenUtf8(cmd.device)] = std::move(a);
-    }
-    const std::vector<std::wstring> hits =
-        k6wp::DetectKeyCollision(prospective, monitors_);
-    if (!hits.empty()) {
-      return ErrorAck("set_display_video refused (IS-7 display key collision)");
+    // Row 33 (IS-7/GAP-14): THE production command-path gate —
+    // MultiMonitor::DetectKeyCollisionForCommand, the same function
+    // EngineApp::HandleSetDisplayVideo calls (engine_app.cpp). The refusal
+    // decision and its exact log line come from production code, not a
+    // harness copy. displays.json is never written on refusal (row 15
+    // byte-identical contract).
+    const std::vector<std::wstring> collisions =
+        k6wp::MultiMonitor::DetectKeyCollisionForCommand(
+            cfg, cmd, k6wp::ListMonitors(), &MmCaptureLog);
+    if (!collisions.empty()) {
+      return ErrorAck("set_display_video refused (duplicate-mode collision)");
     }
 
     if (cmd.clear) {
@@ -370,6 +389,25 @@ class FakeEngine {
     } catch (const k6wp::ConfigError&) {
     }
     return OkAck();
+  }
+
+  // Mirrors EngineApp::OnDisplaysFileChanged's production order minus the
+  // ConfigWatcher plumbing (engine_app.cpp is not linkable here):
+  // LoadDisplays -> MultiMonitor::DropCollidingAssignments (row 33 IS-7
+  // gate, the same function OnDisplaysFileChanged calls) -> converge
+  // changed/added keys via LoadLoopSlot.
+  void SimulateDisplaysFileChanged() {
+    k6wp::DisplaysConfig fresh;
+    try {
+      fresh = k6wp::LoadDisplays(displays_path_);
+    } catch (const k6wp::ConfigError&) {
+      return;
+    }
+    k6wp::MultiMonitor::DropCollidingAssignments(
+        fresh, k6wp::ListMonitors(), &MmCaptureLog);
+    for (const auto& [key, a] : fresh.assignments) {
+      mm_->LoadLoopSlot(NarrowUtf8(key), NarrowUtf8(a.path), "");
+    }
   }
 
   // Production BuildStateJson display_* fields (engine_app.cpp:1321-1372)
@@ -481,6 +519,7 @@ struct PipeScenario {
   std::string default_u8;
   std::string assigned_u8;
   std::string missing_u8;
+  std::string second_u8;
 };
 
 PipeScenario MakeScenario(const char* name) {
@@ -488,10 +527,13 @@ PipeScenario MakeScenario(const char* name) {
   s.dir = ScenarioDir(name);
   const auto def = s.dir / "default.mp4";
   const auto asg = s.dir / "assigned.mp4";
+  const auto snd = s.dir / "second.mp4";
   Touch(def);
   Touch(asg);
+  Touch(snd);
   s.default_u8 = std::string(def.u8string());
   s.assigned_u8 = std::string(asg.u8string());
+  s.second_u8 = std::string(snd.u8string());
   s.missing_u8 = std::string((s.dir / "missing.mp4").u8string());
   s.displays = s.dir / "displays.json";
   return s;
@@ -804,9 +846,12 @@ int main() {
   }
 
   // =====================================================================
-  // Failure: case (e) clone-mode collision -> real DetectKeyCollision
-  // fires; second assignment REFUSED with an error ack (IS-7); map
-  // byte-identical; first assignment survives.
+  // Failure: case (e) clone-mode collision -> the PRODUCTION command-path
+  // gate (MultiMonitor::DetectKeyCollisionForCommand, called by both
+  // EngineApp::HandleSetDisplayVideo and this suite's FakeEngine) fires;
+  // second assignment REFUSED with an error ack naming the collision; the
+  // exact production log line is captured; map byte-identical; first
+  // assignment survives.
   // =====================================================================
   {
     PipeScenario s = MakeScenario("e");
@@ -861,14 +906,24 @@ int main() {
     {
       nlohmann::json payload;
       payload["device"] = "\\\\.\\DISPLAY2";
-      payload["path"] = s.missing_u8;
+      payload["path"] = s.second_u8;
       const k6wp::IpcResult r = client.Send(k6wp::Cmd::set_display_video,
                                              payload);
+      if (r.status != k6wp::IpcStatus::kError) DiagIpc(r, "e-assign2");
       Check(r.status == k6wp::IpcStatus::kError,
-            "e: colliding second assign REFUSED with error ack (IS-7)");
-      Check(HasSubstr(r.error, "IS-7") && HasSubstr(r.error, "collision"),
-            "e: error ack names the IS-7 collision refusal");
+            "e: colliding second assign REFUSED with error ack (production)");
+      Check(HasSubstr(r.error, "duplicate-mode collision"),
+            "e: error ack names the duplicate-mode collision refusal");
     }
+    bool exact_line = false;
+    for (const std::string& line : g_mm_log_lines) {
+      if (line == "ipc: set_display_video refused (duplicate-mode collision): "
+                     "\\\\.\\DISPLAY1, \\\\.\\DISPLAY2") {
+        exact_line = true;
+      }
+    }
+    Check(exact_line,
+          "e: production gate logged the exact refusal line (keys, both)");
     const std::string after = ReadBytes(s.displays);
     Check(before == after,
           "e: displays.json byte-identical after refused collision assign");
@@ -883,6 +938,92 @@ int main() {
 
     client.Disconnect();
     server.join();
+  }
+
+  // =====================================================================
+  // Failure: case (g) load-path IS-7 — hand-edited colliding
+  // displays.json: the PRODUCTION load gate (MultiMonitor::
+  // DropCollidingAssignments — the same function the boot path and
+  // OnDisplaysFileChanged call in engine_app.cpp) keeps the FIRST key,
+  // drops the rest, logs the exact refusal line; applies only the first
+  // key on boot convergence AND on file-change reload; the store stays
+  // dumb (displays.json byte-identical — no rewrite).
+  // =====================================================================
+  {
+    PipeScenario s = MakeScenario("g");
+    MmReset();
+    FakeEngine eng(s.displays, s.default_u8);
+    eng.SetMonitors({
+        MmMakeMonitor(0, L"\\\\.\\DISPLAY1", 0, 0, 1920, 1080),
+        MmMakeMonitor(1, L"\\\\.\\DISPLAY2", 0, 0, 1920, 1080),
+    });
+
+    // Hand-edited colliding seed: both paths EXIST so that without the
+    // production gate both keys would apply (the gate is the only reason
+    // DISPLAY2 keeps the default video).
+    k6wp::DisplaysConfig seed;
+    k6wp::MonitorAssignment a1;
+    a1.path = WidenUtf8(s.assigned_u8);
+    a1.exists = true;
+    k6wp::MonitorAssignment a2;
+    a2.path = WidenUtf8(s.second_u8);
+    a2.exists = true;
+    seed.assignments[L"\\\\.\\DISPLAY1"] = a1;
+    seed.assignments[L"\\\\.\\DISPLAY2"] = a2;
+    k6wp::SaveDisplays(s.displays, seed);
+    const std::string before_boot = ReadBytes(s.displays);
+
+    Check(eng.Boot(&seed), "g: boot with colliding seed attaches both slots");
+
+    bool boot_refusal = false;
+    for (const std::string& line : g_mm_log_lines) {
+      if (line == "display: refusing assignments with colliding keys: "
+                     "\\\\.\\DISPLAY1, \\\\.\\DISPLAY2") {
+        boot_refusal = true;
+      }
+    }
+    Check(boot_refusal,
+          "g: boot logs the exact production refusal line (keep-first)");
+    Check(MmLastPathForDevice(eng.mm(), L"\\\\.\\DISPLAY1") == s.assigned_u8,
+          "g: boot applies ONLY the first colliding key (DISPLAY1)");
+    Check(MmLastPathForDevice(eng.mm(), L"\\\\.\\DISPLAY2") == s.default_u8,
+          "g: boot drops the second colliding key (DISPLAY2 keeps default)");
+    Check(ReadBytes(s.displays) == before_boot,
+          "g: displays.json byte-identical after boot-time refusal (store dumb)");
+
+    // Reload leg: hand-edit a NEW colliding pair (paths swapped — still
+    // colliding, both existing). Production OnDisplaysFileChanged order:
+    // LoadDisplays -> DropCollidingAssignments -> converge via LoadLoopSlot.
+    g_mm_log_lines.clear();
+    k6wp::DisplaysConfig raw2;
+    k6wp::MonitorAssignment b1;
+    b1.path = WidenUtf8(s.second_u8);
+    b1.exists = true;
+    k6wp::MonitorAssignment b2;
+    b2.path = WidenUtf8(s.assigned_u8);
+    b2.exists = true;
+    raw2.assignments[L"\\\\.\\DISPLAY1"] = b1;
+    raw2.assignments[L"\\\\.\\DISPLAY2"] = b2;
+    k6wp::SaveDisplays(s.displays, raw2);
+    const std::string before_reload = ReadBytes(s.displays);
+
+    eng.SimulateDisplaysFileChanged();
+
+    bool reload_refusal = false;
+    for (const std::string& line : g_mm_log_lines) {
+      if (line == "display: refusing assignments with colliding keys: "
+                     "\\\\.\\DISPLAY1, \\\\.\\DISPLAY2") {
+        reload_refusal = true;
+      }
+    }
+    Check(reload_refusal,
+          "g: reload logs the exact production refusal line (keep-first)");
+    Check(MmLastPathForDevice(eng.mm(), L"\\\\.\\DISPLAY1") == s.second_u8,
+          "g: reload applies ONLY the first colliding key (DISPLAY1)");
+    Check(MmLastPathForDevice(eng.mm(), L"\\\\.\\DISPLAY2") == s.default_u8,
+          "g: reload drops the second colliding key (DISPLAY2 keeps default)");
+    Check(ReadBytes(s.displays) == before_reload,
+          "g: displays.json byte-identical after reload refusal (store dumb)");
   }
 
   // =====================================================================

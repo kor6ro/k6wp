@@ -532,6 +532,12 @@ void EngineApp::InitWallpaperSurface(const std::string& video_utf8) {
   } catch (const std::exception&) {
     boot_displays = k6wp::DisplaysConfig{};
   }
+  // Row 33 (IS-7/GAP-14): load-path gate — a hand-edited colliding
+  // displays.json is refused (keep-first) BEFORE apply, so two videos
+  // never stack on one rect. SaveDisplays untouched (store stays dumb);
+  // enforcement lives at this consumer + OnDisplaysFileChanged.
+  k6wp::MultiMonitor::DropCollidingAssignments(
+      boot_displays, k6wp::ListMonitors(), &EngineApp::Log);
   const k6wp::BootAssignmentStats boot_stats =
       multi_monitor_.ApplyBootAssignments(boot_displays,
                                           config_watcher_.GetConfig().fit_mode);
@@ -1101,6 +1107,16 @@ bool EngineApp::HandleSetDisplayVideo(const std::string& payload_json) {
     cfg = k6wp::DisplaysConfig{};
   }
 
+  // Row 33 (IS-7/GAP-14): refuse a colliding prospective assignment set
+  // BEFORE any mutation — error ack + displays.json byte-identical (row 15
+  // contract). GAP-14: a hand-edited or stale file must not stack two
+  // videos on one rect. The gate logs the exact refusal line.
+  if (!k6wp::MultiMonitor::DetectKeyCollisionForCommand(
+          cfg, cmd, k6wp::ListMonitors(), &EngineApp::Log)
+           .empty()) {
+    return false;
+  }
+
   std::string current;
   {
     std::lock_guard<std::mutex> lock(video_mutex_);
@@ -1173,6 +1189,11 @@ void EngineApp::OnDisplaysFileChanged() {
     Log("display: reload failed, keeping last-good: %s", e.what());
     return;
   }
+
+  // Row 33 (IS-7/GAP-14): same load-path gate as boot — a hand-edited
+  // colliding displays.json is refused (keep-first) before re-convergence.
+  k6wp::MultiMonitor::DropCollidingAssignments(
+      fresh, k6wp::ListMonitors(), &EngineApp::Log);
 
   // Self-write echo: HandleSetDisplayVideo's SaveDisplays fires the same
   // notification; when the file's assignment map equals what is already live

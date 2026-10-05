@@ -185,12 +185,16 @@ add_test(NAME desktop_placement_test COMMAND desktop_placement_test)
 # Row 9: src/desktop_placement.cpp is linked so the false-success test can
 # drive the REAL CoversMonitor/CoverageReason on screen-space rects; still
 # no mpv, still no desktop_inject.cpp.
+# Row 33: k6wp_shared added so multi_monitor.cpp's row-33 gates
+# (DetectKeyCollisionForCommand / DropCollidingAssignments -> REAL
+# DetectKeyCollision, shared/displays_schema) resolve at link — same reason
+# placement_test links k6wp_shared (row 12 comment).
 add_executable(multi_monitor_factory_test
   ../tests/multi_monitor_factory_test.cpp
   src/multi_monitor.cpp
   src/desktop_placement.cpp
 )
-target_link_libraries(multi_monitor_factory_test PRIVATE user32)
+target_link_libraries(multi_monitor_factory_test PRIVATE user32 k6wp_shared)
 target_include_directories(multi_monitor_factory_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
   ${CMAKE_SOURCE_DIR}/shared

@@ -537,6 +537,69 @@ BootAssignmentStats MultiMonitor::ApplyBootAssignments(
   return stats;
 }
 
+std::vector<std::wstring> MultiMonitor::DetectKeyCollisionForCommand(
+    const DisplaysConfig& cfg, const DisplayVideoCommand& cmd,
+    const std::vector<MonitorInfo>& monitors, LogFn log) {
+  // Row 33 (IS-7/GAP-14): prospective assignment map = cfg with cmd
+  // applied (assign overwrites the device key; clear erases it), then the
+  // REAL DetectKeyCollision. Pure gate — callers own the mutation.
+  DisplaysConfig prospective = cfg;
+  if (cmd.clear) {
+    prospective.assignments.erase(WidenDeviceKey(cmd.device));
+  } else {
+    MonitorAssignment assignment;
+    assignment.path = WidenDeviceKey(cmd.path);
+    std::error_code ec;
+    assignment.exists = !cmd.path.empty() &&
+                        std::filesystem::exists(
+                            std::filesystem::u8path(cmd.path), ec) &&
+                        !ec;
+    prospective.assignments[WidenDeviceKey(cmd.device)] = std::move(assignment);
+  }
+  const std::vector<std::wstring> hits =
+      DetectKeyCollision(prospective, monitors);
+  if (hits.empty()) return hits;
+  if (log != nullptr) {
+    std::string keys;
+    for (std::size_t i = 0; i < hits.size(); ++i) {
+      if (i != 0) keys += ", ";
+      keys += NarrowUtf8(hits[i]);
+    }
+    char buf[512];
+    std::snprintf(buf, sizeof(buf),
+                  "ipc: set_display_video refused (duplicate-mode collision): %s",
+                  keys.c_str());
+    LogLine(log, buf);
+  }
+  return hits;
+}
+
+std::vector<std::wstring> MultiMonitor::DropCollidingAssignments(
+    DisplaysConfig& cfg, const std::vector<MonitorInfo>& monitors, LogFn log) {
+  // Row 33 (IS-7/GAP-14): keep-first load-path gate. DetectKeyCollision
+  // returns sorted keys (it sorts + uniques at the end); cfg.assignments
+  // is std::map keyed by the same wide device names, so hits[0] is the
+  // first colliding key in map order — it survives, the rest drop.
+  const std::vector<std::wstring> hits = DetectKeyCollision(cfg, monitors);
+  if (hits.empty()) return {};
+  if (log != nullptr) {
+    std::string keys;
+    for (std::size_t i = 0; i < hits.size(); ++i) {
+      if (i != 0) keys += ", ";
+      keys += NarrowUtf8(hits[i]);
+    }
+    char buf[512];
+    std::snprintf(buf, sizeof(buf),
+                  "display: refusing assignments with colliding keys: %s",
+                  keys.c_str());
+    LogLine(log, buf);
+  }
+  for (std::size_t i = 1; i < hits.size(); ++i) {
+    cfg.assignments.erase(hits[i]);
+  }
+  return std::vector<std::wstring>(hits.begin() + 1, hits.end());
+}
+
 void MultiMonitor::ReapplyRetainedLocked() {
   if (retained_assignments_.empty()) return;
   if (mode_ == MultiMonitorMode::Span) return;

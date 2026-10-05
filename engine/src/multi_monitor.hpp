@@ -17,11 +17,13 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "desktop_inject.hpp"
 #include "displays_schema.hpp"
+#include "ipc_marshal.hpp"  // DisplayVideoCommand — row 33 command gate
 #include "monitor_util.hpp"
 #include "mpv_renderer.hpp"
 
@@ -176,6 +178,36 @@ class MultiMonitor {
   // caller's own LoadLoopAll boot load is untouched (IS-4). Never throws.
   BootAssignmentStats ApplyBootAssignments(const DisplaysConfig& cfg,
                                            const std::string& fit_mode);
+
+  // Row 33 (IS-7/GAP-14): command-path collision gate for
+  // set_display_video. EngineApp::HandleSetDisplayVideo (engine_app.cpp) AND
+  // display_assignment_test case (e) both call this — one production
+  // decision, no harness copy. Builds the prospective assignment map from
+  // cfg + cmd (assign overwrites the device key; clear erases it) and runs
+  // the REAL DetectKeyCollision (shared/displays_schema) against `monitors`.
+  // Returns the colliding keys; empty = the command may proceed to mutate.
+  // When non-empty and `log` != nullptr, logs the exact refusal line
+  // "ipc: set_display_video refused (duplicate-mode collision): <keys>"
+  // (keys comma-joined, map order). Pure: no slot, file, or cfg mutation.
+  // DetectKeyCollision semantics unchanged — this is a call site, not a
+  // second detector.
+  static std::vector<std::wstring> DetectKeyCollisionForCommand(
+      const DisplaysConfig& cfg, const DisplayVideoCommand& cmd,
+      const std::vector<MonitorInfo>& monitors, LogFn log);
+
+  // Row 33 (IS-7/GAP-14): load-path collision gate for the displays.json
+  // consumers (boot convergence + OnDisplaysFileChanged). Runs the REAL
+  // DetectKeyCollision on cfg against `monitors`; on collision drops every
+  // colliding key EXCEPT the first in map order (keep-first — std::map
+  // iteration order matches DetectKeyCollision's sorted output) and, when
+  // `log` != nullptr, logs the exact refusal line
+  // "display: refusing assignments with colliding keys: <keys>". Returns
+  // the dropped keys (empty = clean map). Mutates cfg in place. Does NOT
+  // persist displays.json — the store stays dumb (SaveDisplays untouched);
+  // enforcement lives at the consumers.
+  static std::vector<std::wstring> DropCollidingAssignments(
+      DisplaysConfig& cfg, const std::vector<MonitorInfo>& monitors,
+      LogFn log);
 
   // P3L.3 pin verify/revert pass (PATCH A). For each slot created WITH a
   // pin that has started playback but reports hwdec inactive ("no" is only
