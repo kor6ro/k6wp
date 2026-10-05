@@ -99,3 +99,48 @@ claimed result.
     `PauseSlot`, never global). Note: 1.1.0 still decodes per monitor (N
     instances, no shared decode — see packaging/known-limitations.md §9);
     this item checks independent pause, not instance count.
+19. MANUAL — Extend-mode coverage (needs 2 monitors). Set Windows to Extend
+    (Win+P), start the engine, and confirm every monitor is covered edge to
+    edge with desktop icons above the video. The engine log must show one
+    `placement: covered` line per monitor plus one `attached ... to Progman,
+    layered=YES` line per monitor — the item-8 assertion, now under Extend.
+    Collect the bundle with `tools/run_2monitor_evidence.ps1` and check
+    `monitor_dump.exe` reports both monitors, per `docs/runbook-2monitor.md`.
+20. MANUAL — Duplicate-mode coverage (needs 2 monitors). Press Win+P and
+    choose Duplicate, then restart the engine if it stopped. Re-check the same
+    coverage assertion: both screens filled, icons above, one
+    `placement: covered` line per reported monitor and no crash. Run
+    `tools/run_2monitor_evidence.ps1` a second time and keep both bundles
+    (Extend and Duplicate), as `docs/runbook-2monitor.md` Step 4 asks.
+21. MANUAL — portrait secondary (needs 2 monitors). In Display settings rotate
+    one monitor to portrait. Its wallpaper must fill the rotated rect edge to
+    edge, with no letterboxing and no video rotation: the picture stays
+    upright, scaled to the tall rect. The engine log's placement line must
+    report that monitor covered, and `monitor_dump.exe` must report the tall
+    rect. Record which monitor is portrait, as `docs/runbook-2monitor.md`
+    Step 5 asks.
+22. MANUAL — hotplug and arrangement change (needs 2 monitors). With videos
+    on both monitors, unplug the secondary monitor and replug it (or move it
+    to the other side in Display settings). The engine must not crash, and
+    the retained per-monitor assignment must re-apply to the same monitor.
+    If its `\\.\DISPLAYn` key renumbered, the engine falls back to the global
+    video and logs a re-key warning instead of landing on the wrong screen.
+    `get_state` must still answer. See `docs/runbook-2monitor.md`.
+23. MANUAL — per-monitor assignment by drag (needs 2 monitors). In Studio,
+    drag a library video onto monitor 2's desktop rect. Only that monitor's
+    picture changes; monitor 1 keeps playing. `get_state` must show the map
+    under `display_assignments` (keyed by `\\.\DISPLAY2`) and `displays.json`
+    must gain that entry. This is the `set_display_video` path driven by the
+    Studio drag gate.
+24. MANUAL — Duplicate-mode assignment refusal (needs 2 monitors). Switch to
+    Duplicate and attempt the same drag onto a monitor. Both monitors report
+    one rect, so the assignment is refused — the Duplicate-mode assignment
+    refusal recorded in `packaging/known-limitations.md` — with a message
+    naming the collision, rather than stacking two videos on one screen.
+    `displays.json` must stay unchanged and `get_state`'s
+    `display_assignments` must not gain a key. See `docs/runbook-2monitor.md`.
+25. MANUAL — clear a per-monitor assignment (needs 2 monitors). With a video
+    assigned to monitor 2, clear it in Studio (the `set_display_video` clear
+    flag). Monitor 2 must revert to the global video, the
+    `display_assignments` entry must disappear from `get_state`, and
+    `displays.json` must drop that key. See `docs/runbook-2monitor.md`.
