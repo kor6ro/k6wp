@@ -38,7 +38,7 @@
 //    displays.json entry the engine reads, not a live persist.
 //  - display_coverage "degraded" is the lifecycle-suite token for an
 //    assignment whose path is missing on disk (production BuildStateJson
-//    does not emit it yet; row 19 surfaces non-covered coverage anyway).
+//    emits it since row 34; row 19 surfaces non-covered coverage anyway).
 //
 // Do NOT test real monitor enumeration here - plan row 12 owns geometry.
 
@@ -288,8 +288,8 @@ std::string MmLastPathForDevice(const k6wp::MultiMonitor& mm,
 // row-33 collision gates -> LoadLoopSlot/SaveDisplays -> get_state
 // display_* fields) behind the named-pipe ack surface. The IS-7 refusal
 // is no longer a harness copy: both gates are the production functions
-// engine_app.cpp calls (see file banner). Remaining harness-vs-product
-// gap: the case-(d) degraded coverage token.
+// engine_app.cpp calls (see file banner). The case-(d) degraded override
+// below mirrors production BuildStateJson (row 34).
 class FakeEngine {
  public:
   FakeEngine(std::filesystem::path displays_path, std::string default_video)

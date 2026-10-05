@@ -117,7 +117,10 @@ doc — when in doubt, read the code.
   `display_assignments` (object `{GDI device: utf-8 path}` read from
   `displays.json`, §3b), and `display_coverage` (object
   `{GDI device: "covered" | "clipped-left" | "clipped-top" | "clipped-right" |
-  "clipped-bottom" | "headless"}` from the live per-slot placement verdict).
+  "clipped-bottom" | "headless" | "degraded"}` from the live per-slot placement verdict).
+  `"degraded"` (row 34, additive) means the device key is recorded in
+  `display_assignments` but its path no longer exists on disk — the slot
+  keeps running the default video while an assignment is recorded.
   `BuildStateJson` appends them at the END of the state object, never
   reordered; `ParseEngineState` defaults a missing key to capability `0` and
   empty maps, so an old engine's payload still parses cleanly.

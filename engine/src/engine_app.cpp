@@ -1353,10 +1353,25 @@ std::string EngineApp::BuildStateJson() const {
   for (const auto& [id, slot] : multi_monitor_.slots()) {
     const bool headless = slot.injector != nullptr &&
                           slot.injector->injected_hwnd() == nullptr;
-    display_coverage[NarrowUtf8(slot.info.device_name)] =
+    // Row 34 (additive only): a slot whose assignment key is recorded in
+    // display_assignments but whose path no longer exists on disk reports
+    // "degraded" instead of the placement verdict (the slot keeps running
+    // the default video while an assignment is recorded). Every other
+    // device keeps exactly the covered|clipped-*|headless verdict below.
+    std::string verdict =
         headless ? "headless"
                  : DisplayCoverageVerdict(
                        multi_monitor_.SlotCoverageReason(id));
+    const std::string device = NarrowUtf8(slot.info.device_name);
+    if (display_assignments.contains(device)) {
+      std::error_code ec;
+      const std::filesystem::path assigned_path(std::filesystem::u8path(
+          display_assignments.at(device).get<std::string>()));
+      if (!std::filesystem::exists(assigned_path, ec) || ec) {
+        verdict = "degraded";
+      }
+    }
+    display_coverage[device] = std::move(verdict);
   }
   const nlohmann::json state = {
       {"running", running_.load(std::memory_order_acquire)},
