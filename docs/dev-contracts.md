@@ -41,6 +41,7 @@ doc — when in doubt, read the code.
   | `pause` / `resume` | `{}` (test uses `{"reason":"user"}` for pause) | `{"ok":true}` |
   | `get_state` | `{}` | `{"ok":true,"state":{...}}` |
   | `quit` | `{}` | `{"ok":true}` then graceful shutdown (see below) |
+  | `set_display_video` | `{"device":"\\\\.\\DISPLAY1","path":"<utf8 video path>"}` assigns one monitor; `{"device":"\\\\.\\DISPLAY1","clear":true}` drops it. `device` is a GDI device name (`\\.\DISPLAY<n>`, the `assignments` key of §3b); `path` is a non-empty UTF-8 path to an existing regular file; `clear` is boolean. `clear` + `path` together is a STRICT reject. | `{"ok":true}` or `{"error":"..."}` |
 
 - `quit` semantics: the engine acks `{"ok":true}` FIRST on the IPC worker
   thread, then posts its private shutdown message to the hidden window so
@@ -81,6 +82,27 @@ doc — when in doubt, read the code.
   `running_` and `MultiMonitor::active_monitor_` are atomic — no worker
   write race remains.
 
+- `set_display_video` (row 13/14, additive) follows the SAME "diterima"
+  contract: the IPC worker validates the payload with
+  `ParseSetDisplayVideoPayload` (`engine/src/ipc_marshal.cpp`), stashes it via
+  `IpcCommandMarshal::QueueDisplayVideo`, and `PostMessageW`s
+  `kSetDisplayVideoMessage` (`WM_APP+0x56`,
+  `engine/src/ipc_command_marshal.hpp`, pairwise static_asserts) to the hidden
+  window. `{"ok":true}` means accepted + queued, NOT applied; the main loop
+  pops it in `HandleMessage` and runs `EngineApp::HandleSetDisplayVideo`
+  (`engine/src/engine_app.cpp`), which applies the per-slot assignment /
+  clear (`MultiMonitor::LoadLoopSlot`) and persists `displays.json` via
+  `SaveDisplays` (§3b), never `PersistConfigField`. `{"error"}` means
+  rejected: malformed payload, unknown device, decode-refused path, or a post
+  failure during shutdown. Nothing is queued on reject, and the device is
+  resolved before any mutation, so a rejected command leaves the file
+  byte-identical. Protocol version stays 1: the command was APPENDED after
+  `quit` (enum value 6) and values 0-5 stay locked by static_asserts. An old
+  engine that does not know the name answers `{"error":...}` (unknown cmd)
+  because `CmdFromString` returns false for an unknown name and `Decode`
+  rejects the frame, never a crash; old Studios never send it, so mixed
+  versions degrade gracefully.
+
 - `get_state.state` fields (`EngineApp::BuildStateJson`,
   `engine/src/engine_app.cpp`): `running`, `paused`, `pid`,
   `wallpaper_mode`, `video` (utf-8 path), `config` (config path in use),
@@ -89,6 +111,16 @@ doc — when in doubt, read the code.
   `ApplyManager::SyncMonitor` skips unchanged values). Additive playlist
   fields (`playlist_enabled` / `playlist_size` / `playlist_index`) are
   documented in §3a.
+- Additive display fields (row 15; old clients ignore unknown keys):
+  `display_capability` (int; `1` = the two maps below are meaningful, `0` or
+  absent = the engine predates them or emitted a wrong-type value),
+  `display_assignments` (object `{GDI device: utf-8 path}` read from
+  `displays.json`, §3b), and `display_coverage` (object
+  `{GDI device: "covered" | "clipped-left" | "clipped-top" | "clipped-right" |
+  "clipped-bottom" | "headless"}` from the live per-slot placement verdict).
+  `BuildStateJson` appends them at the END of the state object, never
+  reordered; `ParseEngineState` defaults a missing key to capability `0` and
+  empty maps, so an old engine's payload still parses cleanly.
 - Client discipline: `IpcClient::Send` is one atomic transaction
   (connect + write + ack-read under a mutex) with a 2 s ack deadline;
   pipe-drop gets exactly 1 retry on a fresh connection; `kNotRunning`
@@ -223,6 +255,88 @@ doc — when in doubt, read the code.
   and `playlist_bridge_test` (`studio/CMakeLists.txt`, QML-singleton round-trip
   over a scratch file via the `K6WP_PLAYLIST_JSON` override).
 
+## 3b. Displays (`%LOCALAPPDATA%\K6WP\displays.json`)
+
+- Schema: `shared/displays_schema.json` (draft-07, `$id`
+  `.../displays.schema.json`); loader: `shared/displays_schema.cpp`
+  (`LoadDisplays` / `SaveDisplays` / `ValidateDisplays` / `MigrateDisplays`).
+  No `.example` file ships yet.
+- Path: `DefaultDisplaysPath()` = sibling of `config.json`, so an engine
+  started with `--config <dir>/config.json` reads `<dir>/displays.json` (the
+  §3a rule).
+- Why a separate file: `config.json` stays pure Engine playback state (§2),
+  and per-monitor assignment is neither playback state nor a Studio
+  preference. More decisively, an older Studio build rewrites `config.json`
+  from its own `WallpaperConfig` struct (`ApplyManager::WriteConfig` ->
+  `SaveConfig`), which would silently delete an assignment map stored there.
+  A separate file is never touched by old builds, so a downgrade cannot
+  corrupt assignments (the §3a playlist precedent).
+- Fields:
+  - `version` (int; `kDisplaysSchemaVersion` = 1; `0` = legacy/absent, with
+    missing fields defaulted on load).
+  - `assignments` (object): keyed by the GDI device name
+    (`MONITORINFOEXW.szDevice`, e.g. `\\.\DISPLAY1`, the same string
+    `MonitorInfo::device_name` carries). Each value is
+    `{"path":"<utf-8 absolute path>","exists":true|false}`. `exists` is a
+    Studio-side hint recorded at write time; the engine re-checks the
+    filesystem at apply time and does not trust it.
+  - `displays` (array): display-only metadata Studio may write (orientation
+    notes, friendly names). The engine ignores it and preserves it as raw
+    JSON across load/save round-trips.
+- Empty map is legacy (IS-4): an absent or empty `assignments` object is the
+  v0/legacy shape, so there is no per-monitor override and the engine's global
+  playback state from `config.json` (`video_path`, `monitor_id`) governs
+  exactly as it did before per-monitor assignment existed. Adding the store
+  does not change single-monitor behaviour.
+- Clone/Duplicate collision (IS-7): `DetectKeyCollision`
+  (`shared/displays_schema.*`) returns assignment keys that resolve to one
+  physical monitor rect, plus any key whose device name appears twice in the
+  live monitor list (Windows Duplicate/clone mode reports the same `szDevice`
+  for two `HMONITOR`s). Such a map must be refused rather than let two videos
+  stack on one rect; the enforcement path is locked by the
+  assignment-lifecycle suite (see `display_assignment_test` in §4, landing
+  with plan row 18). The user-facing statement is in
+  `packaging/known-limitations.md` §2.
+- Validation + write: `ValidateDisplays` rejects a version outside `[0, 1]`,
+  more than `kDisplaysMaxEntries` (100) assignments, an empty path, or a path
+  with a `..` component. Reads are capped at `kMaxConfigBytes` (1 MiB, the §2
+  cap). Writes publish through the shared `AtomicWriteJson` (`<file>.tmp` ->
+  flush/close -> `MoveFileExW`, §2), and corrupt JSON or a schema migration
+  backs the original bytes up to `<file>.bak` before the throw / self-healing
+  rewrite (the same `.bak` contract as §2/§3a). `LoadDisplays` is best-effort
+  in the engine's hot paths: a missing or corrupt file yields an empty set
+  (get_state) or the last-good in-memory map (live reload), never a throw out
+  of the main loop.
+- Watcher ownership + the NO-new-wakeup contract (IS-4): the engine watches
+  `displays.json` through `ConfigWatcher::WatchSecondFile`
+  (`engine/src/config_watch.*`), NOT a second watcher object. Both files share
+  ONE directory handle, ONE 64 KiB notify buffer, ONE overlapped completion
+  event and ONE 250 ms debounce timer; `OnDirectoryEvent` matches the
+  `FILE_NOTIFY_INFORMATION` basename against both watched names and arms the
+  shared timer, then `OnDebounceExpired` runs each pending file's mtime+size
+  check. The second file is event-only BY DESIGN: there is no poll fallback
+  for it, so it adds NO periodic wakeup, no new timer id to
+  `engine/src/timer_ids.hpp`, and no new `SetTimer` call site (the census
+  stays at 3: config debounce, working-set trim, occlusion poke). The callback
+  owner is `EngineApp::OnDisplaysFileChanged` (`engine/src/engine_app.cpp`),
+  running on the main loop thread: it re-reads via `LoadDisplays` and
+  re-converges slots through `MultiMonitor::LoadLoopSlot`. Two guardrails: the
+  engine's own `SaveDisplays` echo is skipped when the reloaded assignments
+  equal the live `applied_displays_` map, and a corrupt file (or a throwing
+  callback) keeps the last-good map with no slot teardown and no crash, while
+  a later valid write recovers.
+- Scope: the store is per-user (`%LOCALAPPDATA%`), while every command that
+  mutates it arrives on the per-session pipe (§1), so an engine only ever
+  applies assignments to the live monitors of the session it serves and the
+  keys are that session's GDI device names. A session with no engine instance
+  (for example an RDP session where the engine never started) reads nothing
+  and keeps today's global `config.json` playback rather than inventing a
+  monitor.
+- `set_display_video` (§1) is the IPC surface that mutates this store: the
+  worker validates and queues, and `EngineApp::HandleSetDisplayVideo` applies
+  the slot change and persists via `SaveDisplays` on the main loop. It never
+  uses `PersistConfigField` (that helper is config.json-only, §2).
+
 ## 4. Contract-test inventory (kept — never delete)
 
 | Suite | Source | Gate | Last verified |
@@ -244,6 +358,16 @@ doc — when in doubt, read the code.
 | `playlist_test` (43 checks) | `tests/playlist_test.cpp` | `BUILD_TESTING=ON` (`shared/CMakeLists.txt`) | playlist.json io/validation/migration + `SelectNextIndex` / `PlaylistIndexForPath` (43 checks, 0 failures) |
 | `playlist_bridge_test` (26 checks) | `tests/playlist_bridge_test.cpp` | `BUILD_TESTING=ON` (`studio/CMakeLists.txt`) | PlaylistBridge CRUD/persist round-trip over a scratch playlist.json (26 checks, 0 failures) |
 | `lockscreen_backup_test` (34 checks) | `tests/lockscreen_backup_test.cpp` | `BUILD_TESTING=ON` (root `CMakeLists.txt`) | Todo 19/22: 34 checks, 0 failures — lockscreen backup escape/decode round-trip (needs `/utf-8`: literals are UTF-8 without BOM) |
+| `monitor_util_test` (41 checks) | `tests/monitor_util_test.cpp` | `BUILD_TESTING=ON` (`shared/CMakeLists.txt`) | 2026-10-05: 41 checks, 0 failures — `ListMonitors`/`GetPrimaryMonitor` + `MonitorInfo` device_name/geometry (multi-monitor plan row 1) |
+| `displays_schema_test` (73 checks) | `tests/displays_schema_test.cpp` | `BUILD_TESTING=ON` (`shared/CMakeLists.txt`) | 2026-10-05: 73 checks, 0 failures — displays.json io/migrate/validate, `.bak` contract, `DetectKeyCollision` (plan row 5) |
+| `multi_monitor_factory_test` (106 checks) | `tests/multi_monitor_factory_test.cpp` | `BUILD_TESTING=ON` (`engine/CMakeLists.txt`) | 2026-10-05: 106 checks, 0 failures — injectable `SlotFactory` seam, per-slot Attach rects, headless fallback (plan row 6) |
+| `desktop_placement_test` (16 checks) | `tests/desktop_placement_test.cpp` | `BUILD_TESTING=ON` (`engine/CMakeLists.txt`) | 2026-10-05: 16 checks, 0 failures — placement coverage verdicts incl. CLIPPED-* / OUT-OF-BOUNDS (plan row 4) |
+| `desktop_zorder_test` (16 checks) | `tests/desktop_zorder_test.cpp` | `BUILD_TESTING=ON` (`engine/CMakeLists.txt`) | 2026-10-05: 16 checks, 0 failures — one z-order contract across injection branches (plan row 8) |
+| `workerw_span_test` (3 checks) | `tests/workerw_span_test.cpp` | `BUILD_TESTING=ON` (`engine/CMakeLists.txt`) | 2026-10-05: 3 checks, 0 failures — non-spanning WorkerW refused (plan row 8) |
+| `multi_monitor_placement_test` (86 checks) | `tests/multi_monitor_placement_test.cpp` | `BUILD_TESTING=ON` (`engine/CMakeLists.txt`) | 2026-10-05: 86 checks, 0 failures — negative origins, portrait, shared host, `DetectKeyCollision` (plan row 12) |
+| `engine_state_test` (58 checks) | `tests/engine_state_test.cpp` | `BUILD_TESTING=ON` (`engine/CMakeLists.txt`) | 2026-10-05: 58 PASS lines, 0 failures — plan row 15 appended the display get_state checks (`display_capability` / `display_assignments` / `display_coverage`, additive defaults) |
+| `engine_units_test` (62 checks) | `tests/engine_units_test.cpp` | `BUILD_TESTING=ON` (`engine/CMakeLists.txt`) | 2026-10-05: 62 PASS lines, 0 failures — plan row 16 appended the second-file watcher checks (`CheckSecondForChange`, no callback after Stop) |
+| `display_assignment_test` (planned) | not created yet (plan row 18) | NOT REGISTERED YET (plan row 18; add the `add_test` in `engine/CMakeLists.txt` when it lands) | — (row 18 is not landed; do not present this suite as existing) |
 | `monitor_dump` | `shared/monitor_dump.cpp` | always built (QA tool, prints monitor list as JSON) | — |
 
 - Run: `cmake --preset msvc-dev` (with `-DBUILD_TESTING=ON` for the
