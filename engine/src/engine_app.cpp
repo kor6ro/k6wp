@@ -88,6 +88,22 @@ std::string DisplayCoverageVerdict(const std::string& reason) {
   return "headless";
 }
 
+// Row 16: assignment-only equality for the displays self-write echo. The
+// `displays` metadata array is engine-ignored, so a Studio write that only
+// touches it must not re-converge slots. MonitorAssignment has no
+// operator== (shared/displays_schema.hpp is out of this row's scope), so
+// compare the map entries directly.
+bool SameAssignments(const DisplaysConfig& a, const DisplaysConfig& b) {
+  if (a.assignments.size() != b.assignments.size()) return false;
+  auto ia = a.assignments.begin();
+  auto ib = b.assignments.begin();
+  for (; ia != a.assignments.end(); ++ia, ++ib) {
+    if (ia->first != ib->first) return false;
+    if (ia->second.path != ib->second.path) return false;
+  }
+  return true;
+}
+
 // P2.3: --simulate-monitor-off-after-ms payload. Built by value at the call
 // site: SendMessageW is synchronous, so a stack buffer stays valid for the
 // whole dispatch and no static state (or its lazy init) is needed.
@@ -211,6 +227,18 @@ bool EngineApp::Init(int argc, char** argv) {
           applied_adapter_mode_.c_str(), cfg.gpu_adapter.c_str());
     }
   });
+
+  // Row 16: displays.json is watched through the SAME directory handle and
+  // debounce timer as config.json (one handle, one timer, two callbacks; no
+  // second watcher object, no new periodic wakeup). Registration only
+  // snapshots mtime/size — boot-time convergence is a separate concern.
+  try {
+    config_watcher_.WatchSecondFile(
+        k6wp::DefaultDisplaysPath(),
+        [this]() { OnDisplaysFileChanged(); });
+  } catch (const std::exception& e) {
+    Log("warning: displays.json watch registration failed: %s", e.what());
+  }
 
   // P3L.2: E-core affinity from the live config (process-level, once at
   // boot; a later config flip only logs restart-required in the watcher).
@@ -1057,10 +1085,15 @@ bool EngineApp::HandleSetDisplayVideo(const std::string& payload_json) {
       Log("warning: set_display_video clear could not reload default video on %s",
           cmd.device.c_str());
     }
+    // Row 16: record the live map BEFORE the save so the watcher's echo of
+    // this write compares equal and skips a redundant re-convergence.
+    applied_displays_ = cfg;
     try {
       k6wp::SaveDisplays(displays_path, cfg);
     } catch (const k6wp::ConfigError& e) {
       Log("warning: displays.json persist failed: %s", e.what());
+    } catch (const std::exception& e) {
+      Log("warning: displays.json persist failed (unexpected): %s", e.what());
     }
     Log("display: cleared assignment for %s (default video: %s)",
         cmd.device.c_str(), current.empty() ? "(none)" : current.c_str());
@@ -1078,13 +1111,92 @@ bool EngineApp::HandleSetDisplayVideo(const std::string& payload_json) {
   assignment.path = WidenUtf8(cmd.path);
   assignment.exists = std::filesystem::exists(std::filesystem::u8path(cmd.path));
   cfg.assignments[WidenUtf8(cmd.device)] = assignment;
+  // Row 16: same echo suppression as the clear path (live map recorded before
+  // the save; the watcher's notification then compares equal and no-ops).
+  applied_displays_ = cfg;
   try {
     k6wp::SaveDisplays(displays_path, cfg);
   } catch (const k6wp::ConfigError& e) {
     Log("warning: displays.json persist failed: %s", e.what());
+  } catch (const std::exception& e) {
+    Log("warning: displays.json persist failed (unexpected): %s", e.what());
   }
   Log("display: slot assigned %s -> %s", cmd.device.c_str(), cmd.path.c_str());
   return true;
+}
+
+void EngineApp::OnDisplaysFileChanged() {
+  // Row 16: event-driven displays.json reload on the main loop thread (the
+  // watcher's shared debounce expiry). Never throws: a parse/write failure
+  // must not unwind the message loop.
+  k6wp::DisplaysConfig fresh;
+  try {
+    fresh = k6wp::LoadDisplays(DefaultDisplaysPath());
+  } catch (const k6wp::ConfigError& e) {
+    // Corrupt/short/unreadable: keep last-good — no slot teardown, no crash;
+    // a later valid write recovers (the watcher consumed this snapshot).
+    Log("display: reload failed (corrupt), keeping last-good: %s", e.what());
+    return;
+  } catch (const std::exception& e) {
+    Log("display: reload failed, keeping last-good: %s", e.what());
+    return;
+  }
+
+  // Self-write echo: HandleSetDisplayVideo's SaveDisplays fires the same
+  // notification; when the file's assignment map equals what is already live
+  // in memory, skip convergence (no redundant reload). `displays` metadata
+  // is engine-ignored, so compare assignments only.
+  if (SameAssignments(fresh, applied_displays_)) {
+    Log("display: reload skipped (assignments unchanged)");
+    return;
+  }
+
+  // Re-converge via MultiMonitor::LoadLoopSlot (not HandleSetDisplayVideo:
+  // that parses ONE command and would re-save the file, echoing again).
+  const std::string fit_mode = config_watcher_.GetConfig().fit_mode;
+  std::string default_video;
+  {
+    std::lock_guard<std::mutex> lock(video_mutex_);
+    default_video = current_video_utf8_;
+  }
+
+  int applied = 0;
+  int skipped = 0;
+  for (const auto& [key, assignment] : fresh.assignments) {
+    const auto prev = applied_displays_.assignments.find(key);
+    if (prev != applied_displays_.assignments.end() &&
+        prev->second.path == assignment.path) {
+      continue;  // unchanged entry: leave the live slot alone
+    }
+    const std::string device = NarrowUtf8(key);
+    const std::string path_utf8 = NarrowUtf8(assignment.path);
+    if (multi_monitor_.LoadLoopSlot(device, path_utf8, fit_mode)) {
+      ++applied;
+      Log("display: reload applied %s -> %s", device.c_str(), path_utf8.c_str());
+    } else {
+      ++skipped;
+      // No live slot for this key (absent monitor) or decode refused; the
+      // map is still recorded below so a later identical write is a no-op.
+      Log("display: reload skipped %s (no live slot / decode refused)",
+          device.c_str());
+    }
+  }
+  for (const auto& [key, assignment] : applied_displays_.assignments) {
+    (void)assignment;
+    if (fresh.assignments.count(key) != 0) continue;
+    const std::string device = NarrowUtf8(key);
+    if (!default_video.empty() &&
+        multi_monitor_.LoadLoopSlot(device, default_video, fit_mode)) {
+      ++applied;
+      Log("display: reload cleared %s -> default", device.c_str());
+    } else {
+      ++skipped;
+      Log("display: reload cleared %s (no default video / no live slot)",
+          device.c_str());
+    }
+  }
+  applied_displays_ = fresh;
+  Log("display: reload applied (%d slot(s), %d skipped)", applied, skipped);
 }
 
 void EngineApp::RecreateDevice() {

@@ -1,16 +1,21 @@
 // engine_units_test.cpp - pure-logic coverage for the engine units split out
 // of engine_app.cpp: cli_options (argv parsing), PauseController (owner
-// bitmask), PendingCommandQueue (worker->main handoff) and TestSimulator
-// (hidden QA flag schedule). No windows.h, no mpv, no engine_app.
+// bitmask), PendingCommandQueue (worker->main handoff), TestSimulator
+// (hidden QA flag schedule) and (row 16) ConfigWatcher's second-file
+// (displays.json) mtime/size + reload-callback path. No windows.h, no mpv,
+// no engine_app.
 
 #include "cli_options.hpp"
+#include "config_watch.hpp"
 #include "pause_controller.hpp"
 #include "pending_queue.hpp"
 #include "test_simulator.hpp"
 
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
 #include <initializer_list>
+#include <stdlib.h>
 #include <string>
 #include <vector>
 
@@ -218,6 +223,65 @@ void TestSimulator() {
   Check(sim.Tick(3000).monitor_on, "sim: monitor-on fires at +2000ms");
 }
 
+// Row 16: drives ConfigWatcher's second-file (displays.json) change detection
+// through the REAL watcher with no Win32 message window — an mtime/size change
+// must fire the registered reload callback, an unchanged stat must not, and
+// Stop() must tear the registration down. The stat path is deterministic
+// (size delta), so the check cannot flake on mtime granularity.
+void TestDisplaysSecondFileWatch() {
+  namespace fs = std::filesystem;
+  std::error_code ec;
+  const fs::path dir =
+      fs::temp_directory_path(ec) / "k6wp-engine-units-row16";
+  if (ec) {
+    Check(false, "watch2: temp directory available");
+    return;
+  }
+  fs::remove_all(dir, ec);
+  fs::create_directories(dir, ec);
+
+  // Route the watcher's diagnostic log into the throwaway dir: the suite must
+  // never append to a real %LOCALAPPDATA%\K6WP\engine.log. log_file.cpp opens
+  // it lazily via GetEnvironmentVariableW, and _wputenv_s keeps the CRT and
+  // Win32 environment blocks in sync.
+  _wputenv_s(L"LOCALAPPDATA", dir.wstring().c_str());
+
+  const fs::path displays = dir / "displays.json";
+  k6wp::ConfigWatcher watcher;  // no Start(): no Win32 handles are opened
+  int second_calls = 0;
+  watcher.WatchSecondFile(displays, [&second_calls]() { ++second_calls; });
+
+  Check(second_calls == 0,
+        "watch2: registration does not invoke the reload callback");
+
+  {
+    std::ofstream out(displays, std::ios::binary | std::ios::trunc);
+    out << "{\"version\":1,\"assignments\":{}}";
+  }
+  Check(watcher.CheckSecondForChange(),
+        "watch2: creating displays.json is detected as a change");
+  Check(second_calls == 1, "watch2: first change fires the reload callback");
+
+  Check(!watcher.CheckSecondForChange(),
+        "watch2: unchanged mtime/size is a no-op");
+  Check(second_calls == 1, "watch2: no redundant reload callback");
+
+  {
+    std::ofstream out(displays, std::ios::binary | std::ios::app);
+    out << " ";
+  }
+  Check(watcher.CheckSecondForChange(),
+        "watch2: size delta is detected as a change");
+  Check(second_calls == 2, "watch2: recovery write fires the callback again");
+
+  watcher.Stop();
+  Check(!watcher.CheckSecondForChange(),
+        "watch2: Stop() clears the second-file registration");
+  Check(second_calls == 2, "watch2: no callback after Stop()");
+
+  fs::remove_all(dir, ec);
+}
+
 }  // namespace
 
 int main() {
@@ -225,6 +289,7 @@ int main() {
   TestPauseController();
   TestPendingQueue();
   TestSimulator();
+  TestDisplaysSecondFileWatch();
 
   std::printf(g_failures == 0 ? "RESULT: ALL ENGINE-UNIT CHECKS PASSED\n"
                               : "RESULT: %d CHECK(S) FAILED\n",
