@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <filesystem>
 
 #include "multi_monitor.hpp"
 
@@ -64,6 +65,18 @@ std::wstring WidenDeviceKey(const std::string& device) {
   return out;
 }
 
+// Row 17: wide -> UTF-8 for the row's display: log lines (%s on device keys
+// and assignment paths). Empty/undecodable input -> empty string.
+std::string NarrowUtf8(const std::wstring& w) {
+  if (w.empty()) return {};
+  const int n =
+      WideCharToMultiByte(CP_UTF8, 0, w.c_str(), -1, nullptr, 0, nullptr, nullptr);
+  if (n <= 0) return {};
+  std::string out(static_cast<std::size_t>(n - 1), '\0');
+  WideCharToMultiByte(CP_UTF8, 0, w.c_str(), -1, out.data(), n, nullptr, nullptr);
+  return out;
+}
+
 }  // namespace
 
 MultiMonitor::MultiMonitor(LogFn log, SlotFactory factory)
@@ -82,6 +95,7 @@ MultiMonitor::MultiMonitor(MultiMonitor&& other) noexcept
       filter_armed_(other.filter_armed_),
       factory_(std::move(other.factory_)),
       slots_(std::move(other.slots_)),
+      retained_assignments_(std::move(other.retained_assignments_)),
       initialized_(other.initialized_),
       headless_host_(other.headless_host_),
       shared_host_(other.shared_host_),
@@ -104,6 +118,7 @@ MultiMonitor& MultiMonitor::operator=(MultiMonitor&& other) noexcept {
     filter_armed_ = other.filter_armed_;
     factory_ = std::move(other.factory_);
     slots_ = std::move(other.slots_);
+    retained_assignments_ = std::move(other.retained_assignments_);
     initialized_ = other.initialized_;
     headless_host_ = other.headless_host_;
     shared_host_ = other.shared_host_;
@@ -419,6 +434,7 @@ void MultiMonitor::OnDisplayChange() {
         }
       }
     }
+    ReapplyRetainedLocked();
     attached_host_rect_ = shared_host_.client_rect;
     initialized_ = !slots_.empty();
   } catch (...) {
@@ -466,6 +482,95 @@ bool MultiMonitor::LoadLoopSlot(const std::string& device,
     return true;
   }
   return false;
+}
+
+BootAssignmentStats MultiMonitor::ApplyBootAssignments(
+    const DisplaysConfig& cfg, const std::string& fit_mode) {
+  BootAssignmentStats stats;
+  for (const auto& [key, assignment] : cfg.assignments) {
+    if (key.empty() || assignment.path.empty()) continue;
+    const std::string device = NarrowUtf8(key);
+    const std::string path_utf8 = NarrowUtf8(assignment.path);
+    bool slot_live = false;
+    for (const auto& kv : slots_) {
+      if (kv.second.info.device_name == key) {
+        slot_live = true;
+        break;
+      }
+    }
+    if (!slot_live) {
+      retained_assignments_[key] = assignment.path;
+      ++stats.retained;
+      char buf[320];
+      std::snprintf(buf, sizeof(buf),
+                    "display: retained assignment for absent %s",
+                    device.c_str());
+      LogLine(log_, buf);
+      continue;
+    }
+    std::error_code ec;
+    const std::filesystem::path as_path(assignment.path);
+    if (!std::filesystem::exists(as_path, ec) || ec) {
+      ++stats.skipped_missing;
+      char buf[512];
+      std::snprintf(buf, sizeof(buf),
+                    "display: assignment path missing for %s: %s - falling "
+                    "back to default",
+                    device.c_str(), path_utf8.c_str());
+      LogLine(log_, buf);
+      continue;
+    }
+    if (LoadLoopSlot(device, path_utf8, fit_mode)) {
+      ++stats.applied;
+      char buf[320];
+      std::snprintf(buf, sizeof(buf), "display: applied %s to %s",
+                    path_utf8.c_str(), device.c_str());
+      LogLine(log_, buf);
+    } else {
+      char buf[320];
+      std::snprintf(buf, sizeof(buf),
+                    "display: assignment apply failed for %s: %s",
+                    device.c_str(), path_utf8.c_str());
+      LogLine(log_, buf);
+    }
+  }
+  return stats;
+}
+
+void MultiMonitor::ReapplyRetainedLocked() {
+  if (retained_assignments_.empty()) return;
+  if (mode_ == MultiMonitorMode::Span) return;
+  for (auto it = retained_assignments_.begin();
+       it != retained_assignments_.end();) {
+    const std::wstring& key = it->first;
+    const std::wstring& path = it->second;
+    Slot* slot = nullptr;
+    for (auto& kv : slots_) {
+      if (kv.second.info.device_name == key) {
+        slot = &kv.second;
+        break;
+      }
+    }
+    if (slot == nullptr || slot->renderer == nullptr || path.empty()) {
+      ++it;
+      continue;
+    }
+    std::error_code ec;
+    if (!std::filesystem::exists(std::filesystem::path(path), ec) || ec) {
+      ++it;
+      continue;
+    }
+    const std::string path_utf8 = NarrowUtf8(path);
+    if (slot->renderer->LoadLoop(path_utf8)) {
+      char buf[320];
+      std::snprintf(buf, sizeof(buf), "display: applied %s to %s",
+                    path_utf8.c_str(), NarrowUtf8(key).c_str());
+      LogLine(log_, buf);
+      it = retained_assignments_.erase(it);
+    } else {
+      ++it;
+    }
+  }
 }
 
 int MultiMonitor::VerifyPinAndRevert() {

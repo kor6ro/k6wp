@@ -394,6 +394,18 @@ bool EngineApp::Init(int argc, char** argv) {
   tray_cb.on_exit = [this]() { RequestShutdown(); };
   tray_cb.is_paused = [this]() { return pause_.UiPaused(); };
   tray_.Install(message_hwnd_, std::move(tray_cb));
+  // Row 17: run-book visibility for the engine-starts-before-Explorer path.
+  // Install's RegisterWindowMessageW(L"TaskbarCreated") is idempotent
+  // (same system-wide id on every call); the value is what HandleMessage
+  // matches. 0 would mean recovery is disarmed: AttachToDesktop's
+  // Progman-missing nullptr path has nothing to re-anchor on.
+  const unsigned taskbar_created = tray_.taskbar_created_msg();
+  if (taskbar_created != 0) {
+    Log("engine: TaskbarCreated registered (msg id=%u), recovery armed",
+        taskbar_created);
+  } else {
+    Log("engine: TaskbarCreated NOT registered (msg id=0), recovery disarmed");
+  }
   std::string boot_video;
   {
     std::lock_guard<std::mutex> lock(video_mutex_);
@@ -506,6 +518,26 @@ void EngineApp::InitWallpaperSurface(const std::string& video_utf8) {
       Log("warning: wallpaper surface could not load '%s'", video_utf8.c_str());
     }
   }
+  // Row 17: boot-time assignment convergence (displays.json). Order is the
+  // contract: Init attaches the slots, LoadLoopAll seeds the default video,
+  // THEN ApplyBootAssignments applies per-device overrides (MultiMonitor
+  // owns the three rules + the retained map OnDisplayChange consults).
+  // applied_displays_ is seeded with the boot snapshot so row 16's
+  // self-write echo suppression holds from the first watcher event on.
+  k6wp::DisplaysConfig boot_displays;
+  try {
+    boot_displays = k6wp::LoadDisplays(k6wp::DefaultDisplaysPath());
+  } catch (const k6wp::ConfigError&) {
+    boot_displays = k6wp::DisplaysConfig{};
+  } catch (const std::exception&) {
+    boot_displays = k6wp::DisplaysConfig{};
+  }
+  const k6wp::BootAssignmentStats boot_stats =
+      multi_monitor_.ApplyBootAssignments(boot_displays,
+                                          config_watcher_.GetConfig().fit_mode);
+  applied_displays_ = boot_displays;
+  Log("display: boot assignments applied=%d retained=%d missing=%d",
+      boot_stats.applied, boot_stats.retained, boot_stats.skipped_missing);
   UpdateTrayErrorStatus();
 }
 

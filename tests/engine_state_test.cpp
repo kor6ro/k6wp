@@ -20,6 +20,16 @@
 #include <fstream>
 #include <string>
 
+// Row 17: boot-time assignment convergence drives the REAL MultiMonitor
+// (src/multi_monitor.cpp is compiled into this suite) against link-level
+// DesktopInjector / MpvRenderer / ListMonitors stubs below.
+#include <cstdarg>
+#include <map>
+#include <utility>
+#include <vector>
+
+#include "multi_monitor.hpp"
+
 namespace {
 
 int g_failures = 0;
@@ -44,7 +54,187 @@ void Touch(const std::filesystem::path& p) {
   out << "x";
 }
 
+// ---- Row 17: recording stubs for the MultiMonitor boot-convergence checks --
+// Link model (multi_monitor_factory_test pattern): multi_monitor.cpp is
+// compiled into this suite; every DesktopInjector / MpvRenderer /
+// ListMonitors / ResolveSharedHost symbol it references is defined here, so
+// the binary never links desktop_inject.cpp, mpv_renderer.cpp or mpv.lib.
+// The stubs record what production passes (LoadLoop paths in call order,
+// per-renderer last path) so the tests assert BEHAVIOUR, not mock magic.
+// Member definitions live at namespace k6wp scope (C2888: never inside an
+// anonymous namespace) but read the recording state declared here.
+
+std::vector<std::string> g_mm_logs;    // LogFn lines, in order
+std::vector<std::string> g_mm_loads;   // LoadLoop paths, in call order
+std::map<const k6wp::MpvRenderer*, std::string> g_mm_last_path;
+std::vector<k6wp::MonitorInfo> g_mm_monitors;  // ListMonitors fixture
+bool g_mm_loadloop_ok = true;
+k6wp::SharedHost g_mm_resolve_host{};  // ResolveSharedHost fixture
+// Per-injector recording (factory-test g_inj pattern): Impl is not usable
+// for storage here (test-TU body differs from desktop_inject.cpp).
+struct MmInjState {
+  void* hwnd = nullptr;
+  bool shared_set = false;
+};
+std::map<const void*, MmInjState> g_mm_inj;
+
+// Sentinel handed to SetHeadlessHost; must reach MpvRenderer::Create only on
+// the headless fallback path.
+void* const kMmHeadlessHost = reinterpret_cast<void*>(static_cast<uintptr_t>(0x77));
+
+void MmReset() {
+  g_mm_logs.clear();
+  g_mm_loads.clear();
+  g_mm_last_path.clear();
+  g_mm_monitors.clear();
+  g_mm_inj.clear();
+  g_mm_loadloop_ok = true;
+  k6wp::SharedHost sh;
+  sh.host = reinterpret_cast<void*>(static_cast<uintptr_t>(0xBEEF));
+  sh.progman = reinterpret_cast<void*>(static_cast<uintptr_t>(0xFEED));
+  sh.def_view = reinterpret_cast<void*>(static_cast<uintptr_t>(0xDEA1));
+  sh.insert_after = sh.def_view;
+  sh.client_rect.left = 0;
+  sh.client_rect.top = 0;
+  sh.client_rect.right = 1920;
+  sh.client_rect.bottom = 1080;
+  g_mm_resolve_host = sh;
+}
+
+void MmQuietLog(const char* /*fmt*/, ...) {}
+
+void MmRecordLog(const char* fmt, ...) {
+  char buf[512];
+  va_list args;
+  va_start(args, fmt);
+  std::vsnprintf(buf, sizeof(buf), fmt, args);
+  va_end(args);
+  g_mm_logs.push_back(buf);
+}
+
+bool MmLogContains(const std::string& needle) {
+  for (const std::string& line : g_mm_logs) {
+    if (line.find(needle) != std::string::npos) return true;
+  }
+  return false;
+}
+
+k6wp::MonitorInfo MmMakeMonitor(int id, const wchar_t* device, int x, int y,
+                                int w, int h) {
+  k6wp::MonitorInfo mi;
+  mi.id = id;
+  mi.x = x;
+  mi.y = y;
+  mi.width = w;
+  mi.height = h;
+  mi.is_primary = (id == 0);
+  mi.device_name = device;
+  return mi;
+}
+
+// Last LoadLoop path recorded for the live slot whose GDI device name matches
+// (empty string = no slot / never loaded). Reads MultiMonitor::slots() the
+// same way EngineApp::BuildStateJson does (public accessor, auto& binding).
+std::string MmLastPathForDevice(const k6wp::MultiMonitor& mm,
+                                const std::wstring& device) {
+  for (const auto& kv : mm.slots()) {
+    if (kv.second.info.device_name == device && kv.second.renderer) {
+      const auto it = g_mm_last_path.find(kv.second.renderer.get());
+      if (it != g_mm_last_path.end()) return it->second;
+    }
+  }
+  return {};
+}
+
 }  // namespace
+
+namespace k6wp {
+
+// Complete the Pimpl so the stubbed ~DesktopInjector can destroy its
+// unique_ptr<Impl>. desktop_inject.cpp (the real Impl) is NOT linked.
+struct DesktopInjector::Impl {};
+
+// ---- link-level stubs: DesktopInjector (desktop_inject.cpp NOT linked) ----
+
+DesktopInjector::DesktopInjector(LogFn /*log*/) { g_mm_inj[this] = MmInjState{}; }
+
+DesktopInjector::~DesktopInjector() { g_mm_inj.erase(this); }
+
+void DesktopInjector::SetInjectMode(InjectMode /*mode*/) {}
+
+void DesktopInjector::SetSharedHost(const SharedHost& host) {
+  MmInjState& s = g_mm_inj[this];
+  s.shared_set = host.host != nullptr;
+}
+
+bool DesktopInjector::Attach(int /*x*/, int /*y*/, int /*width*/,
+                             int /*height*/) {
+  MmInjState& s = g_mm_inj[this];
+  if (!s.shared_set || !g_mm_resolve_host.host) return false;
+  s.hwnd = reinterpret_cast<void*>(static_cast<uintptr_t>(0x1000));
+  return true;
+}
+
+void DesktopInjector::Detach() { g_mm_inj[this].hwnd = nullptr; }
+
+void DesktopInjector::OnDisplayChange(int /*x*/, int /*y*/, int /*width*/,
+                                      int /*height*/) {}
+
+void* DesktopInjector::injected_hwnd() const {
+  const auto it = g_mm_inj.find(this);
+  return it == g_mm_inj.end() ? nullptr : it->second.hwnd;
+}
+
+void DesktopInjector::ReassertFrameless() {}
+
+std::string DesktopInjector::last_coverage_reason() const { return {}; }
+
+// The free ResolveSharedHost stub: returns the configurable fixture
+// (g_mm_resolve_host = {} simulates Progman absent -> attach refuses).
+SharedHost ResolveSharedHost(InjectMode /*mode*/, LogFn /*log*/) {
+  return g_mm_resolve_host;
+}
+
+// ---- link-level stubs: MpvRenderer (mpv_renderer.cpp/mpv.lib NOT linked) --
+
+MpvRenderer::MpvRenderer() {}
+
+MpvRenderer::~MpvRenderer() {}
+
+bool MpvRenderer::Create(void* /*hwnd*/) { return true; }
+
+void MpvRenderer::SetHWND(void* /*hwnd*/) {}
+
+void MpvRenderer::SetAdapterPin(const std::string& /*substr*/) {}
+
+bool MpvRenderer::pin_active() const { return false; }
+
+bool MpvRenderer::LoadLoop(const std::string& path, bool /*force*/) {
+  g_mm_last_path[this] = path;
+  g_mm_loads.push_back(path);
+  return g_mm_loadloop_ok;
+}
+
+void MpvRenderer::SetFitMode(const std::string& /*fit_mode*/,
+                             double /*window_aspect*/) {}
+
+void MpvRenderer::Pause() {}
+void MpvRenderer::Resume() {}
+void MpvRenderer::SetFpsCap(int /*fps*/) {}
+void MpvRenderer::Wakeup() {}
+void MpvRenderer::SetMessageWindow(void* /*hwnd*/) {}
+void MpvRenderer::OnHwdecPropertyChange() {}
+
+// ---- link-level stubs: monitor enumeration ---------------------------------
+// Deterministic fixture: whatever g_mm_monitors holds (set per scenario).
+
+std::vector<MonitorInfo> ListMonitors() noexcept { return g_mm_monitors; }
+
+MonitorInfo GetPrimaryMonitor() noexcept {
+  return g_mm_monitors.empty() ? MonitorInfo{} : g_mm_monitors.front();
+}
+
+}  // namespace k6wp
 
 int main() {
   // PinVerifySchedule: deadline gating + lifetime counter.
@@ -337,6 +527,123 @@ int main() {
           "display: round-trip path intact");
     Check(loaded.assignments.at(L"\\\\.\\DISPLAY1").exists,
           "display: round-trip exists flag intact");
+  }
+
+  // Row 17: boot-time assignment convergence over the real MultiMonitor
+  // (link-level stubs above). Mirrors the production boot sequence:
+  // Init -> LoadLoopAll(default) -> ApplyBootAssignments(displays.json).
+  // (i)   empty map -> LoadLoopAll exactly once with the default path and
+  //       zero per-slot LoadLoop calls (IS-4 regression guard).
+  // (ii)  assignment for a device absent from ListMonitors() -> retained;
+  //       OnDisplayChange with the device present re-applies the path.
+  // (iii) assignment whose path fails exists -> slot keeps the default and
+  //       the degraded log line is asserted verbatim.
+  {
+    const auto dir = TempDir();
+    const auto default_mp4 = dir / "default.mp4";
+    const auto assigned_mp4 = dir / "assigned.mp4";
+    const auto missing_mp4 = dir / "does_not_exist.mp4";
+    Touch(default_mp4);
+    Touch(assigned_mp4);
+    const std::string default_u8(default_mp4.u8string());
+    const std::string assigned_u8(assigned_mp4.u8string());
+    const std::string missing_u8(missing_mp4.u8string());
+
+    auto make_cfg = [](const wchar_t* device, const std::wstring& path) {
+      k6wp::DisplaysConfig cfg;
+      k6wp::MonitorAssignment a;
+      a.path = path;
+      a.exists = true;
+      cfg.assignments[device] = a;
+      return cfg;
+    };
+
+    // (i) IS-4: empty map leaves the boot path byte-identical.
+    {
+      MmReset();
+      g_mm_monitors.push_back(
+          MmMakeMonitor(0, L"\\\\.\\DISPLAY1", 0, 0, 1920, 1080));
+      k6wp::MultiMonitor mm(MmQuietLog);
+      mm.SetHeadlessHost(kMmHeadlessHost);
+      Check(mm.Init(k6wp::MultiMonitorMode::PerMonitor),
+            "boot17-i: Init attaches the live monitor");
+      Check(mm.LoadLoopAll(default_u8),
+            "boot17-i: LoadLoopAll accepts the default path");
+      const k6wp::DisplaysConfig empty;
+      const k6wp::BootAssignmentStats stats = mm.ApplyBootAssignments(empty, "");
+      Check(g_mm_loads.size() == 1 && g_mm_loads[0] == default_u8,
+            "boot17-i: LoadLoopAll called exactly once with the default path");
+      Check(stats.applied == 0 && stats.retained == 0 &&
+                stats.skipped_missing == 0,
+            "boot17-i: empty map yields zero applied/retained/skipped");
+      Check(!MmLogContains("display: applied") &&
+                !MmLogContains("display: retained assignment") &&
+                !MmLogContains("display: assignment path missing"),
+            "boot17-i: empty map emits no assignment log lines");
+    }
+
+    // (ii) absent device -> retained -> re-applied on OnDisplayChange (IS-6).
+    {
+      MmReset();
+      g_mm_monitors.push_back(
+          MmMakeMonitor(0, L"\\\\.\\DISPLAY1", 0, 0, 1920, 1080));
+      k6wp::MultiMonitor mm(MmRecordLog);
+      mm.SetHeadlessHost(kMmHeadlessHost);
+      mm.Init(k6wp::MultiMonitorMode::PerMonitor);
+      mm.LoadLoopAll(default_u8);
+      const k6wp::DisplaysConfig cfg = make_cfg(L"\\\\.\\DISPLAY9",
+                                                 assigned_mp4.wstring());
+      const k6wp::BootAssignmentStats stats = mm.ApplyBootAssignments(cfg, "");
+      Check(stats.retained == 1 && stats.applied == 0,
+            "boot17-ii: absent-device assignment is retained");
+      Check(MmLogContains(
+                "display: retained assignment for absent \\\\.\\DISPLAY9"),
+            "boot17-ii: retained log line names the absent device");
+      Check(mm.slot_count() == 1,
+            "boot17-ii: no slot appears for the absent device");
+      Check(MmLastPathForDevice(mm, L"\\\\.\\DISPLAY9").empty(),
+            "boot17-ii: absent device has no loaded path yet");
+
+      g_mm_monitors.push_back(
+          MmMakeMonitor(8, L"\\\\.\\DISPLAY9", 1920, 0, 2560, 1440));
+      mm.OnDisplayChange();
+      Check(mm.slot_count() == 2,
+            "boot17-ii: OnDisplayChange attaches the returning device");
+      Check(MmLastPathForDevice(mm, L"\\\\.\\DISPLAY9") == assigned_u8,
+            "boot17-ii: returning slot receives the retained path");
+      Check(MmLogContains("display: applied " + assigned_u8 +
+                              " to \\\\.\\DISPLAY9"),
+            "boot17-ii: applied log line names path and device");
+      const std::size_t applied_logs_after_first =
+          g_mm_loads.size();
+      mm.OnDisplayChange();
+      Check(g_mm_loads.size() == applied_logs_after_first,
+            "boot17-ii: retained entry is consumed (no re-apply on next pass)");
+    }
+
+    // (iii) missing path -> slot keeps the default + degraded log (rule b).
+    {
+      MmReset();
+      g_mm_monitors.push_back(
+          MmMakeMonitor(0, L"\\\\.\\DISPLAY1", 0, 0, 1920, 1080));
+      k6wp::MultiMonitor mm(MmRecordLog);
+      mm.SetHeadlessHost(kMmHeadlessHost);
+      mm.Init(k6wp::MultiMonitorMode::PerMonitor);
+      mm.LoadLoopAll(default_u8);
+      const k6wp::DisplaysConfig cfg = make_cfg(L"\\\\.\\DISPLAY1",
+                                                 missing_mp4.wstring());
+      const k6wp::BootAssignmentStats stats = mm.ApplyBootAssignments(cfg, "");
+      Check(stats.skipped_missing == 1 && stats.applied == 0,
+            "boot17-iii: missing-path assignment is skipped, not applied");
+      Check(MmLogContains("display: assignment path missing for "
+                          "\\\\.\\DISPLAY1: " + missing_u8 +
+                          " - falling back to default"),
+            "boot17-iii: degraded log line asserted verbatim");
+      Check(MmLastPathForDevice(mm, L"\\\\.\\DISPLAY1") == default_u8,
+            "boot17-iii: slot keeps the default path");
+      Check(g_mm_loads.size() == 1 && g_mm_loads[0] == default_u8,
+            "boot17-iii: no per-slot LoadLoop for the missing path");
+    }
   }
 
   std::printf(g_failures == 0 ? "RESULT: ALL ENGINE-STATE CHECKS PASSED\n"

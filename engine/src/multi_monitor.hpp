@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "desktop_inject.hpp"
+#include "displays_schema.hpp"
 #include "monitor_util.hpp"
 #include "mpv_renderer.hpp"
 
@@ -65,6 +66,14 @@ inline SlotFactory DefaultSlotFactory() {
   factory.make_renderer = []() { return std::make_unique<MpvRenderer>(); };
   return factory;
 }
+
+// Row 17: outcome of one MultiMonitor::ApplyBootAssignments pass (engine
+// boot summary + test observables).
+struct BootAssignmentStats {
+  int applied = 0;          // live slot loaded the assignment path
+  int retained = 0;         // device absent -> kept for OnDisplayChange
+  int skipped_missing = 0;  // path fails exists -> slot keeps the default
+};
 
 class MultiMonitor {
  public:
@@ -151,6 +160,22 @@ class MultiMonitor {
   // assignment re-apply story).
   bool LoadLoopSlot(const std::string& device, const std::string& path,
                     const std::string& fit_mode = std::string());
+
+  // Row 17: boot-time assignment convergence. Call AFTER Init() and
+  // LoadLoopAll(default) so live slots already carry the default video.
+  // For each displays.json assignment, matched to a live slot by GDI device
+  // key (MonitorInfo::device_name):
+  //   (a) device key matches no live monitor -> RETAINED in memory and
+  //       re-applied by OnDisplayChange when the device returns;
+  //       logs "display: retained assignment for absent <device>";
+  //   (b) path fails std::filesystem::exists -> skipped for that slot,
+  //       which keeps the default video; logs "display: assignment path
+  //       missing for <device>: <path> - falling back to default";
+  //   (c) successful apply logs "display: applied <path> to <device>".
+  // An empty cfg is a no-op: zero per-slot LoadLoop calls, zero logs - the
+  // caller's own LoadLoopAll boot load is untouched (IS-4). Never throws.
+  BootAssignmentStats ApplyBootAssignments(const DisplaysConfig& cfg,
+                                           const std::string& fit_mode);
 
   // P3L.3 pin verify/revert pass (PATCH A). For each slot created WITH a
   // pin that has started playback but reports hwdec inactive ("no" is only
@@ -275,6 +300,12 @@ class MultiMonitor {
   // Diff the live slots against DesiredMonitors(): tear down the unwanted,
   // attach the missing. Shared by Init/OnDisplayChange/Reanchor/SetActive.
   void ApplyActiveFilter(const std::vector<MonitorInfo>& desired);
+  // Row 17: re-apply retained_assignments_ onto live slots whose device key
+  // has returned (OnDisplayChange pass, PerMonitor only - span mode skips:
+  // the span slot is not keyed by a real GDI device name). Entries that
+  // still have no live slot stay retained silently; a successful LoadLoop
+  // erases the entry and logs "display: applied <path> to <device>".
+  void ReapplyRetainedLocked();
 
   LogFn log_ = nullptr;
   MultiMonitorMode mode_ = MultiMonitorMode::PerMonitor;
@@ -295,6 +326,12 @@ class MultiMonitor {
   // DefaultSlotFactory() default argument (production) or SetSlotFactory.
   SlotFactory factory_;
   std::map<int, Slot> slots_;
+  // Row 17: assignments whose device key matched no live monitor at boot
+  // (or while converged). Keyed by GDI device name (wide, same as
+  // MonitorInfo::device_name); re-applied by OnDisplayChange -> 
+  // ReapplyRetainedLocked when the device returns. Survives
+  // Init/OnDisplayChange/Shutdown (engine keeps the map for hotplug).
+  std::map<std::wstring, std::wstring> retained_assignments_;
   bool initialized_ = false;
   void* headless_host_ = nullptr;
   // Row 7: the attach pass's shared host (ResolveSharedHost). Persists across

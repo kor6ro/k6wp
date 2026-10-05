@@ -146,6 +146,12 @@ add_test(NAME engine_units_test COMMAND engine_units_test)
 
 # engine_state_test (P0-2): the extracted PinVerifySchedule deadline/counter and
 # PlaylistController reload/snapshot/rotation, driven through fake hooks.
+# Row 17: src/multi_monitor.cpp is compiled in so the boot-time assignment
+# convergence checks drive the REAL MultiMonitor against link-level
+# DesktopInjector / MpvRenderer / ListMonitors stubs in the test TU
+# (multi_monitor_factory_test pattern; row 12 verified k6wp_shared +
+# TU stubs coexist - displays_schema.obj does not pull monitor_util.obj).
+# Still mpv-free: no mpv_renderer.cpp, no mpv.lib.
 add_executable(engine_state_test
   ../tests/engine_state_test.cpp
   src/pin_verify_schedule.cpp
@@ -153,6 +159,7 @@ add_executable(engine_state_test
   src/occlusion_poke_scheduler.cpp
   src/ipc_command_marshal.cpp
   src/ipc_marshal.cpp
+  src/multi_monitor.cpp
 )
 target_link_libraries(engine_state_test PRIVATE k6wp_shared user32)
 target_include_directories(engine_state_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
