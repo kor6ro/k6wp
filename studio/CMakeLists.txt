@@ -84,6 +84,13 @@ target_link_libraries(studio PRIVATE k6wp_shared Qt6::Widgets Qt6::Quick Qt6::Qm
 # /qt/qml/K6WP/Main.qml, which is what the qmldir expects. Verified against the
 # generated .qrc/qmldir in build/msvc-dev/studio/.qt/rcc/ (see qml_shell.cpp,
 # which loads exactly that URL and asserts QQuickWidget::status()).
+# Theme.qml is a QML singleton (pragma Singleton), so it needs BOTH the
+# resource alias (it lives in qml/, the alias keeps it next to the generated
+# qmldir) and QT_QML_SINGLETON_TYPE, which makes qt_add_qml_module emit
+# `singleton Theme 1.0 Theme.qml` into the generated qmldir instead of a plain
+# type entry. Without the property the type would compile but `Theme.*` would
+# resolve as a regular (uninstantiable) type at use sites.
+set_source_files_properties(qml/Theme.qml PROPERTIES QT_RESOURCE_ALIAS Theme.qml QT_QML_SINGLETON_TYPE TRUE)
 set_source_files_properties(qml/Main.qml PROPERTIES QT_RESOURCE_ALIAS Main.qml)
 set_source_files_properties(qml/LogPanel.qml PROPERTIES QT_RESOURCE_ALIAS LogPanel.qml)
 set_source_files_properties(qml/PreviewHole.qml PROPERTIES QT_RESOURCE_ALIAS PreviewHole.qml)
@@ -106,6 +113,7 @@ qt_add_qml_module(studio
   VERSION 1.0
   RESOURCE_PREFIX "/qt/qml"
   QML_FILES
+    qml/Theme.qml
     qml/Main.qml
     qml/LogPanel.qml
     qml/PreviewHole.qml
@@ -450,6 +458,7 @@ file(GLOB K6WP_TR_SOURCES CONFIGURE_DEPENDS
   "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/*.hpp")
 set(K6WP_TR_QML_SOURCES
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/Theme.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/Main.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/LogPanel.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/PreviewHole.qml"
