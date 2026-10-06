@@ -4,7 +4,7 @@
 <context>
     <name>DisplayCanvas</name>
     <message>
-        <location filename="../qml/DisplayCanvas.qml" line="+236"/>
+        <location filename="../qml/DisplayCanvas.qml" line="+250"/>
         <source>Drop tidak dikenali - tarik video dari pustaka atau playlist.</source>
         <translation>Unrecognized drop - drag a video from the library or playlist.</translation>
     </message>
@@ -24,7 +24,7 @@
         <translation>File not found - the video was moved or deleted.</translation>
     </message>
     <message>
-        <location line="+87"/>
+        <location line="+112"/>
         <source>UTAMA</source>
         <translation>PRIMARY</translation>
     </message>
@@ -57,7 +57,7 @@
 <context>
     <name>Main</name>
     <message>
-        <location filename="../qml/Main.qml" line="+258"/>
+        <location filename="../qml/Main.qml" line="+288"/>
         <source>&amp;Berkas</source>
         <translation>&amp;File</translation>
     </message>
@@ -107,7 +107,22 @@
         <translation>Display</translation>
     </message>
     <message>
-        <location line="+35"/>
+        <location line="+25"/>
+        <source>Penugasan siap: klik layar tujuan di tab Tampilan untuk %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>Batal</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Batalkan penugasan layar</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+36"/>
         <source>Pratinjau:</source>
         <translation>Preview:</translation>
     </message>
@@ -147,7 +162,19 @@
         <translation>No results for this search</translation>
     </message>
     <message>
-        <location line="+108"/>
+        <location line="+119"/>
+        <location line="+219"/>
+        <source>Tandai</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-212"/>
+        <location line="+216"/>
+        <source>Tandai video ini untuk ditugaskan ke layar</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-210"/>
         <source>Terapkan</source>
         <translation>Apply</translation>
     </message>
@@ -163,13 +190,13 @@
     </message>
     <message>
         <location line="+4"/>
-        <location line="+200"/>
+        <location line="+214"/>
         <location line="+153"/>
         <source>Hapus</source>
         <translation>Remove</translation>
     </message>
     <message>
-        <location line="-345"/>
+        <location line="-359"/>
         <source>Hapus Entri Perpustakaan</source>
         <translation>Remove Library Entry</translation>
     </message>
@@ -247,7 +274,7 @@ File dipindahkan ke Recycle Bin.</source>
         <translation>No videos in the playlist yet - add them from the library or a file</translation>
     </message>
     <message>
-        <location line="+59"/>
+        <location line="+73"/>
         <source>Naik</source>
         <translation>Up</translation>
     </message>
@@ -385,12 +412,12 @@ File dipindahkan ke Recycle Bin.</source>
     <message>
         <location line="-558"/>
         <location line="+512"/>
-        <location line="+646"/>
+        <location line="+655"/>
         <source>Jalankan saat Windows menyala</source>
         <translation>Start when Windows starts</translation>
     </message>
     <message>
-        <location line="-1150"/>
+        <location line="-1159"/>
         <location line="+511"/>
         <source>Hemat baterai (wallpaper berhenti saat pakai baterai)</source>
         <translation>Save battery (wallpaper stops on battery power)</translation>
@@ -751,12 +778,12 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
         <translation>Restart engine</translation>
     </message>
     <message>
-        <location line="+173"/>
+        <location line="+182"/>
         <source>Update check contacts the releases host once per app start (never downloads/installs); disable in Settings → Pembaruan.</source>
         <translation>Update check contacts the releases host once per app start (never downloads/installs); disable in Settings → Updates.</translation>
     </message>
     <message>
-        <location line="-177"/>
+        <location line="-186"/>
         <source>Terapkan perubahan engine yang butuh restart</source>
         <translation>Apply the engine changes that need a restart</translation>
     </message>
@@ -792,7 +819,7 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
         <translation>Delete all temporary files in: %1</translation>
     </message>
     <message>
-        <location line="+40"/>
+        <location line="+49"/>
         <source>Video Besar</source>
         <translation>Large Video</translation>
     </message>

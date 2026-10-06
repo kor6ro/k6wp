@@ -48,8 +48,25 @@
 //     'file tidak ditemukan' label, coverage !== "covered" -> the
 //     'cek engine.log' warning, both visible simultaneously (fixture M);
 //   * empty assignedPath -> the neutral 'tarik video ke sini' drop hint.
+//
+// Row 39 adds click-to-assign (the cross-tab alternate to row 22/23's drag,
+// which cannot work end-to-end: the drag sources live on the Wallpaper tab
+// while the canvas lives on the Tampilan tab):
+//   * DisplayCanvas gains `armedPath`; a rect click with a non-empty armedPath
+//     re-emits the SAME row-23 assignRequested(key, path) signal the drop path
+//     uses (fixture N), and an empty armedPath makes the click a no-op
+//     (fixture O) - fail-closed, exactly like the drop gate;
+//   * every monitor rect carries a monitorClickArea that delegates to
+//     root.handleRectClick (the click analogue of the handleDrop seam);
+//   * Main.qml source assertions (the harness reads Main.qml from the same
+//     qml/ directory as DisplayCanvas.qml): the QML-only `armedAssignPath`
+//     root property exists, both delegates carry an assign affordance that
+//     arms their non-empty path, the armed indicator has a Batal affordance,
+//     and the existing onAssignRequested handler also clears the armed state.
 
 #include <QColor>
+#include <QDir>
+#include <QFileInfo>
 #include <QGuiApplication>
 #include <QJSValue>
 #include <QPointF>
@@ -331,6 +348,11 @@ bool CallQml(QObject* obj, const char* method, const QVariant& a1,
                                    Q_ARG(QVariant, a2));
 }
 
+// Row 39: the click seam takes only the monitor key.
+bool CallQml1(QObject* obj, const char* method, const QVariant& a1) {
+  return QMetaObject::invokeMethod(obj, method, Q_ARG(QVariant, a1));
+}
+
 QString RefusalOf(QQuickItem* canvas) {
   return TextOf(Child(canvas, "refusalLabel"));
 }
@@ -398,6 +420,100 @@ int main(int argc, char** argv) {
             source.find("qsTr(\"Ganti\")") != std::string::npos &&
             source.find("qsTr(\"Hapus\")") != std::string::npos,
         "source: 'Ganti'/'Hapus' affordance labels are qsTr-wrapped");
+
+  // --- row 39: click-to-assign source contract ----------------------------
+  // The canvas side: an armedPath property, a per-rect click area that
+  // delegates to the handleRectClick seam, and the SAME assignRequested signal
+  // the drop path already emits (no new signal, no Studio reference).
+  Check(!source.empty() &&
+            source.find("property string armedPath: \"\"") != std::string::npos,
+        "row 39 source: DisplayCanvas declares the armedPath property");
+  Check(!source.empty() &&
+            source.find("function handleRectClick(key)") != std::string::npos,
+        "row 39 source: the handleRectClick(key) click seam exists");
+  Check(!source.empty() &&
+            source.find("objectName: \"monitorClickArea\"") !=
+                std::string::npos,
+        "row 39 source: every monitor rect carries a monitorClickArea");
+  Check(!source.empty() &&
+            source.find("onClicked: root.handleRectClick(monitorRect.monitorKey)") !=
+                std::string::npos,
+        "row 39 source: the click area delegates to handleRectClick with the "
+        "rect's monitorKey");
+  const std::size_t click_seam = source.find("function handleRectClick(key)");
+  Check(click_seam != std::string::npos &&
+            source.find("root.assignRequested(String(key), p)", click_seam) !=
+                std::string::npos,
+        "row 39 source: handleRectClick re-emits the row-23 assignRequested "
+        "signal");
+
+  // Main.qml owns the armed path, both arm affordances and the disarm-on-
+  // assign handler; this harness only loads DisplayCanvas.qml, so the Main
+  // contract is asserted at the source level (Main.qml sits next to the
+  // DisplayCanvas.qml path the compile definition names).
+  const QString main_qml_path =
+      QFileInfo(QStringLiteral(K6WP_DISPLAY_CANVAS_QML))
+          .absoluteDir()
+          .filePath(QStringLiteral("Main.qml"));
+  std::ifstream main_in(main_qml_path.toStdString(), std::ios::binary);
+  const std::string main_source((std::istreambuf_iterator<char>(main_in)),
+                                std::istreambuf_iterator<char>());
+  Check(!main_source.empty(),
+        "row 39 source(Main.qml): Main.qml is readable next to "
+        "DisplayCanvas.qml");
+  Check(main_source.find("property string armedAssignPath") !=
+            std::string::npos,
+        "row 39 source(Main.qml): the QML-only armedAssignPath root property "
+        "exists (no C++/bridge member)");
+  Check(main_source.find("function armAssign(path)") != std::string::npos &&
+            main_source.find("if (p.length === 0)") != std::string::npos &&
+            main_source.find("root.armedAssignPath = p") != std::string::npos,
+        "row 39 source(Main.qml): armAssign refuses an empty path before "
+        "setting the armed state (the row-22 broken-entry gate)");
+  Check(main_source.find("function disarmAssign()") != std::string::npos &&
+            main_source.find("root.armedAssignPath = \"\"") !=
+                std::string::npos,
+        "row 39 source(Main.qml): disarmAssign() clears the armed state");
+  Check(main_source.find("objectName: \"libraryAssignAffordance\"") !=
+            std::string::npos &&
+            main_source.find("root.armAssign(libraryCell.dst)") !=
+                std::string::npos &&
+            main_source.find("enabled: libraryCell.dst.length > 0") !=
+                std::string::npos,
+        "row 39 source(Main.qml): the library-grid delegate carries an assign "
+        "affordance that arms only its non-empty dst");
+  Check(main_source.find("objectName: \"playlistAssignAffordance\"") !=
+            std::string::npos &&
+            main_source.find("root.armAssign(playlistCell.modelData.path)") !=
+                std::string::npos &&
+            main_source.find(
+                "enabled: playlistCell.modelData.path.length > 0") !=
+                std::string::npos,
+        "row 39 source(Main.qml): the playlist delegate carries an assign "
+        "affordance that arms only its non-empty modelData.path");
+  Check(main_source.find("objectName: \"armedAssignBanner\"") !=
+            std::string::npos &&
+            main_source.find("objectName: \"armedAssignCancel\"") !=
+                std::string::npos &&
+            main_source.find("qsTr(\"Batal\")") != std::string::npos &&
+            main_source.find("visible: root.armedAssignPath.length > 0") !=
+                std::string::npos,
+        "row 39 source(Main.qml): a visible armed indicator carries the Batal "
+        "affordance that clears the armed state");
+  Check(main_source.find("armedPath: root.armedAssignPath") !=
+            std::string::npos,
+        "row 39 source(Main.qml): armedPath is bound 1:1 into DisplayCanvas");
+  Check(main_source.find("onAssignRequested") != std::string::npos &&
+            main_source.find("root.disarmAssign()") != std::string::npos,
+        "row 39 source(Main.qml): the existing onAssignRequested handler also "
+        "clears the armed state (disarm on assign)");
+  Check(main_source.find("onDoubleClicked: Library.applyAt(index)") !=
+            std::string::npos &&
+            main_source.find("mouse.button === Qt.RightButton") !=
+                std::string::npos &&
+            main_source.find("Library.applyAt(index)") != std::string::npos,
+        "row 39 source(Main.qml): the existing single/double-click apply and "
+        "right-click menu are untouched");
 
   // --- component load -----------------------------------------------------
   QQmlEngine engine;
@@ -532,6 +648,8 @@ int main(int argc, char** argv) {
   }
   Check(Children(a.item, "monitorDrop").size() == 2,
         "fixture A: one DropArea per monitor rect");
+  Check(Children(a.item, "monitorClickArea").size() == 2,
+        "fixture A: one click area per monitor rect");
 
   // === Fixture A2: thumbnail contract (posterSource + posterPath) ==========
   warnings.clear();
@@ -933,6 +1051,64 @@ int main(int argc, char** argv) {
   Check(DeclaredVisible(Child(mr, "clearButton")),
         "fixture M: the 'hapus' affordance is offered for a stale assignment");
   dump_warnings("fixture M");
+
+  // === Fixture N (row 39): armed rect click -> assignRequested once =======
+  const QString armed_path = QStringLiteral("C:\\Videos\\klik.mp4");
+  QVariantMap armed_props;
+  armed_props[QStringLiteral("armedPath")] = armed_path;
+  warnings.clear();
+  Canvas n = MakeCanvas(&engine, &component, one_monitor, 400.0, 300.0,
+                        QString(), QString(), armed_props);
+  Check(n.ok(), "fixture N: canvas instantiates with a non-empty armedPath");
+  if (!n.ok()) {
+    dump_warnings("fixture N");
+    return Finish();
+  }
+  Check(n.item->property("armedPath").toString() == armed_path,
+        "fixture N: armedPath carries the armed path into the canvas");
+  QQuickItem* n_rect = RectByKey(n.item, display1);
+  QQuickItem* n_click = Child(n_rect, "monitorClickArea");
+  Check(n_click != nullptr,
+        "fixture N: the rect's monitorClickArea is addressable");
+  AssignSpy n_spy(&engine, n.object);
+  ClearSpy n_clear(&engine, n.object);
+  const bool n_called = CallQml1(n.item, "handleRectClick", display1);
+  std::printf(
+      "QA-HAPPY(armed-click) called=%d emissions=%d key=\"%s\" path=\"%s\" "
+      "clearEmissions=%d\n",
+      n_called ? 1 : 0, n_spy.Count(), qUtf8Printable(n_spy.Key()),
+      qUtf8Printable(n_spy.Path()), n_clear.Count());
+  Check(n_called,
+        "fixture N: the handleRectClick seam is callable on the canvas");
+  Check(n_spy.Count() == 1 && n_spy.Key() == display1 &&
+            n_spy.Path() == armed_path,
+        "fixture N: an armed rect click emits assignRequested(monitorKey, "
+        "armedPath) exactly once");
+  Check(n_clear.Count() == 0,
+        "fixture N: an armed rect click emits no clearRequested");
+  Check(n.item->property("refusalMessage").toString().isEmpty(),
+        "fixture N: an armed rect click raises no refusal");
+  dump_warnings("fixture N");
+
+  // === Fixture O (row 39 failure): unarmed rect click emits nothing ========
+  warnings.clear();
+  Canvas o = MakeCanvas(&engine, &component, one_monitor, 400.0, 300.0);
+  Check(o.ok() && o.item->property("armedPath").toString().isEmpty(),
+        "fixture O: armedPath defaults to empty");
+  AssignSpy o_spy(&engine, o.object);
+  ClearSpy o_clear(&engine, o.object);
+  const bool o_called = CallQml1(o.item, "handleRectClick", display1);
+  std::printf(
+      "QA-FAIL(unarmed-click) called=%d assignEmissions=%d "
+      "clearEmissions=%d\n",
+      o_called ? 1 : 0, o_spy.Count(), o_clear.Count());
+  Check(o_called && o_spy.Count() == 0,
+        "fixture O: an unarmed rect click emits zero assignRequested signals");
+  Check(o_clear.Count() == 0,
+        "fixture O: an unarmed rect click emits zero clearRequested signals");
+  Check(o.item->property("refusalMessage").toString().isEmpty(),
+        "fixture O: an unarmed rect click changes no canvas state");
+  dump_warnings("fixture O");
 
   return Finish();
 }

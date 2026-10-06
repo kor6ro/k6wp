@@ -41,6 +41,15 @@
 // 'tarik video ke sini' hint while assignedPath is empty. Every string is
 // qsTr() Indonesian (row 25 catalogues them).
 //
+// Row 39 adds click-to-assign, the cross-tab alternate to the row-22/23 drag:
+// the drag sources live on the Wallpaper tab while this canvas lives on the
+// Tampilan tab, so a drag cannot be completed end-to-end. `armedPath` is
+// bound 1:1 from Main.qml's QML-only armed state; clicking a rect with a
+// non-empty armedPath re-emits the SAME assignRequested(key, path) signal the
+// drop path uses (Main's one handler serves both triggers), and clicking with
+// an empty armedPath emits nothing. The click area delegates to
+// handleRectClick, the click analogue of the handleDrop seam.
+//
 // READ-ONLY by design (Q2): these rects mirror the Windows display topology
 // and are NEVER repositioned from here — this file contains no drag attached
 // properties, only the DropArea handlers that accept assignment drops. No
@@ -80,6 +89,11 @@ Item {
     // Message of the last refused drop; also rendered by refusalLabel so a
     // refusal is always visible (never a silent failure).
     property string refusalMessage: ""
+
+    // Row 39: Main.qml binds this to its QML-only armed path
+    // (root.armedAssignPath). A rect click with a non-empty armedPath emits
+    // assignRequested(monitorKey, armedPath); an empty one emits nothing.
+    property string armedPath: ""
 
     // Emitted only after every gate passes; row 21 connects these to
     // Studio.assignVideoToMonitor / Studio.clearMonitorAssignment.
@@ -258,6 +272,19 @@ Item {
         root.assignRequested(String(key), p)
     }
 
+    // Row 39 click seam: the per-rect click area delegates here so the
+    // armed/unarmed behavior is testable offscreen without synthesising mouse
+    // events, exactly like the DropArea handlers delegate to handleDrop. A
+    // non-empty armedPath re-emits the row-23 assignRequested signal (Main's
+    // existing handler serves both triggers); an empty one is a no-op.
+    function handleRectClick(key) {
+        const p = String(root.armedPath === undefined || root.armedPath === null
+                         ? "" : root.armedPath)
+        if (p.length === 0)
+            return
+        root.assignRequested(String(key), p)
+    }
+
     Repeater {
         id: monitorRepeater
         objectName: "monitorRepeater"
@@ -298,6 +325,18 @@ Item {
                           : Qt.rgba(Material.foreground.r,
                                     Material.foreground.g,
                                     Material.foreground.b, 0.35)
+
+            // Row 39 click-to-assign. Declared before the labels and buttons so
+            // it sits at the bottom of the z-order: the Ganti/Hapus buttons
+            // keep their clicks, and the DropArea (declared last) keeps every
+            // drag event. An empty root.armedPath makes the click a no-op.
+            MouseArea {
+                id: rectClickArea
+                objectName: "monitorClickArea"
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton
+                onClicked: root.handleRectClick(monitorRect.monitorKey)
+            }
 
             // Degraded tint under the content, so the text stays readable.
             Rectangle {

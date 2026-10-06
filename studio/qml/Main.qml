@@ -176,6 +176,36 @@ Rectangle {
     // preview hidden until the last one closes.
     property int openDialogs: 0
 
+    // --- row 39: click-to-assign armed state ------------------------------
+    // QML-only by design: no C++ member, no new bridge invokable. A library /
+    // playlist assign affordance sets the path; the Tampilan canvas binds it
+    // 1:1 and re-emits assignRequested on a rect click; the canvas handler
+    // below clears it once the assignment is dispatched. The armed banner sits
+    // under the tab bar so it is visible on every tab and carries the Batal
+    // affordance.
+    property string armedAssignPath: ""
+
+    // Broken-entry gate (row 22): an empty path never arms, so a rect click
+    // can never dispatch an empty assignment.
+    function armAssign(path) {
+        const p = String(path === undefined || path === null ? "" : path)
+        if (p.length === 0)
+            return false
+        root.armedAssignPath = p
+        return true
+    }
+
+    function disarmAssign() {
+        root.armedAssignPath = ""
+    }
+
+    // Basename for the armed banner (Windows or POSIX separators).
+    function fileNameOf(path) {
+        const p = String(path === undefined || path === null ? "" : path)
+        const slash = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"))
+        return slash >= 0 ? p.slice(slash + 1) : p
+    }
+
     function startCompressFirst() {
         Compress.setSourcePath(offerPath)
         Compress.setResolutionText("1920x1080")
@@ -322,6 +352,42 @@ Rectangle {
                 }
                 TabButton {
                     text: qsTr("Tampilan")
+                }
+            }
+
+            // Row 39: the click-to-assign armed indicator, directly under the
+            // tab bar so switching to the Tampilan tab to click a rect cannot
+            // hide it. Invisible while disarmed (a layout skips invisible
+            // items), so it costs no space in the normal case.
+            Pane {
+                id: armedAssignBanner
+                objectName: "armedAssignBanner"
+                Layout.fillWidth: true
+                visible: root.armedAssignPath.length > 0
+                padding: 8
+                Material.elevation: 1
+
+                RowLayout {
+                    anchors.fill: parent
+                    spacing: 8
+
+                    Label {
+                        id: armedAssignLabel
+                        objectName: "armedAssignLabel"
+                        Layout.fillWidth: true
+                        elide: Text.ElideMiddle
+                        text: qsTr("Penugasan siap: klik layar tujuan di tab Tampilan untuk %1")
+                              .arg(root.fileNameOf(root.armedAssignPath))
+                    }
+
+                    Button {
+                        id: armedAssignCancel
+                        objectName: "armedAssignCancel"
+                        text: qsTr("Batal")
+                        onClicked: root.disarmAssign()
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("Batalkan penugasan layar")
+                    }
                 }
             }
 
@@ -553,6 +619,30 @@ Rectangle {
                                             }
                                         }
 
+                                        // Row 39 click-to-assign affordance.
+                                        // Declared after dragArea so it sits on
+                                        // top of it: the button keeps its own
+                                        // click, and the rest of the cell keeps
+                                        // the existing double-click/right-click
+                                        // and drag behavior untouched. Disabled
+                                        // for a broken entry (empty dst), the
+                                        // same gate the drag target uses.
+                                        Button {
+                                            id: libraryAssignButton
+                                            objectName: "libraryAssignAffordance"
+                                            anchors.top: parent.top
+                                            anchors.right: parent.right
+                                            anchors.margins: 6
+                                            text: qsTr("Tandai")
+                                            flat: true
+                                            padding: 2
+                                            font.pixelSize: 10
+                                            enabled: libraryCell.dst.length > 0
+                                            onClicked: root.armAssign(libraryCell.dst)
+                                            ToolTip.visible: hovered
+                                            ToolTip.text: qsTr("Tandai video ini untuk ditugaskan ke layar")
+                                        }
+
                                         Menu {
                                             id: rowMenu
                                             MenuItem {
@@ -753,6 +843,20 @@ Rectangle {
                                                     drag.target: playlistCell.modelData.path.length > 0
                                                                  ? playlistCell : null
                                                 }
+                                            }
+
+                                            // Row 39 click-to-assign affordance,
+                                            // disabled for a broken entry (empty
+                                            // path) - the same gate the playlist
+                                            // drag target uses.
+                                            Button {
+                                                id: playlistAssignButton
+                                                objectName: "playlistAssignAffordance"
+                                                text: qsTr("Tandai")
+                                                enabled: playlistCell.modelData.path.length > 0
+                                                onClicked: root.armAssign(playlistCell.modelData.path)
+                                                ToolTip.visible: hovered
+                                                ToolTip.text: qsTr("Tandai video ini untuk ditugaskan ke layar")
                                             }
 
                                             Button {
@@ -1951,8 +2055,17 @@ Rectangle {
                         displayCapability: Studio.displayCapability
                         duplicateModeNotice: Studio.duplicateModeNotice
                         busy: Studio.busy
+                        // Row 39: armed path bound 1:1 from the QML-only armed
+                        // state; the rect-click path and the drop path land in
+                        // the same handler below.
+                        armedPath: root.armedAssignPath
 
-                        onAssignRequested: (key, path) => Studio.assignVideoToMonitor(key, path)
+                        onAssignRequested: (key, path) => {
+                            Studio.assignVideoToMonitor(key, path)
+                            // Disarm on assign, so a later stray click cannot
+                            // reassign a second monitor with the stale path.
+                            root.disarmAssign()
+                        }
                         onClearRequested: (key) => Studio.clearMonitorAssignment(key)
                     }
                 }
