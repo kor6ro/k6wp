@@ -1,9 +1,18 @@
 // Wallpaper page (Wallpaper tab). Contains the monitor sub-tabs strip, the
-// preview caption + PreviewHole, the CollectionPage (Koleksi gallery with the
-// Ganti otomatis panel) in the left column, and the right rail (StatusBar +
-// ActionButtons + QuickSettingsPanel). Raw support details (process id,
-// paths, log) are not shown here - they live in the "Info teknis" dialog
-// (AppDialogs.qml).
+// preview caption + PreviewHole, the "Pasang ke" install-target row
+// (AssignRow + AssignPopup, todo 12), the C-15 warning banners, the
+// CollectionPage (Koleksi gallery with the Ganti otomatis panel) in the left
+// column, and the right rail (StatusBar + ActionButtons +
+// QuickSettingsPanel). Raw support details (process id, paths, log) are not
+// shown here - they live in the "Info teknis" dialog (AppDialogs.qml).
+//
+// "Pasang ke" (todo 12 / C-14 / GATE 0 #3): the page owns the install path.
+// With one screen it goes straight to the global video. With more, installs
+// target the selected radio: "Semua layar" moves the global target and
+// deletes every per-key override (applyToAllMonitors; the C-14 dialog is
+// required only when overrides exist), a display choice assigns that key
+// (assignVideoToMonitor). Duplicate mode forces the global path because the
+// engine cannot place different videos there (IS-7).
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
@@ -21,10 +30,7 @@ Item {
 
     // State + functions from Main root.
     property string selectedMonitorKey: ""
-    property string armedAssignPath: ""
     property var selectMonitor: function (key) {}
-    property var armAssign: function (path) { return false }
-    property var disarmAssign: function () {}
     property var fileNameOf: function (path) { return "" }
     property var selectedMonitorLabel: function () { return "" }
     property var selectedMonitorHasAssignment: function () { return false }
@@ -58,6 +64,117 @@ Item {
         previewHoleHeight = previewHole.height
     }
 
+    // --- "Pasang ke" install target (todo 12 / C-14 / GATE 0 #3) -----------
+    // Selected target: "all" (global) or a display key. Reset to "all"
+    // whenever the chosen display disappears from the model.
+    property string installTarget: "all"
+    // Video waiting on the C-14 confirmation ("Semua layar" + overrides).
+    property string pendingAllPath: ""
+    // {daftar layar} for the C-14 sentence, built when the dialog opens.
+    property string pendingOverrideText: ""
+
+    // The display entries with a usable key, straight from the bridge model.
+    readonly property var screenEntries: {
+        const all = Studio.displays
+        const out = []
+        for (let i = 0; i < all.length; ++i) {
+            if (String(all[i].key).length > 0)
+                out.push(all[i])
+        }
+        return out
+    }
+    // One screen = no choice, install straight to the global video.
+    readonly property bool multiScreen: screenEntries.length > 1
+    // IS-7: in duplicate mode per-key assignment is off; installs go global.
+    readonly property bool duplicateMode: Studio.duplicateModeNotice.length > 0
+
+    function ensureInstallTarget() {
+        if (installTarget === "all")
+            return
+        const all = screenEntries
+        for (let i = 0; i < all.length; ++i) {
+            if (String(all[i].key) === installTarget)
+                return
+        }
+        installTarget = "all"
+    }
+
+    // Displays that would lose their per-screen video if "Semua layar" wins.
+    function overrideEntries() {
+        const all = screenEntries
+        const out = []
+        for (let i = 0; i < all.length; ++i) {
+            if (String(all[i].assignedPath).length > 0)
+                out.push(all[i])
+        }
+        return out
+    }
+
+    function showToast(text) {
+        installToast.toastText = text
+        installToast.visible = true
+        installToastTimer.restart()
+    }
+
+    // THE install entry point: library cards, the row menu's "Pasang", the
+    // right-rail "Terapkan Wallpaper" and the onboarding all funnel through
+    // here (Main.qml routes Library.applyRequested to this function).
+    function installVideo(path) {
+        const p = String(path === undefined || path === null ? "" : path)
+        if (p.length === 0)
+            return
+        if (!multiScreen || duplicateMode) {
+            // One screen (or duplicate mode): the plain global path.
+            applyGlobally(p)
+            return
+        }
+        if (installTarget === "all") {
+            installAllScreens(p)
+            return
+        }
+        // A display choice: persist + push the per-key assignment. The
+        // bridge repaints displaysChanged, so the row/badges follow.
+        Studio.assignVideoToMonitor(installTarget, p)
+    }
+
+    // "Semua layar": confirmation is required ONLY when a per-key override
+    // would be replaced (C-14 / NeedsAllScreensConfirm semantics). Without
+    // overrides the one-shot runs directly and the toast confirms it.
+    function installAllScreens(path) {
+        const overrides = overrideEntries()
+        if (overrides.length > 0) {
+            pendingAllPath = path
+            const labels = []
+            for (let i = 0; i < overrides.length; ++i)
+                labels.push(String(overrides[i].label))
+            pendingOverrideText = labels.join(", ")
+            confirmAllScreensDialog.open()
+            return
+        }
+        runAllScreens(path)
+    }
+
+    // One C++ action: global target + delete every override; the video
+    // itself is installed by the normal apply path afterwards.
+    function runAllScreens(path) {
+        Studio.applyToAllMonitors(path)
+        applyGlobally(path)
+        showToast(qsTr("Terpasang di semua layar"))
+    }
+
+    // The plain global install, compress-first offer included.
+    function applyGlobally(path) {
+        if (!maybeOfferCompressFirst(path, true))
+            Studio.applyWallpaper(path)
+    }
+
+    Connections {
+        target: Studio
+        // A monitor left the model: never keep pointing the target at a key
+        // that no longer exists.
+        function onDisplaysChanged() { wallpaperPage.ensureInstallTarget() }
+    }
+
     // Row 41: the monitor sub-tab strip sits above the two
     // columns so selecting a monitor scopes the whole view
     // (preview caption + actions), not just one column.
@@ -70,9 +187,11 @@ Item {
         // One sub-tab per entry of Studio.displays, filtered to
         // entries with a non-empty key (a zero-key entry
         // renders NO button - row 20's zero-size guard). The
-        // selected button is the scope for the preview caption
-        // and for the monitor actions; it is also the
-        // assignment target while a video is armed (row 39).
+        // selected button scopes the preview caption and the
+        // monitor actions; the install target itself is chosen
+        // in the "Pasang ke" row below the preview (todo 12),
+        // so selecting a sub-tab is scope-only and never
+        // installs anything (the old arm-assign mode is gone).
         Pane {
             id: monitorSubTabs
             objectName: "monitorSubTabs"
@@ -124,23 +243,16 @@ Item {
                             // selectedMonitorKey is the single
                             // source of truth, so a click can
                             // never destroy the binding that
-                            // paints the selection. While a
-                            // video is armed every sub-tab is
-                            // raised (non-flat) because each one
-                            // is a valid assignment target.
+                            // paints the selection.
                             flat: wallpaperPage.selectedMonitorKey !== String(modelData.key)
-                                 && wallpaperPage.armedAssignPath.length === 0
                             highlighted: wallpaperPage.selectedMonitorKey === String(modelData.key)
                             onClicked: wallpaperPage.selectMonitor(String(modelData.key))
 
                             // Row 42: the raw device key was a
                             // developer string in a user-facing
-                            // bubble; say what the click does,
-                            // and what it will do while armed.
+                            // bubble; say what the click does.
                             ToolTip.visible: hovered
-                            ToolTip.text: wallpaperPage.armedAssignPath.length > 0
-                                          ? qsTr("Klik untuk menugaskan video ke layar ini")
-                                          : qsTr("Pilih layar ini")
+                            ToolTip.text: qsTr("Pilih layar ini")
 
                             contentItem: ColumnLayout {
                                 spacing: 3
@@ -188,17 +300,6 @@ Item {
                                     font.pixelSize: 10
                                 }
 
-                                // Duplicate-mode badge: the full
-                                // IS-7 notice sits once under the
-                                // row (one per button would
-                                // repeat the same sentence).
-                                Label {
-                                    visible: Studio.duplicateModeNotice.length > 0
-                                    text: qsTr("mode duplikat")
-                                    color: "orange"
-                                    font.pixelSize: 10
-                                }
-
                                 // Degraded: an assignment exists
                                 // but its file is missing.
                                 Label {
@@ -206,16 +307,6 @@ Item {
                                              && modelData.assignedExists === false
                                     text: qsTr("file tidak ditemukan")
                                     color: "red"
-                                    font.pixelSize: 10
-                                }
-
-                                // Coverage: anything other than
-                                // "covered" is a warning the
-                                // engine log explains.
-                                Label {
-                                    visible: String(modelData.coverage) !== "covered"
-                                    text: qsTr("cek engine.log")
-                                    color: "orange"
                                     font.pixelSize: 10
                                 }
                             }
@@ -231,8 +322,7 @@ Item {
 
                     // The Hapus path: drop the selected
                     // monitor's assignment through the row-19
-                    // invokable (the inverse of the armed
-                    // assign click).
+                    // invokable.
                     Button {
                         id: clearMonitorAssignmentButton
                         objectName: "clearMonitorAssignment"
@@ -243,19 +333,6 @@ Item {
                         ToolTip.visible: hovered
                         ToolTip.text: qsTr("Hapus penugasan video untuk layar terpilih")
                     }
-                }
-
-                // The full IS-7 duplicate-mode notice: the
-                // state rows 19/23/24 used to surface on the
-                // canvas now lives on the sub-tab row.
-                Label {
-                    id: duplicateModeNoticeLabel
-                    objectName: "duplicateModeNotice"
-                    Layout.fillWidth: true
-                    visible: Studio.duplicateModeNotice.length > 0
-                    wrapMode: Text.WordWrap
-                    color: "orange"
-                    text: Studio.duplicateModeNotice
                 }
             }
         }
@@ -303,9 +380,39 @@ Item {
                     }
                 }
 
+                // C-15 banners (todo 12): each renders ONLY while its
+                // problem is real (no problem -> no banner, B-STATE). They
+                // sit above the preview so the AssignPopup, which opens
+                // below the "Pasang ke" row, can never cover them.
+                WarningBanner {
+                    id: duplicateBanner
+                    Layout.fillWidth: true
+                    kind: "duplicate"
+                }
+
+                WarningBanner {
+                    id: coverageBanner
+                    Layout.fillWidth: true
+                    kind: "coverage"
+                    displays: wallpaperPage.screenEntries
+                }
+
                 PreviewHole {
                     syncPreview: wallpaperPage.syncPreview
                     onGeometryChanged: wallpaperPage.refreshPreviewHoleGeometry()
+                }
+
+                // "Pasang ke" (todo 12): the install-target row, visible ONLY
+                // while Studio.displays models more than one screen. The
+                // popup opens below it, into the gallery area - never over
+                // the preview hole (B-WIREFRAME(f)).
+                AssignRow {
+                    id: assignRow
+                    Layout.fillWidth: true
+                    displays: wallpaperPage.screenEntries
+                    target: wallpaperPage.installTarget
+                    duplicateMode: wallpaperPage.duplicateMode
+                    onPopupRequested: assignPopup.open()
                 }
 
                 // Koleksi: search + import + the Ganti otomatis panel + the
@@ -344,8 +451,10 @@ Item {
                 ActionButtons {
                     formColSpacing: wallpaperPage.formColSpacing
                     formRowSpacing: wallpaperPage.formRowSpacing
-                    maybeOfferCompressFirst: wallpaperPage.maybeOfferCompressFirst
                     statusKindNotRunning: wallpaperPage.statusKindNotRunning
+                    // "Terapkan Wallpaper" now runs the same "Pasang ke"
+                    // install path as the gallery cards (todo 12).
+                    installVideo: wallpaperPage.installVideo
                 }
 
                 QuickSettingsPanel {
@@ -365,5 +474,128 @@ Item {
                 }
             }
         }
+    }
+
+    // --- "Pasang ke" popup + C-14 confirmation + toast ---------------------
+    // The popup hangs from the row (below it, gallery area). It is a Popup,
+    // not a Dialog: overlay matrix B-WIREFRAME(f) forbids popups over the
+    // preview hole, and it hides the preview only on the narrow-window
+    // fallback path inside AssignPopup.qml.
+    AssignPopup {
+        id: assignPopup
+        anchorItem: assignRow
+        pageItem: wallpaperPage
+        displays: wallpaperPage.screenEntries
+        target: wallpaperPage.installTarget
+        onTargetChosen: function (key) { wallpaperPage.installTarget = key }
+    }
+
+    // C-14 ("Semua layar" + active overrides). A real Dialog, so it feeds
+    // dialogOpened/dialogClosed and the native preview steps aside while it
+    // is up (overlay matrix: ALL dialogs hide the preview).
+    Dialog {
+        id: confirmAllScreensDialog
+        objectName: "confirmAllScreensDialog"
+        title: qsTr("Pasang ke semua layar?")
+        modal: true
+        anchors.centerIn: Overlay.overlay
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        onOpened: {
+            wallpaperPage.dialogOpened()
+            confirmAllCancel.forceActiveFocus()
+        }
+        onClosed: wallpaperPage.dialogClosed()
+
+        contentItem: ColumnLayout {
+            spacing: Theme.space1
+            Accessible.role: Accessible.Dialog
+            Accessible.name: confirmAllScreensDialog.title
+
+            Label {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: qsTr("Video khusus di %1 akan ikut diganti.")
+                      .arg(wallpaperPage.pendingOverrideText)
+            }
+        }
+
+        footer: RowLayout {
+            spacing: Theme.space2
+            Item {
+                Layout.fillWidth: true
+            }
+            Button {
+                objectName: "confirmAllScreensAccept"
+                implicitHeight: 40
+                Accessible.name: text
+                text: qsTr("Pasang ke semua")
+                onClicked: {
+                    confirmAllScreensDialog.close()
+                    wallpaperPage.runAllScreens(wallpaperPage.pendingAllPath)
+                }
+            }
+            Button {
+                id: confirmAllCancel
+                objectName: "confirmAllScreensCancel"
+                implicitHeight: 40
+                Accessible.name: text
+                text: qsTr("Batal")
+                onClicked: confirmAllScreensDialog.close()
+            }
+        }
+    }
+
+    // C-14 toast: the no-override "Semua layar" path confirms with this
+    // sentence (never an invented string). Anchored to the page's bottom
+    // edge, gallery area - never over the preview hole.
+    Rectangle {
+        id: installToast
+        objectName: "installToast"
+        property string toastText: ""
+        visible: false
+        z: 2
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: Theme.space2
+        implicitWidth: Math.min(parent.width - 2 * Theme.space2,
+                                toastRow.implicitWidth + 2 * Theme.space3)
+        implicitHeight: toastRow.implicitHeight + 2 * Theme.space2
+        radius: Theme.radiusM
+        color: Theme.statusActiveTint
+        border.width: 1
+        border.color: Theme.surface2
+
+        Accessible.role: Accessible.AlertMessage
+        Accessible.name: installToast.toastText
+
+        RowLayout {
+            id: toastRow
+            anchors.fill: parent
+            anchors.margins: Theme.space2
+            spacing: Theme.space2
+
+            Label {
+                text: "\u2713"
+                color: Theme.statusActive
+                font.pixelSize: Theme.fontM
+                font.weight: Theme.fontWeightSemibold
+                Accessible.ignored: true
+            }
+
+            Label {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                color: Theme.text
+                font.pixelSize: Theme.fontM
+                text: installToast.toastText
+            }
+        }
+    }
+
+    Timer {
+        id: installToastTimer
+        interval: 4000
+        repeat: false
+        onTriggered: installToast.visible = false
     }
 }

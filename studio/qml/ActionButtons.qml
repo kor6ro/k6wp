@@ -14,8 +14,11 @@ GridLayout {
     id: actionButtons
     property int formColSpacing: 12
     property int formRowSpacing: 10
-    property var maybeOfferCompressFirst: function (path, applyAfter) { return false }
     property var statusKindNotRunning: 3
+    // Todo 12: "Terapkan Wallpaper" installs through the home view's
+    // "Pasang ke" path (target selection + C-14 on multi-screen rigs), so it
+    // gets the same entry point as the gallery cards.
+    property var installVideo: function (path) {}
 
     columns: 2
     columnSpacing: formColSpacing
@@ -31,10 +34,7 @@ GridLayout {
     Button {
         text: qsTr("&Terapkan Wallpaper")
         enabled: Studio.selectedVideo.length > 0 && !Studio.busy
-        onClicked: {
-            if (!maybeOfferCompressFirst(Studio.selectedVideo, true))
-                Studio.applyWallpaper(Studio.selectedVideo)
-        }
+        onClicked: actionButtons.installVideo(Studio.selectedVideo)
         ToolTip.visible: hovered
         ToolTip.text: qsTr("Terapkan video terpilih sebagai wallpaper (live-switch, tanpa restart saat engine jalan)")
     }

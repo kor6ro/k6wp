@@ -107,9 +107,11 @@ Rectangle {
     // call, so the wiring lives here instead of coupling the model to both.
     Connections {
         target: Library
+        // Todo 12: the install goes through the home view's "Pasang ke" flow
+        // (straight to the global video on one screen; target selection /
+        // C-14 on several), never directly to applyWallpaper.
         function onApplyRequested(dst) {
-            if (!root.maybeOfferCompressFirst(dst, true))
-                Studio.applyWallpaper(dst)
+            wallpaperPage.installVideo(dst)
         }
         function onRecompressRequested(dst) {
             Compress.setSourcePath(dst)
@@ -173,30 +175,8 @@ Rectangle {
     // preview hidden until the last one closes.
     property int openDialogs: 0
 
-    // --- row 39: click-to-assign armed state ------------------------------
-    // QML-only by design: no C++ member, no new bridge invokable. A library /
-    // playlist assign affordance sets the path; the row-41 monitor sub-tabs
-    // consume it and clear it once the assignment is dispatched. The armed
-    // banner sits
-    // under the tab bar so it is visible on every tab and carries the Batal
-    // affordance.
-    property string armedAssignPath: ""
-
-    // Broken-entry gate (row 22): an empty path never arms, so a rect click
-    // can never dispatch an empty assignment.
-    function armAssign(path) {
-        const p = String(path === undefined || path === null ? "" : path)
-        if (p.length === 0)
-            return false
-        root.armedAssignPath = p
-        return true
-    }
-
-    function disarmAssign() {
-        root.armedAssignPath = ""
-    }
-
-    // Basename for the armed banner (Windows or POSIX separators).
+    // Basename for the per-monitor assignment line under a sub-tab (Windows
+    // or POSIX separators).
     function fileNameOf(path) {
         const p = String(path === undefined || path === null ? "" : path)
         const slash = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"))
@@ -265,10 +245,8 @@ Rectangle {
     // through the existing syncPreview() exactly like the layout-change
     // handlers do; the quick settings are re-read through the existing
     // refreshQuickSettings() pattern so the panel cannot be stale on the new
-    // scope. While a video is armed (row 39), the click is ALSO the
-    // assignment gesture: assign the armed path to the just-selected monitor
-    // and disarm - row 39's onAssignRequested clearing, moved from the deleted
-    // canvas rects onto the monitor sub-tabs.
+    // scope. Installing is NOT part of this gesture anymore (todo 12: the
+    // "Pasang ke" row/popup owns the target), so a click only scopes.
     function selectMonitor(key) {
         const k = String(key === undefined || key === null ? "" : key)
         if (k.length === 0)
@@ -276,19 +254,6 @@ Rectangle {
         root.selectedMonitorKey = k
         root.syncPreview()
         Studio.refreshQuickSettings()
-        if (root.armedAssignPath.length > 0)
-            root.assignArmedToSelectedMonitor()
-    }
-
-    // The single place a monitor assignment is dispatched (row 39 mechanism):
-    // assignVideoToMonitor(selected key, armed path) then clear the armed
-    // state. The bridge emits displaysChanged, so the sub-tab repaints with
-    // the new assignment / coverage.
-    function assignArmedToSelectedMonitor() {
-        if (root.armedAssignPath.length === 0 || root.selectedMonitorKey.length === 0)
-            return
-        Studio.assignVideoToMonitor(root.selectedMonitorKey, root.armedAssignPath)
-        root.disarmAssign()
     }
 
     function startCompressFirst() {
@@ -421,48 +386,6 @@ Rectangle {
                 }
             }
 
-            // Row 39: the click-to-assign armed indicator, directly under the
-            // tab bar so it cannot be hidden by tab switching. Invisible while disarmed (a layout skips invisible
-            // items), so it costs no space in the normal case.
-            Pane {
-                id: armedAssignBanner
-                objectName: "armedAssignBanner"
-                Layout.fillWidth: true
-                visible: root.armedAssignPath.length > 0
-                padding: 8
-                Material.elevation: 1
-                // Row 42: an accent wash makes the armed state read as an active
-                // mode instead of one more grey bar. It is a background tint -
-                // no border, no new control, wording unchanged.
-                background: Rectangle {
-                    color: Material.accent
-                    opacity: 0.18
-                }
-
-                RowLayout {
-                    anchors.fill: parent
-                    spacing: 8
-
-                    Label {
-                        id: armedAssignLabel
-                        objectName: "armedAssignLabel"
-                        Layout.fillWidth: true
-                        elide: Text.ElideMiddle
-                        text: qsTr("Penugasan siap: klik sub-tab layar tujuan untuk %1")
-                              .arg(root.fileNameOf(root.armedAssignPath))
-                    }
-
-                    Button {
-                        id: armedAssignCancel
-                        objectName: "armedAssignCancel"
-                        text: qsTr("Batal")
-                        onClicked: root.disarmAssign()
-                        ToolTip.visible: hovered
-                        ToolTip.text: qsTr("Batalkan penugasan layar")
-                    }
-                }
-            }
-
             StackLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
@@ -479,10 +402,7 @@ Rectangle {
                     formColSpacing: root.formColSpacing
                     formRowSpacing: root.formRowSpacing
                     selectedMonitorKey: root.selectedMonitorKey
-                    armedAssignPath: root.armedAssignPath
                     selectMonitor: root.selectMonitor
-                    armAssign: root.armAssign
-                    disarmAssign: root.disarmAssign
                     fileNameOf: root.fileNameOf
                     selectedMonitorLabel: root.selectedMonitorLabel
                     selectedMonitorHasAssignment: root.selectedMonitorHasAssignment

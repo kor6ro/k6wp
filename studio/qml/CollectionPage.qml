@@ -25,6 +25,60 @@ ColumnLayout {
     Layout.fillHeight: true
     spacing: Theme.space2
 
+    // --- C-15 missing-file summary (todo 12) ------------------------------
+    // The Library model exposes `missing` per delegate but no collection-wide
+    // counter, and this slice must not touch the C++ bridge, so a non-visual
+    // Instantiator probes the model's own roles (QtObject delegates - no
+    // visuals, no thumbnails). It sees the same filtered model the grid and
+    // the row-addressed invokables (openLocationAt / removeAt) consume, so
+    // the reported first row is directly actionable.
+    property int missingCards: 0
+    property int firstMissingCard: -1
+
+    function recountMissing() {
+        // Coalesce: one recount per event-loop turn covers creation, role
+        // updates and removals alike.
+        Qt.callLater(collectionPage.doRecountMissing)
+    }
+
+    function doRecountMissing() {
+        let count = 0
+        let first = -1
+        for (let i = 0; i < missingProbe.count; ++i) {
+            const probe = missingProbe.objectAt(i)
+            if (probe && probe.missing) {
+                count += 1
+                if (first < 0 || probe.index < first)
+                    first = probe.index
+            }
+        }
+        collectionPage.missingCards = count
+        collectionPage.firstMissingCard = first
+    }
+
+    Instantiator {
+        id: missingProbe
+        model: Library
+
+        delegate: QtObject {
+            required property bool missing
+            required property int index
+            onMissingChanged: collectionPage.recountMissing()
+            Component.onCompleted: collectionPage.recountMissing()
+            Component.onDestruction: collectionPage.recountMissing()
+        }
+
+        onCountChanged: collectionPage.recountMissing()
+    }
+
+    WarningBanner {
+        id: missingBanner
+        Layout.fillWidth: true
+        kind: "missing"
+        missingCount: collectionPage.missingCards
+        firstMissingRow: collectionPage.firstMissingCard
+    }
+
     RowLayout {
         Layout.fillWidth: true
         spacing: Theme.space2

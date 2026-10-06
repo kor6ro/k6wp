@@ -112,6 +112,9 @@ set_source_files_properties(qml/FirstRunDialog.qml PROPERTIES QT_RESOURCE_ALIAS 
 set_source_files_properties(qml/CompressorPage.qml PROPERTIES QT_RESOURCE_ALIAS CompressorPage.qml)
 set_source_files_properties(qml/SettingsPage.qml PROPERTIES QT_RESOURCE_ALIAS SettingsPage.qml)
 set_source_files_properties(qml/WallpaperPage.qml PROPERTIES QT_RESOURCE_ALIAS WallpaperPage.qml)
+set_source_files_properties(qml/AssignRow.qml PROPERTIES QT_RESOURCE_ALIAS AssignRow.qml)
+set_source_files_properties(qml/AssignPopup.qml PROPERTIES QT_RESOURCE_ALIAS AssignPopup.qml)
+set_source_files_properties(qml/WarningBanner.qml PROPERTIES QT_RESOURCE_ALIAS WarningBanner.qml)
 qt_add_qml_module(studio
   URI K6WP
   VERSION 1.0
@@ -138,6 +141,9 @@ qt_add_qml_module(studio
     qml/CompressorPage.qml
     qml/SettingsPage.qml
     qml/WallpaperPage.qml
+    qml/AssignRow.qml
+    qml/AssignPopup.qml
+    qml/WarningBanner.qml
 )
 
 # About dialog version string (canonical K6WP_VERSION lives in the root
@@ -491,7 +497,10 @@ set(K6WP_TR_QML_SOURCES
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/FirstRunDialog.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/CompressorPage.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/SettingsPage.qml"
-  "${CMAKE_CURRENT_SOURCE_DIR}/qml/WallpaperPage.qml")
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/WallpaperPage.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/AssignRow.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/AssignPopup.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/WarningBanner.qml")
 
 # Both tools degrade to a clear no-op target instead of failing the configure:
 # a Studio that cannot translate is still a working Studio (main.cpp falls back
