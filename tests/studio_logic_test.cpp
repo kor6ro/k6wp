@@ -2380,6 +2380,179 @@ int main(int argc, char** argv) {
     }
   }
 
+  // 24. Studio settings plan todo 8 (GAP-7): closeToTray / playlistSource /
+  //     performancePreset are additive inside schema v3 with safe old-file
+  //     defaults. A file written before they existed must load cleanly to
+  //     the defaults; Save must write the keys; a fresh reload must return
+  //     identical values; deleting ONE key from a saved file must still
+  //     load that key at its default (the failure drill that proves
+  //     old-file tolerance — production files look exactly like that);
+  //     out-of-set enum values normalize instead of failing the load.
+  {
+    QTemporaryDir settings_dir;
+    Check(settings_dir.isValid(), "todo8 settings temp dir is valid");
+    const auto p = ToPath(
+        settings_dir.filePath(QStringLiteral("studio_settings.json")));
+    std::error_code ec;
+    std::filesystem::create_directories(p.parent_path(), ec);
+
+    // --- Old-file tolerance: every pre-todo-8 key present, none of the
+    // three new ones (byte-shape of a real production file today).
+    {
+      const nlohmann::json old_file = {
+          {"version", 3},
+          {"auto_compress_on_import", true},
+          {"compress_output_dir", "C:\\K6WP\\wallpapers"},
+          {"default_crf", 22},
+          {"default_fps", 30},
+          {"default_resolution_mode", "match_monitor"},
+          {"start_with_windows", false},
+          {"cache_dir", "C:\\K6WP\\cache"},
+          {"lockscreen_sync", false},
+          {"lockscreen_offset_sec", 1.0},
+          {"compress_advanced_visible", false},
+          {"check_updates", true},
+      };
+      {
+        std::ofstream out(p, std::ios::binary);
+        out << old_file.dump(2);
+      }
+      k6wp::StudioSettings s;
+      bool loaded = false;
+      try {
+        s = k6wp::LoadStudioSettings(p);
+        loaded = true;
+      } catch (...) {
+        loaded = false;
+      }
+      Check(loaded, "todo8 old file without new keys loads cleanly");
+      Check(s.version == 3, "todo8 old file stays at schema v3 (no bump)");
+      Check(s.close_to_tray == false,
+            "todo8 old file -> close_to_tray defaults false");
+      Check(s.playlist_source == "all",
+            "todo8 old file -> playlist_source defaults all");
+      Check(s.performance_preset == "Seimbang",
+            "todo8 old file -> performance_preset defaults Seimbang");
+      // The loader self-heals: the rewritten file now carries the keys.
+      {
+        std::ifstream in(p, std::ios::binary);
+        const std::string rewritten((std::istreambuf_iterator<char>(in)),
+                                    std::istreambuf_iterator<char>());
+        Check(HasSubstr(rewritten, "\"closeToTray\"") &&
+                  HasSubstr(rewritten, "\"playlistSource\"") &&
+                  HasSubstr(rewritten, "\"performancePreset\""),
+              "todo8 self-heal rewrite writes the new keys");
+      }
+    }
+
+    // --- Round-trip + cross-instance persistence: Save writes the keys,
+    // a fresh Load returns identical values.
+    {
+      k6wp::StudioSettings s = k6wp::DefaultStudioSettings();
+      s.close_to_tray = true;
+      s.playlist_source = "custom";
+      s.performance_preset = "Maksimal";
+      k6wp::SaveStudioSettings(p, s);
+      {
+        std::ifstream in(p, std::ios::binary);
+        const std::string text((std::istreambuf_iterator<char>(in)),
+                               std::istreambuf_iterator<char>());
+        Check(HasSubstr(text, "\"closeToTray\"") &&
+                  HasSubstr(text, "\"playlistSource\"") &&
+                  HasSubstr(text, "\"performancePreset\""),
+              "todo8 save writes the three keys into the JSON");
+        Check(HasSubstr(text, "\"playlistSource\": \"custom\"") &&
+                  HasSubstr(text, "\"performancePreset\": \"Maksimal\""),
+              "todo8 saved JSON carries the non-default values");
+      }
+      k6wp::StudioSettings back;
+      bool loaded = false;
+      try {
+        back = k6wp::LoadStudioSettings(p);
+        loaded = true;
+      } catch (...) {
+        loaded = false;
+      }
+      Check(loaded, "todo8 round-trip reload succeeds");
+      Check(loaded && back.close_to_tray == true &&
+                back.playlist_source == "custom" &&
+                back.performance_preset == "Maksimal",
+            "todo8 reload returns identical values (cross-instance)");
+    }
+
+    // --- Failure drill: delete ONE key from the saved file -> that key
+    // loads at its default, the surviving keys keep their saved values.
+    {
+      nlohmann::json j;
+      {
+        std::ifstream in(p, std::ios::binary);
+        j = nlohmann::json::parse(
+            std::string((std::istreambuf_iterator<char>(in)),
+                        std::istreambuf_iterator<char>()));
+      }
+      j.erase("performancePreset");
+      {
+        std::ofstream out(p, std::ios::binary | std::ios::trunc);
+        out << j.dump(2);
+      }
+      k6wp::StudioSettings s;
+      bool loaded = false;
+      try {
+        s = k6wp::LoadStudioSettings(p);
+        loaded = true;
+      } catch (...) {
+        loaded = false;
+      }
+      Check(loaded, "todo8 file with deleted key still loads");
+      Check(s.performance_preset == "Seimbang",
+            "todo8 deleted performancePreset key -> default Seimbang");
+      Check(s.close_to_tray == true && s.playlist_source == "custom",
+            "todo8 surviving keys keep their saved values");
+    }
+
+    // --- Validation: out-of-set enum values normalize to the safe defaults
+    // (playlistSource anything else -> all; performancePreset anything else
+    // -> Seimbang); a valid sibling key survives untouched.
+    {
+      nlohmann::json j = {
+          {"version", 3},
+          {"auto_compress_on_import", true},
+          {"compress_output_dir", "C:\\K6WP\\wallpapers"},
+          {"default_crf", 22},
+          {"default_fps", 30},
+          {"default_resolution_mode", "match_monitor"},
+          {"start_with_windows", false},
+          {"cache_dir", "C:\\K6WP\\cache"},
+          {"lockscreen_sync", false},
+          {"lockscreen_offset_sec", 1.0},
+          {"compress_advanced_visible", false},
+          {"check_updates", true},
+          {"closeToTray", true},
+          {"playlistSource", "bogus"},
+          {"performancePreset", "Ultra"},
+      };
+      {
+        std::ofstream out(p, std::ios::binary | std::ios::trunc);
+        out << j.dump(2);
+      }
+      k6wp::StudioSettings s;
+      bool loaded = false;
+      try {
+        s = k6wp::LoadStudioSettings(p);
+        loaded = true;
+      } catch (...) {
+        loaded = false;
+      }
+      Check(loaded, "todo8 out-of-set enums still load cleanly");
+      Check(s.playlist_source == "all",
+            "todo8 playlistSource bogus -> normalized to all");
+      Check(s.performance_preset == "Seimbang",
+            "todo8 performancePreset bogus -> normalized to Seimbang");
+      Check(s.close_to_tray == true,
+            "todo8 valid closeToTray preserved alongside normalization");
+    }
+  }
+
   std::printf("checks=%d failures=%d\n", g_checks, g_failures);
   return g_failures == 0 ? 0 : 1;
 }

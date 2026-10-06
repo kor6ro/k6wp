@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://k6wp.local/schemas/studio-settings.schema.json",
   "title": "K6WP StudioSettings",
-  "description": "Studio-side preferences for the K6WP wallpaper app. Stored at %LOCALAPPDATA%/K6WP/studio_settings.json. Deliberately separate from config.json, which is pure Engine playback state (video_path/fit/monitor/speed/fps/battery). Version 0 (legacy: missing version or missing fields) is migrated to version 3 by the loader; version 1 migrates with compress_advanced_visible defaulted to false; version 2 migrates with the removed keep_original/start_minimized keys ignored. On migration (or corrupt input) the loader backs up the original bytes to <file>.bak and rewrites the file at the current version.",
+  "description": "Studio-side preferences for the K6WP wallpaper app. Stored at %LOCALAPPDATA%/K6WP/studio_settings.json. Deliberately separate from config.json, which is pure Engine playback state (video_path/fit/monitor/speed/fps/battery). Version 0 (legacy: missing version or missing fields) is migrated to version 3 by the loader; version 1 migrates with compress_advanced_visible defaulted to false; version 2 migrates with the removed keep_original/start_minimized keys ignored. The three additive Studio UI preferences (closeToTray, playlistSource, performancePreset) may be absent from files written before plan todo 8: the loader defaults them and rewrites the file at the current version — no version bump, same pattern check_updates followed. On migration (or corrupt input) the loader backs up the original bytes to <file>.bak and rewrites the file at the current version.",
   "type": "object",
   "additionalProperties": false,
   "required": ["version"],
@@ -71,6 +71,23 @@
       "type": "boolean",
       "default": true,
       "description": "Optional 'new version available' check (Studio-only, never downloads/installs). When true, Studio GETs the releases API once per start plus manual Help -> Check for updates; network failures are silent. Files missing this key migrate it to true."
+    },
+    "closeToTray": {
+      "type": "boolean",
+      "default": false,
+      "description": "When true, closing Studio hides it to the system tray instead of quitting (plan todo 8, additive inside schema v3; files missing this key migrate it to false)."
+    },
+    "playlistSource": {
+      "type": "string",
+      "enum": ["all", "custom"],
+      "default": "all",
+      "description": "Playlist rotation source: all = every library wallpaper, custom = a user-picked subset (plan todo 8, additive inside schema v3). Any other value migrates to the default \"all\"."
+    },
+    "performancePreset": {
+      "type": "string",
+      "enum": ["Hemat", "Seimbang", "Maksimal"],
+      "default": "Seimbang",
+      "description": "Studio performance preset: Hemat = battery saver, Seimbang = balanced, Maksimal = full quality (plan todo 8, additive inside schema v3). Any other value migrates to the default \"Seimbang\"."
     }
   }
 }
