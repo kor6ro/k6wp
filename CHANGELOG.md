@@ -103,6 +103,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     corrected multi-monitor provenance plus the HDR, duplicate-mode and keying
     limits.
 
+- **The Tampilan canvas tab is replaced by per-monitor sub-tabs in the
+  Wallpaper view, and assignment is now click-to-assign.** The fourth Studio
+  tab added in the previous entry is gone: its read-only canvas duplicated the
+  wallpaper preview and split assignment across two tabs. Each connected
+  monitor now gets a sub-tab in the Wallpaper view that scopes both the preview
+  and the assignment target to that monitor.
+  - Removed (`studio/qml/Main.qml`, `studio/CMakeLists.txt`): the **Tampilan**
+    tab, `studio/qml/DisplayCanvas.qml`, and the `display_canvas_test` CTest
+    suite. The drag sources and per-rect `DropArea` targets went with the
+    canvas: cross-tab drag was impossible once the sources and the canvas lived
+    on different tabs, and a dragged delegate vanished under the native
+    preview. The contract-test inventory drops back to 32 suites.
+  - Assignment (`studio/qml/Main.qml`): click-to-assign. Arming a library or
+    playlist item, selecting a monitor sub-tab, then clicking that monitor's
+    rect sends the existing `set_display_video` command, scoped to the selected
+    sub-tab so only the chosen monitor's picture changes. Clearing uses the same
+    `set_display_video` clear flag, and the Duplicate-mode collision refusal is
+    unchanged: it still surfaces a message naming the collision instead of
+    stacking two videos on one screen.
+  - Polish (`studio/qml/Main.qml`, `studio/i18n/studio_en.ts`): the assignment
+    affordances, the degraded and coverage readouts, and the per-button tooltip
+    gate (hovered and unarmed) were tightened, with the new strings translated.
+
 ## [1.2.0] - 2026-09-27
 
 79 commits landed after the `v1.1.0` tag, all between 2026-09-23 and

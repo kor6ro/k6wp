@@ -237,7 +237,7 @@ end of this section.
   lean mpv profile (P1.1), E-core affinity + iGPU pin (Phase 3-lite —
   `docs/bench_phase3.json`: 1080p playback 0.02% CPU, 141.8 MB WS,
   hwdec d3d11va on Intel UHD, RTX dec 0%). Per-monitor *video assignment*
-  now ships (`displays.json`, `set_display_video`, Studio Display tab), but
+  now ships (`displays.json`, `set_display_video`, Studio monitor sub-tabs), but
   it is still one decode per monitor.
 - **Still no 2-physical-monitor run**: the placement rewrite and the
   per-monitor assignment map are covered by the headless placement matrix and

@@ -126,21 +126,33 @@ claimed result.
     If its `\\.\DISPLAYn` key renumbered, the engine falls back to the global
     video and logs a re-key warning instead of landing on the wrong screen.
     `get_state` must still answer. See `docs/runbook-2monitor.md`.
-23. MANUAL — per-monitor assignment by drag (needs 2 monitors). In Studio,
-    drag a library video onto monitor 2's desktop rect. Only that monitor's
-    picture changes; monitor 1 keeps playing. `get_state` must show the map
-    under `display_assignments` (keyed by `\\.\DISPLAY2`) and `displays.json`
-    must gain that entry. This is the `set_display_video` path driven by the
-    Studio drag gate.
+23. MANUAL — per-monitor assignment by click (needs 2 monitors). In Studio's
+    Wallpaper view, arm a library (or playlist) video, select monitor 2's
+    sub-tab, then click monitor 2's desktop rect. Only that monitor's picture
+    changes; monitor 1 keeps playing. `get_state` must show the map under
+    `display_assignments` (keyed by `\\.\DISPLAY2`) and `displays.json` must
+    gain that entry. This is the `set_display_video` path driven by the arming
+    gate.
 24. MANUAL — Duplicate-mode assignment refusal (needs 2 monitors). Switch to
-    Duplicate and attempt the same drag onto a monitor. Both monitors report
-    one rect, so the assignment is refused — the Duplicate-mode assignment
-    refusal recorded in `packaging/known-limitations.md` — with a message
-    naming the collision, rather than stacking two videos on one screen.
+    Duplicate and attempt the same click-assign on a monitor. Both monitors
+    report one rect, so the assignment is refused — the Duplicate-mode
+    assignment refusal recorded in `packaging/known-limitations.md` — with a
+    message naming the collision, rather than stacking two videos on one screen.
     `displays.json` must stay unchanged and `get_state`'s
     `display_assignments` must not gain a key. See `docs/runbook-2monitor.md`.
 25. MANUAL — clear a per-monitor assignment (needs 2 monitors). With a video
-    assigned to monitor 2, clear it in Studio (the `set_display_video` clear
-    flag). Monitor 2 must revert to the global video, the
-    `display_assignments` entry must disappear from `get_state`, and
-    `displays.json` must drop that key. See `docs/runbook-2monitor.md`.
+    assigned to monitor 2, clear it from monitor 2's sub-tab in Studio (the
+    `set_display_video` clear flag). Monitor 2 must revert to the global video,
+    the `display_assignments` entry must disappear from `get_state`, and
+    `displays.json` must remove that key. See `docs/runbook-2monitor.md`.
+26. MANUAL - sub-tab assignment acceptance (needs 2 monitors). Assign a video
+    to monitor 1 through its sub-tab, then select monitor 2's sub-tab and
+    confirm the preview and the rect reflect monitor 2 only, with no assignment
+    leaking to monitor 1. `get_state`'s `display_assignments` must hold exactly
+    one key per assigned monitor.
+27. MANUAL - click-to-assign refusal acceptance (needs 2 monitors). With no
+    video armed, click a monitor rect: no assignment is sent and
+    `display_assignments` stays unchanged. Then switch to Duplicate, arm a
+    video and click a rect: the collision refusal appears and `displays.json`
+    stays unchanged. Clearing the arm before selecting a sub-tab must also
+    leave the assignment untouched.
