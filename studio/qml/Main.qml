@@ -178,9 +178,9 @@ Rectangle {
 
     // --- row 39: click-to-assign armed state ------------------------------
     // QML-only by design: no C++ member, no new bridge invokable. A library /
-    // playlist assign affordance sets the path; the Tampilan canvas binds it
-    // 1:1 and re-emits assignRequested on a rect click; the canvas handler
-    // below clears it once the assignment is dispatched. The armed banner sits
+    // playlist assign affordance sets the path; the row-41 monitor sub-tabs
+    // consume it and clear it once the assignment is dispatched. The armed
+    // banner sits
     // under the tab bar so it is visible on every tab and carries the Batal
     // affordance.
     property string armedAssignPath: ""
@@ -332,12 +332,9 @@ Rectangle {
 
                 // Re-read on entry: the Wallpaper tab's quick settings mirror
                 // config.json + the autostart registry, either of which the
-                // Pengaturan tab can change. The Tampilan tab (index 3) re-reads
-                // the monitor topology for the same reason: displays.json can be
-                // rewritten while its page is off-screen.
+                // Pengaturan tab can change.
                 onCurrentIndexChanged: {
                     if (currentIndex === 0) Studio.refreshQuickSettings()
-                    if (currentIndex === 3) Studio.refreshDisplays()
                 }
 
                 // Tab labels are the existing Studio tab names.
@@ -350,14 +347,10 @@ Rectangle {
                 TabButton {
                     text: qsTr("Pengaturan")
                 }
-                TabButton {
-                    text: qsTr("Tampilan")
-                }
             }
 
             // Row 39: the click-to-assign armed indicator, directly under the
-            // tab bar so switching to the Tampilan tab to click a rect cannot
-            // hide it. Invisible while disarmed (a layout skips invisible
+            // tab bar so it cannot be hidden by tab switching. Invisible while disarmed (a layout skips invisible
             // items), so it costs no space in the normal case.
             Pane {
                 id: armedAssignBanner
@@ -541,21 +534,6 @@ Rectangle {
                                     required property string thumbUrl
                                     required property string dst
 
-                                    // Drag source for monitor assignment (row 22).
-                                    // B1: DropArea.keys filters on Drag.keys, NOT on the
-                                    // MIME map, so BOTH Drag.keys and Drag.mimeData must
-                                    // carry the same custom key or the DropArea rejects
-                                    // the drag and onDropped never fires.
-                                    Drag.active: dragArea.drag.active
-                                    Drag.source: dragArea
-                                    Drag.keys: ["application/x-k6wp-assignment"]
-                                    Drag.mimeData: ({ "application/x-k6wp-assignment": dst })
-                                    Drag.dragType: Drag.Automatic
-                                    // Drag-in-progress cue: the row stays put (it is the
-                                    // drag target only while the drag is active) and dims
-                                    // instead of vanishing.
-                                    opacity: dragArea.drag.active ? 0.5 : 1.0
-
                                     // thumbUrl stays empty until a thumbnail
                                     // exists, and an Image with no source never
                                     // changes status - so the onStatusChanged
@@ -604,14 +582,6 @@ Rectangle {
                                             anchors.fill: parent
                                             hoverEnabled: true
                                             acceptedButtons: Qt.LeftButton | Qt.RightButton
-                                            // Drag only when there is a real path to carry.
-                                            // A broken entry (empty dst, the [file hilang]
-                                            // case) leaves drag.target null, so no drag can
-                                            // start. Qt's Drag attached type has NO `enabled`
-                                            // property (qmllint: missing-property), so this
-                                            // conditional target IS the non-empty-path gate.
-                                            drag.target: libraryCell.dst.length > 0
-                                                         ? libraryCell : null
                                             onDoubleClicked: Library.applyAt(index)
                                             onClicked: function (mouse) {
                                                 if (mouse.button === Qt.RightButton)
@@ -624,9 +594,9 @@ Rectangle {
                                         // top of it: the button keeps its own
                                         // click, and the rest of the cell keeps
                                         // the existing double-click/right-click
-                                        // and drag behavior untouched. Disabled
+                                        // untouched. Disabled
                                         // for a broken entry (empty dst), the
-                                        // same gate the drag target uses.
+                                        // same non-empty-path gate the old drag target used.
                                         Button {
                                             id: libraryAssignButton
                                             objectName: "libraryAssignAffordance"
@@ -807,21 +777,8 @@ Rectangle {
 
                                             width: playlistList.width
                                             spacing: 6
-                                            // Existing missing-file dim combined with the
-                                            // drag-in-progress cue in one binding (a
-                                            // property cannot carry two bindings).
+                                            // Existing missing-file dim.
                                             opacity: (modelData.exists === false ? 0.6 : 1.0)
-                                                     * (playlistDragArea.drag.active ? 0.5 : 1.0)
-
-                                            // Drag source for monitor assignment (row 22).
-                                            // Both Drag.keys and Drag.mimeData are required:
-                                            // DropArea.keys filters on Drag.keys, not on the
-                                            // MIME map (B1).
-                                            Drag.active: playlistDragArea.drag.active
-                                            Drag.source: playlistDragArea
-                                            Drag.keys: ["application/x-k6wp-assignment"]
-                                            Drag.mimeData: ({ "application/x-k6wp-assignment": modelData.path })
-                                            Drag.dragType: Drag.Automatic
 
                                             Label {
                                                 Layout.fillWidth: true
@@ -837,18 +794,12 @@ Rectangle {
                                                 MouseArea {
                                                     id: playlistDragArea
                                                     anchors.fill: parent
-                                                    // A row with no path cannot start a
-                                                    // drag: drag.target null keeps
-                                                    // Drag.active false.
-                                                    drag.target: playlistCell.modelData.path.length > 0
-                                                                 ? playlistCell : null
                                                 }
                                             }
 
                                             // Row 39 click-to-assign affordance,
                                             // disabled for a broken entry (empty
-                                            // path) - the same gate the playlist
-                                            // drag target uses.
+                                            // path).
                                             Button {
                                                 id: playlistAssignButton
                                                 objectName: "playlistAssignAffordance"
@@ -2030,43 +1981,6 @@ Rectangle {
                                   .arg(Settings.cacheDir)
                             wrapMode: Text.WordWrap
                         }
-                    }
-                }
-
-                // ---------------------------------------------------------
-                // Tampilan (kanvas monitor)
-                // ---------------------------------------------------------
-                Item {
-                    // This page has no preview hole for the native mpv surface,
-                    // so push a 0x0 rect explicitly while it is shown. The
-                    // Wallpaper page's hole guard only fires when that page
-                    // hides, which is not the only path that can show this
-                    // page; without this the native PreviewWidget would float
-                    // over the DisplayCanvas.
-                    onVisibleChanged: if (visible) Studio.syncPreviewGeometry(0, 0, 0, 0)
-
-                    DisplayCanvas {
-                        anchors.fill: parent
-                        anchors.margins: 10
-
-                        displaysModel: Studio.displays
-                        posterPath: Studio.posterPath
-                        posterSource: Studio.activeVideoPath
-                        displayCapability: Studio.displayCapability
-                        duplicateModeNotice: Studio.duplicateModeNotice
-                        busy: Studio.busy
-                        // Row 39: armed path bound 1:1 from the QML-only armed
-                        // state; the rect-click path and the drop path land in
-                        // the same handler below.
-                        armedPath: root.armedAssignPath
-
-                        onAssignRequested: (key, path) => {
-                            Studio.assignVideoToMonitor(key, path)
-                            // Disarm on assign, so a later stray click cannot
-                            // reassign a second monitor with the stale path.
-                            root.disarmAssign()
-                        }
-                        onClearRequested: (key) => Studio.clearMonitorAssignment(key)
                     }
                 }
             }
