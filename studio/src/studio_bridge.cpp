@@ -18,6 +18,15 @@
 
 #include <cassert>
 
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <shellapi.h>
+
 #include "autostart.hpp"
 #include "compress_first_offer.hpp"
 #include "config_schema.hpp"
@@ -124,6 +133,10 @@ QString DuplicateModeNoticeText(const std::vector<std::wstring>& keys) {
 
 bool DisplayCapabilityFromState(const EngineState& state) {
   return state.display_capability == 1;
+}
+
+bool NeedsAllScreensConfirm(int assignment_count) {
+  return assignment_count > 0;
 }
 
 PlaylistLiveState PlaylistLiveFromState(const EngineState& state) {
@@ -627,6 +640,42 @@ void StudioBridge::clearMonitorAssignment(const QString& key) {
   }
   ClearLastError();
   ApplyDisplayModel(last_monitors_, store, display_coverage_);
+}
+
+int StudioBridge::applyToAllMonitors(const QString& path) {
+  // Brief C-14 / GATE 0 #3: "Semua layar" = monitor_id -1 + DELETE every
+  // per-key override. The video itself is installed by the CALLER via
+  // applyWallpaper(path); this function only moves the global target and
+  // clears overrides. Returns the number of overrides cleared so the caller
+  // can decide the C-14 confirmation (NeedsAllScreensConfirm(count)).
+  Q_UNUSED(path);
+  setQuickMonitor(-1);
+  QStringList keys;
+  for (const QVariant& v : displays_) {
+    const QVariantMap m = v.toMap();
+    if (!m.value(QStringLiteral("assignedPath")).toString().isEmpty()) {
+      keys.append(m.value(QStringLiteral("key")).toString());
+    }
+  }
+  for (const QString& key : keys) {
+    clearMonitorAssignment(key);
+  }
+  if (!keys.isEmpty()) {
+    AppendLog(tr("Pasang ke semua layar: %1 override dihapus")
+                  .arg(keys.size()));
+  }
+  return keys.size();
+}
+
+void StudioBridge::openWindowsDisplaySettings() {
+  // Brief B9 / C-15: open Windows Display Settings. Best-effort: a launch
+  // failure is logged, not raised as lastError (nothing user-actionable).
+  const HINSTANCE rc = ShellExecuteW(nullptr, L"open", L"ms-settings:display",
+                                      nullptr, nullptr, SW_SHOWNORMAL);
+  if (reinterpret_cast<INT_PTR>(rc) <= 32) {
+    AppendLog(tr("Gagal membuka Pengaturan Layar Windows (ShellExecute %1)")
+                  .arg(static_cast<qint64>(reinterpret_cast<INT_PTR>(rc))));
+  }
 }
 
 void StudioBridge::setQuickFit(const QString& fit_mode) {

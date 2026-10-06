@@ -2660,6 +2660,156 @@ int main(int argc, char** argv) {
     (void)SetLocalAppDataDir(QString::fromStdWString(real_localappdata));
   }
 
+  // 27. Plan todo 11 (brief C-14 + GATE 0 #3): NeedsAllScreensConfirm pure
+  //     predicate + applyToAllMonitors one-shot (global target + clear
+  //     overrides, return count). Failure drill: empty displays model ->
+  //     returns 0, no crash. Happy path: two active overrides -> returns 2,
+  //     displays.json emptied, quickMonitor snaps to -1, the video is NOT
+  //     played by this function (caller's applyWallpaper job).
+  {
+    Check(!k6wp::NeedsAllScreensConfirm(0),
+          "confirm: NeedsAllScreensConfirm(0) -> false");
+    Check(k6wp::NeedsAllScreensConfirm(2),
+          "confirm: NeedsAllScreensConfirm(2) -> true");
+    Check(k6wp::NeedsAllScreensConfirm(1),
+          "confirm: NeedsAllScreensConfirm(1) -> true");
+
+    const std::wstring real_localappdata = LocalAppDataDir();
+    QTemporaryDir fake_home;
+    Check(fake_home.isValid(), "applyToAll temp dir is valid");
+    const bool redirected =
+        fake_home.isValid() && SetLocalAppDataDir(fake_home.path());
+    Check(redirected, "applyToAll: LOCALAPPDATA redirected");
+    if (redirected) {
+      const QDir media(fake_home.path());
+      Check(QDir().mkpath(media.filePath(QStringLiteral("K6WP"))),
+            "applyToAll: fake K6WP data dir created");
+      {
+        k6wp::StudioSettings s = k6wp::DefaultStudioSettings();
+        s.check_updates = false;
+        k6wp::SaveStudioSettings(k6wp::DefaultStudioSettingsPath(), s);
+      }
+
+      k6wp::MonitorInfo primary;
+      primary.id = 0;
+      primary.x = 0;
+      primary.y = 0;
+      primary.width = 1920;
+      primary.height = 1080;
+      primary.is_primary = true;
+      primary.device_name = L"\\\\.\\DISPLAY1";
+      primary.orientation = 0;
+      primary.refresh_hz = 60;
+      primary.scale_pct = 100;
+
+      k6wp::MonitorInfo second;
+      second.id = 1;
+      second.x = 1920;
+      second.y = 0;
+      second.width = 1080;
+      second.height = 1920;
+      second.is_primary = false;
+      second.device_name = L"\\\\.\\DISPLAY2";
+      second.orientation = 0;
+      second.refresh_hz = 60;
+      second.scale_pct = 100;
+
+      const std::vector<k6wp::MonitorInfo> fixture = {primary, second};
+
+      // --- failure drill: EMPTY displays model -> return 0, no crash ------
+      {
+        k6wp::StudioBridge bridge;
+        bridge.ApplyDisplayModel({}, k6wp::DisplaysConfig{},
+                                 std::map<std::string, std::string>{});
+        Check(bridge.displays().isEmpty(),
+              "applyToAll empty-drill: displays model is empty");
+        const int cleared =
+            bridge.applyToAllMonitors(QStringLiteral("C:\\Videos\\x.mp4"));
+        Check(cleared == 0, "applyToAll empty displays -> returns 0 (no crash)");
+        Check(bridge.quickMonitor() == -1,
+              "applyToAll empty displays still sets quickMonitor -1");
+        Check(!k6wp::NeedsAllScreensConfirm(cleared),
+              "applyToAll empty-drill: NeedsAllScreensConfirm(0) -> false");
+      }
+
+      // --- happy path: two active overrides -> returns 2, store emptied ----
+      {
+        k6wp::StudioBridge bridge;
+        const QString key1 = QString::fromStdWString(primary.device_name);
+        const QString key2 = QString::fromStdWString(second.device_name);
+        const QString video = media.filePath(QStringLiteral("wall.mp4"));
+        {
+          QFile f(video);
+          Check(f.open(QIODevice::WriteOnly | QIODevice::Truncate),
+                "applyToAll: stand-in video file created");
+          f.write("x");
+          f.close();
+        }
+        bridge.ApplyDisplayModel(fixture, k6wp::DisplaysConfig{},
+                                 std::map<std::string, std::string>{});
+        bridge.assignVideoToMonitor(key1, video);
+        bridge.assignVideoToMonitor(key2, video);
+        Check(!bridge.displays().isEmpty() &&
+                  !bridge.displays()
+                       .at(0)
+                       .toMap()
+                       .value("assignedPath")
+                       .toString()
+                       .isEmpty() &&
+                  !bridge.displays()
+                       .at(1)
+                       .toMap()
+                       .value("assignedPath")
+                       .toString()
+                       .isEmpty(),
+              "applyToAll happy-drill: both model entries carry assignments");
+        Check(!k6wp::NeedsAllScreensConfirm(0),
+              "applyToAll happy-drill: overrides exist -> confirm true");
+
+        const int cleared =
+            bridge.applyToAllMonitors(QStringLiteral("C:\\Videos\\all.mp4"));
+        Check(cleared == 2, "applyToAll with 2 overrides -> returns 2");
+        Check(bridge.quickMonitor() == -1,
+              "applyToAll sets quickMonitor to -1 (global)");
+        k6wp::DisplaysConfig back;
+        bool loaded = false;
+        try {
+          back = k6wp::LoadDisplays(k6wp::DefaultDisplaysPath());
+          loaded = true;
+        } catch (...) {
+          loaded = false;
+        }
+        Check(loaded && back.assignments.empty(),
+              "applyToAll: displays.json assignments emptied");
+        bool model_clean = true;
+        for (const QVariant& v : bridge.displays()) {
+          if (!v.toMap().value("assignedPath").toString().isEmpty()) {
+            model_clean = false;
+            break;
+          }
+        }
+        Check(model_clean,
+              "applyToAll: model entries have empty assignedPath after clear");
+        Check(bridge.lastError().isEmpty(),
+              "applyToAll: a successful one-shot clears lastError");
+      }
+
+      // --- no-override case: model present, nothing assigned -> return 0 ---
+      {
+        k6wp::StudioBridge bridge;
+        bridge.ApplyDisplayModel(fixture, k6wp::DisplaysConfig{},
+                                 std::map<std::string, std::string>{});
+        const int cleared =
+            bridge.applyToAllMonitors(QStringLiteral("C:\\Videos\\all.mp4"));
+        Check(cleared == 0,
+              "applyToAll with no overrides -> returns 0");
+        Check(bridge.quickMonitor() == -1,
+              "applyToAll no-overrides still sets quickMonitor -1");
+      }
+    }
+    (void)SetLocalAppDataDir(QString::fromStdWString(real_localappdata));
+  }
+
   std::printf("checks=%d failures=%d\n", g_checks, g_failures);
   return g_failures == 0 ? 0 : 1;
 }

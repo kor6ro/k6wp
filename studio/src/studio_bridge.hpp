@@ -118,6 +118,15 @@ QString DuplicateModeNoticeText(const std::vector<std::wstring>& keys);
 // feature-detect the engine emits; old engines leave the key absent).
 bool DisplayCapabilityFromState(const EngineState& state);
 
+// Plan todo 11 / brief C-14 + GATE 0 #3: the pure C-14 confirmation
+// predicate. "Semua layar" is always safe to execute (monitor_id=-1), but
+// the confirm dialog is required only when at least one per-key override
+// would be replaced: assignment_count > 0. Beside the bridge so
+// studio_logic_test can drive it without the QML singleton.
+//   0 -> false (no overrides: apply immediately + toast)
+//   2 -> true  (overrides exist: show C-14 "akan ikut diganti" dialog)
+bool NeedsAllScreensConfirm(int assignment_count);
+
 // Plan todo 9: playlist live snapshot decoded from the parsed get_state ack
 // (playlist_enabled / playlist_size / playlist_index; engine_app already
 // emits them). Absent or wrong-typed keys -> enabled false / size 0 /
@@ -367,6 +376,22 @@ class StudioBridge : public QObject {
   // Drops the assignment for `key`: SaveDisplays + a clear
   // set_display_video push. Unknown key refuses exactly like assign.
   Q_INVOKABLE void clearMonitorAssignment(const QString& key);
+
+  // Plan todo 11 / brief B7 + C-14 + GATE 0 #3: one-shot "Pasang ke semua
+  // layar". ONE C++ action: setQuickMonitor(-1) (global monitor_id) +
+  // clearMonitorAssignment for every key with an active assignment in the
+  // displays model, each following the existing persist + best-effort IPC
+  // pattern. Returns the number of overrides cleared — the CALLER uses it
+  // to decide the C-14 confirmation (NeedsAllScreensConfirm(count)). Does
+  // NOT play the video: the caller installs it via applyWallpaper(path);
+  // this function only moves the target + clears overrides. Empty displays
+  // model -> returns 0, no crash.
+  Q_INVOKABLE int applyToAllMonitors(const QString& path);
+
+  // Brief B9 / C-15: open Windows Display Settings (ms-settings:display)
+  // via ShellExecuteW. Best-effort: a launch failure is logged, not raised
+  // as lastError (nothing user-actionable Studio can do about it).
+  Q_INVOKABLE void openWindowsDisplaySettings();
 
   // The one place displays_ / duplicate_mode_notice_ are rebuilt.
   // refreshDisplays() feeds it live data; studio_logic_test feeds fixtures.
