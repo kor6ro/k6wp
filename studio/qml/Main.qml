@@ -458,6 +458,13 @@ Rectangle {
                 visible: root.armedAssignPath.length > 0
                 padding: 8
                 Material.elevation: 1
+                // Row 42: an accent wash makes the armed state read as an active
+                // mode instead of one more grey bar. It is a background tint -
+                // no border, no new control, wording unchanged.
+                background: Rectangle {
+                    color: Material.accent
+                    opacity: 0.18
+                }
 
                 RowLayout {
                     anchors.fill: parent
@@ -559,16 +566,26 @@ Rectangle {
                                             // selectedMonitorKey is the single
                                             // source of truth, so a click can
                                             // never destroy the binding that
-                                            // paints the selection.
+                                            // paints the selection. While a
+                                            // video is armed every sub-tab is
+                                            // raised (non-flat) because each one
+                                            // is a valid assignment target.
                                             flat: root.selectedMonitorKey !== String(modelData.key)
+                                                  && root.armedAssignPath.length === 0
                                             highlighted: root.selectedMonitorKey === String(modelData.key)
                                             onClicked: root.selectMonitor(String(modelData.key))
 
+                                            // Row 42: the raw device key was a
+                                            // developer string in a user-facing
+                                            // bubble; say what the click does,
+                                            // and what it will do while armed.
                                             ToolTip.visible: hovered
-                                            ToolTip.text: String(modelData.key)
+                                            ToolTip.text: root.armedAssignPath.length > 0
+                                                          ? qsTr("Klik untuk menugaskan video ke layar ini")
+                                                          : qsTr("Pilih layar ini")
 
                                             contentItem: ColumnLayout {
-                                                spacing: 2
+                                                spacing: 3
 
                                                 RowLayout {
                                                     spacing: 6
@@ -582,13 +599,19 @@ Rectangle {
 
                                                     // Primary mark (row 19
                                                     // isPrimary), shown only on
-                                                    // the primary monitor.
+                                                    // the primary monitor. Row 42:
+                                                    // no explicit accent color -
+                                                    // accent-on-accent made the
+                                                    // badge nearly invisible on
+                                                    // the highlighted (selected)
+                                                    // button; it inherits the
+                                                    // button's foreground instead.
                                                     Label {
                                                         visible: modelData.isPrimary === true
                                                         text: qsTr("UTAMA")
                                                         font.bold: true
                                                         font.pixelSize: 10
-                                                        color: Material.accent
+                                                        opacity: 0.8
                                                     }
                                                 }
 
@@ -851,6 +874,27 @@ Rectangle {
                                         anchors.margins: 4
                                         Material.elevation: 1
 
+                                        // Row 42: the cell-wide click surface
+                                        // is declared first so the thumbnail,
+                                        // filename and assign affordance all
+                                        // paint above it. Images and labels do
+                                        // not handle mouse events in Qt Quick,
+                                        // so clicks on them still reach this
+                                        // area; only the assign button consumes
+                                        // its own clicks, keeping the existing
+                                        // double-click / right-click behavior.
+                                        MouseArea {
+                                            id: dragArea
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                            onDoubleClicked: Library.applyAt(index)
+                                            onClicked: function (mouse) {
+                                                if (mouse.button === Qt.RightButton)
+                                                    rowMenu.popup()
+                                            }
+                                        }
+
                                         ColumnLayout {
                                             anchors.fill: parent
                                             anchors.margins: 8
@@ -871,8 +915,13 @@ Rectangle {
                                                                      Library.ensureThumbnail(index)
                                             }
 
+                                            // Row 42: the filename keeps its
+                                            // two lines but reserves the
+                                            // card's bottom-right corner, where
+                                            // the assign affordance sits.
                                             Label {
                                                 Layout.fillWidth: true
+                                                Layout.rightMargin: 58
                                                 maximumLineCount: 2
                                                 elide: Text.ElideRight
                                                 wrapMode: Text.WordWrap
@@ -881,39 +930,52 @@ Rectangle {
                                             }
                                         }
 
-                                        MouseArea {
-                                            id: dragArea
-                                            anchors.fill: parent
-                                            hoverEnabled: true
-                                            acceptedButtons: Qt.LeftButton | Qt.RightButton
-                                            onDoubleClicked: Library.applyAt(index)
-                                            onClicked: function (mouse) {
-                                                if (mouse.button === Qt.RightButton)
-                                                    rowMenu.popup()
-                                            }
-                                        }
-
-                                        // Row 39 click-to-assign affordance.
-                                        // Declared after dragArea so it sits on
-                                        // top of it: the button keeps its own
-                                        // click, and the rest of the cell keeps
-                                        // the existing double-click/right-click
-                                        // untouched. Disabled
-                                        // for a broken entry (empty dst), the
-                                        // same non-empty-path gate the old drag target used.
+                                        // Row 39 click-to-assign affordance,
+                                        // moved by row 42 into the card's
+                                        // bottom-right corner (inside the
+                                        // filename strip): it can no longer
+                                        // cover the thumbnail, and the row's
+                                        // click surface below stays intact.
+                                        // Disabled for a broken entry (empty
+                                        // dst), the same non-empty-path gate
+                                        // the old drag target used.
                                         Button {
                                             id: libraryAssignButton
                                             objectName: "libraryAssignAffordance"
-                                            anchors.top: parent.top
                                             anchors.right: parent.right
-                                            anchors.margins: 6
+                                            anchors.bottom: parent.bottom
+                                            anchors.margins: 8
                                             text: qsTr("Tandai")
                                             flat: true
-                                            padding: 2
+                                            implicitWidth: 52
+                                            implicitHeight: 22
+                                            // Material's 8px vertical button
+                                            // padding survives `padding: 0`
+                                            // (the style binds top/bottom
+                                            // padding separately) and would
+                                            // leave a 22px-tall button with
+                                            // only 6px of content height,
+                                            // which clips the label away - the
+                                            // compact size owns its paddings
+                                            // explicitly.
+                                            topPadding: 3
+                                            bottomPadding: 3
+                                            leftPadding: 6
+                                            rightPadding: 6
                                             font.pixelSize: 10
                                             enabled: libraryCell.dst.length > 0
                                             onClicked: root.armAssign(libraryCell.dst)
-                                            ToolTip.visible: hovered
+                                            // Row 42 tooltip fix: the arm
+                                            // click shifts the whole view down
+                                            // while the pointer is stationary,
+                                            // and Qt does not re-evaluate hover
+                                            // without a mouse move - so the
+                                            // bubble stayed pinned over the
+                                            // search box. It now hides the
+                                            // moment the armed banner takes
+                                            // over (the banner carries the next
+                                            // instruction).
+                                            ToolTip.visible: hovered && root.armedAssignPath.length === 0
                                             ToolTip.text: qsTr("Tandai video ini untuk ditugaskan ke layar")
                                         }
 
@@ -1103,14 +1165,19 @@ Rectangle {
 
                                             // Row 39 click-to-assign affordance,
                                             // disabled for a broken entry (empty
-                                            // path).
+                                            // path). Row 42 tooltip fix: same
+                                            // armed guard as the library
+                                            // affordance - the arm click shifts
+                                            // the layout under a stationary
+                                            // pointer, so the bubble must not
+                                            // outlive its hint.
                                             Button {
                                                 id: playlistAssignButton
                                                 objectName: "playlistAssignAffordance"
                                                 text: qsTr("Tandai")
                                                 enabled: playlistCell.modelData.path.length > 0
                                                 onClicked: root.armAssign(playlistCell.modelData.path)
-                                                ToolTip.visible: hovered
+                                                ToolTip.visible: hovered && root.armedAssignPath.length === 0
                                                 ToolTip.text: qsTr("Tandai video ini untuk ditugaskan ke layar")
                                             }
 
