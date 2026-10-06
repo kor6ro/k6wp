@@ -133,6 +133,12 @@ Rectangle {
         tabBar.currentIndex = index
     }
 
+    // A card's "Perkecil" action (C-5) sets Compress.setSourcePath itself,
+    // then navigates here so the Kompresor tab shows the job.
+    function showCompressor() {
+        root.showTab(1)
+    }
+
     // --- Compress-first offer (restored from MainWindow::MaybeOfferCompressFirst,
     // deleted with the legacy widget tree in f03c850) ------------------------
     property string offerPath: ""
@@ -395,6 +401,11 @@ Rectangle {
                         // Wallpaper view is shown (row 21's refresh-on-show
                         // pattern, now owned by this view).
                         Studio.refreshDisplays()
+                        // Re-scan the library on re-entry so a video renamed
+                        // or moved in Explorer flips its card to the
+                        // "File tidak ketemu" state (ListItems recomputes
+                        // broken on every load).
+                        Library.reload()
                     }
                 }
 
@@ -477,6 +488,7 @@ Rectangle {
                     selectedMonitorHasAssignment: root.selectedMonitorHasAssignment
                     maybeOfferCompressFirst: root.maybeOfferCompressFirst
                     syncPreview: root.syncPreview
+                    navigateToCompressor: root.showCompressor
                     statusKindNotRunning: Main.StatusKind.NotRunning
                     statusKindPaused: Main.StatusKind.Paused
                     dialogOpened: root.dialogOpened

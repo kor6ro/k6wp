@@ -1,8 +1,9 @@
 // Wallpaper page (Wallpaper tab). Contains the monitor sub-tabs strip, the
-// preview caption + PreviewHole, the LibraryPanel and PlaylistPanel in the
-// left column, and the right rail (StatusBar + ActionButtons +
-// QuickSettingsPanel). Raw support details (process id, paths, log) are not
-// shown here - they live in the "Info teknis" dialog (AppDialogs.qml).
+// preview caption + PreviewHole, the CollectionPage (Koleksi gallery) and
+// PlaylistPanel in the left column, and the right rail (StatusBar +
+// ActionButtons + QuickSettingsPanel). Raw support details (process id,
+// paths, log) are not shown here - they live in the "Info teknis" dialog
+// (AppDialogs.qml).
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
@@ -29,6 +30,9 @@ Item {
     property var selectedMonitorHasAssignment: function () { return false }
     property var maybeOfferCompressFirst: function (path, applyAfter) { return false }
     property var syncPreview: function () {}
+    // "Perkecil" in a card's row menu sets Compress.setSourcePath itself and
+    // then asks Main to switch to the Kompresor tab (root.showTab(1)).
+    property var navigateToCompressor: function () {}
     property int statusKindNotRunning: 3
     // BridgeStatusKind::kPaused, passed down to StatusBar for its one-button
     // Jeda/Lanjut matrix (Main owns the enum mirror).
@@ -304,11 +308,21 @@ Item {
                     onGeometryChanged: wallpaperPage.refreshPreviewHoleGeometry()
                 }
 
-                LibraryPanel {
-                    armAssign: wallpaperPage.armAssign
-                    armedAssignPath: wallpaperPage.armedAssignPath
+                // Koleksi: search + import + the large-thumbnail gallery.
+                // Card row menus and dialogs only ever open BELOW this area
+                // (the preview hole above it must stay uncovered). The
+                // preferred/minimum heights are what reserve the gallery its
+                // share of the column: without them a fillHeight ColumnLayout
+                // has an implicit height of nearly zero and the preview takes
+                // the whole column (pre-existing LibraryPanel carried the
+                // same 220/140 reservation).
+                CollectionPage {
+                    id: collectionPage
+                    Layout.minimumHeight: 260
+                    Layout.preferredHeight: 320
                     dialogOpened: wallpaperPage.dialogOpened
                     dialogClosed: wallpaperPage.dialogClosed
+                    navigateToCompressor: wallpaperPage.navigateToCompressor
                 }
 
                 // --- Daftar putar (playlist) ---------------------

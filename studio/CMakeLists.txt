@@ -98,8 +98,11 @@ set_source_files_properties(qml/StatusBar.qml PROPERTIES QT_RESOURCE_ALIAS Statu
 set_source_files_properties(qml/AppDialogs.qml PROPERTIES QT_RESOURCE_ALIAS AppDialogs.qml)
 set_source_files_properties(qml/ActionButtons.qml PROPERTIES QT_RESOURCE_ALIAS ActionButtons.qml)
 set_source_files_properties(qml/QuickSettingsPanel.qml PROPERTIES QT_RESOURCE_ALIAS QuickSettingsPanel.qml)
-set_source_files_properties(qml/LibraryDelegate.qml PROPERTIES QT_RESOURCE_ALIAS LibraryDelegate.qml)
-set_source_files_properties(qml/LibraryPanel.qml PROPERTIES QT_RESOURCE_ALIAS LibraryPanel.qml)
+# Todo 7: the Koleksi gallery replaces LibraryPanel/LibraryDelegate.
+set_source_files_properties(qml/CollectionPage.qml PROPERTIES QT_RESOURCE_ALIAS CollectionPage.qml)
+set_source_files_properties(qml/VideoGrid.qml PROPERTIES QT_RESOURCE_ALIAS VideoGrid.qml)
+set_source_files_properties(qml/VideoCard.qml PROPERTIES QT_RESOURCE_ALIAS VideoCard.qml)
+set_source_files_properties(qml/EmptyState.qml PROPERTIES QT_RESOURCE_ALIAS EmptyState.qml)
 set_source_files_properties(qml/PlaylistPanel.qml PROPERTIES QT_RESOURCE_ALIAS PlaylistPanel.qml)
 set_source_files_properties(qml/ConsentDialog.qml PROPERTIES QT_RESOURCE_ALIAS ConsentDialog.qml)
 set_source_files_properties(qml/CacheDialog.qml PROPERTIES QT_RESOURCE_ALIAS CacheDialog.qml)
@@ -122,8 +125,10 @@ qt_add_qml_module(studio
     qml/AppDialogs.qml
     qml/ActionButtons.qml
     qml/QuickSettingsPanel.qml
-    qml/LibraryDelegate.qml
-    qml/LibraryPanel.qml
+    qml/CollectionPage.qml
+    qml/VideoGrid.qml
+    qml/VideoCard.qml
+    qml/EmptyState.qml
     qml/PlaylistPanel.qml
     qml/ConsentDialog.qml
     qml/CacheDialog.qml
@@ -468,8 +473,10 @@ set(K6WP_TR_QML_SOURCES
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/AppDialogs.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/ActionButtons.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/QuickSettingsPanel.qml"
-  "${CMAKE_CURRENT_SOURCE_DIR}/qml/LibraryDelegate.qml"
-  "${CMAKE_CURRENT_SOURCE_DIR}/qml/LibraryPanel.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/CollectionPage.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/VideoGrid.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/VideoCard.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/EmptyState.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/PlaylistPanel.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/ConsentDialog.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/CacheDialog.qml"
