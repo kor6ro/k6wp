@@ -12,6 +12,12 @@
 // Copy deck: C-4 (hover [Pasang] + [....]), C-5 (row menu), C-6 (TWO separate
 // delete dialogs, never merged), C-15 actions for a missing file.
 //
+// Todo 10 (Pilihan sendiri mode): while Settings.playlistSource == "custom"
+// the card carries a selection checkbox. Its checked state is derived from
+// Playlist.items (never stored on the card) and toggling it calls
+// Playlist.addPaths / Playlist.removeAt for THIS path - the bridge persists
+// playlist.json, QML never writes it.
+//
 // Delegate scoping (todo-2 F9): the row menu and BOTH delete dialogs live in
 // this file and read their row from the delegate context - no root.* lookups.
 //
@@ -78,6 +84,34 @@ Item {
                                         || menuButton.activeFocus
                                         || retryButton.activeFocus
     readonly property bool revealed: hovered || focusWithin
+
+    // --- Pilihan sendiri selection (todo 10) ------------------------------
+    // The checkbox exists only in custom-source mode; membership is
+    // recomputed from the Playlist bridge so an add/remove from the row menu
+    // ("Tambah ke Ganti otomatis") also flips it.
+    readonly property bool selectionMode: Settings.playlistSource === "custom"
+    readonly property int playlistRow: playlistRowFor(dst)
+
+    function playlistRowFor(path) {
+        const items = Playlist.items
+        for (let i = 0; i < items.length; ++i) {
+            if (samePath(items[i].path, path))
+                return i
+        }
+        return -1
+    }
+
+    // Called by cardSelectCheck on user activation. The row is looked up
+    // fresh (never cached): a previous toggle changed the indices.
+    function togglePlaylistSelection() {
+        const row = playlistRowFor(dst)
+        if (row >= 0) {
+            Playlist.removeAt(row)
+            return
+        }
+        if (!missing)
+            Playlist.addPaths([dst])
+    }
 
     // EntryLabel's displayName is "name\nres - duration"; dialogs show the
     // name alone (C-6 "{nama}").
@@ -187,6 +221,53 @@ Item {
         }
     }
 
+    // Inline playlist checkbox (todo 10, custom source only): a 40px target
+    // with a token-styled indicator and a visible focus ring. onClicked
+    // handles mouse AND Space; Enter gets its own handler (Controls never
+    // maps Enter to click). togglePlaylistSelection() derives the action from
+    // Playlist.items, so a binding-driven checked change can never add or
+    // remove an entry by itself.
+    component CardCheck: CheckBox {
+        id: cardCheck
+        implicitWidth: 40
+        implicitHeight: 40
+        focusPolicy: Qt.StrongFocus
+        Accessible.name: qsTr("Ganti otomatis") + " \u2014 " + videoCard.fileName
+        onClicked: videoCard.togglePlaylistSelection()
+        Keys.onReturnPressed: {
+            videoCard.togglePlaylistSelection()
+            event.accepted = true
+        }
+        Keys.onEnterPressed: {
+            videoCard.togglePlaylistSelection()
+            event.accepted = true
+        }
+        indicator: Rectangle {
+            anchors.centerIn: parent
+            width: 24
+            height: 24
+            radius: Theme.radiusS
+            color: cardCheck.checked
+                   ? Theme.accent
+                   : (cardCheck.hovered || cardCheck.activeFocus
+                      ? Theme.surface2 : Theme.bg)
+            border.width: cardCheck.activeFocus ? 2 : 1
+            border.color: cardCheck.activeFocus || cardCheck.checked
+                          ? Theme.accent : Theme.text2
+
+            Text {
+                anchors.centerIn: parent
+                visible: cardCheck.checked
+                text: "\u2713"
+                color: Theme.accentText
+                font.pixelSize: Theme.fontM
+                font.weight: Theme.fontWeightSemibold
+                Accessible.ignored: true
+            }
+        }
+        contentItem: Item {}
+    }
+
     Rectangle {
         id: frame
         anchors.fill: parent
@@ -282,6 +363,19 @@ Item {
                     tint: Theme.statusPausedTint
                     ink: Theme.statusPaused
                 }
+            }
+
+            // Selection checkbox: top-right corner, always visible in
+            // Pilihan sendiri mode (selection is that mode's primary action,
+            // so it must not hide behind hover).
+            CardCheck {
+                id: cardSelectCheck
+                objectName: "cardSelectCheck"
+                visible: videoCard.selectionMode && !videoCard.missing
+                checked: videoCard.playlistRow >= 0
+                anchors.top: parent.top
+                anchors.right: parent.right
+                anchors.margins: Theme.space1
             }
 
             // "Sedang disiapkan" overlay: progress + Batal (B-STATE matrix).

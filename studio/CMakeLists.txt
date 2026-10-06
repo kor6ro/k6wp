@@ -103,7 +103,7 @@ set_source_files_properties(qml/CollectionPage.qml PROPERTIES QT_RESOURCE_ALIAS 
 set_source_files_properties(qml/VideoGrid.qml PROPERTIES QT_RESOURCE_ALIAS VideoGrid.qml)
 set_source_files_properties(qml/VideoCard.qml PROPERTIES QT_RESOURCE_ALIAS VideoCard.qml)
 set_source_files_properties(qml/EmptyState.qml PROPERTIES QT_RESOURCE_ALIAS EmptyState.qml)
-set_source_files_properties(qml/PlaylistPanel.qml PROPERTIES QT_RESOURCE_ALIAS PlaylistPanel.qml)
+set_source_files_properties(qml/AutoSwitchPanel.qml PROPERTIES QT_RESOURCE_ALIAS AutoSwitchPanel.qml)
 set_source_files_properties(qml/ConsentDialog.qml PROPERTIES QT_RESOURCE_ALIAS ConsentDialog.qml)
 set_source_files_properties(qml/CacheDialog.qml PROPERTIES QT_RESOURCE_ALIAS CacheDialog.qml)
 set_source_files_properties(qml/CompressOfferDialog.qml PROPERTIES QT_RESOURCE_ALIAS CompressOfferDialog.qml)
@@ -129,7 +129,7 @@ qt_add_qml_module(studio
     qml/VideoGrid.qml
     qml/VideoCard.qml
     qml/EmptyState.qml
-    qml/PlaylistPanel.qml
+    qml/AutoSwitchPanel.qml
     qml/ConsentDialog.qml
     qml/CacheDialog.qml
     qml/CompressOfferDialog.qml
@@ -483,7 +483,7 @@ set(K6WP_TR_QML_SOURCES
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/VideoGrid.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/VideoCard.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/EmptyState.qml"
-  "${CMAKE_CURRENT_SOURCE_DIR}/qml/PlaylistPanel.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/AutoSwitchPanel.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/ConsentDialog.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/CacheDialog.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/CompressOfferDialog.qml"

@@ -1,12 +1,14 @@
 // Koleksi: the unified collection view (brief B-WIREFRAME(c)) - the search
 // row (C-4 "Cari video..."), the C-7 import button, the C-1 empty state, the
-// C-4 no-results line and the large-thumbnail VideoGrid. It replaces the old
-// LibraryPanel/LibraryDelegate pair; every string and state comes from the
-// copy deck + the card matrix, no legacy jargon.
+// C-4 no-results line, the Ganti otomatis panel (C-11) and the large
+// thumbnail VideoGrid. It replaces the old LibraryPanel/LibraryDelegate pair;
+// every string and state comes from the copy deck + the card matrix, no
+// legacy jargon.
 //
-// The Ganti otomatis panel is a later slice (todo 10) and intentionally not
-// here yet. dialogs opened by the cards feed dialogOpened/dialogClosed
-// through the parent chain so the native preview steps aside.
+// The Ganti otomatis panel lives here, below the gallery's search row: it is
+// part of the gallery area, never an overlay above the preview hole.
+// dialogs opened by the cards feed dialogOpened/dialogClosed through the
+// parent chain so the native preview steps aside.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
@@ -73,6 +75,14 @@ ColumnLayout {
                               ? Theme.accent : Theme.surface2
             }
         }
+    }
+
+    // C-11 "Ganti otomatis": rotation source, interval, shuffle, live status.
+    // Hidden with an empty collection (the C-1 empty state owns the screen).
+    AutoSwitchPanel {
+        id: autoSwitchPanel
+        Layout.fillWidth: true
+        visible: !Library.isEmpty
     }
 
     Label {

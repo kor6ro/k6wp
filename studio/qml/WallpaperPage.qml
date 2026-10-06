@@ -1,6 +1,6 @@
 // Wallpaper page (Wallpaper tab). Contains the monitor sub-tabs strip, the
-// preview caption + PreviewHole, the CollectionPage (Koleksi gallery) and
-// PlaylistPanel in the left column, and the right rail (StatusBar +
+// preview caption + PreviewHole, the CollectionPage (Koleksi gallery with the
+// Ganti otomatis panel) in the left column, and the right rail (StatusBar +
 // ActionButtons + QuickSettingsPanel). Raw support details (process id,
 // paths, log) are not shown here - they live in the "Info teknis" dialog
 // (AppDialogs.qml).
@@ -308,29 +308,24 @@ Item {
                     onGeometryChanged: wallpaperPage.refreshPreviewHoleGeometry()
                 }
 
-                // Koleksi: search + import + the large-thumbnail gallery.
-                // Card row menus and dialogs only ever open BELOW this area
-                // (the preview hole above it must stay uncovered). The
-                // preferred/minimum heights are what reserve the gallery its
+                // Koleksi: search + import + the Ganti otomatis panel + the
+                // large-thumbnail gallery. Card row menus and dialogs only
+                // ever open BELOW this area (the preview hole above it must
+                // stay uncovered). The preferred/minimum heights are what
+                // reserve the gallery (and the C-11 panel inside it) its
                 // share of the column: without them a fillHeight ColumnLayout
                 // has an implicit height of nearly zero and the preview takes
-                // the whole column (pre-existing LibraryPanel carried the
-                // same 220/140 reservation).
+                // the whole column. Todo 10: the C-11 panel adds ~170px, so
+                // the reservation grew from the old 320/260.
                 CollectionPage {
                     id: collectionPage
-                    Layout.minimumHeight: 260
-                    Layout.preferredHeight: 320
+                    Layout.minimumHeight: 300
+                    Layout.preferredHeight: 460
                     dialogOpened: wallpaperPage.dialogOpened
                     dialogClosed: wallpaperPage.dialogClosed
                     navigateToCompressor: wallpaperPage.navigateToCompressor
                 }
 
-                // --- Daftar putar (playlist) ---------------------
-                PlaylistPanel {
-                    spinWidth: wallpaperPage.spinWidth
-                    armAssign: wallpaperPage.armAssign
-                    armedAssignPath: wallpaperPage.armedAssignPath
-                }
             }
 
             // -----------------------------------------------------
