@@ -47,6 +47,7 @@
 #include "first_run_wizard.hpp"
 #include "ipc_client.hpp"
 #include "ipc_protocol.hpp"
+#include "library_format.hpp"
 #include "library_grid_model.hpp"
 #include "lockscreen.hpp"
 #include "monitor_util.hpp"
@@ -2150,6 +2151,233 @@ int main(int argc, char** argv) {
             "togglePause on a dead pipe leaves lastError empty (no-op)");
     }
     (void)SetLocalAppDataDir(QString::fromStdWString(real_localappdata));
+  }
+
+  // 23. Library card roles (plan todo 6 / brief B1): DisplayNameFor /
+  //     MissingFor / OptimizedFor are the pure derivations the
+  //     displayName/missing/optimized roles read. The legacy label keeps its
+  //     badge text byte for byte; QML consumes the structured roles instead.
+  //     Failure drill: a clean SMALL-res label must be optimized=false —
+  //     optimized tracks the resolution floor, NOT the absence of a badge.
+  {
+    const std::string bullet = "\xE2\x80\xA2";   // •
+    const std::string emdash = "\xE2\x80\x94";    // —
+
+    // Threshold pinned (like kCompressFirstThresholdBytes): if someone
+    // changes the floor, this suite must go red rather than flip polarity
+    // silently.
+    Check(k6wp::kOptimizedMinLongSide == 1280 &&
+              k6wp::kOptimizedMinShortSide == 720,
+          "roles: optimized floor pinned at 1280 long / 720 short");
+
+    // Legacy role values must never be renumbered; new roles append after
+    // kSizeRole.
+    Check(k6wp::LibraryGridModel::kLabelRole == Qt::UserRole + 1 &&
+              k6wp::LibraryGridModel::kThumbUrlRole == Qt::UserRole + 2 &&
+              k6wp::LibraryGridModel::kSizeRole == Qt::UserRole + 8,
+          "roles: legacy role values unchanged (UserRole+1..+8)");
+    Check(k6wp::LibraryGridModel::kDisplayNameRole == Qt::UserRole + 9 &&
+              k6wp::LibraryGridModel::kMissingRole == Qt::UserRole + 10 &&
+              k6wp::LibraryGridModel::kOptimizedRole == Qt::UserRole + 11,
+          "roles: new roles appended after kSizeRole (never renumbered)");
+
+    // --- legacy EntryLabel bytes must stay identical -------------------------
+    k6wp::LibraryEntry legacy;
+    legacy.dst = std::filesystem::path(L"C:/lib/clip.mp4");
+    legacy.res = "1920x1080";
+    legacy.duration = 370.0;  // 6 mnt 10 dtk
+    legacy.broken = true;
+    const std::string legacy_broken = k6wp::EntryLabel(legacy);
+    Check(legacy_broken == "clip.mp4\n1920x1080 " + bullet +
+                               " 6 mnt 10 dtk\n[file hilang]",
+          "roles: legacy label for a missing file is byte-identical");
+    legacy.broken = false;
+    legacy.src = legacy.dst;  // in-place reference
+    legacy.duration = 0.0;
+    const std::string legacy_inplace = k6wp::EntryLabel(legacy);
+    Check(legacy_inplace == "clip.mp4\n1920x1080 " + bullet + " " + emdash +
+                                "\n[belum dioptimasi]",
+          "roles: legacy label for an in-place entry is byte-identical "
+          "(em-dash + badge intact)");
+
+    // --- DisplayNameFor ------------------------------------------------------
+    const std::string badged =
+        "clip.mp4\n1920x1080 " + bullet + " 6 mnt 10 dtk\n[file hilang]";
+    const std::string unopt_badged =
+        "clip.mp4\n640x480 " + bullet + " 30 dtk\n[belum dioptimasi]";
+    const std::string clean =
+        "clip.mp4\n1920x1080 " + bullet + " 6 mnt 10 dtk";
+    const std::string no_meta = "clip.mp4\n" + emdash + " " + bullet + " " +
+                                emdash;
+
+    Check(k6wp::DisplayNameFor(badged) == clean,
+          "roles: [file hilang] label -> displayName is the badge-free label");
+    Check(!HasSubstr(k6wp::DisplayNameFor(badged), "[file hilang]"),
+          "roles: displayName carries no [file hilang] text");
+    Check(!HasSubstr(k6wp::DisplayNameFor(badged), "[belum dioptimasi]"),
+          "roles: displayName carries no [belum dioptimasi] text");
+    Check(k6wp::DisplayNameFor(unopt_badged) ==
+              "clip.mp4\n640x480 " + bullet + " 30 dtk",
+          "roles: [belum dioptimasi] label -> displayName strips that badge");
+    Check(k6wp::DisplayNameFor(clean) == clean,
+          "roles: a clean label is already its own displayName");
+    Check(k6wp::DisplayNameFor(no_meta) == no_meta,
+          "roles: em-dash metadata is formatting, not a badge - kept intact");
+    Check(k6wp::DisplayNameFor("[file hilang]").empty(),
+          "roles: a badge-only string -> empty displayName");
+    Check(k6wp::DisplayNameFor("") == "",
+          "roles: empty label -> empty displayName");
+
+    // --- MissingFor ----------------------------------------------------------
+    Check(k6wp::MissingFor(badged), "roles: [file hilang] label -> missing=true");
+    Check(!k6wp::MissingFor(clean), "roles: clean label -> missing=false");
+    Check(!k6wp::MissingFor(unopt_badged),
+          "roles: [belum dioptimasi] badge is NOT missing");
+    Check(!k6wp::MissingFor(no_meta),
+          "roles: em-dash label is NOT missing");
+    k6wp::LibraryEntry gone;
+    gone.dst = std::filesystem::path(L"C:/lib/gone.mp4");
+    gone.res = "1920x1080";
+    gone.broken = true;
+    Check(k6wp::MissingFor(gone), "roles: broken entry -> missing=true");
+    gone.broken = false;
+    Check(!k6wp::MissingFor(gone), "roles: intact entry -> missing=false");
+
+    // --- OptimizedFor (polarity drill) ---------------------------------------
+    // A label WITHOUT any badge but with a resolution below the floor must be
+    // optimized=false. optimized tracks the resolution threshold — the absence
+    // of [belum dioptimasi] does NOT mean optimized. Assert polarity twice so
+    // an inverted implementation cannot sneak through on one leg.
+    const std::string small_clean = "tiny.mp4\n640x480 " + bullet + " 30 dtk";
+    Check(!HasSubstr(small_clean, "[belum dioptimasi]"),
+          "roles: drill fixture has no badge at all");
+    Check(k6wp::OptimizedFor(small_clean) == false,
+          "roles: small clean label below floor -> optimized=false (polarity)");
+    Check(k6wp::OptimizedFor("almost.mp4\n1279x719 " + bullet + " 1 mnt") ==
+              false,
+          "roles: 1279x719 one pixel below floor -> optimized=false");
+    Check(k6wp::OptimizedFor("hd.mp4\n1280x720 " + bullet + " 1 mnt") == true,
+          "roles: exactly 1280x720 at floor -> optimized=true");
+    Check(k6wp::OptimizedFor(clean) == true,
+          "roles: 1920x1080 at/above floor -> optimized=true");
+    Check(k6wp::OptimizedFor(
+              "portrait.mp4\n1080x1920 " + bullet + " 1 mnt") == true,
+          "roles: portrait 1080x1920 counts via the long/short sides");
+    Check(k6wp::OptimizedFor(no_meta) == false,
+          "roles: em-dash res (unknown) -> optimized=false");
+    Check(k6wp::OptimizedFor("") == false,
+          "roles: empty label -> optimized=false");
+    Check(k6wp::OptimizedFor("nolinebreak.mp4") == false,
+          "roles: label without a res line -> optimized=false");
+    Check(k6wp::OptimizedFor("max.mp4\n" + bullet + " 30 dtk") == false,
+          "roles: filename x must not be parsed as a resolution");
+    // OptimizedFor reads ONLY resolution: the missing-file badge does not
+    // flip a 1080p verdict (missing is its own role, asserted above).
+    Check(k6wp::OptimizedFor(badged) == true,
+          "roles: 1920x1080 missing-file label keeps its resolution verdict");
+    // Entry-shaped form (what data() reads).
+    k6wp::LibraryEntry e;
+    e.dst = std::filesystem::path(L"C:/lib/a.mp4");
+    e.res = "640x480";
+    Check(!k6wp::OptimizedFor(e), "roles: entry 640x480 -> optimized=false");
+    e.res = "1920x1080";
+    Check(k6wp::OptimizedFor(e), "roles: entry 1920x1080 -> optimized=true");
+    e.res = "0x0";
+    Check(!k6wp::OptimizedFor(e), "roles: unprobed 0x0 entry -> optimized=false");
+    e.res = "";
+    Check(!k6wp::OptimizedFor(e), "roles: empty res entry -> optimized=false");
+    e.res = "abc";
+    Check(!k6wp::OptimizedFor(e), "roles: garbage res entry -> optimized=false");
+
+    // --- roleNames + data() wiring over a seeded library ---------------------
+    QTemporaryDir role_dir;
+    Check(role_dir.isValid(), "roles: temp library dir is valid");
+    if (role_dir.isValid()) {
+      const QDir media(role_dir.path());
+      const QString video = WriteSizedFile(media, "ok.mp4", 4096);
+      const auto lib_json =
+          ToPath(media.filePath(QStringLiteral("library.json")));
+      (void)SetEnvironmentVariableW(L"K6WP_LIBRARY_JSON",
+                                    lib_json.wstring().c_str());
+
+      // present: in-place reference (src==dst) -> [belum dioptimasi] badge,
+      // 1080p -> optimized; gone: dst never written -> ListItems computes
+      // broken=true -> [file hilang] + missing, 640x480 -> not optimized.
+      k6wp::LibraryEntry present;
+      present.src = present.dst = ToPath(video);
+      present.res = "1920x1080";
+      present.duration = 370.0;
+      present.codec = "h264";
+      present.width = 1920;
+      present.height = 1080;
+      k6wp::LibraryEntry vanished;
+      vanished.src = vanished.dst =
+          ToPath(media.filePath(QStringLiteral("vanished.mp4")));
+      vanished.res = "640x480";
+      vanished.duration = 30.0;
+      vanished.codec = "h264";
+      vanished.width = 640;
+      vanished.height = 480;
+      {
+        k6wp::LibraryManager seed_mgr(lib_json);
+        seed_mgr.Add(present);
+        seed_mgr.Add(vanished);
+      }
+
+      k6wp::LibraryGridModel model;
+      Check(model.count() == 2, "roles: seeded library yields 2 rows");
+
+      const QHash<int, QByteArray> names = model.roleNames();
+      Check(names.value(k6wp::LibraryGridModel::kLabelRole) == "label" &&
+                names.value(k6wp::LibraryGridModel::kDisplayNameRole) ==
+                    "displayName" &&
+                names.value(k6wp::LibraryGridModel::kMissingRole) == "missing" &&
+                names.value(k6wp::LibraryGridModel::kOptimizedRole) ==
+                    "optimized",
+            "roles: roleNames carries label + displayName + missing + optimized");
+
+      // ListItems sorts by filename: ok.mp4 < vanished.mp4. Identify rows by
+      // dst rather than assuming order.
+      int visited = 0;
+      for (int row = 0; row < model.count(); ++row) {
+        const QModelIndex idx = model.index(row);
+        const QString dst = model.dstAt(row);
+        const QString label =
+            model.data(idx, k6wp::LibraryGridModel::kLabelRole).toString();
+        const QString display = model
+                                    .data(idx, k6wp::LibraryGridModel::
+                                                    kDisplayNameRole)
+                                    .toString();
+        const bool missing =
+            model.data(idx, k6wp::LibraryGridModel::kMissingRole).toBool();
+        const bool optimized =
+            model.data(idx, k6wp::LibraryGridModel::kOptimizedRole).toBool();
+        Check(!display.contains(QString::fromUtf8("[file hilang]")) &&
+                  !display.contains(QString::fromUtf8("[belum dioptimasi]")),
+              "roles: data() displayName never carries badge text");
+        if (dst.contains(QStringLiteral("vanished"))) {
+          ++visited;
+          Check(label.contains(QString::fromUtf8("[file hilang]")),
+                "roles: data() legacy label still shows the missing badge");
+          Check(missing, "roles: data() missing=true for the vanished row");
+          Check(!optimized,
+                "roles: data() optimized=false for the 640x480 vanished row");
+          Check(display ==
+                    QString::fromStdString(k6wp::DisplayNameFor(
+                        label.toStdString())),
+                "roles: data() displayName matches the pure DisplayNameFor");
+        } else {
+          ++visited;
+          Check(label.contains(QString::fromUtf8("[belum dioptimasi]")),
+                "roles: data() legacy label still shows the in-place badge");
+          Check(!missing, "roles: data() missing=false for the intact row");
+          Check(optimized, "roles: data() optimized=true for the 1080p row");
+        }
+      }
+      Check(visited == 2, "roles: both seeded rows visited");
+
+      (void)SetEnvironmentVariableW(L"K6WP_LIBRARY_JSON", nullptr);
+    }
   }
 
   std::printf("checks=%d failures=%d\n", g_checks, g_failures);
