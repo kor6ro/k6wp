@@ -118,6 +118,18 @@ QString DuplicateModeNoticeText(const std::vector<std::wstring>& keys);
 // feature-detect the engine emits; old engines leave the key absent).
 bool DisplayCapabilityFromState(const EngineState& state);
 
+// Plan todo 9: playlist live snapshot decoded from the parsed get_state ack
+// (playlist_enabled / playlist_size / playlist_index; engine_app already
+// emits them). Absent or wrong-typed keys -> enabled false / size 0 /
+// index -1. Beside the bridge so studio_logic_test can drive it with fixture
+// ack payloads without a live engine.
+struct PlaylistLiveState {
+  bool enabled = false;
+  int size = 0;
+  int index = -1;
+};
+PlaylistLiveState PlaylistLiveFromState(const EngineState& state);
+
 // --- friendly status surface (plan todo 4 / B2 / brief C-3 + C-20 + glossary §5) --
 //
 // Pure derivations the statusTitle / statusVideoName properties read. They
@@ -229,6 +241,11 @@ class StudioBridge : public QObject {
   // Non-empty Indonesian IS-7 refusal when DetectKeyCollision reports
   // colliding keys; empty otherwise.
   Q_PROPERTY(QString duplicateModeNotice READ duplicateModeNotice NOTIFY displaysChanged)
+  // Plan todo 9: read-only playlist live state from the last get_state ack.
+  // Repainted by engineStatusChanged with the rest of the status group.
+  Q_PROPERTY(bool playlistLiveEnabled READ playlistLiveEnabled NOTIFY engineStatusChanged)
+  Q_PROPERTY(int playlistLiveSize READ playlistLiveSize NOTIFY engineStatusChanged)
+  Q_PROPERTY(int playlistLiveIndex READ playlistLiveIndex NOTIFY engineStatusChanged)
 
   QString selectedVideo() const { return selected_video_; }
   QString quickFit() const { return quick_fit_; }
@@ -239,6 +256,9 @@ class StudioBridge : public QObject {
   QVariantList displays() const { return displays_; }
   bool displayCapability() const { return display_capability_; }
   QString duplicateModeNotice() const { return duplicate_mode_notice_; }
+  bool playlistLiveEnabled() const { return playlist_live_enabled_; }
+  int playlistLiveSize() const { return playlist_live_size_; }
+  int playlistLiveIndex() const { return playlist_live_index_; }
 
   // --- Live engine status (all repainted together by engineStatusChanged) ---
 
@@ -353,6 +373,10 @@ class StudioBridge : public QObject {
   void ApplyDisplayModel(const std::vector<MonitorInfo>& monitors,
                          const DisplaysConfig& store,
                          const std::map<std::string, std::string>& coverage);
+
+  // The one place playlistLive* is rebuilt from a parsed get_state.
+  // OnPollDone feeds it live data; studio_logic_test feeds fixtures.
+  void ApplyPlaylistLive(const PlaylistLiveState& live);
 
   // Fires one GetState round-trip on a worker and repaints the properties
   // above when it lands. A no-op while a poll is in flight. The QTimer calls
@@ -533,6 +557,11 @@ class StudioBridge : public QObject {
   QString duplicate_mode_notice_;
   std::map<std::string, std::string> display_coverage_;
   std::vector<MonitorInfo> last_monitors_;
+  // Plan todo 9: playlist live snapshot from the last get_state (see the
+  // PlaylistLiveState contract above).
+  bool playlist_live_enabled_ = false;
+  int playlist_live_size_ = 0;
+  int playlist_live_index_ = -1;
 };
 
 }  // namespace k6wp

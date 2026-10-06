@@ -247,13 +247,28 @@ EngineState ParseEngineState(const nlohmann::json& raw) {
         c != state.end() && c->is_object()) {
       for (auto it = c->begin(); it != c->end(); ++it) {
         if (it.value().is_string()) {
-          s.display_coverage.emplace(it.key(), it.value().get<std::string>());
+          s.display_coverage.emplace(it.key(),
+                                      it.value().get<std::string>());
         }
       }
+    }
+    // Plan todo 9, additive: playlist live snapshot. Absent or wrong-typed
+    // keys default safely (enabled false / size 0 / index -1); parsing
+    // never throws out of here.
+    if (auto pe = state.find("playlist_enabled");
+        pe != state.end() && pe->is_boolean()) {
+      s.playlist_enabled = pe->get<bool>();
+    }
+    if (auto ps = state.find("playlist_size");
+        ps != state.end() && ps->is_number_integer()) {
+      s.playlist_size = ps->get<int>();
+    }
+    if (auto pi = state.find("playlist_index");
+        pi != state.end() && pi->is_number_integer()) {
+      s.playlist_index = pi->get<int>();
     }
   } catch (const std::exception&) {
   }
   return s;
 }
-
 }  // namespace k6wp

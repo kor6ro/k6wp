@@ -126,6 +126,14 @@ bool DisplayCapabilityFromState(const EngineState& state) {
   return state.display_capability == 1;
 }
 
+PlaylistLiveState PlaylistLiveFromState(const EngineState& state) {
+  PlaylistLiveState out;
+  out.enabled = state.playlist_enabled;
+  out.size = state.playlist_size < 0 ? 0 : state.playlist_size;
+  out.index = state.playlist_index;
+  return out;
+}
+
 // --- friendly status surface (plan todo 4 / B2 / brief C-3 + C-20 + glossary §5) --
 
 QString StatusVideoNameFor(BridgeStatusKind kind, const QString& detail,
@@ -291,6 +299,7 @@ void StudioBridge::OnPollDone() {
     ApplyStatus(failed);
     display_capability_ = false;
     display_coverage_.clear();
+    ApplyPlaylistLive(PlaylistLiveState{});
     MergeCoverageIntoDisplays();
     emit displaysChanged();
     return;
@@ -299,12 +308,13 @@ void StudioBridge::OnPollDone() {
   // unit-tested by studio_logic_test); this class only maps the resulting view
   // onto QML properties and the Indonesian sentences MainWindow painted.
   ApplyStatus(DecideEngineStatus(res));
-  // Row 19: the additive display fields ride the same get_state ack.
-  // DecideEngineStatus parses EngineState internally but only carries the
-  // status view across, so display_capability / display_coverage are parsed
-  // once more here (ParseEngineState never throws and defaults old-engine
-  // absences to capability 0 / empty maps).
+  // Row 19 + plan todo 9: the additive display + playlist fields ride the
+  // same get_state ack. DecideEngineStatus parses EngineState internally but
+  // only carries the status view across, so those fields are parsed once more
+  // here (ParseEngineState never throws and defaults old-engine absences to
+  // capability 0 / empty maps / playlist off).
   const EngineState state = ParseEngineState(res.raw);
+  ApplyPlaylistLive(PlaylistLiveFromState(state));
   display_capability_ = DisplayCapabilityFromState(state);
   display_coverage_ = state.display_coverage;
   MergeCoverageIntoDisplays();
@@ -490,6 +500,13 @@ void StudioBridge::ApplyDisplayModel(
   duplicate_mode_notice_ =
       DuplicateModeNoticeText(DetectKeyCollision(store, monitors));
   emit displaysChanged();
+}
+
+void StudioBridge::ApplyPlaylistLive(const PlaylistLiveState& live) {
+  playlist_live_enabled_ = live.enabled;
+  playlist_live_size_ = live.size;
+  playlist_live_index_ = live.index;
+  emit engineStatusChanged();
 }
 
 bool StudioBridge::IsKnownDisplayKey(const QString& key) const {

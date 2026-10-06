@@ -210,6 +210,15 @@ void SettingsBridge::setCheckUpdates(bool on) {
   emit changed();
 }
 
+void SettingsBridge::setPlaylistSource(const QString& source) {
+  if (source != QLatin1String("all") && source != QLatin1String("custom")) {
+    SetLastError(tr("Sumber daftar putar tidak dikenal."));
+    return;
+  }
+  studio_.playlist_source = source.toStdString();
+  emit changed();
+}
+
 // --- UI language --------------------------------------------------------------
 
 void SettingsBridge::setLanguage(const QString& code) {

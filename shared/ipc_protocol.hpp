@@ -102,6 +102,14 @@ struct EngineState {
   // "clipped-left/top/right/bottom", "headless") from row 4's
   // Slot::coverage_reason chain. Missing key -> empty.
   std::map<std::string, std::string> display_coverage;
+  // Plan todo 9, additive: wallpaper playlist snapshot (engine
+  // BuildStateJson emits playlist_enabled / playlist_size /
+  // playlist_index). Missing keys (engines older than these fields) ->
+  // enabled false / size 0 / index -1; wrong-type present values also fall
+  // back to those defaults. Parsing never throws.
+  bool playlist_enabled = false;
+  int playlist_size = 0;
+  int playlist_index = -1;
 };
 EngineState ParseEngineState(const nlohmann::json& raw);
 

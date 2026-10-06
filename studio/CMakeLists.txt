@@ -372,9 +372,15 @@ add_test(NAME fake_pipe_test COMMAND fake_pipe_test)
 # playlist.json (K6WP_PLAYLIST_JSON override). QCoreApplication; the native
 # picker is never invoked (addPaths drives the additions). Qt6::Qml supplies the
 # QML_ELEMENT registration macros; Qt6::Widgets the QFileDialog symbol.
+# syncOrderFromLibrary (plan todo 9) reads LibraryManager::ListItems, so the
+# manager + its JSON codec + the ffprobe helper it links against are compiled
+# in; this suite never probes (Add uses kNever).
 add_executable(playlist_bridge_test
   ../tests/playlist_bridge_test.cpp
   src/playlist_bridge.cpp
+  src/library_manager.cpp
+  src/library_json_codec.cpp
+  src/ffprobe_helper.cpp
 )
 target_link_libraries(playlist_bridge_test PRIVATE k6wp_shared Qt6::Widgets Qt6::Qml)
 target_include_directories(playlist_bridge_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)

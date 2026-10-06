@@ -58,6 +58,10 @@ class SettingsBridge : public QObject {
   Q_PROPERTY(double lockscreenOffsetSec READ lockscreenOffsetSec WRITE setLockscreenOffsetSec NOTIFY changed)
   Q_PROPERTY(bool compressAdvancedVisible READ compressAdvancedVisible WRITE setCompressAdvancedVisible NOTIFY changed)
   Q_PROPERTY(bool checkUpdates READ checkUpdates WRITE setCheckUpdates NOTIFY changed)
+  // Plan todo 9 (consumes the todo-8 GAP-7 key): rotation source,
+  // "all" | "custom". studio_settings.json playlistSource; persisted on
+  // apply() like the other studio preferences.
+  Q_PROPERTY(QString playlistSource READ playlistSource WRITE setPlaylistSource NOTIFY changed)
 
   bool autoCompressOnImport() const { return studio_.auto_compress_on_import; }
   QString compressOutputDir() const { return QString::fromStdWString(studio_.compress_output_dir); }
@@ -70,6 +74,7 @@ class SettingsBridge : public QObject {
   double lockscreenOffsetSec() const { return studio_.lockscreen_offset_sec; }
   bool compressAdvancedVisible() const { return studio_.compress_advanced_visible; }
   bool checkUpdates() const { return studio_.check_updates; }
+  QString playlistSource() const { return QString::fromStdString(studio_.playlist_source); }
 
   // --- studio_ui.ini (UI language) -------------------------------------------
   // Its own store rather than a StudioSettings field (see ui_language.hpp).
@@ -146,6 +151,7 @@ class SettingsBridge : public QObject {
   Q_INVOKABLE void setLockscreenOffsetSec(double seconds);
   Q_INVOKABLE void setCompressAdvancedVisible(bool on);
   Q_INVOKABLE void setCheckUpdates(bool on);
+  Q_INVOKABLE void setPlaylistSource(const QString& source);
 
   // Rejects an unsupported code (returns without writing) and emits changed()
   // only on success, so the QML picker never shows a value the store refused.

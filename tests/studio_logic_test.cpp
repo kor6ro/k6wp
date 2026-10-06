@@ -2553,6 +2553,113 @@ int main(int argc, char** argv) {
     }
   }
 
+  // 25. Settings.playlistSource (plan todo 9): Q_PROPERTY over the todo-8
+  //     studio_settings key. Default "all"; set "custom" persists via
+  //     apply(); unknown values are refused without moving the property.
+  {
+    const std::wstring real_localappdata = LocalAppDataDir();
+    QTemporaryDir fake_home;
+    Check(fake_home.isValid(), "playlistSource temp dir is valid");
+    const bool redirected =
+        fake_home.isValid() && SetLocalAppDataDir(fake_home.path());
+    Check(redirected, "playlistSource: LOCALAPPDATA redirected");
+    if (redirected) {
+      const QDir media(fake_home.path());
+      Check(QDir().mkpath(media.filePath(QStringLiteral("K6WP"))),
+            "playlistSource: fake K6WP data dir created");
+      {
+        k6wp::SettingsBridge bridge;
+        Check(bridge.playlistSource() == QStringLiteral("all"),
+              "playlistSource defaults to all");
+        bridge.setPlaylistSource(QStringLiteral("custom"));
+        Check(bridge.playlistSource() == QStringLiteral("custom"),
+              "setPlaylistSource custom accepted");
+        bridge.setPlaylistSource(QStringLiteral("bogus"));
+        Check(bridge.playlistSource() == QStringLiteral("custom"),
+              "bogus playlistSource refused, property unchanged");
+        Check(!bridge.lastError().isEmpty(),
+              "bogus playlistSource sets lastError");
+        bridge.apply();
+        Check(bridge.lastError().isEmpty(),
+              "apply after a valid set clears lastError");
+      }
+      {
+        k6wp::SettingsBridge again;
+        Check(again.playlistSource() == QStringLiteral("custom"),
+              "playlistSource persists through apply + reload");
+      }
+    }
+    (void)SetLocalAppDataDir(QString::fromStdWString(real_localappdata));
+  }
+
+  // 26. Studio.playlistLive* (plan todo 9): read-only get_state playlist
+  //     snapshot. Pure ParseEngineState decode + bridge property defaults +
+  //     ApplyPlaylistLive seam (the same shape as displayCapability).
+  {
+    // --- pure decode over fixture ack payloads --------------------------
+    const nlohmann::json no_pl = {{"state", {{"pid", 7ULL}}}};
+    k6wp::PlaylistLiveState live =
+        k6wp::PlaylistLiveFromState(k6wp::ParseEngineState(no_pl));
+    Check(!live.enabled && live.size == 0 && live.index == -1,
+          "playlistLive defaults when get_state lacks the keys");
+
+    const nlohmann::json with_pl = {
+        {"state",
+         {{"pid", 7ULL},
+          {"playlist_enabled", true},
+          {"playlist_size", 3},
+          {"playlist_index", 1}}}};
+    live = k6wp::PlaylistLiveFromState(k6wp::ParseEngineState(with_pl));
+    Check(live.enabled && live.size == 3 && live.index == 1,
+          "playlistLive parses enabled/size/index from the ack");
+
+    const nlohmann::json wrong = {
+        {"state",
+         {{"pid", 7ULL},
+          {"playlist_enabled", "yes"},
+          {"playlist_size", "three"},
+          {"playlist_index", 1.5}}}};
+    live = k6wp::PlaylistLiveFromState(k6wp::ParseEngineState(wrong));
+    Check(!live.enabled && live.size == 0 && live.index == -1,
+          "playlistLive wrong-typed keys fall back to defaults");
+
+    // --- bridge property defaults + ApplyPlaylistLive seam --------------
+    const std::wstring real_localappdata = LocalAppDataDir();
+    QTemporaryDir fake_home;
+    Check(fake_home.isValid(), "playlistLive bridge temp dir is valid");
+    const bool redirected =
+        fake_home.isValid() && SetLocalAppDataDir(fake_home.path());
+    Check(redirected, "playlistLive: LOCALAPPDATA redirected");
+    if (redirected) {
+      const QDir media(fake_home.path());
+      Check(QDir().mkpath(media.filePath(QStringLiteral("K6WP"))),
+            "playlistLive: fake K6WP data dir created");
+      {
+        k6wp::StudioSettings s = k6wp::DefaultStudioSettings();
+        s.check_updates = false;
+        k6wp::SaveStudioSettings(k6wp::DefaultStudioSettingsPath(), s);
+      }
+      k6wp::StudioBridge bridge;
+      Check(!bridge.playlistLiveEnabled() && bridge.playlistLiveSize() == 0 &&
+                bridge.playlistLiveIndex() == -1,
+            "bridge playlistLive* start at the old-engine defaults");
+      int status_repaints = 0;
+      QObject::connect(&bridge, &k6wp::StudioBridge::engineStatusChanged,
+                       &bridge, [&status_repaints]() { ++status_repaints; });
+      bridge.ApplyPlaylistLive(k6wp::PlaylistLiveState{true, 3, 2});
+      Check(bridge.playlistLiveEnabled() && bridge.playlistLiveSize() == 3 &&
+                bridge.playlistLiveIndex() == 2,
+            "ApplyPlaylistLive surfaces enabled/size/index on the bridge");
+      Check(status_repaints >= 1,
+            "ApplyPlaylistLive repaints via engineStatusChanged");
+      bridge.ApplyPlaylistLive(k6wp::PlaylistLiveState{});
+      Check(!bridge.playlistLiveEnabled() && bridge.playlistLiveSize() == 0 &&
+                bridge.playlistLiveIndex() == -1,
+            "ApplyPlaylistLive defaults reset the bridge properties");
+    }
+    (void)SetLocalAppDataDir(QString::fromStdWString(real_localappdata));
+  }
+
   std::printf("checks=%d failures=%d\n", g_checks, g_failures);
   return g_failures == 0 ? 0 : 1;
 }
