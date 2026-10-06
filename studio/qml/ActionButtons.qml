@@ -1,6 +1,10 @@
 // Action buttons grid: the Wallpaper right-rail GridLayout of engine actions
-// (pick video, apply wallpaper, clear, start engine, pause, resume + busy
-// indicator). Content-width buttons in a 2-column grid.
+// (pick video, apply wallpaper, clear, start engine + busy indicator).
+// Content-width buttons in a 2-column grid.
+//
+// Jeda / Lanjut are NOT here: the pause/resume pair merged into the single
+// StatusBar button (glossary §5 "Hentikan Wallpaper + Lanjutkan -> satu
+// tombol Jeda / Lanjut", plan todo 5).
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
@@ -52,22 +56,6 @@ GridLayout {
         onClicked: Studio.startEngine()
         ToolTip.visible: hovered
         ToolTip.text: qsTr("Menyalakan engine wallpaper (muncul saat engine mati)")
-    }
-
-    Button {
-        text: qsTr("Hentikan Wallpaper")
-        enabled: Studio.engineRunning && !Studio.busy
-        onClicked: Studio.pause()
-        ToolTip.visible: hovered
-        ToolTip.text: qsTr("Hentikan wallpaper (IPC pause, video tetap termuat)")
-    }
-
-    Button {
-        text: qsTr("Lanjutkan")
-        enabled: Studio.engineRunning && !Studio.busy
-        onClicked: Studio.resume()
-        ToolTip.visible: hovered
-        ToolTip.text: qsTr("Lanjutkan engine yang dijeda (IPC, tanpa restart)")
     }
 
     BusyIndicator {

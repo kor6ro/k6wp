@@ -94,7 +94,8 @@ set_source_files_properties(qml/Theme.qml PROPERTIES QT_RESOURCE_ALIAS Theme.qml
 set_source_files_properties(qml/Main.qml PROPERTIES QT_RESOURCE_ALIAS Main.qml)
 set_source_files_properties(qml/LogPanel.qml PROPERTIES QT_RESOURCE_ALIAS LogPanel.qml)
 set_source_files_properties(qml/PreviewHole.qml PROPERTIES QT_RESOURCE_ALIAS PreviewHole.qml)
-set_source_files_properties(qml/EngineStatusPanel.qml PROPERTIES QT_RESOURCE_ALIAS EngineStatusPanel.qml)
+set_source_files_properties(qml/StatusBar.qml PROPERTIES QT_RESOURCE_ALIAS StatusBar.qml)
+set_source_files_properties(qml/AppDialogs.qml PROPERTIES QT_RESOURCE_ALIAS AppDialogs.qml)
 set_source_files_properties(qml/ActionButtons.qml PROPERTIES QT_RESOURCE_ALIAS ActionButtons.qml)
 set_source_files_properties(qml/QuickSettingsPanel.qml PROPERTIES QT_RESOURCE_ALIAS QuickSettingsPanel.qml)
 set_source_files_properties(qml/LibraryDelegate.qml PROPERTIES QT_RESOURCE_ALIAS LibraryDelegate.qml)
@@ -117,7 +118,8 @@ qt_add_qml_module(studio
     qml/Main.qml
     qml/LogPanel.qml
     qml/PreviewHole.qml
-    qml/EngineStatusPanel.qml
+    qml/StatusBar.qml
+    qml/AppDialogs.qml
     qml/ActionButtons.qml
     qml/QuickSettingsPanel.qml
     qml/LibraryDelegate.qml
@@ -462,7 +464,8 @@ set(K6WP_TR_QML_SOURCES
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/Main.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/LogPanel.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/PreviewHole.qml"
-  "${CMAKE_CURRENT_SOURCE_DIR}/qml/EngineStatusPanel.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/StatusBar.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/AppDialogs.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/ActionButtons.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/QuickSettingsPanel.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/LibraryDelegate.qml"

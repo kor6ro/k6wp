@@ -1,7 +1,8 @@
 // Wallpaper page (Wallpaper tab). Contains the monitor sub-tabs strip, the
 // preview caption + PreviewHole, the LibraryPanel and PlaylistPanel in the
-// left column, and the right rail (EngineStatusPanel + ActionButtons +
-// QuickSettingsPanel + LogPanel).
+// left column, and the right rail (StatusBar + ActionButtons +
+// QuickSettingsPanel). Raw support details (process id, paths, log) are not
+// shown here - they live in the "Info teknis" dialog (AppDialogs.qml).
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
@@ -26,10 +27,12 @@ Item {
     property var fileNameOf: function (path) { return "" }
     property var selectedMonitorLabel: function () { return "" }
     property var selectedMonitorHasAssignment: function () { return false }
-    property var statusColor: function (kind) { return "gray" }
     property var maybeOfferCompressFirst: function (path, applyAfter) { return false }
     property var syncPreview: function () {}
     property int statusKindNotRunning: 3
+    // BridgeStatusKind::kPaused, passed down to StatusBar for its one-button
+    // Jeda/Lanjut matrix (Main owns the enum mirror).
+    property int statusKindPaused: 1
     property var dialogOpened: function () {}
     property var dialogClosed: function () {}
 
@@ -317,7 +320,7 @@ Item {
             }
 
             // -----------------------------------------------------
-            // Right rail: status, actions, quick settings, log
+            // Right rail: status, actions, quick settings
             // -----------------------------------------------------
             ColumnLayout {
                 Layout.preferredWidth: 340
@@ -325,10 +328,8 @@ Item {
                 Layout.fillHeight: true
                 spacing: 8
 
-                EngineStatusPanel {
-                    labelColWidth: wallpaperPage.labelColWidth
-                    formColSpacing: wallpaperPage.formColSpacing
-                    statusColor: wallpaperPage.statusColor
+                StatusBar {
+                    statusKindPaused: wallpaperPage.statusKindPaused
                 }
 
                 ActionButtons {
@@ -345,23 +346,13 @@ Item {
                     formRowSpacing: wallpaperPage.formRowSpacing
                 }
 
-                // --- Detail teknis (log) -------------------------
-                Pane {
+                // Absorbs the rail's leftover height so the panes above stay
+                // pinned to the top. A ColumnLayout without an expansive
+                // child keeps its implicit height and the row centers it
+                // (the removed log pane used to play this role).
+                Item {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    Layout.minimumHeight: 100
-                    Material.elevation: 1
-                    padding: 8
-
-                    LogPanel {
-                        anchors.fill: parent
-                        // One log view fed by both backends: the
-                        // old UI had a single MainWindow log fed
-                        // by ApplyManager, CompressService and
-                        // the IPC client, so the lines stay
-                        // interleaved here too.
-                        text: Studio.log.concat(Compress.log).join("\n")
-                    }
                 }
             }
         }

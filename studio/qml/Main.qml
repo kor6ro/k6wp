@@ -70,21 +70,6 @@ Rectangle {
     readonly property int formColSpacing: 12
     readonly property int formRowSpacing: 10
 
-    // Same four colours MainWindow::OnPollDone painted the status label with.
-    function statusColor(kind) {
-        switch (kind) {
-        case StatusKind.Connected:
-            return "green";
-        case StatusKind.Paused:
-        case StatusKind.Degraded:
-            return "orange";
-        case StatusKind.NotRunning:
-            return "gray";
-        default:
-            return "red";
-        }
-    }
-
     // Pushes the preview hole's rectangle to the native PreviewWidget, in
     // QQuickWidget scene coordinates (the space QmlShell maps into window
     // coordinates). mapToItem(null, ...) resolves against the scene root, so
@@ -372,6 +357,13 @@ Rectangle {
                         onTriggered: Studio.checkForUpdatesInteractive()
                     }
 
+                    // C-16 entry point: the friendly status stays on the
+                    // Wallpaper screen, the raw details live in this dialog.
+                    MenuItem {
+                        text: qsTr("&Info teknis")
+                        onTriggered: appDialogs.openInfoTeknis()
+                    }
+
                     MenuItem {
                         text: qsTr("&Tentang K6WP Studio")
                         onTriggered: aboutDialog.open()
@@ -483,10 +475,10 @@ Rectangle {
                     fileNameOf: root.fileNameOf
                     selectedMonitorLabel: root.selectedMonitorLabel
                     selectedMonitorHasAssignment: root.selectedMonitorHasAssignment
-                    statusColor: root.statusColor
                     maybeOfferCompressFirst: root.maybeOfferCompressFirst
                     syncPreview: root.syncPreview
-                    statusKindNotRunning: root.StatusKind.NotRunning
+                    statusKindNotRunning: Main.StatusKind.NotRunning
+                    statusKindPaused: Main.StatusKind.Paused
                     dialogOpened: root.dialogOpened
                     dialogClosed: root.dialogClosed
                 }
@@ -546,6 +538,17 @@ Rectangle {
     // Studio) no active video.
     FirstRunDialog {
         id: firstRunDialog
+        dialogOpened: root.dialogOpened
+        dialogClosed: root.dialogClosed
+    }
+
+    // --- App-level dialogs ---------------------------------------------------
+    // Todo 5: "Info teknis" (friendly status + raw support details + Salin
+    // untuk dukungan). Hosted at the root so todos 12/13 can extend the file
+    // with the compress consent / first-offer dialogs.
+    AppDialogs {
+        id: appDialogs
+        anchors.fill: parent
         dialogOpened: root.dialogOpened
         dialogClosed: root.dialogClosed
     }
