@@ -17,7 +17,6 @@ Item {
 
     property var dialogOpened: function () {}
     property var dialogClosed: function () {}
-    property var navigateToCompressor: function () {}
 
     // Large thumbnails: 256px cells with the card's own 4px gutter.
     readonly property int cellWidth: 256
@@ -65,7 +64,6 @@ Item {
             cellHeight: grid.cellHeight
             dialogOpened: videoGrid.dialogOpened
             dialogClosed: videoGrid.dialogClosed
-            navigateToCompressor: videoGrid.navigateToCompressor
         }
     }
 }

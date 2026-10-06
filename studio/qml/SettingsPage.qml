@@ -179,13 +179,17 @@ Item {
                 }
 
                 Label {
-                    text: qsTr("Kompresor (bawaan impor)")
+                    // Todo 13 / glosarium: the old compressor-group label is
+                    // renamed to "Siapkan otomatis", matching the C-8 offer
+                    // verb so the settings group and the dialog speak one
+                    // language.
+                    text: qsTr("Siapkan otomatis (saat impor)")
                     font.bold: true
                 }
 
                 CheckBox {
                     Layout.fillWidth: true
-                    text: qsTr("Otomatis kompres:")
+                    text: qsTr("Siapkan otomatis:")
                     checked: Settings.autoCompressOnImport
                     onToggled: Settings.setAutoCompressOnImport(checked)
                 }

@@ -6,7 +6,7 @@
 //   Dipakai       - check badge, the video the engine is currently playing
 //   Hilang        - warning badge "File tidak ketemu" + Cari/Hapus dialog
 //   Belum siap    - hourglass badge "Perlu disiapkan" (optimized role, todo 6)
-//   Progres       - scrim + "Menyiapkan video... {p}%" + Batal (Compress)
+//   Progres       - scrim + "Menyiapkan… {p}%" + × cancel (Compress.cancel)
 //   Error         - warning badge "Tidak bisa dipakai" + Coba lagi
 //
 // Copy deck: C-4 (hover [Pasang] + [....]), C-5 (row menu), C-6 (TWO separate
@@ -45,7 +45,6 @@ Item {
     property int cellHeight: 238
     property var dialogOpened: function () {}
     property var dialogClosed: function () {}
-    property var navigateToCompressor: function () {}
 
     width: cellWidth
     height: cellHeight
@@ -378,8 +377,13 @@ Item {
                 anchors.margins: Theme.space1
             }
 
-            // "Sedang disiapkan" overlay: progress + Batal (B-STATE matrix).
+            // "Sedang disiapkan" overlay (todo 13 / B-STATE matrix): the
+            // scrim carries "Menyiapkan… N%" (D3 percent when available) and
+            // a × cancel button. The toast at the window bottom offers the
+            // same cancel via "Batal"; both call Compress.cancel().
             Rectangle {
+                id: preparingOverlay
+                objectName: "preparingOverlay"
                 anchors.fill: parent
                 radius: Theme.radiusS
                 color: Theme.bg
@@ -387,22 +391,58 @@ Item {
                 visible: videoCard.preparing
             }
 
-            ColumnLayout {
+            Label {
+                id: preparingLabel
+                objectName: "preparingLabel"
                 anchors.centerIn: parent
                 visible: videoCard.preparing
-                spacing: Theme.space1
+                text: qsTr("Menyiapkan\u2026 %1%").arg(Compress.progress)
+                font.pixelSize: Theme.fontM
+                font.weight: Theme.fontWeightSemibold
+                color: Theme.text
+                Accessible.name: text
+            }
 
-                Label {
-                    Layout.alignment: Qt.AlignHCenter
-                    text: qsTr("Menyiapkan video\u2026 %1%").arg(Compress.progress)
-                    font.pixelSize: Theme.fontM
-                    color: Theme.text
+            // × cancel: 40px target, Enter/Space, Accessible.name. Top-right
+            // of the thumbnail so it never collides with the status badges.
+            Button {
+                id: preparingCancel
+                objectName: "preparingCancel"
+                visible: videoCard.preparing
+                anchors.top: parent.top
+                anchors.right: parent.right
+                anchors.margins: Theme.space1
+                implicitWidth: 40
+                implicitHeight: 40
+                focusPolicy: Qt.StrongFocus
+                text: "\u00D7"
+                Accessible.name: qsTr("Batal menyiapkan")
+                onClicked: Compress.cancel()
+
+                Keys.onReturnPressed: {
+                    Compress.cancel()
+                    event.accepted = true
+                }
+                Keys.onEnterPressed: {
+                    Compress.cancel()
+                    event.accepted = true
                 }
 
-                CardButton {
-                    Layout.alignment: Qt.AlignHCenter
-                    text: qsTr("Batal")
-                    onClicked: Compress.cancel()
+                contentItem: Text {
+                    text: preparingCancel.text
+                    font.pixelSize: Theme.fontL
+                    font.weight: Theme.fontWeightSemibold
+                    color: Theme.text
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+                background: Rectangle {
+                    radius: Theme.radiusS
+                    color: preparingCancel.hovered || preparingCancel.activeFocus
+                           ? Theme.surface2 : Theme.surface
+                    border.width: preparingCancel.activeFocus ? 2 : 1
+                    border.color: preparingCancel.activeFocus
+                                  ? Theme.accent : Theme.text2
                 }
             }
         }
@@ -484,9 +524,13 @@ Item {
         MenuItem {
             text: qsTr("Perkecil")
             enabled: !videoCard.missing
+            // Todo 13: compression runs fully in the background. "Perkecil"
+            // sets the source and starts the job; the ToastBar at the window
+            // bottom carries the progress + Batal, and long videos raise the
+            // C-9 consent dialog through AppDialogs.
             onTriggered: {
                 Compress.setSourcePath(videoCard.dst)
-                videoCard.navigateToCompressor()
+                Compress.start()
             }
         }
         MenuItem {

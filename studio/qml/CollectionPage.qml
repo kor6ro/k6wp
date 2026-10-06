@@ -19,7 +19,6 @@ ColumnLayout {
 
     property var dialogOpened: function () {}
     property var dialogClosed: function () {}
-    property var navigateToCompressor: function () {}
 
     Layout.fillWidth: true
     Layout.fillHeight: true
@@ -175,6 +174,5 @@ ColumnLayout {
         visible: !Library.isEmpty && Library.visibleCount > 0
         dialogOpened: collectionPage.dialogOpened
         dialogClosed: collectionPage.dialogClosed
-        navigateToCompressor: collectionPage.navigateToCompressor
     }
 }

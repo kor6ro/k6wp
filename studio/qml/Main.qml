@@ -1,4 +1,4 @@
-// Phase 1 shell (Qt6 Widgets -> QML migration).
+﻿// Phase 1 shell (Qt6 Widgets -> QML migration).
 //
 // Root is a plain Rectangle, NOT ApplicationWindow: this document is hosted by
 // a QQuickWidget, which renders QQuickItems, not a top-level QQuickWindow. The
@@ -24,6 +24,14 @@
 // studio/qml/. Shared state (sizing, StatusKind, dialog lifecycle, compress
 // offer, monitor selection, armed assignment) stays on this root and is
 // passed into components as properties.
+//
+// Todo 13 (S6): compression runs fully in the background. The compressor tab
+// is gone; navigation is a left sidebar (Beranda / Pengaturan) per brief
+// B-WIREFRAME(a). Consent (C-9) and the compress-first offer (C-8) live in
+// AppDialogs.qml; progress surfaces in ToastBar at the window bottom.
+// applyAfterCompress, offerPath/offerMb/offerApplyAfter and the
+// maybeOfferCompressFirst / startCompressFirst / declineCompressFirst trio
+// stay on this root (brief Â§4.2: these paths MUST survive).
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
@@ -44,9 +52,6 @@ Rectangle {
     // The Pane below paints the window surface, so the root stays clear.
     color: "transparent"
 
-    // Duration reported by CompressBridge's long-video gate, in minutes.
-    property double consentDuration: 0
-
     // Stable mirror of k6wp::BridgeStatusKind (studio_bridge.hpp). Kept in the
     // same order; a new C++ kind is rejected at compile time by the assert in
     // StudioBridge::ApplyStatus.
@@ -61,7 +66,7 @@ Rectangle {
     // --- shared sizing tokens ---------------------------------------------
     // Every settings row is a 2-column GridLayout so labels and controls line
     // up by construction; these keep the columns identical across rows and
-    // across the three tabs. Without them each row picked its own widths, which
+    // across the pages. Without them each row picked its own widths, which
     // is what made controls start at different x.
     readonly property int labelColWidth: 132
     readonly property int controlWidth: 320
@@ -70,6 +75,34 @@ Rectangle {
     readonly property int formColSpacing: 12
     readonly property int formRowSpacing: 10
 
+    // --- sidebar navigation (todo 13; replaces TabBar + page-index nav) ---
+    // Brief B-WIREFRAME(a): "sidebar kiri (Beranda/Koleksi/Pengaturan)".
+    // Koleksi is part of the Beranda page today (CollectionPage lives inside
+    // WallpaperPage), so the sidebar carries two entries. The compressor tab
+    // is gone - compression is a background job surfaced by ToastBar.
+    readonly property int pageBeranda: 0
+    readonly property int pagePengaturan: 1
+    property int currentPage: pageBeranda
+
+    // switchPage replaces the old tab-index setter: same refresh-on-entry
+    // side effects, driven by the sidebar buttons instead of a TabBar.
+    function switchPage(index) {
+        const i = Number(index)
+        if (isNaN(i) || i === root.currentPage)
+            return
+        root.currentPage = i
+        if (i === root.pageBeranda) {
+            // Re-read on entry: the Beranda page's quick settings mirror
+            // config.json + the autostart registry, either of which the
+            // Pengaturan page can change. Also re-scan the library so a
+            // video renamed or moved in Explorer flips its card to the
+            // "File tidak ketemu" state.
+            Studio.refreshQuickSettings()
+            Studio.refreshDisplays()
+            Library.reload()
+        }
+    }
+
     // Pushes the preview hole's rectangle to the native PreviewWidget, in
     // QQuickWidget scene coordinates (the space QmlShell maps into window
     // coordinates). mapToItem(null, ...) resolves against the scene root, so
@@ -77,7 +110,7 @@ Rectangle {
     //
     // A collapsed / hidden hole is pushed as a 0x0 rect, which QmlShell treats
     // as "hide the native surface" - that is what keeps the preview from
-    // floating over the Kompresor / Pengaturan pages.
+    // floating over the Pengaturan page.
     function dialogOpened() {
         root.openDialogs += 1;
         Studio.syncPreviewGeometry(0, 0, 0, 0);
@@ -113,13 +146,17 @@ Rectangle {
         function onApplyRequested(dst) {
             wallpaperPage.installVideo(dst)
         }
+        // Todo 13: re-compress runs in the background - set the source and
+        // start; ToastBar carries the progress + Batal, and long videos raise
+        // the C-9 consent dialog through AppDialogs.
         function onRecompressRequested(dst) {
             Compress.setSourcePath(dst)
-            root.showTab(1)
+            Compress.start()
         }
         // An imported file was over the threshold, so the model deliberately
         // did not reference it. With auto-compress on, just run it; otherwise
-        // ask. The apply path is a separate signal and always offers.
+        // ask (C-8 offer in AppDialogs). The apply path is a separate signal
+        // and always offers.
         function onCompressFirstRequired(path) {
             root.offerPath = path
             root.offerMb = Studio.compressFirstOfferMb(path)
@@ -127,18 +164,8 @@ Rectangle {
             if (Settings.autoCompressOnImport)
                 root.startCompressFirst()
             else
-                compressOfferDialog.open()
+                appDialogs.openCompressOffer(path, root.offerMb)
         }
-    }
-
-    function showTab(index) {
-        tabBar.currentIndex = index
-    }
-
-    // A card's "Perkecil" action (C-5) sets Compress.setSourcePath itself,
-    // then navigates here so the Kompresor tab shows the job.
-    function showCompressor() {
-        root.showTab(1)
     }
 
     // --- Compress-first offer (restored from MainWindow::MaybeOfferCompressFirst,
@@ -158,7 +185,7 @@ Rectangle {
         offerPath = path
         offerMb = mb
         offerApplyAfter = applyAfter
-        compressOfferDialog.open()
+        appDialogs.openCompressOffer(path, mb)
         return true
     }
 
@@ -167,9 +194,11 @@ Rectangle {
     //
     // applyAfterCompress - not Compress.autoApply - is how the apply path gets
     // its result applied. autoApply is the user's own "Langsung terapkan
-    // setelah selesai" checkbox, and the offer used to write it, so accepting
+    // setelah selesai" preference, and the offer used to write it, so accepting
     // an offer silently ticked (or unticked) a preference the user never
     // touched. This flag belongs to the offer and is one-shot.
+    //
+    // Todo 13: this flag STAYS on the Main root (brief Â§4.2).
     property bool applyAfterCompress: false
     // Modals stack (e.g. first-run wizard + compress offer): keep the native
     // preview hidden until the last one closes.
@@ -187,7 +216,7 @@ Rectangle {
     // Exactly one selected key at a time. The primary monitor's key is the
     // default; with no primary, the first entry with a non-empty key wins
     // (deterministic Studio.displays order). Empty until the first
-    // refreshDisplays() lands - the Wallpaper view is the start page, so that
+    // refreshDisplays() lands - the Beranda view is the start page, so that
     // refresh also runs from Component.onCompleted below.
     property string selectedMonitorKey: ""
 
@@ -240,7 +269,7 @@ Rectangle {
         return entry !== null && String(entry.assignedPath).length > 0
     }
 
-    // A sub-tab click scopes the Wallpaper view to that monitor. The preview
+    // A sub-tab click scopes the Beranda view to that monitor. The preview
     // hole keeps its native-surface contract, so its geometry is re-pushed
     // through the existing syncPreview() exactly like the layout-change
     // handlers do; the quick settings are re-read through the existing
@@ -256,17 +285,19 @@ Rectangle {
         Studio.refreshQuickSettings()
     }
 
+    // Todo 13: start the compress-first job. No page navigation - the job
+    // runs in the background and ToastBar carries the progress. The 1080p
+    // pin matches the C-8 offer's promise.
     function startCompressFirst() {
         Compress.setSourcePath(offerPath)
         Compress.setResolutionText("1920x1080")
         root.applyAfterCompress = offerApplyAfter
-        showTab(1)
         Compress.start()
     }
 
-    // Answering "No" (or Esc) means "do not compress first" - the action
-    // that raised the offer still has to run, otherwise any video over the
-    // threshold can never be applied: the caller already skipped its own
+    // Answering "Pasang saja" (or Esc) means "do not compress first" - the
+    // action that raised the offer still has to run, otherwise any video over
+    // the threshold can never be applied: the caller already skipped its own
     // apply when maybeOfferCompressFirst returned true. The import path sets
     // offerApplyAfter = false, so declining is correctly a no-op there (that
     // file was deliberately left out of the library).
@@ -276,10 +307,45 @@ Rectangle {
         offerApplyAfter = false
     }
 
+    // --- Compress bridge wiring (todo 13; relocated from the old compress
+    // page) ---------------------------------------------------------------
+    // consentRequired -> AppDialogs C-9 dialog -> resolveConsent. The pairing
+    // (Metis F2) lives in AppDialogs.qml; this handler only opens it.
+    //
+    // resultChanged -> the one-shot applyAfterCompress flag (offer intent)
+    // OR the user's autoApply preference decides whether the result is
+    // installed. The flag is spent here.
+    //
+    // jobFinishedWithoutResult -> the flag is dropped so it cannot leak into
+    // an unrelated later compress, and the C-10 outcome sentence is surfaced
+    // in ToastBar (cancel vs failure, distinguished by toastBar.cancelPending).
     Connections {
         target: Compress
+        function onConsentRequired(durationMinutes) {
+            appDialogs.openConsent(durationMinutes)
+        }
+        function onResultChanged() {
+            if (!Compress.hasResult)
+                return
+            // The offer's intent wins over the checkbox, and the flag is
+            // spent here. A job that never yields a result is covered by
+            // onJobFinishedWithoutResult, which clears the flag.
+            const apply_it = root.applyAfterCompress || Compress.autoApply
+            root.applyAfterCompress = false
+            if (apply_it)
+                Studio.applyWallpaper(Compress.resultPath)
+        }
         function onJobFinishedWithoutResult() {
             root.applyAfterCompress = false
+            // C-10 copy (brief B-COPY): cancel and failure both reassure the
+            // user that the original file is untouched.
+            if (toastBar.cancelPending) {
+                toastBar.showOutcome(qsTr("Dibatalkan. Video aslinya tetap ada di koleksi."))
+                toastBar.cancelPending = false
+            } else if (Compress.lastError.length > 0) {
+                toastBar.showOutcome(qsTr("Belum bisa disiapkan (%1). Kamu tetap bisa memasang video aslinya.")
+                                      .arg(Compress.lastError))
+            }
         }
     }
 
@@ -301,7 +367,7 @@ Rectangle {
             anchors.fill: parent
             spacing: 0
 
-                MenuBar {
+            MenuBar {
 
                 Menu {
                     title: qsTr("&Berkas")
@@ -329,7 +395,7 @@ Rectangle {
                     }
 
                     // C-16 entry point: the friendly status stays on the
-                    // Wallpaper screen, the raw details live in this dialog.
+                    // Beranda screen, the raw details live in this dialog.
                     MenuItem {
                         text: qsTr("&Info teknis")
                         onTriggered: appDialogs.openInfoTeknis()
@@ -352,109 +418,201 @@ Rectangle {
                 text: Studio.updateCheckMessage
             }
 
-            TabBar {
-                id: tabBar
+            // --- sidebar + content (todo 13; replaces TabBar + StackLayout
+            // currentIndex binding) ----------------------------------------
+            // Sidebar left, content right (brief B-WIREFRAME(a)). The toast
+            // sits below this row at the window bottom edge, never above the
+            // preview hole inside the Beranda page.
+            RowLayout {
                 Layout.fillWidth: true
+                Layout.fillHeight: true
+                spacing: 0
 
-                // Re-read on entry: the Wallpaper tab's quick settings mirror
-                // config.json + the autostart registry, either of which the
-                // Pengaturan tab can change.
-                onCurrentIndexChanged: {
-                    if (currentIndex === 0) {
-                        Studio.refreshQuickSettings()
-                        // Row 41: re-read the monitor list whenever the
-                        // Wallpaper view is shown (row 21's refresh-on-show
-                        // pattern, now owned by this view).
-                        Studio.refreshDisplays()
-                        // Re-scan the library on re-entry so a video renamed
-                        // or moved in Explorer flips its card to the
-                        // "File tidak ketemu" state (ListItems recomputes
-                        // broken on every load).
-                        Library.reload()
+                // --- sidebar ------------------------------------------------
+                // One button per page. >= 40px targets, Accessible.name,
+                // highlighted = current page (no coloured accent border - the
+                // highlight is a tonal wash + bold text per B-TOKEN a11y).
+                // fillWidth:false + maximumWidth pin the rail so the content
+                // StackLayout claims the rest of the row.
+                ColumnLayout {
+                    Layout.preferredWidth: 180
+                    Layout.minimumWidth: 160
+                    Layout.maximumWidth: 200
+                    Layout.fillWidth: false
+                    Layout.fillHeight: true
+                    spacing: 0
+
+                    // Beranda
+                    Button {
+                        id: sidebarBeranda
+                        objectName: "sidebarBeranda"
+                        Layout.fillWidth: true
+                        Layout.margins: Theme.space2
+                        implicitHeight: 48
+                        focusPolicy: Qt.StrongFocus
+                        flat: root.currentPage !== root.pageBeranda
+                        highlighted: root.currentPage === root.pageBeranda
+                        text: qsTr("Beranda")
+                        Accessible.name: text
+                        onClicked: root.switchPage(root.pageBeranda)
+
+                        Keys.onReturnPressed: {
+                            root.switchPage(root.pageBeranda)
+                            event.accepted = true
+                        }
+                        Keys.onEnterPressed: {
+                            root.switchPage(root.pageBeranda)
+                            event.accepted = true
+                        }
+
+                        contentItem: Text {
+                            text: sidebarBeranda.text
+                            font.pixelSize: Theme.fontM
+                            font.weight: root.currentPage === root.pageBeranda
+                                         ? Theme.fontWeightSemibold
+                                         : Theme.fontWeightRegular
+                            color: Theme.text
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        background: Rectangle {
+                            radius: Theme.radiusS
+                            color: root.currentPage === root.pageBeranda
+                                   ? Theme.surface2 : "transparent"
+                            border.width: sidebarBeranda.activeFocus ? 2 : 0
+                            border.color: Theme.accent
+                        }
+                    }
+
+                    // Pengaturan
+                    Button {
+                        id: sidebarPengaturan
+                        objectName: "sidebarPengaturan"
+                        Layout.fillWidth: true
+                        Layout.margins: Theme.space2
+                        implicitHeight: 48
+                        focusPolicy: Qt.StrongFocus
+                        flat: root.currentPage !== root.pagePengaturan
+                        highlighted: root.currentPage === root.pagePengaturan
+                        text: qsTr("Pengaturan")
+                        Accessible.name: text
+                        onClicked: root.switchPage(root.pagePengaturan)
+
+                        Keys.onReturnPressed: {
+                            root.switchPage(root.pagePengaturan)
+                            event.accepted = true
+                        }
+                        Keys.onEnterPressed: {
+                            root.switchPage(root.pagePengaturan)
+                            event.accepted = true
+                        }
+
+                        contentItem: Text {
+                            text: sidebarPengaturan.text
+                            font.pixelSize: Theme.fontM
+                            font.weight: root.currentPage === root.pagePengaturan
+                                         ? Theme.fontWeightSemibold
+                                         : Theme.fontWeightRegular
+                            color: Theme.text
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        background: Rectangle {
+                            radius: Theme.radiusS
+                            color: root.currentPage === root.pagePengaturan
+                                   ? Theme.surface2 : "transparent"
+                            border.width: sidebarPengaturan.activeFocus ? 2 : 0
+                            border.color: Theme.accent
+                        }
+                    }
+
+                    // Absorbs the rail's leftover height so the two buttons
+                    // stay pinned to the top.
+                    Item {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
                     }
                 }
 
-                // Tab labels are the existing Studio tab names.
-                TabButton {
-                    text: qsTr("Wallpaper")
-                }
-                TabButton {
-                    text: qsTr("Kompresor")
-                }
-                TabButton {
-                    text: qsTr("Pengaturan")
-                }
-            }
-
-            StackLayout {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                currentIndex: tabBar.currentIndex
-
-                // ---------------------------------------------------------
-                // Wallpaper
-                // ---------------------------------------------------------
-                WallpaperPage {
-                    id: wallpaperPage
-                    labelColWidth: root.labelColWidth
-                    controlWidth: root.controlWidth
-                    spinWidth: root.spinWidth
-                    formColSpacing: root.formColSpacing
-                    formRowSpacing: root.formRowSpacing
-                    selectedMonitorKey: root.selectedMonitorKey
-                    selectMonitor: root.selectMonitor
-                    fileNameOf: root.fileNameOf
-                    selectedMonitorLabel: root.selectedMonitorLabel
-                    selectedMonitorHasAssignment: root.selectedMonitorHasAssignment
-                    maybeOfferCompressFirst: root.maybeOfferCompressFirst
-                    syncPreview: root.syncPreview
-                    navigateToCompressor: root.showCompressor
-                    statusKindNotRunning: Main.StatusKind.NotRunning
-                    statusKindPaused: Main.StatusKind.Paused
-                    dialogOpened: root.dialogOpened
-                    dialogClosed: root.dialogClosed
+                // Thin divider between sidebar and content.
+                Rectangle {
+                    Layout.fillHeight: true
+                    Layout.preferredWidth: 1
+                    color: Theme.surface2
                 }
 
-                // ---------------------------------------------------------
-                // Kompresor
-                // ---------------------------------------------------------
-                CompressorPage {
-                    id: compressorPage
-                    labelColWidth: root.labelColWidth
-                    formColSpacing: root.formColSpacing
-                    formRowSpacing: root.formRowSpacing
-                    applyAfterCompress: root.applyAfterCompress
-                    consentDuration: root.consentDuration
-                    dialogOpened: root.dialogOpened
-                    dialogClosed: root.dialogClosed
-                }
+                // --- content ------------------------------------------------
+                StackLayout {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    currentIndex: root.currentPage
 
-                // ---------------------------------------------------------
-                // Pengaturan
-                // ---------------------------------------------------------
-                SettingsPage {
-                    id: settingsPage
-                    labelColWidth: root.labelColWidth
-                    controlWidth: root.controlWidth
-                    narrowControlWidth: root.narrowControlWidth
-                    spinWidth: root.spinWidth
-                    formColSpacing: root.formColSpacing
-                    formRowSpacing: root.formRowSpacing
-                    dialogOpened: root.dialogOpened
-                    dialogClosed: root.dialogClosed
+                    // ---------------------------------------------------------
+                    // Beranda (Wallpaper page)
+                    // ---------------------------------------------------------
+                    WallpaperPage {
+                        id: wallpaperPage
+                        labelColWidth: root.labelColWidth
+                        controlWidth: root.controlWidth
+                        spinWidth: root.spinWidth
+                        formColSpacing: root.formColSpacing
+                        formRowSpacing: root.formRowSpacing
+                        selectedMonitorKey: root.selectedMonitorKey
+                        selectMonitor: root.selectMonitor
+                        fileNameOf: root.fileNameOf
+                        selectedMonitorLabel: root.selectedMonitorLabel
+                        selectedMonitorHasAssignment: root.selectedMonitorHasAssignment
+                        maybeOfferCompressFirst: root.maybeOfferCompressFirst
+                        syncPreview: root.syncPreview
+                        statusKindNotRunning: Main.StatusKind.NotRunning
+                        statusKindPaused: Main.StatusKind.Paused
+                        dialogOpened: root.dialogOpened
+                        dialogClosed: root.dialogClosed
+                    }
+
+                    // ---------------------------------------------------------
+                    // Pengaturan
+                    // ---------------------------------------------------------
+                    SettingsPage {
+                        id: settingsPage
+                        labelColWidth: root.labelColWidth
+                        controlWidth: root.controlWidth
+                        narrowControlWidth: root.narrowControlWidth
+                        spinWidth: root.spinWidth
+                        formColSpacing: root.formColSpacing
+                        formRowSpacing: root.formRowSpacing
+                        dialogOpened: root.dialogOpened
+                        dialogClosed: root.dialogClosed
+                    }
                 }
             }
         }
     }
 
-    CompressOfferDialog {
-        id: compressOfferDialog
-        offerPath: root.offerPath
-        offerMb: root.offerMb
-        startCompressFirst: root.startCompressFirst
-        declineCompressFirst: root.declineCompressFirst
+    // --- ToastBar (todo 13) ----------------------------------------------
+    // Window-bottom compress progress toast. Anchored to the root's bottom
+    // edge, so it is never above the preview hole (B-WIREFRAME(f)). Shows
+    // D3 progress text while a job runs and the C-10 outcome sentence
+    // briefly after cancel / failure / consent rejection.
+    ToastBar {
+        id: toastBar
+    }
+
+    // --- App-level dialogs ---------------------------------------------------
+    // Todo 5: "Info teknis". Todo 13: C-9 consent + C-8 compress-first offer
+    // moved here from the old standalone dialog files. The offer callbacks
+    // are Main-root functions (brief Â§4.2: the paths stay wired at root);
+    // consentCancelled surfaces the C-10 cancel sentence in ToastBar.
+    AppDialogs {
+        id: appDialogs
+        anchors.fill: parent
         dialogOpened: root.dialogOpened
         dialogClosed: root.dialogClosed
+        startCompressFirst: root.startCompressFirst
+        declineCompressFirst: root.declineCompressFirst
+        onConsentCancelled: {
+            toastBar.showOutcome(qsTr("Dibatalkan. Video aslinya tetap ada di koleksi."))
+        }
     }
 
     AboutDialog {
@@ -474,24 +632,16 @@ Rectangle {
         dialogClosed: root.dialogClosed
     }
 
-    // --- App-level dialogs ---------------------------------------------------
-    // Todo 5: "Info teknis" (friendly status + raw support details + Salin
-    // untuk dukungan). Hosted at the root so todos 12/13 can extend the file
-    // with the compress consent / first-offer dialogs.
-    AppDialogs {
-        id: appDialogs
-        anchors.fill: parent
-        dialogOpened: root.dialogOpened
-        dialogClosed: root.dialogClosed
-    }
-
     Component.onCompleted: {
-        // Row 41: the Wallpaper view is the start page, so its monitor list
-        // has to be populated here as well - onCurrentIndexChanged cannot
-        // fire for the initial show. refreshDisplays() emits displaysChanged,
-        // which seeds selectedMonitorKey through ensureSelectedMonitor().
+        // Row 41: the Beranda view is the start page, so its monitor list
+        // has to be populated here as well - switchPage cannot fire for the
+        // initial show. refreshDisplays() emits displaysChanged, which seeds
+        // selectedMonitorKey through ensureSelectedMonitor().
         Studio.refreshDisplays()
         if (Library.firstRunEligible && !Studio.videoActive)
             firstRunDialog.open()
     }
+
 }
+
+

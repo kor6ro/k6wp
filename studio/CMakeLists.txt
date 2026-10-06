@@ -104,12 +104,13 @@ set_source_files_properties(qml/VideoGrid.qml PROPERTIES QT_RESOURCE_ALIAS Video
 set_source_files_properties(qml/VideoCard.qml PROPERTIES QT_RESOURCE_ALIAS VideoCard.qml)
 set_source_files_properties(qml/EmptyState.qml PROPERTIES QT_RESOURCE_ALIAS EmptyState.qml)
 set_source_files_properties(qml/AutoSwitchPanel.qml PROPERTIES QT_RESOURCE_ALIAS AutoSwitchPanel.qml)
-set_source_files_properties(qml/ConsentDialog.qml PROPERTIES QT_RESOURCE_ALIAS ConsentDialog.qml)
+# Todo 13: ToastBar (window-bottom compress progress toast). ConsentDialog /
+# CompressOfferDialog / CompressorPage were deleted - their dialogs live in
+# AppDialogs.qml now and the compressor page is gone with the tab.
+set_source_files_properties(qml/ToastBar.qml PROPERTIES QT_RESOURCE_ALIAS ToastBar.qml)
 set_source_files_properties(qml/CacheDialog.qml PROPERTIES QT_RESOURCE_ALIAS CacheDialog.qml)
-set_source_files_properties(qml/CompressOfferDialog.qml PROPERTIES QT_RESOURCE_ALIAS CompressOfferDialog.qml)
 set_source_files_properties(qml/AboutDialog.qml PROPERTIES QT_RESOURCE_ALIAS AboutDialog.qml)
 set_source_files_properties(qml/FirstRunDialog.qml PROPERTIES QT_RESOURCE_ALIAS FirstRunDialog.qml)
-set_source_files_properties(qml/CompressorPage.qml PROPERTIES QT_RESOURCE_ALIAS CompressorPage.qml)
 set_source_files_properties(qml/SettingsPage.qml PROPERTIES QT_RESOURCE_ALIAS SettingsPage.qml)
 set_source_files_properties(qml/WallpaperPage.qml PROPERTIES QT_RESOURCE_ALIAS WallpaperPage.qml)
 set_source_files_properties(qml/AssignRow.qml PROPERTIES QT_RESOURCE_ALIAS AssignRow.qml)
@@ -128,17 +129,15 @@ qt_add_qml_module(studio
     qml/AppDialogs.qml
     qml/ActionButtons.qml
     qml/QuickSettingsPanel.qml
+    qml/ToastBar.qml
     qml/CollectionPage.qml
     qml/VideoGrid.qml
     qml/VideoCard.qml
     qml/EmptyState.qml
     qml/AutoSwitchPanel.qml
-    qml/ConsentDialog.qml
     qml/CacheDialog.qml
-    qml/CompressOfferDialog.qml
     qml/AboutDialog.qml
     qml/FirstRunDialog.qml
-    qml/CompressorPage.qml
     qml/SettingsPage.qml
     qml/WallpaperPage.qml
     qml/AssignRow.qml
@@ -485,17 +484,15 @@ set(K6WP_TR_QML_SOURCES
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/AppDialogs.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/ActionButtons.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/QuickSettingsPanel.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/ToastBar.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/CollectionPage.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/VideoGrid.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/VideoCard.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/EmptyState.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/AutoSwitchPanel.qml"
-  "${CMAKE_CURRENT_SOURCE_DIR}/qml/ConsentDialog.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/CacheDialog.qml"
-  "${CMAKE_CURRENT_SOURCE_DIR}/qml/CompressOfferDialog.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/AboutDialog.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/FirstRunDialog.qml"
-  "${CMAKE_CURRENT_SOURCE_DIR}/qml/CompressorPage.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/SettingsPage.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/WallpaperPage.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/AssignRow.qml"

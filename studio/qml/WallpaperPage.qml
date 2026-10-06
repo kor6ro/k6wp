@@ -1,4 +1,4 @@
-// Wallpaper page (Wallpaper tab). Contains the monitor sub-tabs strip, the
+﻿// Wallpaper page (Wallpaper tab). Contains the monitor sub-tabs strip, the
 // preview caption + PreviewHole, the "Pasang ke" install-target row
 // (AssignRow + AssignPopup, todo 12), the C-15 warning banners, the
 // CollectionPage (Koleksi gallery with the Ganti otomatis panel) in the left
@@ -36,9 +36,6 @@ Item {
     property var selectedMonitorHasAssignment: function () { return false }
     property var maybeOfferCompressFirst: function (path, applyAfter) { return false }
     property var syncPreview: function () {}
-    // "Perkecil" in a card's row menu sets Compress.setSourcePath itself and
-    // then asks Main to switch to the Kompresor tab (root.showTab(1)).
-    property var navigateToCompressor: function () {}
     property int statusKindNotRunning: 3
     // BridgeStatusKind::kPaused, passed down to StatusBar for its one-button
     // Jeda/Lanjut matrix (Main owns the enum mirror).
@@ -430,7 +427,6 @@ Item {
                     Layout.preferredHeight: 460
                     dialogOpened: wallpaperPage.dialogOpened
                     dialogClosed: wallpaperPage.dialogClosed
-                    navigateToCompressor: wallpaperPage.navigateToCompressor
                 }
 
             }
@@ -598,4 +594,7 @@ Item {
         repeat: false
         onTriggered: installToast.visible = false
     }
+
 }
+
+
