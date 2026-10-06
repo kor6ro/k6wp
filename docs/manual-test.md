@@ -127,8 +127,8 @@ claimed result.
     video and logs a re-key warning instead of landing on the wrong screen.
     `get_state` must still answer. See `docs/runbook-2monitor.md`.
 23. MANUAL — per-monitor assignment by click (needs 2 monitors). In Studio's
-    Wallpaper view, arm a library (or playlist) video, select monitor 2's
-    sub-tab, then click monitor 2's desktop rect. Only that monitor's picture
+    Wallpaper view, arm a library (or playlist) video, then click monitor 2's
+    sub-tab. Only that monitor's picture
     changes; monitor 1 keeps playing. `get_state` must show the map under
     `display_assignments` (keyed by `\\.\DISPLAY2`) and `displays.json` must
     gain that entry. This is the `set_display_video` path driven by the arming
@@ -147,12 +147,12 @@ claimed result.
     `displays.json` must remove that key. See `docs/runbook-2monitor.md`.
 26. MANUAL - sub-tab assignment acceptance (needs 2 monitors). Assign a video
     to monitor 1 through its sub-tab, then select monitor 2's sub-tab and
-    confirm the preview and the rect reflect monitor 2 only, with no assignment
-    leaking to monitor 1. `get_state`'s `display_assignments` must hold exactly
-    one key per assigned monitor.
-27. MANUAL - click-to-assign refusal acceptance (needs 2 monitors). With no
-    video armed, click a monitor rect: no assignment is sent and
+    confirm the preview and the sub-tab state reflect monitor 2 only, with no
+    assignment leaking to monitor 1. `get_state`'s `display_assignments` must
+    hold exactly one key per assigned monitor.
+27. MANUAL - click-to-assign refusal acceptance (needs 2 monitors). Click a
+    monitor sub-tab with nothing armed: no assignment is sent and
     `display_assignments` stays unchanged. Then switch to Duplicate, arm a
-    video and click a rect: the collision refusal appears and `displays.json`
-    stays unchanged. Clearing the arm before selecting a sub-tab must also
-    leave the assignment untouched.
+    video and click a sub-tab: the collision refusal appears and
+    `displays.json` stays unchanged. Clearing the arm before selecting a
+    sub-tab must also leave the assignment untouched.

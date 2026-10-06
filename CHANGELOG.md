@@ -116,8 +116,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     on different tabs, and a dragged delegate vanished under the native
     preview. The contract-test inventory drops back to 32 suites.
   - Assignment (`studio/qml/Main.qml`): click-to-assign. Arming a library or
-    playlist item, selecting a monitor sub-tab, then clicking that monitor's
-    rect sends the existing `set_display_video` command, scoped to the selected
+    playlist item, clicking a monitor sub-tab while armed sends the existing
+    `set_display_video` command, scoped to the selected
     sub-tab so only the chosen monitor's picture changes. Clearing uses the same
     `set_display_video` clear flag, and the Duplicate-mode collision refusal is
     unchanged: it still surfaces a message naming the collision instead of
