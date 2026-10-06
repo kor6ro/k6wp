@@ -118,6 +118,35 @@ QString DuplicateModeNoticeText(const std::vector<std::wstring>& keys);
 // feature-detect the engine emits; old engines leave the key absent).
 bool DisplayCapabilityFromState(const EngineState& state);
 
+// --- friendly status surface (plan todo 4 / B2 / brief C-3 + C-20 + glossary §5) --
+//
+// Pure derivations the statusTitle / statusVideoName properties read. They
+// live beside the bridge (not inside it) so studio_logic_test can drive
+// them with fixture kind/detail pairs without constructing the QML
+// singleton. `kind` is the BridgeStatusKind QML already switches on;
+// `detail` is the live engineStatusDetail sentence (the video name is
+// derived from its trailing segment); `video_active` mirrors the
+// videoActive property.
+//
+// StatusTitleFor: the short state label, glossary §5 wording.
+//   kConnected/kDegraded + video_active -> "Wallpaper aktif"
+//   kConnected/kDegraded, no video      -> "Tidak aktif"
+//   kPaused                              -> "Dijeda"
+//   kNotRunning/kDisconnected            -> "Tidak aktif"
+//   unknown kind + non-empty detail      -> `detail` (passthrough; never
+//                                           invents a label)
+//   unknown kind + empty detail          -> "Tidak aktif" (documented default)
+//
+// StatusVideoNameFor: the active video's display name, or empty when
+// nothing is playing. Never invents a name: video_active false, the
+// "(belum ada video aktif)" fallback, or a trailing separator with no
+// segment all yield empty. `kind` is accepted for signature symmetry with
+// StatusTitleFor and does not change the derivation.
+QString StatusTitleFor(BridgeStatusKind kind, const QString& detail,
+                       bool video_active);
+QString StatusVideoNameFor(BridgeStatusKind kind, const QString& detail,
+                           bool video_active);
+
 // NOT `final`, unlike most classes in this project: Qt's QML type
 // registration instantiates QQmlElement<T> which INHERITS from T, so a final
 // QML_ELEMENT class does not compile (C3246). This is a hard Qt requirement,
@@ -149,6 +178,10 @@ class StudioBridge : public QObject {
   Q_PROPERTY(int engineStatusKind READ engineStatusKind NOTIFY engineStatusChanged)
   Q_PROPERTY(QString engineStatusDetail READ engineStatusDetail NOTIFY engineStatusChanged)
   Q_PROPERTY(QString engineStatusHint READ engineStatusHint NOTIFY engineStatusChanged)
+  // Friendly status surface (B2 / todo 4): derived, not stored - see the
+  // StatusTitleFor / StatusVideoNameFor free-function contract above.
+  Q_PROPERTY(QString statusTitle READ statusTitle NOTIFY engineStatusChanged)
+  Q_PROPERTY(QString statusVideoName READ statusVideoName NOTIFY engineStatusChanged)
   Q_PROPERTY(quint64 enginePid READ enginePid NOTIFY engineStatusChanged)
   Q_PROPERTY(bool videoActive READ videoActive NOTIFY engineStatusChanged)
   Q_PROPERTY(bool engineRunning READ engineRunning NOTIFY engineStatusChanged)
@@ -211,16 +244,26 @@ class StudioBridge : public QObject {
 
   // BridgeStatusKind as int (see the enum above for the exact order).
   int engineStatusKind() const { return static_cast<int>(status_.kind); }
-  // The status sentence shown in the UI. The wording is copied verbatim from
-  // wallpaper_tab/main_window so Phase 1 speaks exactly like the old UI:
-  //   "Engine aktif — <video>" / "Engine aktif tapi tak tampil — <video>" /
-  //   "Dijeda — <video>" / "Engine mati — klik Nyalakan Engine" /
+  // The status sentence shown in the UI. Wording follows brief C-20 /
+  // glossary §5 (plan todo 4):
+  //   "Wallpaper aktif • <video>" / "Wallpaper aktif tapi tak tampil • <video>" /
+  //   "Dijeda — <video>" / "Tidak aktif — pilih video untuk mulai" /
   //   "Terputus — coba lagi"
   QString engineStatusDetail() const { return status_detail_; }
   // Tooltip detail: the full video path (or the same "(belum ada video aktif)"
   // fallback), plus the headless-slot hint on kDegraded, plus the transport
   // error on kDisconnected. Empty while the first poll is still in flight.
   QString engineStatusHint() const { return status_hint_; }
+  // Friendly state label / video name, derived from kind+detail+videoActive
+  // via the pure free functions (B2). Repainted by engineStatusChanged.
+  QString statusTitle() const {
+    return StatusTitleFor(static_cast<BridgeStatusKind>(status_.kind),
+                          status_detail_, video_active_);
+  }
+  QString statusVideoName() const {
+    return StatusVideoNameFor(static_cast<BridgeStatusKind>(status_.kind),
+                              status_detail_, video_active_);
+  }
   // Engine PID from the get_state ack; 0 when unknown (not running, or the
   // ack carried no pid).
   quint64 enginePid() const { return status_.pid; }
@@ -336,6 +379,16 @@ class StudioBridge : public QObject {
   // without waiting up to 1.5s. Workers, like every other blocking call.
   Q_INVOKABLE void pause();
   Q_INVOKABLE void resume();
+  // B3 / todo 4: one QML button. Pauses when the engine is active, resumes
+  // when paused, reusing the pause/resume IPC path above. Consults the live
+  // status kind - never blindly pauses. No-op when the pipe is dead
+  // (kNotRunning / kDisconnected): nothing to toggle.
+  Q_INVOKABLE void togglePause();
+  // B9 / todo 4: puts `text` on the system clipboard for "Salin untuk
+  // dukungan". Empty text is ignored (a dialog can open before any
+  // technical detail exists) and a missing QGuiApplication clipboard is a
+  // silent no-op - neither path may crash.
+  Q_INVOKABLE void copyToClipboard(const QString& text);
 
   // Requests the preview poster for `videoPath` (usually activeVideoPath()).
   // Non-blocking: the cached thumbnail is returned immediately when present,

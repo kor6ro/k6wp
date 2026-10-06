@@ -11,7 +11,7 @@ QString FriendlyApplyError(const QString& technical) {
       t.contains(QStringLiteral("engine mati"))) {
     return QCoreApplication::translate(
         "k6wp::UserErrors",
-        "Engine belum jalan. Klik Nyalakan Engine, lalu coba lagi.");
+        "Wallpaper belum aktif. Pilih video untuk mulai, lalu coba lagi.");
   }
   if (t.contains(QStringLiteral("busy")) ||
       t.contains(QStringLiteral("sibuk"))) {

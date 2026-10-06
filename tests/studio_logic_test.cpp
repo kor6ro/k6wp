@@ -2032,6 +2032,126 @@ int main(int argc, char** argv) {
     (void)SetLocalAppDataDir(QString::fromStdWString(real_localappdata));
   }
 
+  // 22. Friendly status surface (plan todo 4 / B2 / brief C-3 + C-20 +
+  //     glossary §5): StatusTitleFor / StatusVideoNameFor are the pure
+  //     derivations the statusTitle / statusVideoName properties read.
+  //     Covers every BridgeStatusKind mapping, the unknown-kind default
+  //     (failure drill - the default branch is asserted explicitly), the
+  //     empty-video-name contract, and detail passthrough.
+  {
+    using K = k6wp::BridgeStatusKind;
+    const QString active_detail = QStringLiteral("Wallpaper aktif • a.mp4");
+    const QString paused_detail = QStringLiteral("Dijeda — a.mp4");
+    const QString degraded_detail =
+        QStringLiteral("Wallpaper aktif tapi tak tampil • a.mp4");
+    const QString idle_detail =
+        QStringLiteral("Tidak aktif — pilih video untuk mulai");
+
+    // --- each StatusKind mapping -------------------------------------------
+    Check(k6wp::StatusTitleFor(K::kConnected, active_detail, true) ==
+              QStringLiteral("Wallpaper aktif"),
+          "statusTitle connected+video -> Wallpaper aktif");
+    Check(k6wp::StatusTitleFor(K::kConnected, idle_detail, false) ==
+              QStringLiteral("Tidak aktif"),
+          "statusTitle connected without video -> Tidak aktif");
+    Check(k6wp::StatusTitleFor(K::kPaused, paused_detail, true) ==
+              QStringLiteral("Dijeda"),
+          "statusTitle paused -> Dijeda");
+    Check(k6wp::StatusTitleFor(K::kDegraded, degraded_detail, true) ==
+              QStringLiteral("Wallpaper aktif"),
+          "statusTitle degraded+video -> Wallpaper aktif");
+    Check(k6wp::StatusTitleFor(K::kDegraded, idle_detail, false) ==
+              QStringLiteral("Tidak aktif"),
+          "statusTitle degraded without video -> Tidak aktif");
+    Check(k6wp::StatusTitleFor(K::kNotRunning, idle_detail, false) ==
+              QStringLiteral("Tidak aktif"),
+          "statusTitle not-running -> Tidak aktif");
+    Check(k6wp::StatusTitleFor(K::kDisconnected, idle_detail, false) ==
+              QStringLiteral("Tidak aktif"),
+          "statusTitle disconnected -> Tidak aktif");
+
+    // --- video name derivation ---------------------------------------------
+    Check(k6wp::StatusVideoNameFor(K::kConnected, active_detail, true) ==
+              QStringLiteral("a.mp4"),
+          "statusVideoName connected -> trailing file name");
+    Check(k6wp::StatusVideoNameFor(K::kPaused, paused_detail, true) ==
+              QStringLiteral("a.mp4"),
+          "statusVideoName paused -> trailing file name");
+    Check(k6wp::StatusVideoNameFor(K::kDegraded, degraded_detail, true) ==
+              QStringLiteral("a.mp4"),
+          "statusVideoName degraded -> trailing file name");
+
+    // --- empty video name ---------------------------------------------------
+    Check(k6wp::StatusVideoNameFor(K::kConnected, active_detail, false)
+              .isEmpty(),
+          "statusVideoName videoActive=false -> empty");
+    Check(k6wp::StatusVideoNameFor(
+              K::kPaused, QStringLiteral("Dijeda — (belum ada video aktif)"),
+              false)
+              .isEmpty(),
+          "statusVideoName paused-without-video fallback -> empty");
+    Check(k6wp::StatusVideoNameFor(K::kConnected,
+                                   QStringLiteral("Wallpaper aktif • "),
+                                   true)
+              .isEmpty(),
+          "statusVideoName trailing separator with no name -> empty");
+    Check(k6wp::StatusVideoNameFor(K::kConnected, QString(), true).isEmpty(),
+          "statusVideoName empty detail -> empty");
+
+    // --- unknown-kind default + detail passthrough (failure drill) ----------
+    const K unknown = static_cast<K>(99);
+    Check(k6wp::StatusTitleFor(unknown, QStringLiteral("mentah"), true) ==
+              QStringLiteral("mentah"),
+          "statusTitle unknown kind + detail -> detail passthrough");
+    Check(k6wp::StatusTitleFor(unknown, QString(), true) ==
+              QStringLiteral("Tidak aktif"),
+          "statusTitle unknown kind + empty detail -> default Tidak aktif");
+    Check(k6wp::StatusVideoNameFor(unknown, active_detail, true) ==
+              QStringLiteral("a.mp4"),
+          "statusVideoName unknown kind still derives the name from detail");
+  }
+
+  // 22b. Invokable safety (todo 4 B3/B9): copyToClipboard must ignore empty
+  //      text without crashing, and togglePause on a dead pipe must be a
+  //      no-op (no IPC, no lastError). QCoreApplication has no
+  //      QGuiApplication, so a non-null clipboard guard is the contract
+  //      under test here - the real shell (QApplication) is covered by that
+  //      same guard.
+  {
+    const std::wstring real_localappdata = LocalAppDataDir();
+    QTemporaryDir fake_home;
+    Check(fake_home.isValid(), "status-invokable temp dir is valid");
+    const bool redirected =
+        fake_home.isValid() && SetLocalAppDataDir(fake_home.path());
+    Check(redirected, "status-invokable: LOCALAPPDATA redirected");
+    if (redirected) {
+      const QDir media(fake_home.path());
+      Check(QDir().mkpath(media.filePath(QStringLiteral("K6WP"))),
+            "status-invokable: fake K6WP data dir created");
+      {
+        k6wp::StudioSettings s = k6wp::DefaultStudioSettings();
+        s.check_updates = false;
+        k6wp::SaveStudioSettings(k6wp::DefaultStudioSettingsPath(), s);
+      }
+      k6wp::StudioBridge bridge;
+      // Fresh bridge: default EngineStatusView kind is kDisconnected, so
+      // the derived surface must already read as idle.
+      Check(bridge.statusTitle() == QStringLiteral("Tidak aktif"),
+            "fresh bridge statusTitle -> Tidak aktif (default kind)");
+      Check(bridge.statusVideoName().isEmpty(),
+            "fresh bridge statusVideoName -> empty");
+      // Empty text must not reach the clipboard API (no crash).
+      bridge.copyToClipboard(QString());
+      // Non-empty with no QGuiApplication clipboard: silent no-op, no crash.
+      bridge.copyToClipboard(QStringLiteral("Salin untuk dukungan"));
+      // Dead pipe: togglePause is a no-op - nothing to toggle, no error.
+      bridge.togglePause();
+      Check(bridge.lastError().isEmpty(),
+            "togglePause on a dead pipe leaves lastError empty (no-op)");
+    }
+    (void)SetLocalAppDataDir(QString::fromStdWString(real_localappdata));
+  }
+
   std::printf("checks=%d failures=%d\n", g_checks, g_failures);
   return g_failures == 0 ? 0 : 1;
 }

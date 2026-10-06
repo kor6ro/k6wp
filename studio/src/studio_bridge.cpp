@@ -6,9 +6,11 @@
 #include "studio_bridge.hpp"
 #include "bridge_diagnostics.hpp"
 
+#include <QClipboard>
 #include <QCoreApplication>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QGuiApplication>
 #include <QTimer>
 #include <QVariantMap>
 
@@ -122,6 +124,53 @@ QString DuplicateModeNoticeText(const std::vector<std::wstring>& keys) {
 
 bool DisplayCapabilityFromState(const EngineState& state) {
   return state.display_capability == 1;
+}
+
+// --- friendly status surface (plan todo 4 / B2 / brief C-3 + C-20 + glossary §5) --
+
+QString StatusVideoNameFor(BridgeStatusKind kind, const QString& detail,
+                           bool video_active) {
+  Q_UNUSED(kind);
+  if (!video_active) {
+    return QString();
+  }
+  const QStringList separators{QStringLiteral(" • "), QStringLiteral(" — "),
+                               QStringLiteral(" - ")};
+  for (const QString& sep : separators) {
+    const int idx = detail.lastIndexOf(sep);
+    if (idx >= 0) {
+      const QString name = detail.mid(idx + sep.size()).trimmed();
+      if (name.isEmpty() ||
+          name == QStringLiteral("(belum ada video aktif)")) {
+        return QString();
+      }
+      return name;
+    }
+  }
+  return QString();
+}
+
+QString StatusTitleFor(BridgeStatusKind kind, const QString& detail,
+                       bool video_active) {
+  switch (kind) {
+    case BridgeStatusKind::kConnected:
+    case BridgeStatusKind::kDegraded:
+      // Degraded still paints the wallpaper as active in the detail line
+      // ("tapi tak tampil"), so the title agrees with the engine being alive.
+      return video_active ? QStringLiteral("Wallpaper aktif")
+                          : QStringLiteral("Tidak aktif");
+    case BridgeStatusKind::kPaused:
+      return QStringLiteral("Dijeda");
+    case BridgeStatusKind::kNotRunning:
+    case BridgeStatusKind::kDisconnected:
+      return QStringLiteral("Tidak aktif");
+    case BridgeStatusKind::kCount:
+    default:
+      // Unknown kind (a future EngineStatusView::Kind): never invent a
+      // label - hand the raw detail through so nothing user-visible is
+      // lost; empty detail falls back to the idle label.
+      return detail.isEmpty() ? QStringLiteral("Tidak aktif") : detail;
+  }
 }
 
 StudioBridge::StudioBridge(QObject* parent) : QObject(parent) {
@@ -300,9 +349,9 @@ void StudioBridge::ApplyStatus(const EngineStatusView& view) {
       status_detail_ = tr("Dijeda — %1").arg(short_name);
     } else if (view.kind == EngineStatusView::Kind::kDegraded) {
       status_detail_ =
-          tr("Engine aktif tapi tak tampil — %1").arg(short_name);
+          tr("Wallpaper aktif tapi tak tampil • %1").arg(short_name);
     } else {
-      status_detail_ = tr("Engine aktif — %1").arg(short_name);
+      status_detail_ = tr("Wallpaper aktif • %1").arg(short_name);
     }
     QString tip_detail =
         view.video.isEmpty() ? tr("(belum ada video aktif)") : view.video;
@@ -312,8 +361,8 @@ void StudioBridge::ApplyStatus(const EngineStatusView& view) {
     }
     status_hint_ = tr("pid %1\n%2").arg(view.pid).arg(tip_detail);
   } else if (view.kind == EngineStatusView::Kind::kNotRunning) {
-    status_detail_ = tr("Engine mati — klik Nyalakan Engine");
-    status_hint_ = tr("Engine tidak jalan");
+    status_detail_ = tr("Tidak aktif — pilih video untuk mulai");
+    status_hint_ = tr("Wallpaper tidak aktif");
   } else {
     status_detail_ = tr("Terputus — coba lagi");
     // The transport error is the "never swallow an IPC failure" path, so it
@@ -787,7 +836,7 @@ void StudioBridge::OnApplyDone() {
   }
   ClearLastError();
   // The live status sentence is the success feedback (it flips to
-  // "Engine aktif - <file>"), so no extra log line is invented here.
+  // "Wallpaper aktif • <file>"), so no extra log line is invented here.
   loadPreview(pending_apply_path_);
   requestPoster(pending_apply_path_);
   requestStatusPoll();
@@ -813,6 +862,38 @@ void StudioBridge::resume() {
   RunPauseResume(/*do_pause=*/false);
 }
 
+void StudioBridge::togglePause() {
+  // B3: one button, toggle - consult the live kind, never blindly pause.
+  if (status_.kind == EngineStatusView::Kind::kPaused) {
+    resume();
+    return;
+  }
+  if (engine_running_) {
+    pause();
+  }
+  // kNotRunning / kDisconnected: nothing to toggle; no IPC, no log noise.
+}
+
+void StudioBridge::copyToClipboard(const QString& text) {
+  // Empty text is a valid QML call (e.g. a dialog opened before any
+  // technical detail existed) and must never reach the clipboard API.
+  if (text.isEmpty()) {
+    return;
+  }
+  // QGuiApplication::clipboard() is not safe when only a QCoreApplication
+  // exists (studio_logic_test runs that way on purpose - no QPA plugin).
+  // The real shell is a QApplication, so the cast succeeds there.
+  auto* gui = qobject_cast<QGuiApplication*>(QCoreApplication::instance());
+  if (gui == nullptr) {
+    return;
+  }
+  QClipboard* clipboard = gui->clipboard();
+  if (clipboard == nullptr) {
+    return;
+  }
+  clipboard->setText(text);
+}
+
 void StudioBridge::OnPauseResumeDone() {
   IpcResult res;
   QString thrown;
@@ -829,23 +910,26 @@ void StudioBridge::OnPauseResumeDone() {
       AppendLog(tr("Engine paused (IPC)"));
       ClearLastError();
     } else if (res.status == IpcStatus::kNotRunning) {
-      SetLastError(tr("Engine mati — klik Nyalakan Engine dulu"));
+      SetLastError(tr("Tidak ada wallpaper aktif. Pilih video untuk mulai, "
+                      "lalu coba lagi."));
     } else {
       const QString technical = QString::fromStdString(res.error);
       if (!technical.isEmpty()) AppendLog(technical);
-      SetLastError(tr("Jeda gagal: %1").arg(FriendlyIpcError(technical)));
+      SetLastError(tr("Jeda gagal: %1. Coba lagi.")
+                       .arg(FriendlyIpcError(technical)));
     }
   } else if (op == 2) {
     if (res.status == IpcStatus::kOk) {
       AppendLog(tr("Engine resumed (IPC)"));
       ClearLastError();
     } else if (res.status == IpcStatus::kNotRunning) {
-      SetLastError(tr("Engine mati — klik Nyalakan Engine dulu"));
+      SetLastError(tr("Tidak ada wallpaper aktif. Pilih video untuk mulai, "
+                      "lalu coba lagi."));
     } else {
       const QString technical = QString::fromStdString(res.error);
       if (!technical.isEmpty()) AppendLog(technical);
-      SetLastError(
-          tr("Lanjutkan gagal: %1").arg(FriendlyIpcError(technical)));
+      SetLastError(tr("Lanjutkan gagal: %1. Coba lagi.")
+                       .arg(FriendlyIpcError(technical)));
     }
   }
   // Refresh right away instead of waiting up to 1.5s for the label to flip.
