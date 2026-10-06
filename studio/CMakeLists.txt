@@ -85,12 +85,44 @@ target_link_libraries(studio PRIVATE k6wp_shared Qt6::Widgets Qt6::Quick Qt6::Qm
 # generated .qrc/qmldir in build/msvc-dev/studio/.qt/rcc/ (see qml_shell.cpp,
 # which loads exactly that URL and asserts QQuickWidget::status()).
 set_source_files_properties(qml/Main.qml PROPERTIES QT_RESOURCE_ALIAS Main.qml)
+set_source_files_properties(qml/LogPanel.qml PROPERTIES QT_RESOURCE_ALIAS LogPanel.qml)
+set_source_files_properties(qml/PreviewHole.qml PROPERTIES QT_RESOURCE_ALIAS PreviewHole.qml)
+set_source_files_properties(qml/EngineStatusPanel.qml PROPERTIES QT_RESOURCE_ALIAS EngineStatusPanel.qml)
+set_source_files_properties(qml/ActionButtons.qml PROPERTIES QT_RESOURCE_ALIAS ActionButtons.qml)
+set_source_files_properties(qml/QuickSettingsPanel.qml PROPERTIES QT_RESOURCE_ALIAS QuickSettingsPanel.qml)
+set_source_files_properties(qml/LibraryDelegate.qml PROPERTIES QT_RESOURCE_ALIAS LibraryDelegate.qml)
+set_source_files_properties(qml/LibraryPanel.qml PROPERTIES QT_RESOURCE_ALIAS LibraryPanel.qml)
+set_source_files_properties(qml/PlaylistPanel.qml PROPERTIES QT_RESOURCE_ALIAS PlaylistPanel.qml)
+set_source_files_properties(qml/ConsentDialog.qml PROPERTIES QT_RESOURCE_ALIAS ConsentDialog.qml)
+set_source_files_properties(qml/CacheDialog.qml PROPERTIES QT_RESOURCE_ALIAS CacheDialog.qml)
+set_source_files_properties(qml/CompressOfferDialog.qml PROPERTIES QT_RESOURCE_ALIAS CompressOfferDialog.qml)
+set_source_files_properties(qml/AboutDialog.qml PROPERTIES QT_RESOURCE_ALIAS AboutDialog.qml)
+set_source_files_properties(qml/FirstRunDialog.qml PROPERTIES QT_RESOURCE_ALIAS FirstRunDialog.qml)
+set_source_files_properties(qml/CompressorPage.qml PROPERTIES QT_RESOURCE_ALIAS CompressorPage.qml)
+set_source_files_properties(qml/SettingsPage.qml PROPERTIES QT_RESOURCE_ALIAS SettingsPage.qml)
+set_source_files_properties(qml/WallpaperPage.qml PROPERTIES QT_RESOURCE_ALIAS WallpaperPage.qml)
 qt_add_qml_module(studio
   URI K6WP
   VERSION 1.0
   RESOURCE_PREFIX "/qt/qml"
   QML_FILES
     qml/Main.qml
+    qml/LogPanel.qml
+    qml/PreviewHole.qml
+    qml/EngineStatusPanel.qml
+    qml/ActionButtons.qml
+    qml/QuickSettingsPanel.qml
+    qml/LibraryDelegate.qml
+    qml/LibraryPanel.qml
+    qml/PlaylistPanel.qml
+    qml/ConsentDialog.qml
+    qml/CacheDialog.qml
+    qml/CompressOfferDialog.qml
+    qml/AboutDialog.qml
+    qml/FirstRunDialog.qml
+    qml/CompressorPage.qml
+    qml/SettingsPage.qml
+    qml/WallpaperPage.qml
 )
 
 # About dialog version string (canonical K6WP_VERSION lives in the root
@@ -418,7 +450,23 @@ file(GLOB K6WP_TR_SOURCES CONFIGURE_DEPENDS
   "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/*.hpp")
 set(K6WP_TR_QML_SOURCES
-  "${CMAKE_CURRENT_SOURCE_DIR}/qml/Main.qml")
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/Main.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/LogPanel.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/PreviewHole.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/EngineStatusPanel.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/ActionButtons.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/QuickSettingsPanel.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/LibraryDelegate.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/LibraryPanel.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/PlaylistPanel.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/ConsentDialog.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/CacheDialog.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/CompressOfferDialog.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/AboutDialog.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/FirstRunDialog.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/CompressorPage.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/SettingsPage.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/WallpaperPage.qml")
 
 # Both tools degrade to a clear no-op target instead of failing the configure:
 # a Studio that cannot translate is still a working Studio (main.cpp falls back

@@ -2,6 +2,319 @@
 <!DOCTYPE TS>
 <TS version="2.1" language="en" sourcelanguage="id">
 <context>
+    <name>AboutDialog</name>
+    <message>
+        <location filename="../qml/AboutDialog.qml" line="+14"/>
+        <source>About K6WP</source>
+        <translation type="unfinished">About K6WP</translation>
+    </message>
+    <message>
+        <location line="+20"/>
+        <source>License: GPL-2.0-or-later</source>
+        <translation type="unfinished">License: GPL-2.0-or-later</translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>Third-party licenses: mpv (libmpv), ffmpeg, Qt, nlohmann/json — see LICENSES/ for the full texts.</source>
+        <translation type="unfinished">Third-party licenses: mpv (libmpv), ffmpeg, Qt, nlohmann/json - see LICENSES/ for the full texts.</translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>New version %1 is available.</source>
+        <translation type="unfinished">New version %1 is available.</translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>Update check contacts the releases host once per app start (never downloads/installs); disable in Settings → Pembaruan.</source>
+        <translation type="unfinished">Update check contacts the releases host once per app start (never downloads/installs); disable in Settings → Updates.</translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>Support development</source>
+        <translation type="unfinished">Support development</translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>Project page</source>
+        <translation type="unfinished">Project page</translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>Open release page</source>
+        <translation type="unfinished">Open release page</translation>
+    </message>
+</context>
+<context>
+    <name>ActionButtons</name>
+    <message>
+        <location filename="../qml/ActionButtons.qml" line="+21"/>
+        <source>Pilih &amp;Video</source>
+        <translation type="unfinished">Choose &amp;Video</translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Pilih file untuk diterapkan tanpa impor ke perpustakaan</source>
+        <translation type="unfinished">Pick a file to apply without importing it to the library</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>&amp;Terapkan Wallpaper</source>
+        <translation type="unfinished">&amp;Apply Wallpaper</translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>Terapkan video terpilih sebagai wallpaper (live-switch, tanpa restart saat engine jalan)</source>
+        <translation type="unfinished">Apply the selected video as wallpaper (live-switch, no restart while the engine runs)</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Hapus</source>
+        <translation type="unfinished">Remove</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Hapus dari daftar</source>
+        <translation type="unfinished">Remove from the list</translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>Nyalakan Engine</source>
+        <translation type="unfinished">Start Engine</translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>Menyalakan engine wallpaper (muncul saat engine mati)</source>
+        <translation type="unfinished">Start the wallpaper engine (shown while the engine is stopped)</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Hentikan Wallpaper</source>
+        <translation type="unfinished">Stop Wallpaper</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Hentikan wallpaper (IPC pause, video tetap termuat)</source>
+        <translation type="unfinished">Stop the wallpaper (IPC pause, the video stays loaded)</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Lanjutkan</source>
+        <translation type="unfinished">Resume</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Lanjutkan engine yang dijeda (IPC, tanpa restart)</source>
+        <translation type="unfinished">Resume the paused engine (IPC, no restart)</translation>
+    </message>
+</context>
+<context>
+    <name>CacheDialog</name>
+    <message>
+        <location filename="../qml/CacheDialog.qml" line="+13"/>
+        <source>Bersihkan cache</source>
+        <translation type="unfinished">Clear cache</translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>Hapus semua file sementara di:
+%1</source>
+        <translation type="unfinished">Delete all temporary files in: %1</translation>
+    </message>
+</context>
+<context>
+    <name>CompressOfferDialog</name>
+    <message>
+        <location filename="../qml/CompressOfferDialog.qml" line="+18"/>
+        <source>Video Besar</source>
+        <translation type="unfinished">Large Video</translation>
+    </message>
+    <message>
+        <location line="+18"/>
+        <source>Video ini berukuran %1 MB. Kompres ke 1080p dulu agar hemat ~3x RAM saat dipakai sebagai wallpaper?
+
+%2</source>
+        <translation type="unfinished">This video is %1 MB. Compress it to 1080p first to use roughly 3x less RAM as a wallpaper? %2</translation>
+    </message>
+</context>
+<context>
+    <name>CompressorPage</name>
+    <message>
+        <location filename="../qml/CompressorPage.qml" line="+95"/>
+        <source>Sumber:</source>
+        <translation type="unfinished">Source:</translation>
+    </message>
+    <message>
+        <location line="+11"/>
+        <source>(belum dipilih — klik Jelajahi)</source>
+        <translation type="unfinished">(none selected yet - click Browse)</translation>
+    </message>
+    <message>
+        <location line="+10"/>
+        <source>&amp;Jelajahi...</source>
+        <translation type="unfinished">&amp;Browse...</translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Pilih file video untuk dikompres</source>
+        <translation type="unfinished">Pick a video file to compress</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Folder output:</source>
+        <translation type="unfinished">Output folder:</translation>
+    </message>
+    <message>
+        <location line="+16"/>
+        <source>&amp;Ganti folder...</source>
+        <translation type="unfinished">&amp;Change folder...</translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>&amp;Buka Folder</source>
+        <translation type="unfinished">&amp;Open Folder</translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Buka folder output di Explorer</source>
+        <translation type="unfinished">Open the output folder in Explorer</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Buka &amp;Hasil</source>
+        <translation type="unfinished">Open &amp;Result</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Buka folder hasil kompres di Explorer</source>
+        <translation type="unfinished">Open the compressed result folder in Explorer</translation>
+    </message>
+    <message>
+        <location line="+16"/>
+        <source>Kompres:</source>
+        <translation type="unfinished">Compress:</translation>
+    </message>
+    <message>
+        <location line="+52"/>
+        <source>Antrikan</source>
+        <translation type="unfinished">Queue</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Kompres</source>
+        <translation type="unfinished">Compress</translation>
+    </message>
+    <message>
+        <location line="+10"/>
+        <source>Kompres video ke H.264 di latar belakang (UI tetap responsif)</source>
+        <translation type="unfinished">Compress the video to H.264 in the background (the UI stays responsive)</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Terapkan &amp;Hasil</source>
+        <translation type="unfinished">&amp;Apply Result</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Terapkan hasil kompresi sebagai wallpaper</source>
+        <translation type="unfinished">Apply the compressed result as wallpaper</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>&amp;Batal</source>
+        <translation type="unfinished">&amp;Cancel</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Batalkan kompresi yang berjalan</source>
+        <translation type="unfinished">Cancel the running compression</translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>Langsung terapkan setelah selesai</source>
+        <translation type="unfinished">Apply automatically when finished</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Otomatis terapkan hasil kompres sebagai wallpaper</source>
+        <translation type="unfinished">Automatically apply the compressed result as wallpaper</translation>
+    </message>
+    <message>
+        <location line="+38"/>
+        <source>Mode lanjutan (teknis)</source>
+        <translation type="unfinished">Advanced mode (technical)</translation>
+    </message>
+    <message>
+        <location line="+17"/>
+        <source>CRF:</source>
+        <translation type="unfinished">CRF:</translation>
+    </message>
+    <message>
+        <location line="+14"/>
+        <source>Kualitas CRF 16-28 (bawaan 22)</source>
+        <translation type="unfinished">CRF quality 16-28 (default 22)</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>FPS:</source>
+        <translation type="unfinished">FPS:</translation>
+    </message>
+    <message>
+        <location line="+14"/>
+        <source>Target bingkai per detik (bawaan 30, maks 30)</source>
+        <translation type="unfinished">Target frames per second (default 30, max 30)</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Resolusi:</source>
+        <translation type="unfinished">Resolution:</translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>mis. 1920x1080 (kosong = ikut sumber)</source>
+        <translation type="unfinished">e.g. 1920x1080 (empty = follow source)</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Resolusi output WxH</source>
+        <translation type="unfinished">Output resolution WxH</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Encoder:</source>
+        <translation type="unfinished">Encoder:</translation>
+    </message>
+    <message>
+        <location line="+12"/>
+        <source>Encoder (bawaan auto)</source>
+        <translation type="unfinished">Encoder (default auto)</translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>Paksa (video &gt;10 menit)</source>
+        <translation type="unfinished">Force (video &gt;10 minutes)</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Izinkan video lebih dari 10 menit</source>
+        <translation type="unfinished">Allow videos longer than 10 minutes</translation>
+    </message>
+</context>
+<context>
+    <name>ConsentDialog</name>
+    <message>
+        <location filename="../qml/ConsentDialog.qml" line="+15"/>
+        <source>Video Panjang</source>
+        <translation type="unfinished">Long Video</translation>
+    </message>
+    <message>
+        <location line="+10"/>
+        <source>Video berdurasi %1 menit (lebih dari 10). Kompres tetap?
+
+Video panjang butuh waktu lama dan memakai --force-long.</source>
+        <translation type="unfinished">This video is %1 minutes long (over 10). Compress anyway? Long videos take a while and use --force-long.</translation>
+    </message>
+</context>
+<context>
     <name>DisplayCanvas</name>
     <message>
         <source>Drop tidak dikenali - tarik video dari pustaka atau playlist.</source>
@@ -45,9 +358,234 @@
     </message>
 </context>
 <context>
+    <name>EngineStatusPanel</name>
+    <message>
+        <location filename="../qml/EngineStatusPanel.qml" line="+32"/>
+        <source>Status engine:</source>
+        <translation type="unfinished">Engine status:</translation>
+    </message>
+    <message>
+        <location line="+19"/>
+        <source>Video saat ini:</source>
+        <translation type="unfinished">Current video:</translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>(belum ada video)</source>
+        <translation type="unfinished">(no video yet)</translation>
+    </message>
+    <message>
+        <location line="+10"/>
+        <source>pid</source>
+        <translation type="unfinished">pid</translation>
+    </message>
+    <message>
+        <location line="+16"/>
+        <source>Dipilih:</source>
+        <translation type="unfinished">Selected:</translation>
+    </message>
+</context>
+<context>
+    <name>FirstRunDialog</name>
+    <message>
+        <location filename="../qml/FirstRunDialog.qml" line="+14"/>
+        <location line="+40"/>
+        <source>Selamat datang di K6WP</source>
+        <translation type="unfinished">Welcome to K6WP</translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>Wallpaper video untuk Windows Anda.</source>
+        <translation type="unfinished">Video wallpaper for your Windows desktop.</translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>K6WP menampilkan video sebagai wallpaper desktop Anda. Panduan singkat ini akan memilih video pertama, menyiapkan pengaturan awal, lalu menampilkan hasilnya di layar. Klik Lanjut untuk mulai — atau Nanti saja untuk melewati dan mengatur sendiri dari tab Wallpaper.</source>
+        <translation type="unfinished">K6WP shows video as your desktop wallpaper. This short guide picks your first video, sets up the initial options, then shows the result on screen. Click Next to begin - or Later to skip and set things up yourself from the Wallpaper tab.</translation>
+    </message>
+    <message>
+        <location line="+12"/>
+        <location line="+25"/>
+        <source>Pilih video pertama Anda</source>
+        <translation type="unfinished">Pick your first video</translation>
+    </message>
+    <message>
+        <location line="-17"/>
+        <source>Pilih satu video dari komputer Anda. File asli tidak dipindah atau diubah.</source>
+        <translation type="unfinished">Choose one video from your computer. The original file is never moved or modified.</translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>Format yang didukung: mp4, webm, avi, mkv, mov, wmv.</source>
+        <translation type="unfinished">Supported formats: mp4, webm, avi, mkv, mov, wmv.</translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>Pilih video...</source>
+        <translation type="unfinished">Choose video...</translation>
+    </message>
+    <message>
+        <location line="+16"/>
+        <source>Belum ada video dipilih.</source>
+        <translation type="unfinished">No video chosen yet.</translation>
+    </message>
+    <message>
+        <location line="+16"/>
+        <source>Pengaturan awal</source>
+        <translation type="unfinished">Initial settings</translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>Anda bisa mengubah semuanya nanti di tab Pengaturan.</source>
+        <translation type="unfinished">You can change everything later in the Settings tab.</translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>Jalankan saat Windows menyala</source>
+        <translation type="unfinished">Start when Windows starts</translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>K6WP menyala sendiri setiap masuk Windows</source>
+        <translation type="unfinished">K6WP starts automatically every time you log in to Windows</translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>Siapkan video otomatis (disarankan menyala)</source>
+        <translation type="unfinished">Prepare the video automatically (recommended on)</translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>Video disiapkan agar ringan dipakai sebagai wallpaper</source>
+        <translation type="unfinished">The video is prepared so it stays light to use as a wallpaper</translation>
+    </message>
+    <message>
+        <location line="+16"/>
+        <source>Saran</source>
+        <translation type="unfinished">Tip</translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>Satu hal sebelum mulai.</source>
+        <translation type="unfinished">One thing before you start.</translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>Biarkan pilihan otomatis menyala. Video Anda akan disiapkan agar ringan dipakai sebagai wallpaper, lalu ditampilkan di layar. Klik Selesai untuk mulai — Anda bisa mengganti video kapan saja dari tab Wallpaper.</source>
+        <translation type="unfinished">Leave the automatic option on. Your video will be prepared so it stays light to use as a wallpaper, then shown on screen. Click Finish to start - you can change the video any time from the Wallpaper tab.</translation>
+    </message>
+    <message>
+        <location line="+15"/>
+        <source>Nanti saja</source>
+        <translation type="unfinished">Later</translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>Kembali</source>
+        <translation type="unfinished">Back</translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>Lanjut</source>
+        <translation type="unfinished">Next</translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>Selesai</source>
+        <translation type="unfinished">Finish</translation>
+    </message>
+</context>
+<context>
+    <name>LibraryDelegate</name>
+    <message>
+        <location filename="../qml/LibraryDelegate.qml" line="+114"/>
+        <source>Tandai</source>
+        <translation type="unfinished">Mark</translation>
+    </message>
+    <message>
+        <location line="+31"/>
+        <source>Tandai video ini untuk ditugaskan ke layar</source>
+        <translation type="unfinished">Mark this video for screen assignment</translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>Terapkan</source>
+        <translation type="unfinished">Apply</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Kompres-ulang</source>
+        <translation type="unfinished">Compress again</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Buka Lokasi</source>
+        <translation type="unfinished">Show in Folder</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Hapus</source>
+        <translation type="unfinished">Remove</translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>Hapus Entri Perpustakaan</source>
+        <translation type="unfinished">Remove Library Entry</translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>Hapus entri untuk:
+%1
+
+File dipindahkan ke Recycle Bin.</source>
+        <translation type="unfinished">Remove entry for: %1The file will be moved to the Recycle Bin.</translation>
+    </message>
+</context>
+<context>
+    <name>LibraryPanel</name>
+    <message>
+        <location filename="../qml/LibraryPanel.qml" line="+26"/>
+        <source>Perpustakaan:</source>
+        <translation type="unfinished">Library:</translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>Cari video...</source>
+        <translation type="unfinished">Search videos...</translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>&amp;Impor Video</source>
+        <translation type="unfinished">&amp;Import Video</translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Impor video ke perpustakaan untuk mulai</source>
+        <translation type="unfinished">Import videos into the library to get started</translation>
+    </message>
+    <message>
+        <location line="+24"/>
+        <source>Perpustakaan kosong — impor video lewat Berkas &gt; Impor atau seret &amp; letakkan</source>
+        <translation type="unfinished">Library is empty - import videos via File &gt; Import, or drag &amp; drop them here</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Tidak ada hasil untuk pencarian ini</source>
+        <translation type="unfinished">No results for this search</translation>
+    </message>
+</context>
+<context>
+    <name>LogPanel</name>
+    <message>
+        <location filename="../qml/LogPanel.qml" line="+16"/>
+        <source>Detail teknis (log)</source>
+        <translation type="unfinished">Technical details (log)</translation>
+    </message>
+</context>
+<context>
     <name>Main</name>
     <message>
-        <location filename="../qml/Main.qml" line="+381"/>
+        <location filename="../qml/Main.qml" line="+351"/>
         <source>&amp;Berkas</source>
         <translation>&amp;File</translation>
     </message>
@@ -106,915 +644,822 @@
         <translation>Cancel screen assignment</translation>
     </message>
     <message>
-        <location line="+96"/>
         <source>Klik untuk menugaskan video ke layar ini</source>
-        <translation>Click to assign the video to this screen</translation>
+        <translation type="vanished">Click to assign the video to this screen</translation>
     </message>
     <message>
-        <location line="+1"/>
         <source>Pilih layar ini</source>
-        <translation>Select this screen</translation>
+        <translation type="vanished">Select this screen</translation>
     </message>
     <message>
-        <location line="+26"/>
         <source>UTAMA</source>
-        <translation>PRIMARY</translation>
+        <translation type="vanished">PRIMARY</translation>
     </message>
     <message>
-        <location line="+28"/>
         <source>mode duplikat</source>
-        <translation>duplicate mode</translation>
+        <translation type="vanished">duplicate mode</translation>
     </message>
     <message>
-        <location line="+10"/>
         <source>file tidak ditemukan</source>
-        <translation>file not found</translation>
+        <translation type="vanished">file not found</translation>
     </message>
     <message>
-        <location line="+10"/>
         <source>cek engine.log</source>
-        <translation>check engine.log</translation>
+        <translation type="vanished">check engine.log</translation>
     </message>
     <message>
-        <location line="+12"/>
         <source>Tidak ada layar terdeteksi</source>
-        <translation>No screens detected</translation>
+        <translation type="vanished">No screens detected</translation>
     </message>
     <message>
-        <location line="+10"/>
         <source>Hapus penugasan</source>
-        <translation>Remove assignment</translation>
+        <translation type="vanished">Remove assignment</translation>
     </message>
     <message>
-        <location line="+5"/>
         <source>Hapus penugasan video untuk layar terpilih</source>
-        <translation>Remove the video assignment for the selected screen</translation>
+        <translation type="vanished">Remove the video assignment for the selected screen</translation>
     </message>
     <message>
-        <location line="+48"/>
         <source>Pratinjau:</source>
-        <translation>Preview:</translation>
+        <translation type="vanished">Preview:</translation>
     </message>
     <message>
-        <location line="+9"/>
         <source>cakupan: %1</source>
-        <translation>scope: %1</translation>
+        <translation type="vanished">scope: %1</translation>
     </message>
     <message>
-        <location line="+1"/>
         <source>cakupan: semua layar</source>
-        <translation>scope: all screens</translation>
+        <translation type="vanished">scope: all screens</translation>
     </message>
     <message>
-        <location line="+30"/>
         <source>Klik untuk jeda/jalan</source>
-        <translation>Click to pause/play</translation>
+        <translation type="vanished">Click to pause/play</translation>
     </message>
     <message>
-        <location line="+24"/>
         <source>Perpustakaan:</source>
-        <translation>Library:</translation>
+        <translation type="vanished">Library:</translation>
     </message>
     <message>
-        <location line="+6"/>
         <source>Cari video...</source>
-        <translation>Search videos...</translation>
+        <translation type="vanished">Search videos...</translation>
     </message>
     <message>
-        <location line="+5"/>
         <source>&amp;Impor Video</source>
-        <translation>&amp;Import Video</translation>
+        <translation type="vanished">&amp;Import Video</translation>
     </message>
     <message>
-        <location line="+3"/>
         <source>Impor video ke perpustakaan untuk mulai</source>
-        <translation>Import videos into the library to get started</translation>
+        <translation type="vanished">Import videos into the library to get started</translation>
     </message>
     <message>
-        <location line="+24"/>
         <source>Perpustakaan kosong — impor video lewat Berkas &gt; Impor atau seret &amp; letakkan</source>
-        <translation>Library is empty - import videos via File &gt; Import, or drag &amp; drop them here</translation>
+        <translation type="vanished">Library is empty - import videos via File &gt; Import, or drag &amp; drop them here</translation>
     </message>
     <message>
-        <location line="+1"/>
         <source>Tidak ada hasil untuk pencarian ini</source>
-        <translation>No results for this search</translation>
+        <translation type="vanished">No results for this search</translation>
     </message>
     <message>
-        <location line="+111"/>
-        <location line="+229"/>
         <source>Tandai</source>
-        <translation>Mark</translation>
+        <translation type="vanished">Mark</translation>
     </message>
     <message>
-        <location line="-198"/>
-        <location line="+202"/>
         <source>Tandai video ini untuk ditugaskan ke layar</source>
-        <translation>Mark this video for screen assignment</translation>
+        <translation type="vanished">Mark this video for screen assignment</translation>
     </message>
     <message>
-        <location line="-196"/>
         <source>Terapkan</source>
-        <translation>Apply</translation>
+        <translation type="vanished">Apply</translation>
     </message>
     <message>
-        <location line="+4"/>
         <source>Kompres-ulang</source>
-        <translation>Compress again</translation>
+        <translation type="vanished">Compress again</translation>
     </message>
     <message>
-        <location line="+4"/>
         <source>Buka Lokasi</source>
-        <translation>Show in Folder</translation>
+        <translation type="vanished">Show in Folder</translation>
     </message>
     <message>
-        <location line="+4"/>
-        <location line="+200"/>
-        <location line="+153"/>
         <source>Hapus</source>
-        <translation>Remove</translation>
+        <translation type="vanished">Remove</translation>
     </message>
     <message>
-        <location line="-345"/>
         <source>Hapus Entri Perpustakaan</source>
-        <translation>Remove Library Entry</translation>
+        <translation type="vanished">Remove Library Entry</translation>
     </message>
     <message>
-        <location line="+9"/>
         <source>Hapus entri untuk:
 %1
 
 File dipindahkan ke Recycle Bin.</source>
-        <translation>Remove entry for: %1The file will be moved to the Recycle Bin.</translation>
+        <translation type="vanished">Remove entry for: %1The file will be moved to the Recycle Bin.</translation>
     </message>
     <message>
-        <location line="+28"/>
         <source>Daftar putar (%1)</source>
-        <translation>Playlist (%1)</translation>
+        <translation type="vanished">Playlist (%1)</translation>
     </message>
     <message>
-        <location line="+9"/>
         <source>Tambah...</source>
-        <translation>Add...</translation>
+        <translation type="vanished">Add...</translation>
     </message>
     <message>
-        <location line="+3"/>
         <source>Tambah video ke daftar putar</source>
-        <translation>Add a video to the playlist</translation>
+        <translation type="vanished">Add a video to the playlist</translation>
     </message>
     <message>
-        <location line="+4"/>
         <source>Kosongkan</source>
-        <translation>Clear</translation>
+        <translation type="vanished">Clear</translation>
     </message>
     <message>
-        <location line="+4"/>
         <source>Hapus semua entri daftar putar</source>
-        <translation>Remove all playlist entries</translation>
+        <translation type="vanished">Remove all playlist entries</translation>
     </message>
     <message>
-        <location line="+9"/>
         <source>Putar otomatis</source>
-        <translation>Auto-play</translation>
+        <translation type="vanished">Auto-play</translation>
     </message>
     <message>
-        <location line="+4"/>
         <source>Ganti wallpaper secara berkala</source>
-        <translation>Change the wallpaper periodically</translation>
+        <translation type="vanished">Change the wallpaper periodically</translation>
     </message>
     <message>
-        <location line="+4"/>
         <source>Interval:</source>
-        <translation>Interval:</translation>
+        <translation type="vanished">Interval:</translation>
     </message>
     <message>
-        <location line="+11"/>
         <source>Menit antar pergantian (1-1440)</source>
-        <translation>Minutes between rotations (1-1440)</translation>
+        <translation type="vanished">Minutes between rotations (1-1440)</translation>
     </message>
     <message>
-        <location line="+4"/>
         <source> menit</source>
-        <translation> minutes</translation>
+        <translation type="vanished"> minutes</translation>
     </message>
     <message>
-        <location line="+8"/>
         <source>Acak</source>
-        <translation>Shuffle</translation>
+        <translation type="vanished">Shuffle</translation>
     </message>
     <message>
-        <location line="+4"/>
         <source>Putar daftar putar dalam urutan acak</source>
-        <translation>Play the playlist in random order</translation>
+        <translation type="vanished">Play the playlist in random order</translation>
     </message>
     <message>
-        <location line="+20"/>
         <source>Belum ada video di daftar putar — tambah dari perpustakaan atau berkas</source>
-        <translation>No videos in the playlist yet - add them from the library or a file</translation>
+        <translation type="vanished">No videos in the playlist yet - add them from the library or a file</translation>
     </message>
     <message>
-        <location line="+59"/>
         <source>Naik</source>
-        <translation>Up</translation>
+        <translation type="vanished">Up</translation>
     </message>
     <message>
-        <location line="+6"/>
         <source>Turun</source>
-        <translation>Down</translation>
+        <translation type="vanished">Down</translation>
     </message>
     <message>
-        <location line="+43"/>
         <source>Status engine:</source>
-        <translation>Engine status:</translation>
+        <translation type="vanished">Engine status:</translation>
     </message>
     <message>
-        <location line="+19"/>
         <source>Video saat ini:</source>
-        <translation>Current video:</translation>
+        <translation type="vanished">Current video:</translation>
     </message>
     <message>
-        <location line="+9"/>
         <source>(belum ada video)</source>
-        <translation>(no video yet)</translation>
+        <translation type="vanished">(no video yet)</translation>
     </message>
     <message>
-        <location line="+10"/>
         <source>pid</source>
-        <translation>pid</translation>
+        <translation type="vanished">pid</translation>
     </message>
     <message>
-        <location line="+16"/>
         <source>Dipilih:</source>
-        <translation>Selected:</translation>
+        <translation type="vanished">Selected:</translation>
     </message>
     <message>
-        <location line="+44"/>
         <source>Pilih &amp;Video</source>
-        <translation>Choose &amp;Video</translation>
+        <translation type="vanished">Choose &amp;Video</translation>
     </message>
     <message>
-        <location line="+3"/>
         <source>Pilih file untuk diterapkan tanpa impor ke perpustakaan</source>
-        <translation>Pick a file to apply without importing it to the library</translation>
+        <translation type="vanished">Pick a file to apply without importing it to the library</translation>
     </message>
     <message>
-        <location line="+4"/>
         <source>&amp;Terapkan Wallpaper</source>
-        <translation>&amp;Apply Wallpaper</translation>
+        <translation type="vanished">&amp;Apply Wallpaper</translation>
     </message>
     <message>
-        <location line="+7"/>
         <source>Terapkan video terpilih sebagai wallpaper (live-switch, tanpa restart saat engine jalan)</source>
-        <translation>Apply the selected video as wallpaper (live-switch, no restart while the engine runs)</translation>
+        <translation type="vanished">Apply the selected video as wallpaper (live-switch, no restart while the engine runs)</translation>
     </message>
     <message>
-        <location line="+8"/>
         <source>Hapus dari daftar</source>
-        <translation>Remove from the list</translation>
+        <translation type="vanished">Remove from the list</translation>
     </message>
     <message>
-        <location line="+6"/>
         <source>Nyalakan Engine</source>
-        <translation>Start Engine</translation>
+        <translation type="vanished">Start Engine</translation>
     </message>
     <message>
-        <location line="+5"/>
         <source>Menyalakan engine wallpaper (muncul saat engine mati)</source>
-        <translation>Start the wallpaper engine (shown while the engine is stopped)</translation>
+        <translation type="vanished">Start the wallpaper engine (shown while the engine is stopped)</translation>
     </message>
     <message>
-        <location line="+4"/>
         <source>Hentikan Wallpaper</source>
-        <translation>Stop Wallpaper</translation>
+        <translation type="vanished">Stop Wallpaper</translation>
     </message>
     <message>
-        <location line="+4"/>
         <source>Hentikan wallpaper (IPC pause, video tetap termuat)</source>
-        <translation>Stop the wallpaper (IPC pause, the video stays loaded)</translation>
+        <translation type="vanished">Stop the wallpaper (IPC pause, the video stays loaded)</translation>
     </message>
     <message>
-        <location line="+4"/>
         <source>Lanjutkan</source>
-        <translation>Resume</translation>
+        <translation type="vanished">Resume</translation>
     </message>
     <message>
-        <location line="+4"/>
         <source>Lanjutkan engine yang dijeda (IPC, tanpa restart)</source>
-        <translation>Resume the paused engine (IPC, no restart)</translation>
+        <translation type="vanished">Resume the paused engine (IPC, no restart)</translation>
     </message>
     <message>
-        <location line="+25"/>
         <source>Pengaturan cepat</source>
-        <translation>Quick settings</translation>
+        <translation type="vanished">Quick settings</translation>
     </message>
     <message>
-        <location line="+14"/>
-        <location line="+588"/>
         <source>Isi layar:</source>
-        <translation>Fill screen:</translation>
+        <translation type="vanished">Fill screen:</translation>
     </message>
     <message>
-        <location line="-580"/>
-        <location line="+587"/>
         <source>Isi layar (potong bila perlu)</source>
-        <translation>Fill screen (crop if needed)</translation>
+        <translation type="vanished">Fill screen (crop if needed)</translation>
     </message>
     <message>
-        <location line="-586"/>
-        <location line="+587"/>
         <source>Sesuaikan (seluruh video terlihat)</source>
-        <translation>Fit (whole video visible)</translation>
+        <translation type="vanished">Fit (whole video visible)</translation>
     </message>
     <message>
-        <location line="-586"/>
-        <location line="+587"/>
         <source>Regang (isi penuh)</source>
-        <translation>Stretch (fill)</translation>
+        <translation type="vanished">Stretch (fill)</translation>
     </message>
     <message>
-        <location line="-586"/>
-        <location line="+587"/>
         <source>Tengah (ukuran asli)</source>
-        <translation>Center (original size)</translation>
+        <translation type="vanished">Center (original size)</translation>
     </message>
     <message>
-        <location line="-576"/>
         <source>Cara video mengisi layar</source>
-        <translation>How the video fills the screen</translation>
+        <translation type="vanished">How the video fills the screen</translation>
     </message>
     <message>
-        <location line="-908"/>
-        <location line="+912"/>
-        <location line="+585"/>
         <source>Layar:</source>
-        <translation>Screen:</translation>
+        <translation type="vanished">Screen:</translation>
     </message>
     <message>
-        <location line="-559"/>
-        <location line="+513"/>
-        <location line="+618"/>
         <source>Jalankan saat Windows menyala</source>
-        <translation>Start when Windows starts</translation>
+        <translation type="vanished">Start when Windows starts</translation>
     </message>
     <message>
-        <location line="-1123"/>
-        <location line="+512"/>
         <source>Hemat baterai (wallpaper berhenti saat pakai baterai)</source>
-        <translation>Save battery (wallpaper stops on battery power)</translation>
+        <translation type="vanished">Save battery (wallpaper stops on battery power)</translation>
     </message>
     <message>
-        <location line="-492"/>
-        <location line="+821"/>
         <source>Detail teknis (log)</source>
-        <translation>Technical details (log)</translation>
+        <translation type="vanished">Technical details (log)</translation>
     </message>
     <message>
-        <location line="-802"/>
-        <location line="+817"/>
         <source>Log terapkan muncul di sini...</source>
-        <translation>Apply log appears here...</translation>
+        <translation type="vanished">Apply log appears here...</translation>
     </message>
     <message>
-        <location line="-745"/>
         <source>Sumber:</source>
-        <translation>Source:</translation>
+        <translation type="vanished">Source:</translation>
     </message>
     <message>
         <source>(gunakan video saat ini)</source>
         <translation type="vanished">(use the current video)</translation>
     </message>
     <message>
-        <location line="+21"/>
         <source>&amp;Jelajahi...</source>
-        <translation>&amp;Browse...</translation>
+        <translation type="vanished">&amp;Browse...</translation>
     </message>
     <message>
-        <location line="+3"/>
         <source>Pilih file video untuk dikompres</source>
-        <translation>Pick a video file to compress</translation>
+        <translation type="vanished">Pick a video file to compress</translation>
     </message>
     <message>
-        <location line="+4"/>
-        <location line="+476"/>
         <source>Folder output:</source>
-        <translation>Output folder:</translation>
+        <translation type="vanished">Output folder:</translation>
     </message>
     <message>
-        <location line="-460"/>
         <source>&amp;Ganti folder...</source>
-        <translation>&amp;Change folder...</translation>
+        <translation type="vanished">&amp;Change folder...</translation>
     </message>
     <message>
-        <location line="+5"/>
         <source>&amp;Buka Folder</source>
-        <translation>&amp;Open Folder</translation>
+        <translation type="vanished">&amp;Open Folder</translation>
     </message>
     <message>
-        <location line="+3"/>
         <source>Buka folder output di Explorer</source>
-        <translation>Open the output folder in Explorer</translation>
+        <translation type="vanished">Open the output folder in Explorer</translation>
     </message>
     <message>
-        <location line="+4"/>
         <source>Buka &amp;Hasil</source>
-        <translation>Open &amp;Result</translation>
+        <translation type="vanished">Open &amp;Result</translation>
     </message>
     <message>
-        <location line="+4"/>
         <source>Buka folder hasil kompres di Explorer</source>
-        <translation>Open the compressed result folder in Explorer</translation>
+        <translation type="vanished">Open the compressed result folder in Explorer</translation>
     </message>
     <message>
-        <location line="+16"/>
         <source>Kompres:</source>
-        <translation>Compress:</translation>
+        <translation type="vanished">Compress:</translation>
     </message>
     <message>
-        <location line="+52"/>
         <source>Antrikan</source>
-        <translation>Queue</translation>
+        <translation type="vanished">Queue</translation>
     </message>
     <message>
-        <location line="+1"/>
         <source>Kompres</source>
-        <translation>Compress</translation>
+        <translation type="vanished">Compress</translation>
     </message>
     <message>
-        <location line="+10"/>
         <source>Kompres video ke H.264 di latar belakang (UI tetap responsif)</source>
-        <translation>Compress the video to H.264 in the background (the UI stays responsive)</translation>
+        <translation type="vanished">Compress the video to H.264 in the background (the UI stays responsive)</translation>
     </message>
     <message>
-        <location line="+4"/>
         <source>Terapkan &amp;Hasil</source>
-        <translation>&amp;Apply Result</translation>
+        <translation type="vanished">&amp;Apply Result</translation>
     </message>
     <message>
-        <location line="+4"/>
         <source>Terapkan hasil kompresi sebagai wallpaper</source>
-        <translation>Apply the compressed result as wallpaper</translation>
+        <translation type="vanished">Apply the compressed result as wallpaper</translation>
     </message>
     <message>
-        <location line="+4"/>
         <source>&amp;Batal</source>
-        <translation>&amp;Cancel</translation>
+        <translation type="vanished">&amp;Cancel</translation>
     </message>
     <message>
-        <location line="+4"/>
         <source>Batalkan kompresi yang berjalan</source>
-        <translation>Cancel the running compression</translation>
+        <translation type="vanished">Cancel the running compression</translation>
     </message>
     <message>
-        <location line="+5"/>
         <source>Langsung terapkan setelah selesai</source>
-        <translation>Apply automatically when finished</translation>
+        <translation type="vanished">Apply automatically when finished</translation>
     </message>
     <message>
-        <location line="+4"/>
         <source>Otomatis terapkan hasil kompres sebagai wallpaper</source>
-        <translation>Automatically apply the compressed result as wallpaper</translation>
+        <translation type="vanished">Automatically apply the compressed result as wallpaper</translation>
     </message>
     <message>
-        <location line="+38"/>
         <source>Mode lanjutan (teknis)</source>
-        <translation>Advanced mode (technical)</translation>
+        <translation type="vanished">Advanced mode (technical)</translation>
     </message>
     <message>
-        <location line="+17"/>
         <source>CRF:</source>
-        <translation>CRF:</translation>
+        <translation type="vanished">CRF:</translation>
     </message>
     <message>
-        <location line="+14"/>
         <source>Kualitas CRF 16-28 (bawaan 22)</source>
-        <translation>CRF quality 16-28 (default 22)</translation>
+        <translation type="vanished">CRF quality 16-28 (default 22)</translation>
     </message>
     <message>
-        <location line="+4"/>
         <source>FPS:</source>
-        <translation>FPS:</translation>
+        <translation type="vanished">FPS:</translation>
     </message>
     <message>
-        <location line="+14"/>
         <source>Target bingkai per detik (bawaan 30, maks 30)</source>
-        <translation>Target frames per second (default 30, max 30)</translation>
+        <translation type="vanished">Target frames per second (default 30, max 30)</translation>
     </message>
     <message>
-        <location line="+4"/>
         <source>Resolusi:</source>
-        <translation>Resolution:</translation>
+        <translation type="vanished">Resolution:</translation>
     </message>
     <message>
-        <location line="+8"/>
         <source>mis. 1920x1080 (kosong = ikut sumber)</source>
-        <translation>e.g. 1920x1080 (empty = follow source)</translation>
+        <translation type="vanished">e.g. 1920x1080 (empty = follow source)</translation>
     </message>
     <message>
-        <location line="+4"/>
         <source>Resolusi output WxH</source>
-        <translation>Output resolution WxH</translation>
+        <translation type="vanished">Output resolution WxH</translation>
     </message>
     <message>
-        <location line="+4"/>
         <source>Encoder:</source>
-        <translation>Encoder:</translation>
+        <translation type="vanished">Encoder:</translation>
     </message>
     <message>
-        <location line="+12"/>
         <source>Encoder (bawaan auto)</source>
-        <translation>Encoder (default auto)</translation>
+        <translation type="vanished">Encoder (default auto)</translation>
     </message>
     <message>
-        <location line="+6"/>
         <source>Paksa (video &gt;10 menit)</source>
-        <translation>Force (video &gt;10 minutes)</translation>
+        <translation type="vanished">Force (video &gt;10 minutes)</translation>
     </message>
     <message>
-        <location line="+4"/>
         <source>Izinkan video lebih dari 10 menit</source>
-        <translation>Allow videos longer than 10 minutes</translation>
+        <translation type="vanished">Allow videos longer than 10 minutes</translation>
     </message>
     <message>
-        <location line="+8"/>
         <source>Video Panjang</source>
-        <translation>Long Video</translation>
+        <translation type="vanished">Long Video</translation>
     </message>
     <message>
-        <location line="+8"/>
         <source>Video berdurasi %1 menit (lebih dari 10). Kompres tetap?
 
 Video panjang butuh waktu lama dan memakai --force-long.</source>
-        <translation>This video is %1 minutes long (over 10). Compress anyway? Long videos take a while and use --force-long.</translation>
+        <translation type="vanished">This video is %1 minutes long (over 10). Compress anyway? Long videos take a while and use --force-long.</translation>
     </message>
     <message>
-        <location line="+44"/>
         <source>Bahasa</source>
-        <translation>Language</translation>
+        <translation type="vanished">Language</translation>
     </message>
     <message>
-        <location line="+11"/>
         <source>Bahasa antarmuka:</source>
-        <translation>Interface language:</translation>
+        <translation type="vanished">Interface language:</translation>
     </message>
     <message>
-        <location line="+7"/>
         <source>Indonesia</source>
-        <translation>Indonesia</translation>
+        <translation type="vanished">Indonesia</translation>
     </message>
     <message>
-        <location line="+17"/>
         <source>Pengaturan dasar</source>
-        <translation>General settings</translation>
+        <translation type="vanished">General settings</translation>
     </message>
     <message>
-        <location line="+74"/>
         <source>Offset bingkai (detik):</source>
-        <translation>Frame offset (seconds):</translation>
+        <translation type="vanished">Frame offset (seconds):</translation>
     </message>
     <message>
-        <location line="+16"/>
         <source>Samakan bingkai video ke layar kunci (gambar statis)</source>
-        <translation>Sync the video frame to the lock screen (still image)</translation>
+        <translation type="vanished">Sync the video frame to the lock screen (still image)</translation>
     </message>
     <message>
-        <location line="+6"/>
         <source>Kompresor (bawaan impor)</source>
-        <translation>Compressor (import defaults)</translation>
+        <translation type="vanished">Compressor (import defaults)</translation>
     </message>
     <message>
-        <location line="+6"/>
         <source>Otomatis kompres:</source>
-        <translation>Compress automatically:</translation>
+        <translation type="vanished">Compress automatically:</translation>
     </message>
     <message>
-        <location line="+27"/>
-        <location line="+94"/>
         <source>Ubah...</source>
-        <translation>Change...</translation>
+        <translation type="vanished">Change...</translation>
     </message>
     <message>
-        <location line="-82"/>
         <source>CRF bawaan:</source>
-        <translation>Default CRF:</translation>
+        <translation type="vanished">Default CRF:</translation>
     </message>
     <message>
-        <location line="+14"/>
         <source>FPS bawaan:</source>
-        <translation>Default FPS:</translation>
+        <translation type="vanished">Default FPS:</translation>
     </message>
     <message>
-        <location line="+14"/>
         <source>Resolusi bawaan:</source>
-        <translation>Default resolution:</translation>
+        <translation type="vanished">Default resolution:</translation>
     </message>
     <message>
-        <location line="+7"/>
         <source>Ikuti layar</source>
-        <translation>Follow screen</translation>
+        <translation type="vanished">Follow screen</translation>
     </message>
     <message>
-        <location line="+0"/>
         <source>Ikuti sumber</source>
-        <translation>Follow source</translation>
+        <translation type="vanished">Follow source</translation>
     </message>
     <message>
-        <location line="+0"/>
         <source>720p</source>
-        <translation>720p</translation>
+        <translation type="vanished">720p</translation>
     </message>
     <message>
-        <location line="+0"/>
         <source>1080p</source>
-        <translation>1080p</translation>
+        <translation type="vanished">1080p</translation>
     </message>
     <message>
-        <location line="+0"/>
         <source>2160p</source>
-        <translation>2160p</translation>
+        <translation type="vanished">2160p</translation>
     </message>
     <message>
-        <location line="+17"/>
         <source>Cache</source>
-        <translation>Cache</translation>
+        <translation type="vanished">Cache</translation>
     </message>
     <message>
-        <location line="+14"/>
         <source>Cache:</source>
-        <translation>Cache:</translation>
+        <translation type="vanished">Cache:</translation>
     </message>
     <message>
-        <location line="+21"/>
         <source>Bersihkan cache...</source>
-        <translation>Clear cache...</translation>
+        <translation type="vanished">Clear cache...</translation>
     </message>
     <message>
-        <location line="+7"/>
         <source>Engine</source>
-        <translation>Engine</translation>
+        <translation type="vanished">Engine</translation>
     </message>
     <message>
-        <location line="+13"/>
         <source>Mode hemat baterai:</source>
-        <translation>Battery saver mode:</translation>
+        <translation type="vanished">Battery saver mode:</translation>
     </message>
     <message>
-        <location line="+7"/>
         <source>Batasi 24 fps (hemat)</source>
-        <translation>Cap at 24 fps (saver)</translation>
+        <translation type="vanished">Cap at 24 fps (saver)</translation>
     </message>
     <message>
-        <location line="+0"/>
         <source>Jeda penuh saat baterai (paling hemat)</source>
-        <translation>Pause fully on battery (most saving)</translation>
+        <translation type="vanished">Pause fully on battery (most saving)</translation>
     </message>
     <message>
-        <location line="+7"/>
         <source>Inti CPU:</source>
-        <translation>CPU cores:</translation>
+        <translation type="vanished">CPU cores:</translation>
     </message>
     <message>
-        <location line="+7"/>
         <source>Otomatis (inti efisiensi/E-core)</source>
-        <translation>Automatic (efficiency / E-cores)</translation>
+        <translation type="vanished">Automatic (efficiency / E-cores)</translation>
     </message>
     <message>
-        <location line="+0"/>
         <source>Semua inti</source>
-        <translation>All cores</translation>
+        <translation type="vanished">All cores</translation>
     </message>
     <message>
-        <location line="+7"/>
         <source>GPU:</source>
-        <translation>GPU:</translation>
+        <translation type="vanished">GPU:</translation>
     </message>
     <message>
-        <location line="+7"/>
         <source>Otomatis</source>
-        <translation>Automatic</translation>
+        <translation type="vanished">Automatic</translation>
     </message>
     <message>
-        <location line="+0"/>
         <source>Terintegrasi (hemat daya)</source>
-        <translation>Integrated (power saving)</translation>
+        <translation type="vanished">Integrated (power saving)</translation>
     </message>
     <message>
-        <location line="+0"/>
         <source>Diskrit (performa)</source>
-        <translation>Discrete (performance)</translation>
+        <translation type="vanished">Discrete (performance)</translation>
     </message>
     <message>
-        <location line="+12"/>
         <source>Perubahan Inti CPU / GPU butuh restart engine.</source>
-        <translation>CPU core / GPU changes need an engine restart.</translation>
+        <translation type="vanished">CPU core / GPU changes need an engine restart.</translation>
     </message>
     <message>
-        <location line="+8"/>
         <source>&amp;Terapkan</source>
-        <translation>&amp;Apply</translation>
+        <translation type="vanished">&amp;Apply</translation>
     </message>
     <message>
-        <location line="+7"/>
         <source>Restart engine</source>
-        <translation>Restart engine</translation>
+        <translation type="vanished">Restart engine</translation>
     </message>
     <message>
-        <location line="+145"/>
         <source>Update check contacts the releases host once per app start (never downloads/installs); disable in Settings → Pembaruan.</source>
-        <translation>Update check contacts the releases host once per app start (never downloads/installs); disable in Settings → Updates.</translation>
+        <translation type="vanished">Update check contacts the releases host once per app start (never downloads/installs); disable in Settings → Updates.</translation>
     </message>
     <message>
-        <location line="-149"/>
         <source>Terapkan perubahan engine yang butuh restart</source>
-        <translation>Apply the engine changes that need a restart</translation>
+        <translation type="vanished">Apply the engine changes that need a restart</translation>
     </message>
     <message>
-        <location line="-1807"/>
+        <location line="-10"/>
         <source>Penugasan siap: klik sub-tab layar tujuan untuk %1</source>
         <translation>Assignment ready: click the target screen&apos;s sub-tab for %1</translation>
     </message>
     <message>
-        <location line="+1124"/>
         <source>(belum dipilih — klik Jelajahi)</source>
-        <translation>(none selected yet - click Browse)</translation>
+        <translation type="vanished">(none selected yet - click Browse)</translation>
     </message>
     <message>
-        <location line="+690"/>
         <source>Mulai ulang engine supaya perubahan inti CPU / GPU langsung berlaku</source>
-        <translation>Restart the engine so CPU / GPU core changes take effect immediately</translation>
+        <translation type="vanished">Restart the engine so CPU / GPU core changes take effect immediately</translation>
     </message>
     <message>
-        <location line="+9"/>
         <source>Pembaruan</source>
-        <translation>Updates</translation>
+        <translation type="vanished">Updates</translation>
     </message>
     <message>
-        <location line="+6"/>
         <source>Periksa pembaruan saat Studio dimulai</source>
-        <translation>Check for updates when Studio starts</translation>
+        <translation type="vanished">Check for updates when Studio starts</translation>
     </message>
     <message>
-        <location line="+38"/>
         <source>Bersihkan cache</source>
-        <translation>Clear cache</translation>
+        <translation type="vanished">Clear cache</translation>
     </message>
     <message>
-        <location line="+7"/>
         <source>Hapus semua file sementara di:
 %1</source>
-        <translation>Delete all temporary files in: %1</translation>
+        <translation type="vanished">Delete all temporary files in: %1</translation>
     </message>
     <message>
-        <location line="+12"/>
         <source>Video Besar</source>
-        <translation>Large Video</translation>
+        <translation type="vanished">Large Video</translation>
     </message>
     <message>
-        <location line="+18"/>
         <source>Video ini berukuran %1 MB. Kompres ke 1080p dulu agar hemat ~3x RAM saat dipakai sebagai wallpaper?
 
 %2</source>
-        <translation>This video is %1 MB. Compress it to 1080p first to use roughly 3x less RAM as a wallpaper? %2</translation>
+        <translation type="vanished">This video is %1 MB. Compress it to 1080p first to use roughly 3x less RAM as a wallpaper? %2</translation>
     </message>
     <message>
-        <location line="+10"/>
         <source>About K6WP</source>
-        <translation>About K6WP</translation>
+        <translation type="vanished">About K6WP</translation>
     </message>
     <message>
-        <location line="+20"/>
         <source>License: GPL-2.0-or-later</source>
-        <translation>License: GPL-2.0-or-later</translation>
+        <translation type="vanished">License: GPL-2.0-or-later</translation>
     </message>
     <message>
-        <location line="+9"/>
         <source>Third-party licenses: mpv (libmpv), ffmpeg, Qt, nlohmann/json — see LICENSES/ for the full texts.</source>
-        <translation>Third-party licenses: mpv (libmpv), ffmpeg, Qt, nlohmann/json - see LICENSES/ for the full texts.</translation>
+        <translation type="vanished">Third-party licenses: mpv (libmpv), ffmpeg, Qt, nlohmann/json - see LICENSES/ for the full texts.</translation>
     </message>
     <message>
-        <location line="+7"/>
         <source>New version %1 is available.</source>
-        <translation>New version %1 is available.</translation>
+        <translation type="vanished">New version %1 is available.</translation>
     </message>
     <message>
         <source>Update check contacts the releases host once per app start (never downloads/installs); disable in Settings → Lanjutan.</source>
         <translation type="vanished">The update check contacts the releases host once per app start (it never downloads or installs anything); disable it in Settings &gt; Advanced.</translation>
     </message>
     <message>
-        <location line="+13"/>
         <source>Support development</source>
-        <translation>Support development</translation>
+        <translation type="vanished">Support development</translation>
     </message>
     <message>
-        <location line="+5"/>
         <source>Project page</source>
-        <translation>Project page</translation>
+        <translation type="vanished">Project page</translation>
     </message>
     <message>
-        <location line="+5"/>
         <source>Open release page</source>
-        <translation>Open release page</translation>
+        <translation type="vanished">Open release page</translation>
     </message>
     <message>
-        <location line="+19"/>
-        <location line="+40"/>
         <source>Selamat datang di K6WP</source>
-        <translation>Welcome to K6WP</translation>
+        <translation type="vanished">Welcome to K6WP</translation>
     </message>
     <message>
-        <location line="+6"/>
         <source>Wallpaper video untuk Windows Anda.</source>
-        <translation>Video wallpaper for your Windows desktop.</translation>
+        <translation type="vanished">Video wallpaper for your Windows desktop.</translation>
     </message>
     <message>
-        <location line="+8"/>
         <source>K6WP menampilkan video sebagai wallpaper desktop Anda. Panduan singkat ini akan memilih video pertama, menyiapkan pengaturan awal, lalu menampilkan hasilnya di layar. Klik Lanjut untuk mulai — atau Nanti saja untuk melewati dan mengatur sendiri dari tab Wallpaper.</source>
-        <translation>K6WP shows video as your desktop wallpaper. This short guide picks your first video, sets up the initial options, then shows the result on screen. Click Next to begin - or Later to skip and set things up yourself from the Wallpaper tab.</translation>
+        <translation type="vanished">K6WP shows video as your desktop wallpaper. This short guide picks your first video, sets up the initial options, then shows the result on screen. Click Next to begin - or Later to skip and set things up yourself from the Wallpaper tab.</translation>
     </message>
     <message>
-        <location line="+12"/>
-        <location line="+25"/>
         <source>Pilih video pertama Anda</source>
-        <translation>Pick your first video</translation>
+        <translation type="vanished">Pick your first video</translation>
     </message>
     <message>
-        <location line="-17"/>
         <source>Pilih satu video dari komputer Anda. File asli tidak dipindah atau diubah.</source>
-        <translation>Choose one video from your computer. The original file is never moved or modified.</translation>
+        <translation type="vanished">Choose one video from your computer. The original file is never moved or modified.</translation>
     </message>
     <message>
-        <location line="+7"/>
         <source>Format yang didukung: mp4, webm, avi, mkv, mov, wmv.</source>
-        <translation>Supported formats: mp4, webm, avi, mkv, mov, wmv.</translation>
+        <translation type="vanished">Supported formats: mp4, webm, avi, mkv, mov, wmv.</translation>
     </message>
     <message>
-        <location line="+7"/>
         <source>Pilih video...</source>
-        <translation>Choose video...</translation>
+        <translation type="vanished">Choose video...</translation>
     </message>
     <message>
-        <location line="+16"/>
         <source>Belum ada video dipilih.</source>
-        <translation>No video chosen yet.</translation>
+        <translation type="vanished">No video chosen yet.</translation>
     </message>
     <message>
-        <location line="+16"/>
         <source>Pengaturan awal</source>
-        <translation>Initial settings</translation>
+        <translation type="vanished">Initial settings</translation>
+    </message>
+    <message>
+        <source>Anda bisa mengubah semuanya nanti di tab Pengaturan.</source>
+        <translation type="vanished">You can change everything later in the Settings tab.</translation>
+    </message>
+    <message>
+        <source>K6WP menyala sendiri setiap masuk Windows</source>
+        <translation type="vanished">K6WP starts automatically every time you log in to Windows</translation>
+    </message>
+    <message>
+        <source>Siapkan video otomatis (disarankan menyala)</source>
+        <translation type="vanished">Prepare the video automatically (recommended on)</translation>
+    </message>
+    <message>
+        <source>Video disiapkan agar ringan dipakai sebagai wallpaper</source>
+        <translation type="vanished">The video is prepared so it stays light to use as a wallpaper</translation>
+    </message>
+    <message>
+        <source>Saran</source>
+        <translation type="vanished">Tip</translation>
+    </message>
+    <message>
+        <source>Satu hal sebelum mulai.</source>
+        <translation type="vanished">One thing before you start.</translation>
+    </message>
+    <message>
+        <source>Biarkan pilihan otomatis menyala. Video Anda akan disiapkan agar ringan dipakai sebagai wallpaper, lalu ditampilkan di layar. Klik Selesai untuk mulai — Anda bisa mengganti video kapan saja dari tab Wallpaper.</source>
+        <translation type="vanished">Leave the automatic option on. Your video will be prepared so it stays light to use as a wallpaper, then shown on screen. Click Finish to start - you can change the video any time from the Wallpaper tab.</translation>
+    </message>
+    <message>
+        <source>Nanti saja</source>
+        <translation type="vanished">Later</translation>
+    </message>
+    <message>
+        <source>Kembali</source>
+        <translation type="vanished">Back</translation>
+    </message>
+    <message>
+        <source>Lanjut</source>
+        <translation type="vanished">Next</translation>
+    </message>
+    <message>
+        <source>Selesai</source>
+        <translation type="vanished">Finish</translation>
+    </message>
+</context>
+<context>
+    <name>PlaylistPanel</name>
+    <message>
+        <location filename="../qml/PlaylistPanel.qml" line="+29"/>
+        <source>Daftar putar (%1)</source>
+        <translation type="unfinished">Playlist (%1)</translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>Tambah...</source>
+        <translation type="unfinished">Add...</translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Tambah video ke daftar putar</source>
+        <translation type="unfinished">Add a video to the playlist</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Kosongkan</source>
+        <translation type="unfinished">Clear</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Hapus semua entri daftar putar</source>
+        <translation type="unfinished">Remove all playlist entries</translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>Putar otomatis</source>
+        <translation type="unfinished">Auto-play</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Ganti wallpaper secara berkala</source>
+        <translation type="unfinished">Change the wallpaper periodically</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Interval:</source>
+        <translation type="unfinished">Interval:</translation>
+    </message>
+    <message>
+        <location line="+11"/>
+        <source>Menit antar pergantian (1-1440)</source>
+        <translation type="unfinished">Minutes between rotations (1-1440)</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source> menit</source>
+        <translation type="unfinished"> minutes</translation>
     </message>
     <message>
         <location line="+8"/>
-        <source>Anda bisa mengubah semuanya nanti di tab Pengaturan.</source>
-        <translation>You can change everything later in the Settings tab.</translation>
+        <source>Acak</source>
+        <translation type="unfinished">Shuffle</translation>
     </message>
     <message>
-        <location line="+12"/>
-        <source>K6WP menyala sendiri setiap masuk Windows</source>
-        <translation>K6WP starts automatically every time you log in to Windows</translation>
+        <location line="+4"/>
+        <source>Putar daftar putar dalam urutan acak</source>
+        <translation type="unfinished">Play the playlist in random order</translation>
     </message>
     <message>
-        <location line="+5"/>
-        <source>Siapkan video otomatis (disarankan menyala)</source>
-        <translation>Prepare the video automatically (recommended on)</translation>
+        <location line="+20"/>
+        <source>Belum ada video di daftar putar — tambah dari perpustakaan atau berkas</source>
+        <translation type="unfinished">No videos in the playlist yet - add them from the library or a file</translation>
     </message>
     <message>
-        <location line="+7"/>
-        <source>Video disiapkan agar ringan dipakai sebagai wallpaper</source>
-        <translation>The video is prepared so it stays light to use as a wallpaper</translation>
+        <location line="+51"/>
+        <source>Tandai</source>
+        <translation type="unfinished">Mark</translation>
     </message>
     <message>
-        <location line="+16"/>
-        <source>Saran</source>
-        <translation>Tip</translation>
+        <location line="+4"/>
+        <source>Tandai video ini untuk ditugaskan ke layar</source>
+        <translation type="unfinished">Mark this video for screen assignment</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Naik</source>
+        <translation type="unfinished">Up</translation>
     </message>
     <message>
         <location line="+6"/>
-        <source>Satu hal sebelum mulai.</source>
-        <translation>One thing before you start.</translation>
+        <source>Turun</source>
+        <translation type="unfinished">Down</translation>
     </message>
     <message>
-        <location line="+8"/>
-        <source>Biarkan pilihan otomatis menyala. Video Anda akan disiapkan agar ringan dipakai sebagai wallpaper, lalu ditampilkan di layar. Klik Selesai untuk mulai — Anda bisa mengganti video kapan saja dari tab Wallpaper.</source>
-        <translation>Leave the automatic option on. Your video will be prepared so it stays light to use as a wallpaper, then shown on screen. Click Finish to start - you can change the video any time from the Wallpaper tab.</translation>
+        <location line="+6"/>
+        <source>Hapus</source>
+        <translation type="unfinished">Remove</translation>
     </message>
+</context>
+<context>
+    <name>PreviewHole</name>
     <message>
-        <location line="+15"/>
-        <source>Nanti saja</source>
-        <translation>Later</translation>
-    </message>
-    <message>
-        <location line="+9"/>
-        <source>Kembali</source>
-        <translation>Back</translation>
-    </message>
-    <message>
-        <location line="+7"/>
-        <source>Lanjut</source>
-        <translation>Next</translation>
-    </message>
-    <message>
-        <location line="+9"/>
-        <source>Selesai</source>
-        <translation>Finish</translation>
+        <location filename="../qml/PreviewHole.qml" line="+34"/>
+        <source>Klik untuk jeda/jalan</source>
+        <translation type="unfinished">Click to pause/play</translation>
     </message>
 </context>
 <context>
@@ -1037,6 +1482,298 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
     </message>
 </context>
 <context>
+    <name>QuickSettingsPanel</name>
+    <message>
+        <location filename="../qml/QuickSettingsPanel.qml" line="+51"/>
+        <source>Pengaturan cepat</source>
+        <translation type="unfinished">Quick settings</translation>
+    </message>
+    <message>
+        <location line="+14"/>
+        <source>Isi layar:</source>
+        <translation type="unfinished">Fill screen:</translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>Isi layar (potong bila perlu)</source>
+        <translation type="unfinished">Fill screen (crop if needed)</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Sesuaikan (seluruh video terlihat)</source>
+        <translation type="unfinished">Fit (whole video visible)</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Regang (isi penuh)</source>
+        <translation type="unfinished">Stretch (fill)</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Tengah (ukuran asli)</source>
+        <translation type="unfinished">Center (original size)</translation>
+    </message>
+    <message>
+        <location line="+11"/>
+        <source>Cara video mengisi layar</source>
+        <translation type="unfinished">How the video fills the screen</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Layar:</source>
+        <translation type="unfinished">Screen:</translation>
+    </message>
+    <message>
+        <location line="+26"/>
+        <source>Jalankan saat Windows menyala</source>
+        <translation type="unfinished">Start when Windows starts</translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>Hemat baterai (wallpaper berhenti saat pakai baterai)</source>
+        <translation type="unfinished">Save battery (wallpaper stops on battery power)</translation>
+    </message>
+</context>
+<context>
+    <name>SettingsPage</name>
+    <message>
+        <location filename="../qml/SettingsPage.qml" line="+51"/>
+        <source>Bahasa</source>
+        <translation type="unfinished">Language</translation>
+    </message>
+    <message>
+        <location line="+11"/>
+        <source>Bahasa antarmuka:</source>
+        <translation type="unfinished">Interface language:</translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>Indonesia</source>
+        <translation type="unfinished">Indonesia</translation>
+    </message>
+    <message>
+        <location line="+17"/>
+        <source>Pengaturan dasar</source>
+        <translation type="unfinished">General settings</translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>Jalankan saat Windows menyala</source>
+        <translation type="unfinished">Start when Windows starts</translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>Hemat baterai (wallpaper berhenti saat pakai baterai)</source>
+        <translation type="unfinished">Save battery (wallpaper stops on battery power)</translation>
+    </message>
+    <message>
+        <location line="+16"/>
+        <source>Isi layar:</source>
+        <translation type="unfinished">Fill screen:</translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>Isi layar (potong bila perlu)</source>
+        <translation type="unfinished">Fill screen (crop if needed)</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Sesuaikan (seluruh video terlihat)</source>
+        <translation type="unfinished">Fit (whole video visible)</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Regang (isi penuh)</source>
+        <translation type="unfinished">Stretch (fill)</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Tengah (ukuran asli)</source>
+        <translation type="unfinished">Center (original size)</translation>
+    </message>
+    <message>
+        <location line="+13"/>
+        <source>Layar:</source>
+        <translation type="unfinished">Screen:</translation>
+    </message>
+    <message>
+        <location line="+22"/>
+        <source>Offset bingkai (detik):</source>
+        <translation type="unfinished">Frame offset (seconds):</translation>
+    </message>
+    <message>
+        <location line="+16"/>
+        <source>Samakan bingkai video ke layar kunci (gambar statis)</source>
+        <translation type="unfinished">Sync the video frame to the lock screen (still image)</translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>Kompresor (bawaan impor)</source>
+        <translation type="unfinished">Compressor (import defaults)</translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>Otomatis kompres:</source>
+        <translation type="unfinished">Compress automatically:</translation>
+    </message>
+    <message>
+        <location line="+14"/>
+        <source>Folder output:</source>
+        <translation type="unfinished">Output folder:</translation>
+    </message>
+    <message>
+        <location line="+13"/>
+        <location line="+95"/>
+        <source>Ubah...</source>
+        <translation type="unfinished">Change...</translation>
+    </message>
+    <message>
+        <location line="-83"/>
+        <source>CRF bawaan:</source>
+        <translation type="unfinished">Default CRF:</translation>
+    </message>
+    <message>
+        <location line="+14"/>
+        <source>FPS bawaan:</source>
+        <translation type="unfinished">Default FPS:</translation>
+    </message>
+    <message>
+        <location line="+14"/>
+        <source>Resolusi bawaan:</source>
+        <translation type="unfinished">Default resolution:</translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>Ikuti layar</source>
+        <translation type="unfinished">Follow screen</translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>Ikuti sumber</source>
+        <translation type="unfinished">Follow source</translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>720p</source>
+        <translation type="unfinished">720p</translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>1080p</source>
+        <translation type="unfinished">1080p</translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>2160p</source>
+        <translation type="unfinished">2160p</translation>
+    </message>
+    <message>
+        <location line="+18"/>
+        <source>Cache</source>
+        <translation type="unfinished">Cache</translation>
+    </message>
+    <message>
+        <location line="+14"/>
+        <source>Cache:</source>
+        <translation type="unfinished">Cache:</translation>
+    </message>
+    <message>
+        <location line="+21"/>
+        <source>Bersihkan cache...</source>
+        <translation type="unfinished">Clear cache...</translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>Engine</source>
+        <translation type="unfinished">Engine</translation>
+    </message>
+    <message>
+        <location line="+13"/>
+        <source>Mode hemat baterai:</source>
+        <translation type="unfinished">Battery saver mode:</translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>Batasi 24 fps (hemat)</source>
+        <translation type="unfinished">Cap at 24 fps (saver)</translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>Jeda penuh saat baterai (paling hemat)</source>
+        <translation type="unfinished">Pause fully on battery (most saving)</translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>Inti CPU:</source>
+        <translation type="unfinished">CPU cores:</translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>Otomatis (inti efisiensi/E-core)</source>
+        <translation type="unfinished">Automatic (efficiency / E-cores)</translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>Semua inti</source>
+        <translation type="unfinished">All cores</translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>GPU:</source>
+        <translation type="unfinished">GPU:</translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>Otomatis</source>
+        <translation type="unfinished">Automatic</translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>Terintegrasi (hemat daya)</source>
+        <translation type="unfinished">Integrated (power saving)</translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>Diskrit (performa)</source>
+        <translation type="unfinished">Discrete (performance)</translation>
+    </message>
+    <message>
+        <location line="+12"/>
+        <source>Perubahan Inti CPU / GPU butuh restart engine.</source>
+        <translation type="unfinished">CPU core / GPU changes need an engine restart.</translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>&amp;Terapkan</source>
+        <translation type="unfinished">&amp;Apply</translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Terapkan perubahan engine yang butuh restart</source>
+        <translation type="unfinished">Apply the engine changes that need a restart</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Restart engine</source>
+        <translation type="unfinished">Restart engine</translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Mulai ulang engine supaya perubahan inti CPU / GPU langsung berlaku</source>
+        <translation type="unfinished">Restart the engine so CPU / GPU core changes take effect immediately</translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>Pembaruan</source>
+        <translation type="unfinished">Updates</translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>Periksa pembaruan saat Studio dimulai</source>
+        <translation type="unfinished">Check for updates when Studio starts</translation>
+    </message>
+</context>
+<context>
     <name>StudioBridge</name>
     <message>
         <location filename="../src/studio_bridge.cpp" line="+71"/>
@@ -1052,6 +1789,74 @@ Video panjang butuh waktu lama dan memakai --force-long.</source>
         <location line="+43"/>
         <source>Mode duplikat terdeteksi (%1). Penugasan video per layar dinonaktifkan sampai tampilan Windows diubah ke mode Perluas.</source>
         <translation>Duplicate mode detected (%1). Per-monitor video assignment is disabled until the Windows display is changed to Extend mode.</translation>
+    </message>
+</context>
+<context>
+    <name>WallpaperPage</name>
+    <message>
+        <location filename="../qml/WallpaperPage.qml" line="+85"/>
+        <source>Layar:</source>
+        <translation type="unfinished">Screen:</translation>
+    </message>
+    <message>
+        <location line="+50"/>
+        <source>Klik untuk menugaskan video ke layar ini</source>
+        <translation type="unfinished">Click to assign the video to this screen</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Pilih layar ini</source>
+        <translation type="unfinished">Select this screen</translation>
+    </message>
+    <message>
+        <location line="+26"/>
+        <source>UTAMA</source>
+        <translation type="unfinished">PRIMARY</translation>
+    </message>
+    <message>
+        <location line="+28"/>
+        <source>mode duplikat</source>
+        <translation type="unfinished">duplicate mode</translation>
+    </message>
+    <message>
+        <location line="+10"/>
+        <source>file tidak ditemukan</source>
+        <translation type="unfinished">file not found</translation>
+    </message>
+    <message>
+        <location line="+10"/>
+        <source>cek engine.log</source>
+        <translation type="unfinished">check engine.log</translation>
+    </message>
+    <message>
+        <location line="+12"/>
+        <source>Tidak ada layar terdeteksi</source>
+        <translation type="unfinished">No screens detected</translation>
+    </message>
+    <message>
+        <location line="+10"/>
+        <source>Hapus penugasan</source>
+        <translation type="unfinished">Remove assignment</translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>Hapus penugasan video untuk layar terpilih</source>
+        <translation type="unfinished">Remove the video assignment for the selected screen</translation>
+    </message>
+    <message>
+        <location line="+48"/>
+        <source>Pratinjau:</source>
+        <translation type="unfinished">Preview:</translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>cakupan: %1</source>
+        <translation type="unfinished">scope: %1</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>cakupan: semua layar</source>
+        <translation type="unfinished">scope: all screens</translation>
     </message>
 </context>
 <context>
