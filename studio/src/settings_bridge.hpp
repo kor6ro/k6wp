@@ -23,6 +23,8 @@
 #include <QString>
 #include <QStringList>
 
+#include <functional>
+
 #include <QtQml/qqmlregistration.h>
 
 #include "config_schema.hpp"
@@ -30,6 +32,18 @@
 #include "ui_language.hpp"
 
 namespace k6wp {
+
+// Plan todo 17 / brief B10: process-global mirror of the closeToTray
+// preference. Lives here (not in qml_shell.cpp) because studio_logic_test
+// links settings_bridge.cpp but NOT qml_shell.cpp, and SettingsBridge is
+// the owner of the setting: ctor/reload/setter write it, QmlShell::closeEvent
+// reads it. Default false = pre-todo-17 behavior (close = exit).
+void SetCloseToTrayEnabled(bool on);
+bool CloseToTrayEnabled();
+// Listener invoked on every closeToTray change (reload + setter). QmlShell
+// registers it to show/hide the tray icon live; nullptr clears. Invoked on
+// the GUI thread; a null listener is a no-op.
+void SetCloseToTrayListener(std::function<void(bool)> listener);
 
 // Plan todo 14 (brief B8 + D1): the value set a performance preset maps to.
 // Fields mirror the WallpaperConfig playback keys the preset rewrites in
@@ -105,6 +119,12 @@ class SettingsBridge : public QObject {
   // performancePresetApplied(true) so QML can trigger the automatic restart
   // with a friendly notice (never the word "engine").
   Q_PROPERTY(QString performancePreset READ performancePreset WRITE setPerformancePreset NOTIFY changed)
+  // Plan todo 17 / brief B10 + C-18: "Tutup ke tray (Studio tetap jalan di
+  // latar)". Consumes the todo-8 key studio_settings.json "closeToTray"
+  // (default false = old behavior byte-for-byte). Written through on toggle
+  // like startWithWindows: the closeEvent decision needs the live value, not
+  // an unapplied edit.
+  Q_PROPERTY(bool closeToTray READ closeToTray WRITE setCloseToTray NOTIFY changed)
 
   bool autoCompressOnImport() const { return studio_.auto_compress_on_import; }
   QString compressOutputDir() const { return QString::fromStdWString(studio_.compress_output_dir); }
@@ -119,6 +139,7 @@ class SettingsBridge : public QObject {
   bool checkUpdates() const { return studio_.check_updates; }
   QString playlistSource() const { return QString::fromStdString(studio_.playlist_source); }
   QString performancePreset() const { return QString::fromStdString(studio_.performance_preset); }
+  bool closeToTray() const { return studio_.close_to_tray; }
 
   // --- studio_ui.ini (UI language) -------------------------------------------
   // Its own store rather than a StudioSettings field (see ui_language.hpp).
@@ -200,6 +221,10 @@ class SettingsBridge : public QObject {
   // and stores the preset name. Unknown names are refused without moving the
   // property (same contract as setPlaylistSource).
   Q_INVOKABLE void setPerformancePreset(const QString& preset);
+  // Plan todo 17: persists studio_.close_to_tray, mirrors it into the
+  // process-global CloseToTrayEnabled() (what QmlShell::closeEvent reads)
+  // and nudges the active shell so the tray icon appears/disappears live.
+  Q_INVOKABLE void setCloseToTray(bool on);
 
   // Rejects an unsupported code (returns without writing) and emits changed()
   // only on success, so the QML picker never shows a value the store refused.

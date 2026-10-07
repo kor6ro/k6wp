@@ -21,6 +21,7 @@
 #include <shlobj.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cwctype>
 #include <filesystem>
@@ -32,6 +33,25 @@
 #include "config_schema.hpp"
 
 namespace k6wp {
+
+// Plan todo 17 / B10: process-global closeToTray mirror (see settings_bridge.hpp).
+namespace {
+std::atomic<bool> g_close_to_tray{false};
+std::function<void(bool)> g_close_to_tray_listener;
+}  // namespace
+
+void SetCloseToTrayEnabled(bool on) {
+  g_close_to_tray.store(on, std::memory_order_relaxed);
+  if (g_close_to_tray_listener) {
+    g_close_to_tray_listener(on);
+  }
+}
+
+bool CloseToTrayEnabled() { return g_close_to_tray.load(std::memory_order_relaxed); }
+
+void SetCloseToTrayListener(std::function<void(bool)> listener) {
+  g_close_to_tray_listener = std::move(listener);
+}
 
 // --- performance preset mapping (plan todo 14 / brief B8 + D1) -------------
 
@@ -135,6 +155,9 @@ void SettingsBridge::reload() {
   if (loaded) {
     SetLastError(QString());
   }
+  // Plan todo 17: keep the closeEvent mirror in step with the loaded store so
+  // a stored closeToTray=true takes effect on the first close after launch.
+  SetCloseToTrayEnabled(studio_.close_to_tray);
   emit changed();
   loading_ = false;
 }
@@ -261,6 +284,12 @@ void SettingsBridge::setCompressAdvancedVisible(bool on) {
 
 void SettingsBridge::setCheckUpdates(bool on) {
   studio_.check_updates = on;
+  emit changed();
+}
+
+void SettingsBridge::setCloseToTray(bool on) {
+  studio_.close_to_tray = on;
+  SetCloseToTrayEnabled(on);
   emit changed();
 }
 

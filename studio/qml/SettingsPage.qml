@@ -150,7 +150,7 @@ Item {
         if (autostartBox)
             autostartBox.checked = Settings.startWithWindows
         if (trayBox)
-            trayBox.checked = Settings.closeToTray === true
+            trayBox.checked = Settings.closeToTray
         if (batteryBox)
             batteryBox.checked = Settings.batterySaver
         if (batteryModeCombo)
@@ -394,16 +394,10 @@ Item {
                     // C-18 verbatim: "Tutup ke tray (Studio tetap jalan di
                     // latar)", default OFF.
                     text: qsTr("Tutup ke tray (Studio tetap jalan di latar)")
-                    checked: Settings.closeToTray === true
-                    onToggled: {
-                        // Todo 17 (B10) owns the C++ closeToTray property and
-                        // the tray lifecycle. Until that slice lands the
-                        // guard keeps this toggle inert instead of raising
-                        // "Property 'setCloseToTray' is not a function"; once
-                        // 17 lands it becomes a normal write-through toggle.
-                        if (typeof Settings.setCloseToTray === "function")
-                            Settings.setCloseToTray(checked)
-                    }
+                    checked: Settings.closeToTray
+                    // Todo 17 (B10): the C++ property + tray lifecycle have
+                    // landed, so this is a normal write-through toggle.
+                    onToggled: Settings.setCloseToTray(checked)
                 }
 
                 // ----------------------------- TAMPILAN -----------------------

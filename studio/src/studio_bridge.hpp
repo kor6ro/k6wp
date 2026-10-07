@@ -40,6 +40,7 @@
 #include <QtQml/qqmlregistration.h>
 
 #include <atomic>
+#include <functional>
 #include <map>
 #include <string>
 #include <vector>
@@ -58,6 +59,32 @@ class QTimer;
 namespace k6wp {
 
 class UpdateChecker;
+
+// Plan todo 17 / brief B10 + C-19: the Studio tray's engine-side actions.
+// Defined in studio_bridge.cpp (NOT qml_shell.cpp) because studio_logic_test
+// compiles studio_bridge.cpp but not qml_shell.cpp, and the IPC pause/resume
+// + friendly status live on StudioBridge. QmlShell's QSystemTrayIcon
+// registers here on construction and reads the copies at menu-popup time;
+// StudioBridge::ApplyStatus pushes tooltip updates through the listener.
+// Menu copy is C-19 verbatim: "Buka K6WP Studio / Jeda / Lanjut / Keluar" —
+// deliberately NOT the engine tray's quick-switch MRU (engine_app.cpp).
+struct StudioTrayHooks {
+  std::function<void()> pause;          // "Jeda"
+  std::function<void()> resume;         // "Lanjut"
+  std::function<QString()> status_tip;  // friendly status, never "engine"
+};
+void SetStudioTrayHooks(StudioTrayHooks hooks);
+// Clears the hooks; QmlShell's tray dtor and StudioBridge's dtor both call
+// this so a dying side never leaves a dangling std::function.
+void ClearStudioTrayHooks();
+// Copies of the current hooks (empty std::function when unset). GUI-thread
+// only; the tray reads them at menu-popup / action time.
+StudioTrayHooks GetStudioTrayHooks();
+// Called by StudioBridge::ApplyStatus after engineStatusChanged, so the tray
+// tooltip tracks the live status without the shell polling IPC.
+void NotifyStudioTrayStatusChanged();
+// Tray installs this when it appears; cleared by ClearStudioTrayHooks.
+void SetStudioTrayStatusListener(std::function<void()> listener);
 
 // QML-facing mirror of EngineStatusView::Kind. The VALUES are the stable
 // contract studio/qml/Main.qml switches on (it redeclares the same order as

@@ -4,10 +4,14 @@
 
 #include "qml_shell.hpp"
 
+#include <QAction>
+#include <QApplication>
+#include <QCloseEvent>
 #include <QDragEnterEvent>
 #include <QDragMoveEvent>
 #include <QDropEvent>
 #include <QIcon>
+#include <QMenu>
 #include <QMimeData>
 #include <QPoint>
 #include <QQmlEngine>
@@ -17,6 +21,7 @@
 #include <QResizeEvent>
 #include <QShowEvent>
 #include <QSize>
+#include <QSystemTrayIcon>
 #include <QUrl>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -24,6 +29,8 @@
 #include "preview_widget.hpp"
 
 #include "library_grid_model.hpp"
+#include "settings_bridge.hpp"
+#include "studio_bridge.hpp"
 #include "video_paths.hpp"
 
 namespace k6wp {
@@ -121,9 +128,18 @@ QmlShell::QmlShell(QWidget* parent) : QMainWindow(parent) {
   quick_->setSource(MainQmlUrl());
 
   SetActiveQmlShell(this);
+
+  // Plan todo 17: a stored closeToTray=true must take effect on this launch's
+  // first close, so seed the tray from the process-global mirror (written by
+  // SettingsBridge::reload during setSource above). The listener covers
+  // runtime toggles from SettingsPage.
+  SetCloseToTrayListener([this](bool on) { ApplyCloseToTrayPreference(on); });
+  ApplyCloseToTrayPreference(CloseToTrayEnabled());
 }
 
 QmlShell::~QmlShell() {
+  SetCloseToTrayListener(nullptr);
+  ClearStudioTrayHooks();
   if (g_active_shell == this) {
     g_active_shell = nullptr;
   }
@@ -181,6 +197,105 @@ void QmlShell::setPreviewPaused(bool paused) {
     return;
   }
   preview_->SetPaused(paused);
+}
+
+// --- Plan todo 17 / B10: optional close-to-tray lifecycle --------------------
+
+void QmlShell::ApplyCloseToTrayPreference(bool on) {
+  if (on) {
+    EnsureTray();
+    return;
+  }
+  if (tray_ != nullptr) {
+    // OFF returns to the pre-todo-17 surface: no Studio tray icon at all.
+    tray_->hide();
+  }
+  // A prior ON in this session flipped this to false; OFF must restore the
+  // Qt default so a later close exits instead of hanging in a trayless hide.
+  QApplication::setQuitOnLastWindowClosed(true);
+}
+
+void QmlShell::EnsureTray() {
+  if (tray_ != nullptr || !QSystemTrayIcon::isSystemTrayAvailable()) {
+    return;
+  }
+  tray_ = new QSystemTrayIcon(QIcon(QStringLiteral(":/icons/k6wp-on.ico")), this);
+  tray_menu_ = new QMenu(this);
+  // C-19 verbatim menu — the ONLY items. Do NOT copy the engine tray's
+  // quick-switch MRU (engine_app.cpp); this tray is a controller, not a
+  // playlist switcher.
+  tray_open_ = tray_menu_->addAction(tr("Buka K6WP Studio"));
+  tray_pause_ = tray_menu_->addAction(tr("Jeda"));
+  tray_resume_ = tray_menu_->addAction(tr("Lanjut"));
+  tray_menu_->addSeparator();
+  tray_quit_ = tray_menu_->addAction(tr("Keluar"));
+  tray_->setContextMenu(tray_menu_);
+  tray_->setIcon(QIcon(QStringLiteral(":/icons/k6wp-on.ico")));
+
+  connect(tray_open_, &QAction::triggered, this, &QmlShell::ShowFromTray);
+  connect(tray_pause_, &QAction::triggered, this, [this]() {
+    const StudioTrayHooks hooks = GetStudioTrayHooks();
+    if (hooks.pause) {
+      hooks.pause();
+    }
+  });
+  connect(tray_resume_, &QAction::triggered, this, [this]() {
+    const StudioTrayHooks hooks = GetStudioTrayHooks();
+    if (hooks.resume) {
+      hooks.resume();
+    }
+  });
+  connect(tray_quit_, &QAction::triggered, this, &QmlShell::QuitFromTray);
+  connect(tray_menu_, &QMenu::aboutToShow, this, &QmlShell::RefreshTrayTooltip);
+
+  SetStudioTrayStatusListener([this]() { RefreshTrayTooltip(); });
+  RefreshTrayTooltip();
+  tray_->show();
+}
+
+void QmlShell::RefreshTrayTooltip() {
+  if (tray_ == nullptr) {
+    return;
+  }
+  // Friendly status only — glossary §5: never the word "engine".
+  const StudioTrayHooks hooks = GetStudioTrayHooks();
+  const QString status = hooks.status_tip ? hooks.status_tip() : QString();
+  tray_->setToolTip(status.isEmpty()
+                        ? QStringLiteral("K6WP Studio")
+                        : QStringLiteral("K6WP Studio — %1").arg(status));
+}
+
+void QmlShell::ShowFromTray() {
+  QApplication::setQuitOnLastWindowClosed(true);
+  showNormal();
+  raise();
+  activateWindow();
+}
+
+void QmlShell::QuitFromTray() {
+  // Explicit quit (C-19 "Keluar"). Release the singleton mutex first so a
+  // second Studio launch is not blocked by this process's teardown window.
+  ReleaseStudioMutex();
+  qApp->quit();
+}
+
+void QmlShell::closeEvent(QCloseEvent* event) {
+  if (!CloseToTrayEnabled()) {
+    // OFF (default): pre-todo-17 behavior, byte-for-byte.
+    QApplication::setQuitOnLastWindowClosed(true);
+    QMainWindow::closeEvent(event);
+    return;
+  }
+  // ON: hide to tray instead of exiting. The process stays alive; "Keluar"
+  // in the tray menu (or a second launch's focus path) is how it ends.
+  event->ignore();
+  hide();
+  QApplication::setQuitOnLastWindowClosed(false);
+  EnsureTray();
+  if (tray_ != nullptr) {
+    tray_->show();
+    RefreshTrayTooltip();
+  }
 }
 
 void QmlShell::resizeEvent(QResizeEvent* event) {

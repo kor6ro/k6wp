@@ -22,32 +22,61 @@ namespace {
 // reusing it would make a launcher-born Studio see ALREADY_EXISTS and exit).
 constexpr wchar_t kStudioAppMutex[] = L"Local\\K6WP-Studio-App-Singleton";
 
+// The live mutex handle. nulled by ReleaseStudioMutex() (plan todo 17:
+// tray "Keluar") and by ~MutexGuard at process exit — both paths are
+// idempotent through ReleaseStudioMutexInternal.
+HANDLE g_studio_mutex = nullptr;
+
+void ReleaseStudioMutexInternal() {
+  if (g_studio_mutex != nullptr && g_studio_mutex != INVALID_HANDLE_VALUE) {
+    CloseHandle(g_studio_mutex);
+  }
+  g_studio_mutex = nullptr;
+}
+
 // Minimal RAII guard: holds the mutex until process exit. Never closes an
 // invalid handle; never copied.
 class MutexGuard {
  public:
-  explicit MutexGuard(HANDLE h) : handle_(h) {}
+  MutexGuard() = default;
   MutexGuard(const MutexGuard&) = delete;
   MutexGuard& operator=(const MutexGuard&) = delete;
-  ~MutexGuard() {
-    if (handle_ != nullptr && handle_ != INVALID_HANDLE_VALUE) {
-      CloseHandle(handle_);
-    }
-  }
-
- private:
-  HANDLE handle_;
+  ~MutexGuard() { ReleaseStudioMutexInternal(); }
 };
 
 // Focus the existing "K6WP Studio" top-level window. Retries ~2s for the
 // startup race (second instance arrives before the first window exists).
+// Plan todo 17: a close-to-tray window is HIDDEN, not minimized — FindWindow
+// still finds it, but SW_RESTORE alone does not unhide a never-minimized
+// window, so SW_SHOW covers that case (no-op for the classic minimized path).
+// FindWindowW(nullptr, title) alone is NOT enough: Qt also creates a
+// QWindowPopupSaveBits top-level titled "K6WP Studio", and the first match
+// may be that popup — enumerate and require the QWindowIcon class instead.
 void FocusExistingStudio() {
   const ULONGLONG start = GetTickCount64();
   for (;;) {
-    const HWND hwnd = FindWindowW(nullptr, L"K6WP Studio");
-    if (hwnd != nullptr) {
-      ShowWindow(hwnd, SW_RESTORE);
-      SetForegroundWindow(hwnd);
+    HWND found = nullptr;
+    EnumWindows(
+        [](HWND hwnd, LPARAM lparam) -> BOOL {
+          wchar_t cls[128] = {};
+          if (GetClassNameW(hwnd, cls, 128) == 0) {
+            return TRUE;
+          }
+          // The real QMainWindow is Qt's QWindowIcon window; the popup
+          // save-bits window shares the title but never hosts the UI.
+          if (wcsstr(cls, L"QWindowIcon") != nullptr) {
+            *reinterpret_cast<HWND*>(lparam) = hwnd;
+            return FALSE;
+          }
+          return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&found));
+    if (found != nullptr) {
+      ShowWindow(found, SW_RESTORE);
+      if (!IsWindowVisible(found)) {
+        ShowWindow(found, SW_SHOW);
+      }
+      SetForegroundWindow(found);
       return;
     }
     if (GetTickCount64() - start >= 2000) {
@@ -57,6 +86,10 @@ void FocusExistingStudio() {
   }
 }
 }  // namespace
+
+namespace k6wp {
+void ReleaseStudioMutex() { ReleaseStudioMutexInternal(); }
+}  // namespace k6wp
 
 int main(int argc, char* argv[]) {
   // DLL-planting hardening: per-user install dir is user-writable; restrict
@@ -70,13 +103,16 @@ int main(int argc, char* argv[]) {
     // No singleton guard possible; continue normally (same as launcher's
     // CreateMutexW-failure path: warn-free here, Studio still starts).
   } else if (GetLastError() == ERROR_ALREADY_EXISTS) {
-    // Second instance: focus the first, exit fast without creating UI.
+    // Second instance: focus the first (including a hidden close-to-tray
+    // window — plan todo 17), exit fast without creating UI.
     CloseHandle(mutex);
     FocusExistingStudio();
     return 0;
   } else {
-    // Own the mutex for the process lifetime; never close while in use.
-    static MutexGuard guard(mutex);
+    // Own the mutex for the process lifetime; never close while in use
+    // (ReleaseStudioMutex / ~MutexGuard are the only closer paths).
+    g_studio_mutex = mutex;
+    static MutexGuard guard;
     (void)guard;
   }
 

@@ -40,6 +40,33 @@
 
 namespace k6wp {
 
+// Plan todo 17 / B10: Studio tray hooks (see studio_bridge.hpp). One process-
+// global slot pair; the tray reads copies at menu-popup time so the menu
+// never holds a live reference across a bridge rebuild.
+namespace {
+StudioTrayHooks g_studio_tray_hooks;
+std::function<void()> g_tray_status_listener;
+}  // namespace
+
+void SetStudioTrayHooks(StudioTrayHooks hooks) { g_studio_tray_hooks = std::move(hooks); }
+
+void ClearStudioTrayHooks() {
+  g_studio_tray_hooks = StudioTrayHooks{};
+  g_tray_status_listener = nullptr;
+}
+
+StudioTrayHooks GetStudioTrayHooks() { return g_studio_tray_hooks; }
+
+void SetStudioTrayStatusListener(std::function<void()> listener) {
+  g_tray_status_listener = std::move(listener);
+}
+
+void NotifyStudioTrayStatusChanged() {
+  if (g_tray_status_listener) {
+    g_tray_status_listener();
+  }
+}
+
 namespace {
 
 // Reads a finished watcher's value, absorbing an exception that escaped the
@@ -265,9 +292,19 @@ StudioBridge::StudioBridge(QObject* parent) : QObject(parent) {
   if (settings_.check_updates) {
     checkForUpdates();
   }
+  // Plan todo 17: publish the C-19 tray hooks. QmlShell's tray reads copies
+  // at menu-popup time; this registration is what makes Jeda/Lanjut/status
+  // live once the (optional) tray exists.
+  SetStudioTrayHooks(
+      {[this]() { pause(); },
+       [this]() { resume(); },
+       [this]() { return statusTitle(); }});
 }
 
 StudioBridge::~StudioBridge() {
+  // Plan todo 17: drop the tray hooks before members die so a still-visible
+  // tray menu can never invoke a destroyed bridge.
+  ClearStudioTrayHooks();
   // The QML engine owns this singleton, so the destruction order is: engine
   // teardown -> here. Stop the timer so no NEW poll launches, then cancel and
   // drain every in-flight worker BEFORE members die: each lambda captures
@@ -395,6 +432,9 @@ void StudioBridge::ApplyStatus(const EngineStatusView& view) {
     status_hint_ = FriendlyIpcError(technical);
   }
   emit engineStatusChanged();
+  // Plan todo 17: refresh the Studio tray tooltip (friendly statusTitle,
+  // never the word "engine") whenever the polled status repaints.
+  NotifyStudioTrayStatusChanged();
 
   // The native preview follows the engine's active video - that is the whole
   // reason PreviewWidget is embedded in the shell. Only on change, so the
