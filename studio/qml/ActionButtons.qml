@@ -32,11 +32,11 @@ GridLayout {
     }
 
     Button {
-        text: qsTr("&Terapkan Wallpaper")
+        text: qsTr("&Pasang")
         enabled: Studio.selectedVideo.length > 0 && !Studio.busy
         onClicked: actionButtons.installVideo(Studio.selectedVideo)
         ToolTip.visible: hovered
-        ToolTip.text: qsTr("Terapkan video terpilih sebagai wallpaper (live-switch, tanpa restart saat engine jalan)")
+        ToolTip.text: qsTr("Pasang video terpilih sebagai wallpaper (langsung, tanpa restart)")
     }
 
     Button {
@@ -50,12 +50,12 @@ GridLayout {
     // Visible only on NotRunning, the same rule
     // MainWindow::OnPollDone used for its start button.
     Button {
-        text: qsTr("Nyalakan Engine")
+        text: qsTr("Aktifkan lagi")
         visible: Studio.engineStatusKind === statusKindNotRunning
         enabled: !Studio.busy
         onClicked: Studio.startEngine()
         ToolTip.visible: hovered
-        ToolTip.text: qsTr("Menyalakan engine wallpaper (muncul saat engine mati)")
+        ToolTip.text: qsTr("Aktifkan lagi wallpaper yang sedang tidak berjalan")
     }
 
     BusyIndicator {
