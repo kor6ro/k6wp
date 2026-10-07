@@ -123,7 +123,7 @@ class SettingsBridge : public QObject {
   // latar)". Consumes the todo-8 key studio_settings.json "closeToTray"
   // (default false = old behavior byte-for-byte). Written through on toggle
   // like startWithWindows: the closeEvent decision needs the live value, not
-  // an unapplied edit.
+  // an unapplied edit. Persists via PersistStudioSettingsNow() (DEF-2).
   Q_PROPERTY(bool closeToTray READ closeToTray WRITE setCloseToTray NOTIFY changed)
 
   bool autoCompressOnImport() const { return studio_.auto_compress_on_import; }
@@ -255,6 +255,13 @@ class SettingsBridge : public QObject {
  private:
   void AppendLog(const QString& line);
   void SetLastError(const QString& error);
+  // Persists studio_settings.json immediately (write-through). Used by
+  // behavioral setters (closeToTray, checkUpdates, lockscreenSync, …) whose
+  // values must survive a crash before the next clean quit — the
+  // aboutToQuit flush is a safety net, not the contract. SaveStudioSettings
+  // directly (not apply()) because these setters touch only studio settings,
+  // not config.json; apply() would rewrite the engine config as a side effect.
+  void PersistStudioSettingsNow();
 
   StudioSettings studio_;
   WallpaperConfig config_;

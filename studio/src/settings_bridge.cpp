@@ -192,6 +192,15 @@ void SettingsBridge::apply() {
   }
 }
 
+void SettingsBridge::PersistStudioSettingsNow() {
+  try {
+    SaveStudioSettings(settings_path_, studio_);
+  } catch (const ConfigError& e) {
+    SetLastError(QStringLiteral("Gagal menyimpan pengaturan studio: %1")
+                     .arg(QString::fromUtf8(e.what())));
+  }
+}
+
 bool SettingsBridge::engineRestartNeeded() const {
   return config_.cpu_affinity != "auto" || config_.gpu_adapter != "auto";
 }
@@ -200,6 +209,7 @@ bool SettingsBridge::engineRestartNeeded() const {
 
 void SettingsBridge::setAutoCompressOnImport(bool on) {
   studio_.auto_compress_on_import = on;
+  PersistStudioSettingsNow();
   emit changed();
 }
 
@@ -266,6 +276,7 @@ void SettingsBridge::setCacheDir(const QString& dir) {
 
 void SettingsBridge::setLockscreenSync(bool on) {
   studio_.lockscreen_sync = on;
+  PersistStudioSettingsNow();
   emit changed();
 }
 
@@ -274,6 +285,7 @@ void SettingsBridge::setLockscreenOffsetSec(double seconds) {
     return;
   }
   studio_.lockscreen_offset_sec = seconds;
+  PersistStudioSettingsNow();
   emit changed();
 }
 
@@ -284,12 +296,14 @@ void SettingsBridge::setCompressAdvancedVisible(bool on) {
 
 void SettingsBridge::setCheckUpdates(bool on) {
   studio_.check_updates = on;
+  PersistStudioSettingsNow();
   emit changed();
 }
 
 void SettingsBridge::setCloseToTray(bool on) {
   studio_.close_to_tray = on;
   SetCloseToTrayEnabled(on);
+  PersistStudioSettingsNow();
   emit changed();
 }
 
@@ -299,6 +313,7 @@ void SettingsBridge::setPlaylistSource(const QString& source) {
     return;
   }
   studio_.playlist_source = source.toStdString();
+  PersistStudioSettingsNow();
   emit changed();
 }
 

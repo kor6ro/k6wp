@@ -2981,6 +2981,144 @@ int main(int argc, char** argv) {
     (void)SetLocalAppDataDir(QString::fromStdWString(real_localappdata));
   }
 
+  // 29. Write-through persistence (DEF-2 / F3-08): behavioral toggles
+  //     (closeToTray, checkUpdates, lockscreenSync, autoCompressOnImport)
+  //     must persist to studio_settings.json immediately on set — WITHOUT
+  //     an explicit apply() call. The exact F3-08 failure: onToggled →
+  //     setter wrote memory + emit only; SaveStudioSettings ran solely in
+  //     apply(); quit-flush did not cover it (JSON stayed false).
+  //     Quit-flush is a safety net, not the contract: a crash before clean
+  //     quit must not lose the toggle. Each leg toggles, then reads the
+  //     JSON bytes directly from disk — the proof that no apply() is needed.
+  {
+    const std::wstring real_localappdata = LocalAppDataDir();
+    QTemporaryDir fake_home;
+    Check(fake_home.isValid(), "writethrough temp dir is valid");
+    const bool redirected =
+        fake_home.isValid() && SetLocalAppDataDir(fake_home.path());
+    Check(redirected, "writethrough: LOCALAPPDATA redirected");
+    if (redirected) {
+      const QDir media(fake_home.path());
+      Check(QDir().mkpath(media.filePath(QStringLiteral("K6WP"))),
+            "writethrough: fake K6WP data dir created");
+      {
+        k6wp::StudioSettings s = k6wp::DefaultStudioSettings();
+        s.check_updates = true;
+        k6wp::SaveStudioSettings(k6wp::DefaultStudioSettingsPath(), s);
+      }
+      const auto settings_json =
+          media.filePath(QStringLiteral("K6WP/studio_settings.json"));
+
+      const auto read_json = [&settings_json]() {
+        std::ifstream in(ToPath(settings_json), std::ios::binary);
+        return std::string((std::istreambuf_iterator<char>(in)),
+                           std::istreambuf_iterator<char>());
+      };
+
+      // --- closeToTray: toggle true WITHOUT apply() -> JSON on disk ------
+      {
+        k6wp::SettingsBridge bridge;
+        Check(!bridge.closeToTray(),
+              "writethrough closeToTray starts false (default)");
+        bridge.setCloseToTray(true);  // NO apply() call
+        Check(bridge.closeToTray(),
+              "writethrough setCloseToTray(true) updates the property");
+        const std::string text = read_json();
+        Check(HasSubstr(text, "\"closeToTray\": true") ||
+                  HasSubstr(text, "\"closeToTray\":true"),
+              "writethrough closeToTray=true is on disk WITHOUT apply()");
+        {
+          k6wp::SettingsBridge again;
+          Check(again.closeToTray(),
+                "writethrough closeToTray persists through reload (no apply)");
+        }
+      }
+
+      // --- closeToTray: toggle false WITHOUT apply() -> JSON on disk ------
+      {
+        k6wp::SettingsBridge bridge;
+        Check(bridge.closeToTray(),
+              "writethrough closeToTray starts true (reloaded)");
+        bridge.setCloseToTray(false);  // NO apply() call
+        Check(!bridge.closeToTray(),
+              "writethrough setCloseToTray(false) updates the property");
+        const std::string text = read_json();
+        Check(HasSubstr(text, "\"closeToTray\": false") ||
+                  HasSubstr(text, "\"closeToTray\":false"),
+              "writethrough closeToTray=false is on disk WITHOUT apply()");
+      }
+
+      // --- checkUpdates: toggle false WITHOUT apply() -> JSON on disk -----
+      {
+        k6wp::SettingsBridge bridge;
+        Check(bridge.checkUpdates(),
+              "writethrough checkUpdates starts true (default)");
+        bridge.setCheckUpdates(false);  // NO apply() call
+        Check(!bridge.checkUpdates(),
+              "writethrough setCheckUpdates(false) updates the property");
+        const std::string text = read_json();
+        Check(HasSubstr(text, "\"check_updates\": false") ||
+                  HasSubstr(text, "\"check_updates\":false"),
+              "writethrough checkUpdates=false is on disk WITHOUT apply()");
+        {
+          k6wp::SettingsBridge again;
+          Check(!again.checkUpdates(),
+                "writethrough checkUpdates persists through reload (no apply)");
+        }
+      }
+
+      // --- lockscreenSync: toggle true WITHOUT apply() -> JSON on disk ----
+      {
+        k6wp::SettingsBridge bridge;
+        Check(!bridge.lockscreenSync(),
+              "writethrough lockscreenSync starts false (default)");
+        bridge.setLockscreenSync(true);  // NO apply() call
+        Check(bridge.lockscreenSync(),
+              "writethrough setLockscreenSync(true) updates the property");
+        const std::string text = read_json();
+        Check(HasSubstr(text, "\"lockscreen_sync\": true") ||
+                  HasSubstr(text, "\"lockscreen_sync\":true"),
+              "writethrough lockscreenSync=true is on disk WITHOUT apply()");
+      }
+
+      // --- autoCompressOnImport: toggle false WITHOUT apply() -> JSON ------
+      {
+        k6wp::SettingsBridge bridge;
+        Check(bridge.autoCompressOnImport(),
+              "writethrough autoCompressOnImport starts true (default)");
+        bridge.setAutoCompressOnImport(false);  // NO apply() call
+        Check(!bridge.autoCompressOnImport(),
+              "writethrough setAutoCompressOnImport(false) updates the property");
+        const std::string text = read_json();
+        Check(HasSubstr(text, "\"auto_compress_on_import\": false") ||
+                  HasSubstr(text, "\"auto_compress_on_import\":false"),
+              "writethrough autoCompressOnImport=false is on disk WITHOUT apply()");
+      }
+
+      // --- playlistSource: set custom WITHOUT apply() -> JSON on disk -----
+      {
+        k6wp::SettingsBridge bridge;
+        Check(bridge.playlistSource() == QStringLiteral("all"),
+              "writethrough playlistSource starts all (default)");
+        bridge.setPlaylistSource(QStringLiteral("custom"));  // NO apply() call
+        Check(bridge.playlistSource() == QStringLiteral("custom"),
+              "writethrough setPlaylistSource(custom) updates the property");
+        const std::string text = read_json();
+        Check(HasSubstr(text, "\"playlistSource\": \"custom\"") ||
+                  HasSubstr(text, "\"playlistSource\":\"custom\""),
+              "writethrough playlistSource=custom is on disk WITHOUT apply()");
+      }
+
+      // QA-HAPPY dump: the on-disk JSON after all toggles, for evidence.
+      {
+        const std::string text = read_json();
+        std::printf("QA-HAPPY writethrough studio_settings.json:\n%s\n",
+                    text.c_str());
+      }
+    }
+    (void)SetLocalAppDataDir(QString::fromStdWString(real_localappdata));
+  }
+
   std::printf("checks=%d failures=%d\n", g_checks, g_failures);
   return g_failures == 0 ? 0 : 1;
 }
