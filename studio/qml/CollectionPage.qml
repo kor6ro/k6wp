@@ -19,6 +19,10 @@ ColumnLayout {
 
     property var dialogOpened: function () {}
     property var dialogClosed: function () {}
+    // Main.root.firstRunActive (forwarded through WallpaperPage): while the
+    // first-run onboarding owns the screen, the C-1 empty state must not
+    // compete with it (plan todo 16).
+    property bool firstRunActive: false
 
     Layout.fillWidth: true
     Layout.fillHeight: true
@@ -164,7 +168,9 @@ ColumnLayout {
         id: emptyState
         Layout.fillWidth: true
         Layout.fillHeight: true
-        visible: Library.isEmpty
+        // Visibility lives in EmptyState.qml (isEmpty + !firstRunActive):
+        // do NOT re-bind `visible` here or the gate would be shadowed.
+        firstRunActive: collectionPage.firstRunActive
     }
 
     VideoGrid {

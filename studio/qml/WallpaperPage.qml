@@ -42,6 +42,10 @@ Item {
     property int statusKindPaused: 1
     property var dialogOpened: function () {}
     property var dialogClosed: function () {}
+    // Main.root.firstRunActive: true while the first-run onboarding overlay
+    // owns the screen (plan todo 16). Forwarded to CollectionPage so the C-1
+    // empty state stays hidden then.
+    property bool firstRunActive: false
 
     // PreviewHole state exposed for Main.qml's syncPreview() function
     // (the id previewHole is scoped to this file). Updated via the
@@ -427,6 +431,7 @@ Item {
                     Layout.preferredHeight: 460
                     dialogOpened: wallpaperPage.dialogOpened
                     dialogClosed: wallpaperPage.dialogClosed
+                    firstRunActive: wallpaperPage.firstRunActive
                 }
 
             }

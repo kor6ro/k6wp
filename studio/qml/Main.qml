@@ -103,6 +103,21 @@ Rectangle {
         }
     }
 
+    // --- first-run gate (plan todo 16) -------------------------------------
+    // Old pattern (base Main.qml, located by symbol): the gate on
+    // `Library.firstRunEligible && !Studio.videoActive` in Component.onCompleted
+    // plus the wizard's `firstRunFile: Library.lastPickedPath`. firstRunEligible
+    // covers only the settings-file and library arguments (the C++ comment says
+    // QML must AND it with !Studio.videoActive), so the same conjunction is
+    // kept here. The lastPickedPath term keeps the onboarding up after the pick
+    // imports the video - the import flips firstRunEligible false through
+    // countChanged - and re-evaluates the gate when Selesai's
+    // markFirstRunHandled() clears it (lastPickedPathChanged). Single source of
+    // truth: OnboardingView.visible and EmptyState.visible both read this.
+    readonly property bool firstRunActive:
+        (Library.firstRunEligible && !Studio.videoActive)
+        || Library.lastPickedPath.length > 0
+
     // Pushes the preview hole's rectangle to the native PreviewWidget, in
     // QQuickWidget scene coordinates (the space QmlShell maps into window
     // coordinates). mapToItem(null, ...) resolves against the scene root, so
@@ -200,8 +215,8 @@ Rectangle {
     //
     // Todo 13: this flag STAYS on the Main root (brief Â§4.2).
     property bool applyAfterCompress: false
-    // Modals stack (e.g. first-run wizard + compress offer): keep the native
-    // preview hidden until the last one closes.
+    // Modals stack (e.g. first-run onboarding + compress offer): keep the
+    // native preview hidden until the last one closes.
     property int openDialogs: 0
 
     // Basename for the per-monitor assignment line under a sub-tab (Windows
@@ -564,6 +579,7 @@ Rectangle {
                         statusKindPaused: Main.StatusKind.Paused
                         dialogOpened: root.dialogOpened
                         dialogClosed: root.dialogClosed
+                        firstRunActive: root.firstRunActive
                     }
 
                     // ---------------------------------------------------------
@@ -619,13 +635,16 @@ Rectangle {
     // The standalone AboutDialog.qml was replaced by AppDialogs' C-17
     // "Tentang K6WP Studio" + "Versi baru tersedia" dialogs (plan todo 15).
 
-    // --- First-run wizard ---------------------------------------------------
-    // QWizardPage cannot run inside a QQuickWidget, so the four wizard pages are
-    // a StackLayout here. The gate is the same pure IsFirstRunCondition the
-    // Widgets wizard used: no settings file, empty library, and (supplied by
-    // Studio) no active video.
-    FirstRunDialog {
-        id: firstRunDialog
+    // --- First-run onboarding (plan todo 16) -------------------------------
+    // ONE screen (C-2) replaces the deleted four-page wizard (FirstRunDialog.qml).
+    // It is a full-window overlay OUTSIDE WallpaperPage/PreviewHole.qml; while
+    // up it feeds dialogOpened()/dialogClosed() so the native preview surface
+    // steps aside (overlay contract B-WIREFRAME(f)). Visibility is the single
+    // firstRunActive gate above.
+    OnboardingView {
+        id: onboardingView
+        anchors.fill: parent
+        visible: root.firstRunActive
         dialogOpened: root.dialogOpened
         dialogClosed: root.dialogClosed
     }
@@ -636,8 +655,6 @@ Rectangle {
         // initial show. refreshDisplays() emits displaysChanged, which seeds
         // selectedMonitorKey through ensureSelectedMonitor().
         Studio.refreshDisplays()
-        if (Library.firstRunEligible && !Studio.videoActive)
-            firstRunDialog.open()
     }
 
 }

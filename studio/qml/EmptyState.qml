@@ -5,8 +5,12 @@
 //   "atau seret & letakkan file ke sini"
 //
 // Drag-and-drop is handled by QmlShell (C++ WM_DROPFILES), not by a QML
-// DropArea - the hint is text only. Shown by CollectionPage when the library
-// itself is empty (a live search with no matches uses the C-4 line instead).
+// DropArea - the hint is text only.
+//
+// Visibility (plan todo 16): C-1 is the empty state, but NEVER while the
+// first-run OnboardingView owns the screen. Main.firstRunActive is the single
+// gate and CollectionPage forwards it here; the two views are mutually
+// exclusive by construction.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
@@ -14,6 +18,13 @@ import QtQuick.Layouts
 
 Item {
     id: emptyState
+
+    // Main.root.firstRunActive (CollectionPage forwards it): true while the
+    // first-run onboarding is on screen. Defaults false so the component is
+    // still correct standalone.
+    property bool firstRunActive: false
+
+    visible: Library.isEmpty && !emptyState.firstRunActive
 
     ColumnLayout {
         anchors.centerIn: parent
@@ -41,6 +52,7 @@ Item {
 
         Label {
             Layout.fillWidth: true
+            Layout.topMargin: Theme.space1
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.WordWrap
             font.pixelSize: Theme.fontL
@@ -93,6 +105,7 @@ Item {
 
         Label {
             Layout.fillWidth: true
+            Layout.topMargin: Theme.space1
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.WordWrap
             font.pixelSize: Theme.fontS

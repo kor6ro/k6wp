@@ -111,7 +111,10 @@ set_source_files_properties(qml/ToastBar.qml PROPERTIES QT_RESOURCE_ALIAS ToastB
 set_source_files_properties(qml/CacheDialog.qml PROPERTIES QT_RESOURCE_ALIAS CacheDialog.qml)
 # Todo 15: AboutDialog.qml was folded into AppDialogs.qml (C-17 "Tentang
 # K6WP Studio" + "Versi baru tersedia" dialogs); the standalone file is gone.
-set_source_files_properties(qml/FirstRunDialog.qml PROPERTIES QT_RESOURCE_ALIAS FirstRunDialog.qml)
+# Todo 16: FirstRunDialog.qml (the four-page wizard) is deleted; the one-screen
+# C-2 onboarding is OnboardingView.qml (Main-root overlay, outside
+# PreviewHole.qml per the B-WIREFRAME(f) overlay rule).
+set_source_files_properties(qml/OnboardingView.qml PROPERTIES QT_RESOURCE_ALIAS OnboardingView.qml)
 set_source_files_properties(qml/SettingsPage.qml PROPERTIES QT_RESOURCE_ALIAS SettingsPage.qml)
 set_source_files_properties(qml/WallpaperPage.qml PROPERTIES QT_RESOURCE_ALIAS WallpaperPage.qml)
 set_source_files_properties(qml/AssignRow.qml PROPERTIES QT_RESOURCE_ALIAS AssignRow.qml)
@@ -137,7 +140,7 @@ qt_add_qml_module(studio
     qml/EmptyState.qml
     qml/AutoSwitchPanel.qml
     qml/CacheDialog.qml
-    qml/FirstRunDialog.qml
+    qml/OnboardingView.qml
     qml/SettingsPage.qml
     qml/WallpaperPage.qml
     qml/AssignRow.qml
@@ -491,7 +494,7 @@ set(K6WP_TR_QML_SOURCES
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/EmptyState.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/AutoSwitchPanel.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/CacheDialog.qml"
-  "${CMAKE_CURRENT_SOURCE_DIR}/qml/FirstRunDialog.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/OnboardingView.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/SettingsPage.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/WallpaperPage.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/AssignRow.qml"
