@@ -399,42 +399,13 @@ Rectangle {
             anchors.fill: parent
             spacing: 0
 
-            MenuBar {
-
-                Menu {
-                    title: qsTr("&Berkas")
-
-                    MenuItem {
-                        text: qsTr("&Impor Video...")
-                        onTriggered: Library.pickAndImport()
-                    }
-
-                    MenuSeparator {}
-
-                    MenuItem {
-                        text: qsTr("&Keluar")
-                        onTriggered: Qt.quit()
-                    }
-                }
-
-                Menu {
-                    title: qsTr("&Bantuan")
-
-                    // C-16 Info teknis + C-17 Tentang stay in AppDialogs; the
-                    // old English update-check item moved into Pengaturan >
-                    // Umum as the "Cek pembaruan" button (plan todo 15,
-                    // glossary §5).
-                    MenuItem {
-                        text: qsTr("&Info teknis")
-                        onTriggered: appDialogs.openInfoTeknis()
-                    }
-
-                    MenuItem {
-                        text: qsTr("&Tentang K6WP Studio")
-                        onTriggered: appDialogs.openAbout()
-                    }
-                }
-            }
+            // B-FLOW: the top menu bar (Berkas/Bantuan) is deleted; every
+            // action it carried keeps a reachable opener:
+            //   Impor Video -> Koleksi "+ Tambah video" / C-1 empty state
+            //   Keluar      -> window close (C-19 tray "Keluar" when enabled)
+            //   Info teknis -> Pengaturan > Diagnostik "Info teknis"
+            //   Tentang     -> Pengaturan > Umum "Tentang K6WP Studio"
+            //                  (Main passes appDialogs.openAbout down)
 
             Label {
                 Layout.fillWidth: true
@@ -617,6 +588,9 @@ Rectangle {
                         // entry points instead of duplicating the dialogs.
                         openInfoTeknis: appDialogs.openInfoTeknis
                         checkUpdates: appDialogs.checkUpdatesInteractive
+                        // C-17 Tentang: the old top menu was its only opener
+                        // before B-FLOW; the Umum button now calls this.
+                        openAbout: appDialogs.openAbout
                     }
                 }
             }

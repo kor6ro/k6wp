@@ -13,7 +13,8 @@ ColumnLayout {
     property alias placeholderText: logArea.placeholderText
 
     Label {
-        text: qsTr("Detail teknis (log)")
+        // Glossary §5: "Detail teknis (log)" -> "Info teknis".
+        text: qsTr("Info teknis")
         font.bold: true
     }
 

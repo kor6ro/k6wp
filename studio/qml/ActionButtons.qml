@@ -25,14 +25,15 @@ GridLayout {
     rowSpacing: formRowSpacing
 
     Button {
-        text: qsTr("Pilih &Video")
+        text: qsTr("Pilih video")
         onClicked: Studio.pickVideo()
         ToolTip.visible: hovered
-        ToolTip.text: qsTr("Pilih file untuk diterapkan tanpa impor ke perpustakaan")
+        // Glossary §5: "Terapkan" -> "Pasang", "perpustakaan" -> "koleksi".
+        ToolTip.text: qsTr("Pilih file video untuk dipasang tanpa impor ke koleksi")
     }
 
     Button {
-        text: qsTr("&Pasang")
+        text: qsTr("Pasang")
         enabled: Studio.selectedVideo.length > 0 && !Studio.busy
         onClicked: actionButtons.installVideo(Studio.selectedVideo)
         ToolTip.visible: hovered

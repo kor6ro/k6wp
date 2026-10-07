@@ -45,6 +45,11 @@ Item {
     // consent dialogs).
     property var openInfoTeknis: function () {}
     property var checkUpdates: function () {}
+    // C-17 "Tentang K6WP Studio". The B-FLOW menu removal left this dialog
+    // without an opener, so Main wires appDialogs.openAbout into the Umum
+    // button below. Without this the About dialog (version/license/support)
+    // would be unreachable.
+    property var openAbout: function () {}
 
     // Settings/logs are produced by three different backends, so all three
     // are merged into the one log view.
@@ -376,6 +381,25 @@ Item {
                         text: qsTr("Cek pembaruan")
                         enabled: !Studio.updateCheckBusy
                         onClicked: settingsPage.checkUpdates()
+                    }
+                }
+
+                // C-17 Tentang opener. Replaces the deleted top menu's only
+                // "Tentang K6WP Studio" trigger (brief B-FLOW); the dialog
+                // itself stays in AppDialogs and keeps hosting [Cek
+                // pembaruan] + the support links.
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: settingsPage.formColSpacing
+
+                    SettingButton {
+                        objectName: "aboutButton"
+                        text: qsTr("Tentang K6WP Studio")
+                        onClicked: settingsPage.openAbout()
+                    }
+
+                    Item {
+                        Layout.fillWidth: true
                     }
                 }
 
