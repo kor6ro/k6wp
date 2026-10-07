@@ -55,7 +55,9 @@ QtObject {
         accentText: "#FFFFFF"
         statusActive: "#1E7E34"
         statusActiveTint: "#E5F4E9"
-        statusPaused: "#8A6D00"
+        // F4-21: brief hex #8A6D00 was 4.47:1 on statusPausedTint (below AA);
+        // #8A6B00 keeps the amber and reaches 4.56:1. Tint stays brief-exact.
+        statusPaused: "#8A6B00"
         statusPausedTint: "#FFF4CC"
         statusIdle: "#5A6170"
         statusIdleTint: "#ECEEF4"
