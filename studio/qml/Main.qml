@@ -388,14 +388,10 @@ Rectangle {
                 Menu {
                     title: qsTr("&Bantuan")
 
-                    MenuItem {
-                        text: qsTr("Check for updates")
-                        enabled: !Studio.updateCheckBusy
-                        onTriggered: Studio.checkForUpdatesInteractive()
-                    }
-
-                    // C-16 entry point: the friendly status stays on the
-                    // Beranda screen, the raw details live in this dialog.
+                    // C-16 Info teknis + C-17 Tentang stay in AppDialogs; the
+                    // old English update-check item moved into Pengaturan >
+                    // Umum as the "Cek pembaruan" button (plan todo 15,
+                    // glossary §5).
                     MenuItem {
                         text: qsTr("&Info teknis")
                         onTriggered: appDialogs.openInfoTeknis()
@@ -403,7 +399,7 @@ Rectangle {
 
                     MenuItem {
                         text: qsTr("&Tentang K6WP Studio")
-                        onTriggered: aboutDialog.open()
+                        onTriggered: appDialogs.openAbout()
                     }
                 }
             }
@@ -583,6 +579,11 @@ Rectangle {
                         formRowSpacing: root.formRowSpacing
                         dialogOpened: root.dialogOpened
                         dialogClosed: root.dialogClosed
+                        // Todo 15: the C-16 Info teknis dialog and the C-17
+                        // update flow live in AppDialogs; the page gets the
+                        // entry points instead of duplicating the dialogs.
+                        openInfoTeknis: appDialogs.openInfoTeknis
+                        checkUpdates: appDialogs.checkUpdatesInteractive
                     }
                 }
             }
@@ -615,11 +616,8 @@ Rectangle {
         }
     }
 
-    AboutDialog {
-        id: aboutDialog
-        dialogOpened: root.dialogOpened
-        dialogClosed: root.dialogClosed
-    }
+    // The standalone AboutDialog.qml was replaced by AppDialogs' C-17
+    // "Tentang K6WP Studio" + "Versi baru tersedia" dialogs (plan todo 15).
 
     // --- First-run wizard ---------------------------------------------------
     // QWizardPage cannot run inside a QQuickWidget, so the four wizard pages are

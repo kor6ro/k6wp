@@ -1,6 +1,6 @@
 // AppDialogs: the app-level dialogs that must not share the main screen.
 //
-// Hosts three modals (plan todo 5 + todo 13):
+// Hosts five modals (plan todo 5 + todo 13 + todo 15):
 //   1. "Info teknis" (brief C-16) - friendly status + raw support details +
 //      "Salin untuk dukungan".
 //   2. Long-video consent (brief C-9, todo 13) - Compress.onConsentRequired
@@ -8,6 +8,11 @@
 //   3. Compress-first offer (brief C-8, todo 13) - Library.onCompressFirst
 //      Required / maybeOfferCompressFirst -> this dialog. Copy verbatim
 //      from C-8.
+//   4. "Tentang K6WP Studio" (brief C-17, todo 15) - version/license/support
+//      + [Cek pembaruan]. Replaces the old standalone AboutDialog.qml.
+//   5. "Versi baru tersedia ({v})" update dialog (brief C-17, todo 15) -
+//      [Buka halaman unduhan] [Nanti]. Only a user-initiated check raises
+//      it; the silent start-up check never pops a modal.
 //
 // Lifecycle contract (brief B-WIREFRAME(f)): the native mpv preview is a
 // separate HWND DWM composites above the QQuickWidget, so every modal feeds
@@ -374,6 +379,174 @@ Item {
                     compressOfferDialog.close()
                     appDialogs.declineCompressFirst()
                 }
+            }
+        }
+    }
+
+    // ======================================================================
+    // 4. Tentang K6WP Studio (brief C-17, todo 15) --------------------------
+    // Replaces the standalone AboutDialog.qml. The mpv preview hiding pair
+    // (dialogOpened/dialogClosed) is identical to the dialogs above.
+    // ======================================================================
+    function openAbout() {
+        aboutDialog.open()
+    }
+
+    // Shared C-17 entry point: the About dialog's [Cek pembaruan] button and
+    // the Umum group's button (Main passes settingsPage.checkUpdates =
+    // appDialogs.checkUpdatesInteractive) both land here. pendingUpdatePrompt
+    // is what makes ONLY a user-initiated check raise the update dialog -
+    // the automatic start-up check must never pop a modal.
+    property bool pendingUpdatePrompt: false
+
+    function checkUpdatesInteractive() {
+        pendingUpdatePrompt = true
+        Studio.checkForUpdatesInteractive()
+    }
+
+    Connections {
+        target: Studio
+        function onUpdateChanged() {
+            if (!appDialogs.pendingUpdatePrompt || Studio.updateCheckBusy)
+                return
+            appDialogs.pendingUpdatePrompt = false
+            if (Studio.updateAvailable)
+                updateDialog.open()
+        }
+    }
+
+    Dialog {
+        id: aboutDialog
+        objectName: "aboutDialog"
+        // C-17 verbatim title.
+        title: qsTr("Tentang K6WP Studio")
+        modal: true
+        anchors.centerIn: parent
+        standardButtons: Dialog.Close
+
+        onOpened: {
+            appDialogs.dialogOpened()
+            aboutCheckButton.forceActiveFocus()
+        }
+        onClosed: appDialogs.dialogClosed()
+
+        contentItem: ColumnLayout {
+            spacing: Theme.space2
+            Accessible.role: Accessible.Dialog
+            Accessible.name: aboutDialog.title
+
+            Label {
+                text: "K6WP Studio " + Studio.version
+                font.bold: true
+                font.pixelSize: Theme.fontM
+            }
+
+            Label {
+                text: qsTr("License: GPL-2.0-or-later")
+            }
+
+            Label {
+                Layout.preferredWidth: 440
+                wrapMode: Text.WordWrap
+                text: qsTr("Third-party licenses: mpv (libmpv), ffmpeg, Qt, nlohmann/json — see LICENSES/ for the full texts.")
+            }
+
+            // C-17 sentence verbatim (one translatable string with %1),
+            // shown only when the update state is real.
+            Label {
+                Layout.preferredWidth: 440
+                wrapMode: Text.WordWrap
+                visible: Studio.updateAvailable
+                text: qsTr("Versi baru tersedia %1.").arg(Studio.latestVersion)
+            }
+
+            RowLayout {
+                spacing: Theme.space2
+
+                DialogActionButton {
+                    id: aboutCheckButton
+                    objectName: "aboutCheckUpdates"
+                    text: qsTr("Cek pembaruan")
+                    enabled: !Studio.updateCheckBusy
+                    onClicked: appDialogs.checkUpdatesInteractive()
+                }
+
+                Item {
+                    Layout.fillWidth: true
+                }
+
+                DialogActionButton {
+                    objectName: "aboutSupport"
+                    text: qsTr("Support development")
+                    onClicked: Qt.openUrlExternally(Studio.donateUrl)
+                }
+
+                DialogActionButton {
+                    objectName: "aboutProject"
+                    text: qsTr("Project page")
+                    onClicked: Qt.openUrlExternally(Studio.projectUrl)
+                }
+            }
+        }
+    }
+
+    // ======================================================================
+    // 5. Versi baru tersedia (brief C-17, todo 15) --------------------------
+    // Raised only when a user-initiated check (About or Umum > Cek pembaruan)
+    // finds a newer release. Buttons verbatim: [Buka halaman unduhan] [Nanti].
+    // ======================================================================
+    Dialog {
+        id: updateDialog
+        objectName: "updateDialog"
+        title: qsTr("Pembaruan")
+        modal: true
+        anchors.centerIn: Overlay.overlay
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+        onOpened: {
+            appDialogs.dialogOpened()
+            updateOpenButton.forceActiveFocus()
+        }
+        onClosed: appDialogs.dialogClosed()
+
+        contentItem: ColumnLayout {
+            spacing: Theme.space2
+            Accessible.role: Accessible.Dialog
+            Accessible.name: updateDialog.title
+
+            // C-17 verbatim: "Versi baru tersedia ({v})." - %1 carries the
+            // version, the same one-placeholder pattern C-8/C-9 use.
+            Label {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                font.pixelSize: Theme.fontM
+                text: qsTr("Versi baru tersedia %1.").arg(Studio.latestVersion)
+            }
+        }
+
+        footer: RowLayout {
+            spacing: Theme.space2
+
+            Item {
+                Layout.fillWidth: true
+            }
+
+            DialogActionButton {
+                id: updateOpenButton
+                objectName: "updateOpenRelease"
+                primary: true
+                text: qsTr("Buka halaman unduhan")
+                onClicked: {
+                    updateDialog.close()
+                    Qt.openUrlExternally(Studio.latestPageUrl)
+                }
+            }
+
+            DialogActionButton {
+                id: updateLaterButton
+                objectName: "updateLater"
+                text: qsTr("Nanti")
+                onClicked: updateDialog.close()
             }
         }
     }

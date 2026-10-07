@@ -109,7 +109,8 @@ set_source_files_properties(qml/AutoSwitchPanel.qml PROPERTIES QT_RESOURCE_ALIAS
 # AppDialogs.qml now and the compressor page is gone with the tab.
 set_source_files_properties(qml/ToastBar.qml PROPERTIES QT_RESOURCE_ALIAS ToastBar.qml)
 set_source_files_properties(qml/CacheDialog.qml PROPERTIES QT_RESOURCE_ALIAS CacheDialog.qml)
-set_source_files_properties(qml/AboutDialog.qml PROPERTIES QT_RESOURCE_ALIAS AboutDialog.qml)
+# Todo 15: AboutDialog.qml was folded into AppDialogs.qml (C-17 "Tentang
+# K6WP Studio" + "Versi baru tersedia" dialogs); the standalone file is gone.
 set_source_files_properties(qml/FirstRunDialog.qml PROPERTIES QT_RESOURCE_ALIAS FirstRunDialog.qml)
 set_source_files_properties(qml/SettingsPage.qml PROPERTIES QT_RESOURCE_ALIAS SettingsPage.qml)
 set_source_files_properties(qml/WallpaperPage.qml PROPERTIES QT_RESOURCE_ALIAS WallpaperPage.qml)
@@ -136,7 +137,6 @@ qt_add_qml_module(studio
     qml/EmptyState.qml
     qml/AutoSwitchPanel.qml
     qml/CacheDialog.qml
-    qml/AboutDialog.qml
     qml/FirstRunDialog.qml
     qml/SettingsPage.qml
     qml/WallpaperPage.qml
@@ -491,7 +491,6 @@ set(K6WP_TR_QML_SOURCES
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/EmptyState.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/AutoSwitchPanel.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/CacheDialog.qml"
-  "${CMAKE_CURRENT_SOURCE_DIR}/qml/AboutDialog.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/FirstRunDialog.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/SettingsPage.qml"
   "${CMAKE_CURRENT_SOURCE_DIR}/qml/WallpaperPage.qml"
