@@ -103,20 +103,37 @@ Rectangle {
         }
     }
 
-    // --- first-run gate (plan todo 16) -------------------------------------
+    // --- first-run gate (plan todo 16; DEF-1 fix) --------------------------
     // Old pattern (base Main.qml, located by symbol): the gate on
     // `Library.firstRunEligible && !Studio.videoActive` in Component.onCompleted
     // plus the wizard's `firstRunFile: Library.lastPickedPath`. firstRunEligible
     // covers only the settings-file and library arguments (the C++ comment says
-    // QML must AND it with !Studio.videoActive), so the same conjunction is
-    // kept here. The lastPickedPath term keeps the onboarding up after the pick
-    // imports the video - the import flips firstRunEligible false through
-    // countChanged - and re-evaluates the gate when Selesai's
-    // markFirstRunHandled() clears it (lastPickedPathChanged). Single source of
+    // QML must AND it with !Studio.videoActive). The lastPickedPath term keeps
+    // the onboarding up after the pick imports the video - the import flips
+    // firstRunEligible false through countChanged - and re-evaluates the gate
+    // when Selesai's markFirstRunHandled() clears it (lastPickedPathChanged).
+    //
+    // DEF-1: importPaths() writes lastPickedPath on EVERY import, so the bare
+    // OR re-opened the overlay after any gallery import, long after Selesai.
+    // firstRunFlowActive is a session latch, armed exactly once at start-up and
+    // only when this session really begins in the first-run state; it stays
+    // armed through the pick and is disarmed by Selesai (finishFirstRunFlow).
+    // A later import therefore cannot re-open the overlay in this session, and
+    // on restart the durable marker (studio_settings.json) makes
+    // firstRunEligible false, so the latch arms false again. Single source of
     // truth: OnboardingView.visible and EmptyState.visible both read this.
+    property bool firstRunFlowActive: false
+
     readonly property bool firstRunActive:
-        (Library.firstRunEligible && !Studio.videoActive)
-        || Library.lastPickedPath.length > 0
+        root.firstRunFlowActive
+        && ((Library.firstRunEligible && !Studio.videoActive)
+            || Library.lastPickedPath.length > 0)
+
+    // Selesai consumes the latch (called by OnboardingView.finish after the
+    // durable marker is written). Never re-arms in the session.
+    function finishFirstRunFlow() {
+        root.firstRunFlowActive = false
+    }
 
     // Pushes the preview hole's rectangle to the native PreviewWidget, in
     // QQuickWidget scene coordinates (the space QmlShell maps into window
@@ -647,9 +664,16 @@ Rectangle {
         visible: root.firstRunActive
         dialogOpened: root.dialogOpened
         dialogClosed: root.dialogClosed
+        // DEF-1: Selesai consumes the session latch, so no later import can
+        // re-open the overlay.
+        firstRunFinished: root.finishFirstRunFlow
     }
 
     Component.onCompleted: {
+        // DEF-1: arm the one-shot first-run latch now, before the first frame
+        // is drawn. A returning user (settings file present) or a mid-flow
+        // restart (library non-empty) starts disarmed.
+        root.firstRunFlowActive = Library.firstRunEligible && !Studio.videoActive
         // Row 41: the Beranda view is the start page, so its monitor list
         // has to be populated here as well - switchPage cannot fire for the
         // initial show. refreshDisplays() emits displaysChanged, which seeds

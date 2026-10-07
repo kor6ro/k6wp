@@ -7,12 +7,17 @@
 // `Library.firstRunEligible && !Studio.videoActive` in Component.onCompleted
 // plus the wizard's `firstRunFile: Library.lastPickedPath`):
 //   Main.root.firstRunActive =
-//       (Library.firstRunEligible && !Studio.videoActive)
-//       || Library.lastPickedPath.length > 0
-// The lastPickedPath term keeps this view up after the pick imports the video
-// (the import flips firstRunEligible false through countChanged) and makes the
-// gate re-evaluate when Selesai's markFirstRunHandled() clears it
-// (lastPickedPathChanged); firstRunEligible itself only NOTIFYs countChanged.
+//       root.firstRunFlowActive
+//       && ((Library.firstRunEligible && !Studio.videoActive)
+//           || Library.lastPickedPath.length > 0)
+// firstRunFlowActive is the DEF-1 session latch: armed once at start-up (only
+// when the session begins in the first-run state), kept through the pick, and
+// consumed by Selesai. The lastPickedPath term keeps this view up after the
+// pick imports the video (the import flips firstRunEligible false through
+// countChanged) and makes the gate re-evaluate when Selesai's
+// markFirstRunHandled() clears it (lastPickedPathChanged); firstRunEligible
+// itself only NOTIFYs countChanged. Without the latch, any LATER gallery
+// import (which also sets lastPickedPath) re-opened this overlay.
 //
 // "Pilih video" runs the standard single-file picker (Studio.pickVideo, the
 // same invokable StatusBar's inactive-state button uses) and then references
@@ -50,6 +55,10 @@ FocusScope {
     property var dialogOpened: function () {}
     property var dialogClosed: function () {}
 
+    // DEF-1: consumes Main's session latch with Selesai, so a later import
+    // (which also writes Library.lastPickedPath) can never re-open the flow.
+    property var firstRunFinished: function () {}
+
     // Fires each visibility edge exactly once, including the initial
     // visible=true that never appears as a property change.
     property bool dialogAnnounced: false
@@ -64,7 +73,15 @@ FocusScope {
             onboardingView.dialogClosed()
     }
 
-    onVisibleChanged: onboardingView.announceDialog(visible)
+    onVisibleChanged: {
+        onboardingView.announceDialog(visible)
+        // Main arms the gate in Component.onCompleted, so this overlay is
+        // created hidden and becomes visible later: take the keyboard on
+        // every show. (The created-visible path is covered by
+        // Component.onCompleted below.)
+        if (visible)
+            Qt.callLater(onboardingView.focusPrimary)
+    }
     Component.onCompleted: {
         onboardingView.announceDialog(visible)
         // The FocusScope's focus:visible + pickButton.focus:true pair alone
@@ -93,6 +110,10 @@ FocusScope {
     }
 
     function syncFocus() {
+        // DEF-1: imports after Selesai still change lastPickedPath, but the
+        // overlay is gone and must never take focus for a hidden flow.
+        if (!onboardingView.visible)
+            return
         if (Library.lastPickedPath.length > 0) {
             pickButton.focus = false
             finishButton.focus = true
@@ -156,6 +177,10 @@ FocusScope {
         // what Library.firstRunEligible reads, and clears lastPickedPath so
         // Main.firstRunActive drops this view.
         Library.markFirstRunHandled()
+        // DEF-1: consume the session latch. Later gallery imports also write
+        // lastPickedPath, but firstRunActive is latched off now, so this
+        // overlay can never re-open - in this session or after a restart.
+        onboardingView.firstRunFinished()
         // Play immediately. The plain global apply path ("Semua layar").
         Studio.applyWallpaper(picked)
     }
