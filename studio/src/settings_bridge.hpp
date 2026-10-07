@@ -31,6 +31,42 @@
 
 namespace k6wp {
 
+// Plan todo 14 (brief B8 + D1): the value set a performance preset maps to.
+// Fields mirror the WallpaperConfig playback keys the preset rewrites in
+// config.json; the preset NAME itself lives in studio_settings.json
+// performancePreset (todo-8 key). Pure C++ — no Qt — so studio_logic_test
+// drives the mapping without constructing the QML singleton.
+struct PerformancePresetValues {
+  std::string cpuAffinity;  // "auto" | "all"
+  std::string gpuAdapter;   // "auto" | "integrated" | "discrete"
+  int fpsCap = 30;          // 1 - 30
+  int crf = 22;             // 16 - 28
+  double speed = 1.0;       // 0.5 - 2.0
+  int resolutionW = 0;      // 0 = monitor native
+  int resolutionH = 0;      // 0 = monitor native
+};
+
+// D1 final numbers (decided at S7 / todo 14; brief §B-LOCKED D1):
+//   Seimbang = "nilai kini" (current values): auto/auto, fps 30, CRF 22,
+//              speed 1.0, native 0x0 — the product defaults per D1 + README
+//              ("Battery saver: FPS cap (default 30…)"; note the
+//              config-schema struct default of 24 predates that doc — D1
+//              governs the preset mapping, config_schema.* stays untouched).
+//   Hemat    = reduced-res + cap-fps: auto/integrated, fps 24 (the existing
+//              DC battery-saver cap in engine power.cpp), CRF 26 (lighter
+//              encode), speed 1.0, 1280x720 (the existing 720p mode).
+//   Maksimal = full: all/discrete, fps 30 (schema max), CRF 16 (min = best
+//              quality), speed 1.0, native 0x0.
+// Unknown/empty preset string -> Seimbang values (default; never crashes).
+PerformancePresetValues PresetToValues(const std::string& preset);
+
+// Nearest preset for a value set. Round-trips PresetToValues for all three
+// presets. Categorical mismatches (cpuAffinity/gpuAdapter) weigh 100 each so
+// a mode change always outranks numeric drift; ties resolve to "Seimbang"
+// (the D1 default) because the table is scanned in that order with strict
+// less-than. Always returns one of the three names — never throws.
+std::string ValuesToPreset(const PerformancePresetValues& values);
+
 // NOT `final`: QML registration instantiates a QQmlElement<T> subclass, so a
 // final QML_ELEMENT class does not compile (C3246).
 class SettingsBridge : public QObject {
@@ -62,6 +98,13 @@ class SettingsBridge : public QObject {
   // "all" | "custom". studio_settings.json playlistSource; persisted on
   // apply() like the other studio preferences.
   Q_PROPERTY(QString playlistSource READ playlistSource WRITE setPlaylistSource NOTIFY changed)
+  // Plan todo 14 (consumes the todo-8 GAP-7 key; brief B8): performance
+  // preset name, "Hemat" | "Seimbang" | "Maksimal". Setting it rewrites the
+  // mapped config.json playback fields via PresetToValues; presets touching
+  // cpuAffinity/gpuAdapter flip engineRestartNeeded and emit
+  // performancePresetApplied(true) so QML can trigger the automatic restart
+  // with a friendly notice (never the word "engine").
+  Q_PROPERTY(QString performancePreset READ performancePreset WRITE setPerformancePreset NOTIFY changed)
 
   bool autoCompressOnImport() const { return studio_.auto_compress_on_import; }
   QString compressOutputDir() const { return QString::fromStdWString(studio_.compress_output_dir); }
@@ -75,6 +118,7 @@ class SettingsBridge : public QObject {
   bool compressAdvancedVisible() const { return studio_.compress_advanced_visible; }
   bool checkUpdates() const { return studio_.check_updates; }
   QString playlistSource() const { return QString::fromStdString(studio_.playlist_source); }
+  QString performancePreset() const { return QString::fromStdString(studio_.performance_preset); }
 
   // --- studio_ui.ini (UI language) -------------------------------------------
   // Its own store rather than a StudioSettings field (see ui_language.hpp).
@@ -152,6 +196,10 @@ class SettingsBridge : public QObject {
   Q_INVOKABLE void setCompressAdvancedVisible(bool on);
   Q_INVOKABLE void setCheckUpdates(bool on);
   Q_INVOKABLE void setPlaylistSource(const QString& source);
+  // Plan todo 14: applies PresetToValues to the config.json playback fields
+  // and stores the preset name. Unknown names are refused without moving the
+  // property (same contract as setPlaylistSource).
+  Q_INVOKABLE void setPerformancePreset(const QString& preset);
 
   // Rejects an unsupported code (returns without writing) and emits changed()
   // only on success, so the QML picker never shows a value the store refused.
@@ -173,6 +221,11 @@ class SettingsBridge : public QObject {
   void changed();
   void lastErrorChanged();
   void logChanged();
+  // Plan todo 14: fired after a successful setPerformancePreset. True when
+  // the preset touched cpu_affinity/gpu_adapter (engineRestartNeeded flipped
+  // on) — QML connects this to Studio.startEngine() plus the friendly
+  // "Menerapkan performa…" notice (glossary §5: never "engine").
+  void performancePresetApplied(bool needsRestart);
 
  private:
   void AppendLog(const QString& line);

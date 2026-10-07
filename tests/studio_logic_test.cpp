@@ -2810,6 +2810,177 @@ int main(int argc, char** argv) {
     (void)SetLocalAppDataDir(QString::fromStdWString(real_localappdata));
   }
 
+  // 28. Plan todo 14 (brief B8 + D1): performance preset pure mapping
+  //     (PresetToValues / ValuesToPreset) + SettingsBridge.performancePreset.
+  //     D1 final numbers (decided at S7): Seimbang = current values (auto/
+  //     auto, 30 fps, CRF 22, native 0x0); Hemat = reduced-res + cap-fps
+  //     (auto/integrated, 24 fps, CRF 26, 1280x720); Maksimal = full (all/
+  //     discrete, 30 fps, CRF 16, native 0x0). Failure drills: unknown
+  //     preset string -> Seimbang values, no crash; ValuesToPreset of
+  //     mixed/garbage values still returns one of the three names. Restart
+  //     handling: presets touching affinity/GPU flip engineRestartNeeded
+  //     and emit performancePresetApplied(true) + the friendly
+  //     "Menerapkan performa…" log line (never the word "engine").
+  {
+    using k6wp::PresetToValues;
+    using k6wp::PerformancePresetValues;
+    using k6wp::ValuesToPreset;
+
+    // --- D1 mapping: exact numbers per preset ------------------------------
+    const PerformancePresetValues seimbang = PresetToValues("Seimbang");
+    Check(seimbang.cpuAffinity == "auto" && seimbang.gpuAdapter == "auto",
+          "preset Seimbang: cpuAffinity/gpuAdapter stay auto");
+    Check(seimbang.fpsCap == 30 && seimbang.crf == 22,
+          "preset Seimbang: fpsCap 30 + crf 22 (D1 current values)");
+    Check(seimbang.speed == 1.0 && seimbang.resolutionW == 0 &&
+              seimbang.resolutionH == 0,
+          "preset Seimbang: speed 1.0 + native resolution (0x0)");
+
+    const PerformancePresetValues hemat = PresetToValues("Hemat");
+    Check(hemat.cpuAffinity == "auto" && hemat.gpuAdapter == "integrated",
+          "preset Hemat: cpuAffinity auto + gpuAdapter integrated");
+    Check(hemat.fpsCap == 24 && hemat.crf == 26,
+          "preset Hemat: fpsCap 24 (cap-fps) + crf 26 (lighter encode)");
+    Check(hemat.resolutionW == 1280 && hemat.resolutionH == 720,
+          "preset Hemat: reduced resolution 1280x720");
+
+    const PerformancePresetValues maksimal = PresetToValues("Maksimal");
+    Check(maksimal.cpuAffinity == "all" && maksimal.gpuAdapter == "discrete",
+          "preset Maksimal: cpuAffinity all + gpuAdapter discrete");
+    Check(maksimal.fpsCap == 30 && maksimal.crf == 16,
+          "preset Maksimal: fpsCap 30 (schema max) + crf 16 (min = full)");
+    Check(maksimal.resolutionW == 0 && maksimal.resolutionH == 0,
+          "preset Maksimal: native resolution (0x0)");
+
+    // --- failure drill: unknown preset -> Seimbang, no crash --------------
+    const PerformancePresetValues unknown = PresetToValues("Ultra");
+    Check(unknown.cpuAffinity == seimbang.cpuAffinity &&
+              unknown.gpuAdapter == seimbang.gpuAdapter &&
+              unknown.fpsCap == seimbang.fpsCap && unknown.crf == seimbang.crf &&
+              unknown.resolutionW == seimbang.resolutionW &&
+              unknown.resolutionH == seimbang.resolutionH,
+          "preset unknown -> falls back to Seimbang values (no crash)");
+    const PerformancePresetValues empty = PresetToValues("");
+    Check(empty.cpuAffinity == "auto" && empty.fpsCap == 30 &&
+              empty.crf == 22,
+          "preset empty string -> Seimbang values (no crash)");
+
+    // --- round-trip: ValuesToPreset(PresetToValues(p)) == p ---------------
+    Check(ValuesToPreset(seimbang) == "Seimbang",
+          "round-trip: Seimbang -> values -> Seimbang");
+    Check(ValuesToPreset(hemat) == "Hemat",
+          "round-trip: Hemat -> values -> Hemat");
+    Check(ValuesToPreset(maksimal) == "Maksimal",
+          "round-trip: Maksimal -> values -> Maksimal");
+
+    // --- nearest-preset: mixed values land on the closest preset ----------
+    PerformancePresetValues mixed = hemat;
+    mixed.fpsCap = 25;  // 1 off Hemat's cap, 5 off Seimbang's
+    Check(ValuesToPreset(mixed) == "Hemat",
+          "nearest: Hemat-like values with fps drift -> Hemat");
+    PerformancePresetValues almost_seimbang = seimbang;
+    almost_seimbang.crf = 23;
+    Check(ValuesToPreset(almost_seimbang) == "Seimbang",
+          "nearest: Seimbang-like values with crf drift -> Seimbang");
+    PerformancePresetValues garbage;
+    garbage.cpuAffinity = "nonsense";
+    garbage.gpuAdapter = "nonsense";
+    garbage.fpsCap = 999;
+    garbage.crf = -5;
+    garbage.speed = 42.0;
+    garbage.resolutionW = 12345;
+    garbage.resolutionH = 6789;
+    const std::string garbage_preset = ValuesToPreset(garbage);
+    Check(garbage_preset == "Hemat" || garbage_preset == "Seimbang" ||
+              garbage_preset == "Maksimal",
+          "nearest: garbage values still return one of the three names");
+
+    // --- bridge property + restart handling --------------------------------
+    const std::wstring real_localappdata = LocalAppDataDir();
+    QTemporaryDir fake_home;
+    Check(fake_home.isValid(), "performancePreset temp dir is valid");
+    const bool redirected =
+        fake_home.isValid() && SetLocalAppDataDir(fake_home.path());
+    Check(redirected, "performancePreset: LOCALAPPDATA redirected");
+    if (redirected) {
+      const QDir media(fake_home.path());
+      Check(QDir().mkpath(media.filePath(QStringLiteral("K6WP"))),
+            "performancePreset: fake K6WP data dir created");
+      {
+        k6wp::StudioSettings s = k6wp::DefaultStudioSettings();
+        s.check_updates = false;
+        k6wp::SaveStudioSettings(k6wp::DefaultStudioSettingsPath(), s);
+      }
+      k6wp::SettingsBridge bridge;
+      Check(bridge.performancePreset() == QStringLiteral("Seimbang"),
+            "performancePreset defaults to Seimbang");
+      Check(!bridge.engineRestartNeeded(),
+            "default Seimbang values keep engineRestartNeeded false");
+
+      int applied = 0;
+      bool last_needs_restart = false;
+      QObject::connect(&bridge, &k6wp::SettingsBridge::performancePresetApplied,
+                       &bridge, [&](bool needs_restart) {
+                         ++applied;
+                         last_needs_restart = needs_restart;
+                       });
+
+      bridge.setPerformancePreset(QStringLiteral("Hemat"));
+      Check(bridge.performancePreset() == QStringLiteral("Hemat"),
+            "setPerformancePreset Hemat accepted");
+      Check(bridge.engineRestartNeeded(),
+            "Hemat (integrated GPU) flips engineRestartNeeded");
+      Check(bridge.cpuAffinity() == QStringLiteral("auto") &&
+                bridge.gpuAdapter() == QStringLiteral("integrated") &&
+                bridge.fpsCap() == 24 && bridge.crf() == 26 &&
+                bridge.resolutionW() == 1280 && bridge.resolutionH() == 720,
+            "Hemat mapped values land on the config properties");
+      Check(applied == 1 && last_needs_restart,
+            "performancePresetApplied(true) emitted for Hemat");
+      bool notice_ok = false;
+      for (const QString& line : bridge.log()) {
+        if (line.contains(QStringLiteral("Menerapkan performa"))) {
+          notice_ok = !line.contains(QStringLiteral("engine"),
+                                     Qt::CaseInsensitive);
+        }
+      }
+      Check(notice_ok,
+            "restart notice 'Menerapkan performa…' logged without 'engine'");
+
+      bridge.setPerformancePreset(QStringLiteral("Maksimal"));
+      Check(bridge.performancePreset() == QStringLiteral("Maksimal") &&
+                bridge.cpuAffinity() == QStringLiteral("all") &&
+                bridge.gpuAdapter() == QStringLiteral("discrete") &&
+                bridge.fpsCap() == 30 && bridge.crf() == 16,
+            "Maksimal mapped values land on the config properties");
+      Check(bridge.engineRestartNeeded() && applied == 2 && last_needs_restart,
+            "Maksimal flips engineRestartNeeded + emits applied(true)");
+
+      bridge.setPerformancePreset(QStringLiteral("Seimbang"));
+      Check(bridge.performancePreset() == QStringLiteral("Seimbang") &&
+                !bridge.engineRestartNeeded() &&
+                bridge.cpuAffinity() == QStringLiteral("auto") &&
+                bridge.gpuAdapter() == QStringLiteral("auto") &&
+                bridge.fpsCap() == 30 && bridge.crf() == 22,
+            "Seimbang restores auto/auto -> engineRestartNeeded false");
+      Check(applied == 3 && !last_needs_restart,
+            "performancePresetApplied(false) emitted for Seimbang");
+
+      bridge.setPerformancePreset(QStringLiteral("bogus"));
+      Check(bridge.performancePreset() == QStringLiteral("Seimbang"),
+            "bogus preset refused, property unchanged");
+      Check(!bridge.lastError().isEmpty(), "bogus preset sets lastError");
+      Check(applied == 3, "bogus preset does not emit performancePresetApplied");
+
+      {
+        k6wp::SettingsBridge again;
+        Check(again.performancePreset() == QStringLiteral("Seimbang"),
+              "performancePreset persists through apply + reload");
+      }
+    }
+    (void)SetLocalAppDataDir(QString::fromStdWString(real_localappdata));
+  }
+
   std::printf("checks=%d failures=%d\n", g_checks, g_failures);
   return g_failures == 0 ? 0 : 1;
 }

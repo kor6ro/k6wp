@@ -21,6 +21,7 @@
 #include <shlobj.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cwctype>
 #include <filesystem>
 #include <fstream>
@@ -31,6 +32,59 @@
 #include "config_schema.hpp"
 
 namespace k6wp {
+
+// --- performance preset mapping (plan todo 14 / brief B8 + D1) -------------
+
+PerformancePresetValues PresetToValues(const std::string& preset) {
+  // D1 final numbers (S7): Seimbang = current values (auto/auto, 30 fps,
+  // CRF 22, native); Hemat = reduced-res + cap-fps (auto/integrated, 24 fps,
+  // CRF 26, 1280x720); Maksimal = full (all/discrete, 30 fps, CRF 16,
+  // native). Unknown/empty -> Seimbang, never crashes.
+  if (preset == "Hemat") {
+    return PerformancePresetValues{"auto", "integrated", 24, 26, 1.0, 1280,
+                                   720};
+  }
+  if (preset == "Maksimal") {
+    return PerformancePresetValues{"all", "discrete", 30, 16, 1.0, 0, 0};
+  }
+  return PerformancePresetValues{"auto", "auto", 30, 22, 1.0, 0, 0};
+}
+
+std::string ValuesToPreset(const PerformancePresetValues& values) {
+  // Nearest-preset by weighted distance. Categorical fields (affinity/GPU)
+  // weigh 100 so a mode change always outranks numeric drift; numeric
+  // fields contribute raw |diff|; speed is scaled x10 and resolution /100 so
+  // a 1080p-vs-720p gap (~10) still loses to a GPU-mode mismatch (100).
+  // Scanned Hemat -> Seimbang -> Maksimal with strict less-than, so ties
+  // resolve to Seimbang (the D1 default).
+  const auto dist = [&values](const PerformancePresetValues& p) {
+    int d = 0;
+    if (values.cpuAffinity != p.cpuAffinity) d += 100;
+    if (values.gpuAdapter != p.gpuAdapter) d += 100;
+    d += std::abs(values.fpsCap - p.fpsCap);
+    d += std::abs(values.crf - p.crf);
+    d += static_cast<int>(std::lround(std::abs(values.speed - p.speed) * 10.0));
+    d += (std::abs(values.resolutionW - p.resolutionW) +
+          std::abs(values.resolutionH - p.resolutionH)) /
+         100;
+    return d;
+  };
+  const PerformancePresetValues hemat = PresetToValues("Hemat");
+  const PerformancePresetValues seimbang = PresetToValues("Seimbang");
+  const PerformancePresetValues maksimal = PresetToValues("Maksimal");
+  std::string best = "Seimbang";
+  int best_d = dist(seimbang);
+  const int d_hemat = dist(hemat);
+  if (d_hemat < best_d) {
+    best_d = d_hemat;
+    best = "Hemat";
+  }
+  const int d_maksimal = dist(maksimal);
+  if (d_maksimal < best_d) {
+    best = "Maksimal";
+  }
+  return best;
+}
 
 SettingsBridge::SettingsBridge(QObject* parent) : QObject(parent) {
   settings_path_ = DefaultStudioSettingsPath();
@@ -217,6 +271,34 @@ void SettingsBridge::setPlaylistSource(const QString& source) {
   }
   studio_.playlist_source = source.toStdString();
   emit changed();
+}
+
+void SettingsBridge::setPerformancePreset(const QString& preset) {
+  const std::string name = preset.toStdString();
+  if (name != "Hemat" && name != "Seimbang" && name != "Maksimal") {
+    SetLastError(tr("Preset performa tidak dikenal."));
+    return;
+  }
+  const PerformancePresetValues values = PresetToValues(name);
+  studio_.performance_preset = name;
+  config_.cpu_affinity = values.cpuAffinity;
+  config_.gpu_adapter = values.gpuAdapter;
+  config_.fps_cap = values.fpsCap;
+  config_.crf = values.crf;
+  config_.speed = values.speed;
+  config_.resolution_w = values.resolutionW;
+  config_.resolution_h = values.resolutionH;
+  // The restarted engine loads config.json from disk, so persist before any
+  // restart trigger — in-memory edits alone would not reach the new process.
+  apply();
+  const bool persisted = last_error_.isEmpty();
+  const bool needs_restart = persisted && engineRestartNeeded();
+  if (needs_restart) {
+    // Glossary §5: never the word "engine" in user-facing copy.
+    AppendLog(QStringLiteral("Menerapkan performa…"));
+  }
+  emit changed();
+  emit performancePresetApplied(needs_restart);
 }
 
 // --- UI language --------------------------------------------------------------
