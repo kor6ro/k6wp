@@ -1922,11 +1922,18 @@ int main(int argc, char** argv) {
             "bridge displays(): portrait entry geometry + orientation + scale");
       Check(displays_changed >= 1, "ApplyDisplayModel emits displaysChanged");
 
-      // (iii) through the bridge property.
+      // (iii) through the bridge property. Task 25: also prove displaysChanged
+      // fired for the colliding feed and print the notice text for evidence.
+      const int changed_before_collision = displays_changed;
       bridge.ApplyDisplayModel(colliding_monitors, colliding_store,
                                no_coverage);
+      Check(displays_changed > changed_before_collision,
+            "ApplyDisplayModel(colliding monitors) emits displaysChanged");
       Check(!bridge.duplicateModeNotice().isEmpty(),
             "bridge duplicateModeNotice non-empty for colliding fixture");
+      std::printf(
+          "QA-HAPPY duplicateModeNotice (colliding ApplyDisplayModel): %s\n",
+          bridge.duplicateModeNotice().toUtf8().constData());
       bridge.ApplyDisplayModel({primary, second}, distinct_store, no_coverage);
       Check(bridge.duplicateModeNotice().isEmpty(),
             "bridge duplicateModeNotice empty for non-colliding fixture");
