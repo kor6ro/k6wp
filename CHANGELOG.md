@@ -7,8 +7,84 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0-beta.1] - 2026-10-08
+
+> **Beta release.** This is an explicit pre-release. The `v1.2.0` and `v1.2.1`
+> tags were originally published without a beta marker even though they
+> shipped beta-grade software; they have since been re-pointed to
+> `v1.2.0-beta` / `v1.2.1-beta` and their GitHub releases are now marked
+> pre-release (old deep links to the un-suffixed tag URLs no longer resolve;
+> the asset filenames did not change). The `1.3.0` line is marked pre-release
+> from the start. One headline claim is not yet live-proven: the
+> multi-monitor **Extend** placement fix is covered by the automated suites,
+> but the plan records the live two-monitor acceptance as UNPROVEN until the
+> third-party rig run-book bundle comes back. Treat Extend-mode support as
+> unverified until then.
+
 ### Added
 
+- **Multi-monitor Extend-mode support.** Before this, a live wallpaper on two or
+  more monitors only worked when Windows was set to **Duplicate**; in **Extend**
+  mode the extra screens stayed blank. The injection path is fixed and each
+  monitor can now carry its own wallpaper.
+  - **Per-monitor placement fix** (`engine/src/desktop_placement.{hpp,cpp}`,
+    `engine/src/desktop_inject.cpp`): the injector resolves one shared host per
+    attach pass instead of spawning one per slot, converts screen coordinates
+    with `MapWindowPoints` instead of hand-rolled subtraction, uses a single
+    z-order contract across the 24H2 and classic branches, and verifies the
+    final child rect actually covers its monitor. A false success now degrades
+    to the existing headless indicator instead of a silent blank screen.
+  - **Per-monitor wallpaper assignments** (`shared/displays_schema.{hpp,cpp}`):
+    an assignment map persisted at `%LOCALAPPDATA%\K6WP\displays.json`, keyed by
+    the GDI device name (`\\.\DISPLAYn`), with the same atomic write and
+    `.bak`-on-corrupt contract as the other settings files. An additive IPC
+    command plus a `get_state` capability field expose it, and the engine
+    watches the file without adding a periodic timer. An empty map keeps the
+    previous single-video behaviour, so single-monitor users see no change.
+  - **Studio monitor sub-tabs with click-to-assign.** Studio lists the monitors
+    as sub-tabs; select a saved library or playlist video and click a monitor to
+    assign it there. The earlier read-only display canvas and drag-to-assign
+    were dropped during execution after live testing showed a cross-tab drag
+    disappears under the native preview window.
+  - **Two-monitor run-book** (`docs/runbook-2monitor.md`,
+    `tools/run_2monitor_evidence.ps1`): a non-author can collect the live proof
+    bundle in one command, the extended `monitor_dump` JSON, the `placement:`
+    engine-log lines, an injected-window rect census, and one screenshot per
+    display mode. Until that bundle is pasted back, the Extend fix stays
+    UNPROVEN (see the beta note above).
+  - Assignments are keyed on `\\.\DISPLAYn`, which is not hardware-stable: a
+    dock/undock or port change can renumber the key and require re-assignment,
+    and a Duplicate-mode identity collision is detected and refused rather than
+    silently overwriting. HDR and colour handling are out of scope and recorded
+    as a documented limitation.
+- **Studio UI/UX redesign.** The Studio front end is rebuilt around one page and
+  plain-language copy, so a non-technical user can pick a video and press
+  **Pasang** without learning tabs or jargon.
+  - **One-page Beranda.** A landing page with the library gallery and a large
+    preview. Cards are select-then-**Pasang**; the separate Kompresor tab and
+    the "Tandai" mode are gone, and the technical controls move under
+    **Lanjutan**. A "Pasang ke" choice appears only when more than one monitor
+    is present.
+  - **Material icon pack** replaces the ad-hoc glyphs across cards, menus, the
+    sidebar and dialogs.
+  - **De-jargon friendly status and copy.** "Engine aktif" becomes "Wallpaper
+    aktif", the separate pause and resume controls collapse into one
+    **Jeda / Lanjut** button, and status and error strings say what happened
+    plus what to do, without CRF / FPS / encoder / IPC / pid / HWND terms. The
+    raw details stay reachable through an "Info teknis" dialog with a
+    "Salin untuk dukungan" button.
+  - **Collapsible sidebar and adaptive Pengaturan.** The sidebar collapses to an
+    icon rail at narrow widths, and Settings is grouped into Umum / Tampilan /
+    Hemat daya / Lanjutan with a Performa preset (Hemat / Seimbang / Maksimal).
+  - **Background auto-compress.** Large or long imports are prepared
+    automatically in the background ("Siapkan video otomatis", default on) with
+    a friendly progress state; the long-video consent dialog is kept.
+  - **Optional tray icon.** A "Tutup ke tray" setting (default off) keeps Studio
+    running when the window closes, with a Buka / Jeda / Lanjut / Keluar menu.
+    The engine keeps its own separate tray icon.
+  - **Theming.** A `Theme.qml` token singleton defines light and dark palettes
+    that follow the system, with shared spacing, radius and type tokens, and
+    dialogs drawn from the same tokens.
 - **Wallpaper playlist + timed rotation.** The engine can now cycle through an
   ordered list of wallpapers on a fixed interval, with optional shuffle.
   - New `shared/playlist.{hpp,cpp}` (`PlaylistConfig`, `LoadPlaylist`,
