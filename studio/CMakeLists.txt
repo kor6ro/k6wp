@@ -46,6 +46,19 @@ qt_add_resources(studio "k6wp_icons"
   FILES "${CMAKE_SOURCE_DIR}/packaging/k6wp-on.ico"
 )
 
+# Task 32: the ONE icon font for the whole Studio UI (Material Design Icons,
+# Pictogrammers 7.4.47, Apache-2.0 - see studio/fonts/LICENSE.txt and
+# .omo/evidence/k6wp-studio-ui-redesign/task-32-icons2-provenance.txt).
+# Theme.qml's FontLoader registers qrc:/fonts/materialdesignicons-webfont.ttf,
+# so a deployed studio.exe needs no loose .ttf beside it. Embedded with
+# qt_add_resources for the same reason as k6wp_icons above: the QML module
+# turns AUTORCC off for this target.
+qt_add_resources(studio "k6wp_mdi_font"
+  PREFIX "/fonts"
+  BASE "${CMAKE_CURRENT_SOURCE_DIR}/fonts"
+  FILES "${CMAKE_CURRENT_SOURCE_DIR}/fonts/materialdesignicons-webfont.ttf"
+)
+
 # Todo 11: GUI subsystem — no console window. qt_add_executable links
 # Qt's qtmain entry point, so int main() in src/main.cpp stays unchanged.
 set_target_properties(studio PROPERTIES WIN32_EXECUTABLE TRUE)
@@ -394,6 +407,64 @@ target_link_libraries(playlist_bridge_test PRIVATE k6wp_shared Qt6::Widgets Qt6:
 target_include_directories(playlist_bridge_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_compile_options(playlist_bridge_test PRIVATE /Zc:__cplusplus /permissive-)
 add_test(NAME playlist_bridge_test COMMAND playlist_bridge_test)
+
+# duplicate_banner_harness (task 25): hardware-free offscreen QML proof that
+# WarningBanner kind="duplicate" renders (C-15 / F3-15). Compiles the REAL
+# studio/qml/Theme.qml (singleton) + WarningBanner.qml into a harness QML
+# module (K6WPHarness); Studio is a stub context object (duplicateModeNotice,
+# openWindowsDisplaySettings, activeVideoPath, busy, applyWallpaper). NOT a
+# live-rig proof — no monitor driver, no engine. Screenshot via grabToImage
+# under QT_QPA_PLATFORM=offscreen; success = PNG has visible banner pixels.
+#
+# QML_FILES must stay under CMAKE_CURRENT_SOURCE_DIR (studio/): qt_add_qml_module
+# derives the qmlcache output path from each source's path relative to the
+# current source dir, so a tests/ path yields a literal ".." segment and
+# MSBuild fails with MSB3191 (cannot create the directory). The harness
+# wrapper therefore lives at tests/qml_harness/HarnessMain.qml and is loaded
+# from disk at runtime with `import K6WPHarness`.
+add_executable(duplicate_banner_harness
+  ../tests/duplicate_banner_harness.cpp
+)
+# Task 32: the SAME qrc:/fonts/ Material Design Icons resource as the studio
+# target above, so this harness's Theme.qml singleton resolves its FontLoader
+# identically and WarningBanner glyphs render in-metric under the offscreen
+# test. Minimal additive wiring (flagged in the task-32 provenance evidence).
+qt_add_resources(duplicate_banner_harness "k6wp_mdi_font_harness"
+  PREFIX "/fonts"
+  BASE "${CMAKE_CURRENT_SOURCE_DIR}/fonts"
+  FILES "${CMAKE_CURRENT_SOURCE_DIR}/fonts/materialdesignicons-webfont.ttf"
+)
+set(K6WP_HARNESS_MAIN_QML "${CMAKE_SOURCE_DIR}/tests/qml_harness/HarnessMain.qml")
+set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/qml/Theme.qml
+  PROPERTIES QT_RESOURCE_ALIAS Theme.qml QT_QML_SINGLETON_TYPE TRUE)
+set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/qml/WarningBanner.qml
+  PROPERTIES QT_RESOURCE_ALIAS WarningBanner.qml)
+qt_add_qml_module(duplicate_banner_harness
+  URI K6WPHarness
+  VERSION 1.0
+  RESOURCE_PREFIX "/qt/qml"
+  QML_FILES
+    ${CMAKE_CURRENT_SOURCE_DIR}/qml/Theme.qml
+    ${CMAKE_CURRENT_SOURCE_DIR}/qml/WarningBanner.qml
+)
+target_compile_definitions(duplicate_banner_harness PRIVATE
+  "K6WP_HARNESS_MAIN_QML=\"${K6WP_HARNESS_MAIN_QML}\"")
+target_link_libraries(duplicate_banner_harness PRIVATE
+  Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2)
+target_compile_options(duplicate_banner_harness PRIVATE /Zc:__cplusplus /permissive-)
+get_filename_component(_qt_harness_prefix "${Qt6Widgets_DIR}/../../.." ABSOLUTE)
+add_test(NAME duplicate_banner_harness COMMAND duplicate_banner_harness
+  "${CMAKE_BINARY_DIR}/duplicate_banner_harness.png"
+  "${K6WP_HARNESS_MAIN_QML}")
+set_tests_properties(duplicate_banner_harness PROPERTIES
+  # Task 32: the offscreen QFreeType font DB starts with ZERO fonts - before
+  # the MDI webfont existed the banner text accidentally rendered as tofu
+  # boxes (which the dark-ink check counted). Now that Theme.qml registers the
+  # single application font, Latin text would resolve to MDI's missing
+  # codepoints and vanish. Pointing the offscreen font dir at the OS fonts
+  # makes the harness render the real banner text AND real MDI glyphs.
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_PLUGIN_PATH=${_qt_harness_prefix}/plugins;QML2_IMPORT_PATH=${_qt_harness_prefix}/qml;QT_QPA_FONTDIR=$ENV{SystemRoot}/Fonts"
+  WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
 endif()
 
 # Vendored libmpv (Todo 2): headers + MSVC import lib. libmpv-2.dll is copied
