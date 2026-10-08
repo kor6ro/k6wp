@@ -129,6 +129,29 @@ Item {
         }
     }
 
+    // Shared dialog chrome. The stock Material Dialog paints its surface and
+    // header from Material.dialogColor, and the popup-local Material attached
+    // object does not inherit the window root's Material.theme across the
+    // popup boundary - so dialogs stayed light while the window was dark.
+    // Every dialog below paints its own surface/header from Theme tokens and
+    // pins its popup-local Material theme to Theme.dark, so dialog chrome
+    // follows the app theme in both modes.
+    component DialogSurface: Rectangle {
+        color: Theme.surface
+        radius: Theme.radiusL
+        border.width: 1
+        border.color: Theme.surface2
+    }
+
+    component DialogTitle: Label {
+        padding: Theme.space4
+        bottomPadding: 0
+        elide: Label.ElideRight
+        color: Theme.text
+        font.pixelSize: Theme.fontL
+        font.weight: Theme.fontWeightSemibold
+    }
+
     // ======================================================================
     // 1. Info teknis (brief C-16, todo 5)
     // ======================================================================
@@ -139,7 +162,12 @@ Item {
         modal: true
         anchors.centerIn: parent
         width: Math.min(640, parent.width - 48)
-        standardButtons: Dialog.Close
+        // Pin the popup-local Material theme to the app Theme: attached
+        // Material properties do not inherit across the popup boundary.
+        Material.theme: Theme.dark ? Material.Dark : Material.Light
+        Material.accent: Theme.accent
+        background: DialogSurface {}
+        header: DialogTitle { text: infoTeknisDialog.title }
 
         onOpened: {
             appDialogs.dialogOpened()
@@ -148,7 +176,7 @@ Item {
         onClosed: appDialogs.dialogClosed()
 
         contentItem: ColumnLayout {
-            spacing: 8
+            spacing: Theme.space2
             Accessible.role: Accessible.Dialog
             Accessible.name: infoTeknisDialog.title
 
@@ -158,6 +186,7 @@ Item {
                 wrapMode: Text.WordWrap
                 font.bold: true
                 font.pixelSize: Theme.fontM
+                color: Theme.text
                 text: appDialogs.friendlyStatus()
             }
 
@@ -166,28 +195,40 @@ Item {
                 Layout.fillWidth: true
                 columns: 2
                 columnSpacing: 12
-                rowSpacing: 4
+                rowSpacing: Theme.space1
 
-                Label { text: qsTr("pid") }
+                Label {
+                    text: qsTr("pid")
+                    color: Theme.text2
+                }
                 Label {
                     Layout.fillWidth: true
                     elide: Text.ElideRight
+                    color: Theme.text
                     text: String(Studio.enginePid)
                 }
 
-                Label { text: qsTr("Video aktif") }
+                Label {
+                    text: qsTr("Video aktif")
+                    color: Theme.text2
+                }
                 Label {
                     Layout.fillWidth: true
                     elide: Text.ElideMiddle
+                    color: Theme.text
                     text: Studio.activeVideoPath.length > 0
                           ? Studio.activeVideoPath
                           : qsTr("(belum ada video aktif)")
                 }
 
-                Label { text: qsTr("Path pengaturan") }
+                Label {
+                    text: qsTr("Path pengaturan")
+                    color: Theme.text2
+                }
                 Label {
                     Layout.fillWidth: true
                     elide: Text.ElideMiddle
+                    color: Theme.text
                     text: Studio.settingsPath
                 }
             }
@@ -195,9 +236,11 @@ Item {
             Label {
                 text: qsTr("Log")
                 font.bold: true
+                color: Theme.text
             }
 
             TextArea {
+                id: infoTeknisLog
                 objectName: "infoTeknisLog"
                 Layout.fillWidth: true
                 Layout.preferredHeight: 180
@@ -205,23 +248,47 @@ Item {
                 selectByMouse: true
                 wrapMode: TextEdit.Wrap
                 font.pixelSize: Theme.fontS
+                color: Theme.text
+                selectionColor: Theme.accent
+                selectedTextColor: Theme.accentText
                 text: Studio.log.join("\n")
+
+                background: Rectangle {
+                    color: Theme.surface2
+                    radius: Theme.radiusS
+                    border.width: infoTeknisLog.activeFocus ? 2 : 0
+                    border.color: Theme.accent
+                }
             }
 
             RowLayout {
                 Layout.fillWidth: true
 
-                Button {
+                DialogActionButton {
                     id: copySupportButton
                     objectName: "copySupportButton"
                     text: qsTr("Salin untuk dukungan")
-                    Accessible.name: text
                     onClicked: Studio.copyToClipboard(appDialogs.supportText())
                 }
 
                 Item {
                     Layout.fillWidth: true
                 }
+            }
+        }
+
+        // The stock Dialog.Close standard button is replaced by a token
+        // button so the close affordance follows Theme in both modes.
+        footer: RowLayout {
+            spacing: Theme.space2
+            Item {
+                Layout.fillWidth: true
+            }
+            DialogActionButton {
+                id: infoTeknisCloseButton
+                objectName: "infoTeknisClose"
+                text: qsTr("Tutup")
+                onClicked: infoTeknisDialog.close()
             }
         }
     }
@@ -243,6 +310,10 @@ Item {
         modal: true
         anchors.centerIn: Overlay.overlay
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        Material.theme: Theme.dark ? Material.Dark : Material.Light
+        Material.accent: Theme.accent
+        background: DialogSurface {}
+        header: DialogTitle { text: consentDialog.title }
 
         onOpened: {
             appDialogs.dialogOpened()
@@ -262,6 +333,7 @@ Item {
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 font.pixelSize: Theme.fontM
+                color: Theme.text
                 text: qsTr("Video ini panjang %1 menit. "
                            + "Menyiapkannya butuh waktu lama. Lanjut?")
                       .arg(appDialogs.consentDuration.toFixed(1))
@@ -318,6 +390,10 @@ Item {
         modal: true
         anchors.centerIn: Overlay.overlay
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        Material.theme: Theme.dark ? Material.Dark : Material.Light
+        Material.accent: Theme.accent
+        background: DialogSurface {}
+        header: DialogTitle { text: compressOfferDialog.title }
 
         onOpened: {
             appDialogs.dialogOpened()
@@ -336,6 +412,7 @@ Item {
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 font.pixelSize: Theme.fontM
+                color: Theme.text
                 text: qsTr("Video ini besar %1 MB. "
                            + "Kami siapkan dulu supaya ringan diputar.")
                       .arg(appDialogs.offerMb)
@@ -422,7 +499,10 @@ Item {
         title: qsTr("Tentang K6WP Studio")
         modal: true
         anchors.centerIn: parent
-        standardButtons: Dialog.Close
+        Material.theme: Theme.dark ? Material.Dark : Material.Light
+        Material.accent: Theme.accent
+        background: DialogSurface {}
+        header: DialogTitle { text: aboutDialog.title }
 
         onOpened: {
             appDialogs.dialogOpened()
@@ -439,15 +519,18 @@ Item {
                 text: "K6WP Studio " + Studio.version
                 font.bold: true
                 font.pixelSize: Theme.fontM
+                color: Theme.text
             }
 
             Label {
                 text: qsTr("License: GPL-2.0-or-later")
+                color: Theme.text2
             }
 
             Label {
                 Layout.preferredWidth: 440
                 wrapMode: Text.WordWrap
+                color: Theme.text2
                 text: qsTr("Third-party licenses: mpv (libmpv), ffmpeg, Qt, nlohmann/json — see LICENSES/ for the full texts.")
             }
 
@@ -457,6 +540,7 @@ Item {
                 Layout.preferredWidth: 440
                 wrapMode: Text.WordWrap
                 visible: Studio.updateAvailable
+                color: Theme.text
                 text: qsTr("Versi baru tersedia %1.").arg(Studio.latestVersion)
             }
 
@@ -488,6 +572,21 @@ Item {
                 }
             }
         }
+
+        // The stock Dialog.Close standard button is replaced by a token
+        // button so the close affordance follows Theme in both modes.
+        footer: RowLayout {
+            spacing: Theme.space2
+            Item {
+                Layout.fillWidth: true
+            }
+            DialogActionButton {
+                id: aboutCloseButton
+                objectName: "aboutClose"
+                text: qsTr("Tutup")
+                onClicked: aboutDialog.close()
+            }
+        }
     }
 
     // ======================================================================
@@ -502,6 +601,10 @@ Item {
         modal: true
         anchors.centerIn: Overlay.overlay
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        Material.theme: Theme.dark ? Material.Dark : Material.Light
+        Material.accent: Theme.accent
+        background: DialogSurface {}
+        header: DialogTitle { text: updateDialog.title }
 
         onOpened: {
             appDialogs.dialogOpened()
@@ -520,6 +623,7 @@ Item {
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 font.pixelSize: Theme.fontM
+                color: Theme.text
                 text: qsTr("Versi baru tersedia %1.").arg(Studio.latestVersion)
             }
         }
