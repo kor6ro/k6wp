@@ -46,6 +46,19 @@ qt_add_resources(studio "k6wp_icons"
   FILES "${CMAKE_SOURCE_DIR}/packaging/k6wp-on.ico"
 )
 
+# Task 32: the ONE icon font for the whole Studio UI (Material Design Icons,
+# Pictogrammers 7.4.47, Apache-2.0 - see studio/fonts/LICENSE.txt and
+# .omo/evidence/k6wp-studio-ui-redesign/task-32-icons2-provenance.txt).
+# Theme.qml's FontLoader registers qrc:/fonts/materialdesignicons-webfont.ttf,
+# so a deployed studio.exe needs no loose .ttf beside it. Embedded with
+# qt_add_resources for the same reason as k6wp_icons above: the QML module
+# turns AUTORCC off for this target.
+qt_add_resources(studio "k6wp_mdi_font"
+  PREFIX "/fonts"
+  BASE "${CMAKE_CURRENT_SOURCE_DIR}/fonts"
+  FILES "${CMAKE_CURRENT_SOURCE_DIR}/fonts/materialdesignicons-webfont.ttf"
+)
+
 # Todo 11: GUI subsystem — no console window. qt_add_executable links
 # Qt's qtmain entry point, so int main() in src/main.cpp stays unchanged.
 set_target_properties(studio PROPERTIES WIN32_EXECUTABLE TRUE)
@@ -84,13 +97,68 @@ target_link_libraries(studio PRIVATE k6wp_shared Qt6::Widgets Qt6::Quick Qt6::Qm
 # /qt/qml/K6WP/Main.qml, which is what the qmldir expects. Verified against the
 # generated .qrc/qmldir in build/msvc-dev/studio/.qt/rcc/ (see qml_shell.cpp,
 # which loads exactly that URL and asserts QQuickWidget::status()).
+# Theme.qml is a QML singleton (pragma Singleton), so it needs BOTH the
+# resource alias (it lives in qml/, the alias keeps it next to the generated
+# qmldir) and QT_QML_SINGLETON_TYPE, which makes qt_add_qml_module emit
+# `singleton Theme 1.0 Theme.qml` into the generated qmldir instead of a plain
+# type entry. Without the property the type would compile but `Theme.*` would
+# resolve as a regular (uninstantiable) type at use sites.
+set_source_files_properties(qml/Theme.qml PROPERTIES QT_RESOURCE_ALIAS Theme.qml QT_QML_SINGLETON_TYPE TRUE)
 set_source_files_properties(qml/Main.qml PROPERTIES QT_RESOURCE_ALIAS Main.qml)
+set_source_files_properties(qml/LogPanel.qml PROPERTIES QT_RESOURCE_ALIAS LogPanel.qml)
+set_source_files_properties(qml/PreviewHole.qml PROPERTIES QT_RESOURCE_ALIAS PreviewHole.qml)
+set_source_files_properties(qml/StatusBar.qml PROPERTIES QT_RESOURCE_ALIAS StatusBar.qml)
+set_source_files_properties(qml/AppDialogs.qml PROPERTIES QT_RESOURCE_ALIAS AppDialogs.qml)
+set_source_files_properties(qml/ActionButtons.qml PROPERTIES QT_RESOURCE_ALIAS ActionButtons.qml)
+set_source_files_properties(qml/QuickSettingsPanel.qml PROPERTIES QT_RESOURCE_ALIAS QuickSettingsPanel.qml)
+# Todo 7: the Koleksi gallery replaces LibraryPanel/LibraryDelegate.
+set_source_files_properties(qml/CollectionPage.qml PROPERTIES QT_RESOURCE_ALIAS CollectionPage.qml)
+set_source_files_properties(qml/VideoGrid.qml PROPERTIES QT_RESOURCE_ALIAS VideoGrid.qml)
+set_source_files_properties(qml/VideoCard.qml PROPERTIES QT_RESOURCE_ALIAS VideoCard.qml)
+set_source_files_properties(qml/EmptyState.qml PROPERTIES QT_RESOURCE_ALIAS EmptyState.qml)
+set_source_files_properties(qml/AutoSwitchPanel.qml PROPERTIES QT_RESOURCE_ALIAS AutoSwitchPanel.qml)
+# Todo 13: ToastBar (window-bottom compress progress toast). ConsentDialog /
+# CompressOfferDialog / CompressorPage were deleted - their dialogs live in
+# AppDialogs.qml now and the compressor page is gone with the tab.
+set_source_files_properties(qml/ToastBar.qml PROPERTIES QT_RESOURCE_ALIAS ToastBar.qml)
+set_source_files_properties(qml/CacheDialog.qml PROPERTIES QT_RESOURCE_ALIAS CacheDialog.qml)
+# Todo 15: AboutDialog.qml was folded into AppDialogs.qml (C-17 "Tentang
+# K6WP Studio" + "Versi baru tersedia" dialogs); the standalone file is gone.
+# Todo 16: FirstRunDialog.qml (the four-page wizard) is deleted; the one-screen
+# C-2 onboarding is OnboardingView.qml (Main-root overlay, outside
+# PreviewHole.qml per the B-WIREFRAME(f) overlay rule).
+set_source_files_properties(qml/OnboardingView.qml PROPERTIES QT_RESOURCE_ALIAS OnboardingView.qml)
+set_source_files_properties(qml/SettingsPage.qml PROPERTIES QT_RESOURCE_ALIAS SettingsPage.qml)
+set_source_files_properties(qml/WallpaperPage.qml PROPERTIES QT_RESOURCE_ALIAS WallpaperPage.qml)
+set_source_files_properties(qml/AssignRow.qml PROPERTIES QT_RESOURCE_ALIAS AssignRow.qml)
+set_source_files_properties(qml/AssignPopup.qml PROPERTIES QT_RESOURCE_ALIAS AssignPopup.qml)
+set_source_files_properties(qml/WarningBanner.qml PROPERTIES QT_RESOURCE_ALIAS WarningBanner.qml)
 qt_add_qml_module(studio
   URI K6WP
   VERSION 1.0
   RESOURCE_PREFIX "/qt/qml"
   QML_FILES
+    qml/Theme.qml
     qml/Main.qml
+    qml/LogPanel.qml
+    qml/PreviewHole.qml
+    qml/StatusBar.qml
+    qml/AppDialogs.qml
+    qml/ActionButtons.qml
+    qml/QuickSettingsPanel.qml
+    qml/ToastBar.qml
+    qml/CollectionPage.qml
+    qml/VideoGrid.qml
+    qml/VideoCard.qml
+    qml/EmptyState.qml
+    qml/AutoSwitchPanel.qml
+    qml/CacheDialog.qml
+    qml/OnboardingView.qml
+    qml/SettingsPage.qml
+    qml/WallpaperPage.qml
+    qml/AssignRow.qml
+    qml/AssignPopup.qml
+    qml/WarningBanner.qml
 )
 
 # About dialog version string (canonical K6WP_VERSION lives in the root
@@ -325,14 +393,78 @@ add_test(NAME fake_pipe_test COMMAND fake_pipe_test)
 # playlist.json (K6WP_PLAYLIST_JSON override). QCoreApplication; the native
 # picker is never invoked (addPaths drives the additions). Qt6::Qml supplies the
 # QML_ELEMENT registration macros; Qt6::Widgets the QFileDialog symbol.
+# syncOrderFromLibrary (plan todo 9) reads LibraryManager::ListItems, so the
+# manager + its JSON codec + the ffprobe helper it links against are compiled
+# in; this suite never probes (Add uses kNever).
 add_executable(playlist_bridge_test
   ../tests/playlist_bridge_test.cpp
   src/playlist_bridge.cpp
+  src/library_manager.cpp
+  src/library_json_codec.cpp
+  src/ffprobe_helper.cpp
 )
 target_link_libraries(playlist_bridge_test PRIVATE k6wp_shared Qt6::Widgets Qt6::Qml)
 target_include_directories(playlist_bridge_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_compile_options(playlist_bridge_test PRIVATE /Zc:__cplusplus /permissive-)
 add_test(NAME playlist_bridge_test COMMAND playlist_bridge_test)
+
+# duplicate_banner_harness (task 25): hardware-free offscreen QML proof that
+# WarningBanner kind="duplicate" renders (C-15 / F3-15). Compiles the REAL
+# studio/qml/Theme.qml (singleton) + WarningBanner.qml into a harness QML
+# module (K6WPHarness); Studio is a stub context object (duplicateModeNotice,
+# openWindowsDisplaySettings, activeVideoPath, busy, applyWallpaper). NOT a
+# live-rig proof — no monitor driver, no engine. Screenshot via grabToImage
+# under QT_QPA_PLATFORM=offscreen; success = PNG has visible banner pixels.
+#
+# QML_FILES must stay under CMAKE_CURRENT_SOURCE_DIR (studio/): qt_add_qml_module
+# derives the qmlcache output path from each source's path relative to the
+# current source dir, so a tests/ path yields a literal ".." segment and
+# MSBuild fails with MSB3191 (cannot create the directory). The harness
+# wrapper therefore lives at tests/qml_harness/HarnessMain.qml and is loaded
+# from disk at runtime with `import K6WPHarness`.
+add_executable(duplicate_banner_harness
+  ../tests/duplicate_banner_harness.cpp
+)
+# Task 32: the SAME qrc:/fonts/ Material Design Icons resource as the studio
+# target above, so this harness's Theme.qml singleton resolves its FontLoader
+# identically and WarningBanner glyphs render in-metric under the offscreen
+# test. Minimal additive wiring (flagged in the task-32 provenance evidence).
+qt_add_resources(duplicate_banner_harness "k6wp_mdi_font_harness"
+  PREFIX "/fonts"
+  BASE "${CMAKE_CURRENT_SOURCE_DIR}/fonts"
+  FILES "${CMAKE_CURRENT_SOURCE_DIR}/fonts/materialdesignicons-webfont.ttf"
+)
+set(K6WP_HARNESS_MAIN_QML "${CMAKE_SOURCE_DIR}/tests/qml_harness/HarnessMain.qml")
+set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/qml/Theme.qml
+  PROPERTIES QT_RESOURCE_ALIAS Theme.qml QT_QML_SINGLETON_TYPE TRUE)
+set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/qml/WarningBanner.qml
+  PROPERTIES QT_RESOURCE_ALIAS WarningBanner.qml)
+qt_add_qml_module(duplicate_banner_harness
+  URI K6WPHarness
+  VERSION 1.0
+  RESOURCE_PREFIX "/qt/qml"
+  QML_FILES
+    ${CMAKE_CURRENT_SOURCE_DIR}/qml/Theme.qml
+    ${CMAKE_CURRENT_SOURCE_DIR}/qml/WarningBanner.qml
+)
+target_compile_definitions(duplicate_banner_harness PRIVATE
+  "K6WP_HARNESS_MAIN_QML=\"${K6WP_HARNESS_MAIN_QML}\"")
+target_link_libraries(duplicate_banner_harness PRIVATE
+  Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2)
+target_compile_options(duplicate_banner_harness PRIVATE /Zc:__cplusplus /permissive-)
+get_filename_component(_qt_harness_prefix "${Qt6Widgets_DIR}/../../.." ABSOLUTE)
+add_test(NAME duplicate_banner_harness COMMAND duplicate_banner_harness
+  "${CMAKE_BINARY_DIR}/duplicate_banner_harness.png"
+  "${K6WP_HARNESS_MAIN_QML}")
+set_tests_properties(duplicate_banner_harness PROPERTIES
+  # Task 32: the offscreen QFreeType font DB starts with ZERO fonts - before
+  # the MDI webfont existed the banner text accidentally rendered as tofu
+  # boxes (which the dark-ink check counted). Now that Theme.qml registers the
+  # single application font, Latin text would resolve to MDI's missing
+  # codepoints and vanish. Pointing the offscreen font dir at the OS fonts
+  # makes the harness render the real banner text AND real MDI glyphs.
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_PLUGIN_PATH=${_qt_harness_prefix}/plugins;QML2_IMPORT_PATH=${_qt_harness_prefix}/qml;QT_QPA_FONTDIR=$ENV{SystemRoot}/Fonts"
+  WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
 endif()
 
 # Vendored libmpv (Todo 2): headers + MSVC import lib. libmpv-2.dll is copied
@@ -418,7 +550,27 @@ file(GLOB K6WP_TR_SOURCES CONFIGURE_DEPENDS
   "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/*.hpp")
 set(K6WP_TR_QML_SOURCES
-  "${CMAKE_CURRENT_SOURCE_DIR}/qml/Main.qml")
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/Theme.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/Main.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/LogPanel.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/PreviewHole.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/StatusBar.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/AppDialogs.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/ActionButtons.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/QuickSettingsPanel.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/ToastBar.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/CollectionPage.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/VideoGrid.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/VideoCard.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/EmptyState.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/AutoSwitchPanel.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/CacheDialog.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/OnboardingView.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/SettingsPage.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/WallpaperPage.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/AssignRow.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/AssignPopup.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/WarningBanner.qml")
 
 # Both tools degrade to a clear no-op target instead of failing the configure:
 # a Studio that cannot translate is still a working Studio (main.cpp falls back

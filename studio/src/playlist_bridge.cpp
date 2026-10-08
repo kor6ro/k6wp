@@ -8,6 +8,7 @@
 #include <system_error>
 
 #include "config_schema.hpp"
+#include "library_manager.hpp"
 #include "video_paths.hpp"
 
 namespace k6wp {
@@ -200,6 +201,52 @@ QString PlaylistBridge::pathAt(int row) const {
     return QString();
   }
   return QString::fromStdWString(cfg_.order[row]);
+}
+
+bool PlaylistBridge::syncOrderFromLibrary() {
+  std::vector<std::wstring> order;
+  try {
+    // Fresh read every call: the library may have changed since the last
+    // sync. DefaultLibraryJsonPath honors K6WP_LIBRARY_JSON (tests).
+    LibraryManager lib;
+    lib.Load();  // missing file => empty library (first run)
+    for (const LibraryEntry& e : lib.ListItems()) {
+      // Skip missing files (exists == false): broken is computed by
+      // ListItems from a dst stat and is never persisted.
+      if (e.broken) {
+        continue;
+      }
+      std::error_code ec;
+      if (!std::filesystem::is_regular_file(e.dst, ec) || ec) {
+        continue;
+      }
+      order.push_back(e.dst.wstring());
+    }
+  } catch (const LibraryError& ex) {
+    SetLastError(QString::fromUtf8(ex.what()));
+    return false;
+  } catch (const ConfigError& ex) {
+    SetLastError(QString::fromUtf8(ex.what()));
+    return false;
+  }
+
+  // >500-entry guard: reject BEFORE touching cfg_ or the file, so a
+  // 501-entry library cannot truncate or rewrite playlist.json.
+  if (order.size() > kPlaylistMaxEntries) {
+    SetLastError(QStringLiteral("Daftar putar melebihi batas %1 entri (dapat %2)")
+                     .arg(static_cast<qulonglong>(kPlaylistMaxEntries))
+                     .arg(order.size()));
+    return false;
+  }
+
+  cfg_.order = NormalizeOrder(std::move(order));
+  if (!Save()) {
+    return false;  // lastError already set by Save()
+  }
+  AppendLog(QStringLiteral("playlist: disinkronkan dari pustaka (%1 entri)")
+                .arg(cfg_.order.size()));
+  emit changed();
+  return true;
 }
 
 void PlaylistBridge::AppendLog(const QString& line) {

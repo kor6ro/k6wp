@@ -20,11 +20,20 @@
 // calls StudioBridge.syncPreviewGeometry() whenever it moves; the bridge
 // forwards the call here, where the QML scene coordinates are converted into
 // QMainWindow client coordinates and applied to the widget.
+//
+// Plan todo 17 (B10): when Settings.closeToTray is ON, this shell also owns
+// the optional QSystemTrayIcon (C-19 menu) and overrides closeEvent to hide
+// instead of exit. OFF (default) leaves closeEvent at the QMainWindow
+// baseline — byte-for-byte the pre-todo-17 behavior.
 
 #include <QMainWindow>
 #include <QString>
 
+class QCloseEvent;
+class QMenu;
 class QQuickWidget;
+class QSystemTrayIcon;
+class QAction;
 class QWidget;
 
 namespace k6wp {
@@ -57,9 +66,18 @@ class QmlShell final : public QMainWindow {
   void loadPreview(const QString& path);
   void setPreviewPaused(bool paused);
 
+  // Plan todo 17: show/hide the optional tray icon when the closeToTray
+  // setting flips at runtime (SettingsPage toggle). Called by the
+  // SetCloseToTrayListener the shell registers with settings_bridge.
+  void ApplyCloseToTrayPreference(bool on);
+
  protected:
   void resizeEvent(QResizeEvent* event) override;
   void showEvent(QShowEvent* event) override;
+  // Plan todo 17 / B10: OFF (default) forwards to QMainWindow unchanged;
+  // ON ignores the close, hides the window and keeps the process alive in
+  // the tray. "Keluar" in the tray menu is the explicit quit path.
+  void closeEvent(QCloseEvent* event) override;
   // Drops are handled on the WINDOW rather than a QML DropArea: these mirror
   // MainWindow's own handlers, which were the proven path for native file
   // drops into this UI.
@@ -74,6 +92,19 @@ class QmlShell final : public QMainWindow {
   // window. This is permanent code, not a temporary debug dump.
   void OnQuickStatusChanged(int status);
 
+  // Plan todo 17: lazily create the C-19 tray (icon + "Buka K6WP Studio /
+  // Jeda / Lanjut / Keluar"). No-op when a tray already exists. The menu is
+  // deliberately NOT the engine tray's quick-switch MRU.
+  void EnsureTray();
+  // Plan todo 17: repaint the tray tooltip from the bridge's friendly
+  // statusTitle (never the word "engine").
+  void RefreshTrayTooltip();
+  // Plan todo 17: "Buka K6WP Studio" — restore + focus this window.
+  void ShowFromTray();
+  // Plan todo 17: "Keluar" — explicit quit. Releases the Studio singleton
+  // mutex (main.cpp) so a second launch can start immediately, then exits.
+  void QuitFromTray();
+
   // Central widget hosting the QQuickWidget.
   QWidget* host_ = nullptr;
   QQuickWidget* quick_ = nullptr;
@@ -83,6 +114,14 @@ class QmlShell final : public QMainWindow {
   PreviewWidget* preview_ = nullptr;
   // Drop target, set by the Library model once the QML engine constructs it.
   LibraryGridModel* import_target_ = nullptr;
+  // Plan todo 17: optional close-to-tray icon. Null until the setting is ON
+  // (and the system offers a tray); parented to this shell.
+  QSystemTrayIcon* tray_ = nullptr;
+  QMenu* tray_menu_ = nullptr;
+  QAction* tray_open_ = nullptr;
+  QAction* tray_pause_ = nullptr;
+  QAction* tray_resume_ = nullptr;
+  QAction* tray_quit_ = nullptr;
 };
 
 // --- Active-shell registry --------------------------------------------------
@@ -96,5 +135,10 @@ class QmlShell final : public QMainWindow {
 // and every read happens on the GUI thread.
 void SetActiveQmlShell(QmlShell* shell);
 QmlShell* ActiveQmlShell();
+
+// Plan todo 17: implemented in main.cpp. Closes the Studio singleton mutex
+// handle so "Keluar" from the tray frees the name for an immediate second
+// launch. Idempotent; no-op when the mutex was never created.
+void ReleaseStudioMutex();
 
 }  // namespace k6wp

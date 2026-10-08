@@ -6,15 +6,26 @@
 #include "studio_bridge.hpp"
 #include "bridge_diagnostics.hpp"
 
+#include <QClipboard>
 #include <QCoreApplication>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QGuiApplication>
 #include <QTimer>
 #include <QVariantMap>
 
 #include <QtConcurrent>
 
 #include <cassert>
+
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <shellapi.h>
 
 #include "autostart.hpp"
 #include "compress_first_offer.hpp"
@@ -28,6 +39,33 @@
 #include "user_errors.hpp"
 
 namespace k6wp {
+
+// Plan todo 17 / B10: Studio tray hooks (see studio_bridge.hpp). One process-
+// global slot pair; the tray reads copies at menu-popup time so the menu
+// never holds a live reference across a bridge rebuild.
+namespace {
+StudioTrayHooks g_studio_tray_hooks;
+std::function<void()> g_tray_status_listener;
+}  // namespace
+
+void SetStudioTrayHooks(StudioTrayHooks hooks) { g_studio_tray_hooks = std::move(hooks); }
+
+void ClearStudioTrayHooks() {
+  g_studio_tray_hooks = StudioTrayHooks{};
+  g_tray_status_listener = nullptr;
+}
+
+StudioTrayHooks GetStudioTrayHooks() { return g_studio_tray_hooks; }
+
+void SetStudioTrayStatusListener(std::function<void()> listener) {
+  g_tray_status_listener = std::move(listener);
+}
+
+void NotifyStudioTrayStatusChanged() {
+  if (g_tray_status_listener) {
+    g_tray_status_listener();
+  }
+}
 
 namespace {
 
@@ -124,6 +162,65 @@ bool DisplayCapabilityFromState(const EngineState& state) {
   return state.display_capability == 1;
 }
 
+bool NeedsAllScreensConfirm(int assignment_count) {
+  return assignment_count > 0;
+}
+
+PlaylistLiveState PlaylistLiveFromState(const EngineState& state) {
+  PlaylistLiveState out;
+  out.enabled = state.playlist_enabled;
+  out.size = state.playlist_size < 0 ? 0 : state.playlist_size;
+  out.index = state.playlist_index;
+  return out;
+}
+
+// --- friendly status surface (plan todo 4 / B2 / brief C-3 + C-20 + glossary §5) --
+
+QString StatusVideoNameFor(BridgeStatusKind kind, const QString& detail,
+                           bool video_active) {
+  Q_UNUSED(kind);
+  if (!video_active) {
+    return QString();
+  }
+  const QStringList separators{QStringLiteral(" • "), QStringLiteral(" — "),
+                               QStringLiteral(" - ")};
+  for (const QString& sep : separators) {
+    const int idx = detail.lastIndexOf(sep);
+    if (idx >= 0) {
+      const QString name = detail.mid(idx + sep.size()).trimmed();
+      if (name.isEmpty() ||
+          name == QStringLiteral("(belum ada video aktif)")) {
+        return QString();
+      }
+      return name;
+    }
+  }
+  return QString();
+}
+
+QString StatusTitleFor(BridgeStatusKind kind, const QString& detail,
+                       bool video_active) {
+  switch (kind) {
+    case BridgeStatusKind::kConnected:
+    case BridgeStatusKind::kDegraded:
+      // Degraded still paints the wallpaper as active in the detail line
+      // ("tapi tak tampil"), so the title agrees with the engine being alive.
+      return video_active ? QStringLiteral("Wallpaper aktif")
+                          : QStringLiteral("Tidak aktif");
+    case BridgeStatusKind::kPaused:
+      return QStringLiteral("Dijeda");
+    case BridgeStatusKind::kNotRunning:
+    case BridgeStatusKind::kDisconnected:
+      return QStringLiteral("Tidak aktif");
+    case BridgeStatusKind::kCount:
+    default:
+      // Unknown kind (a future EngineStatusView::Kind): never invent a
+      // label - hand the raw detail through so nothing user-visible is
+      // lost; empty detail falls back to the idle label.
+      return detail.isEmpty() ? QStringLiteral("Tidak aktif") : detail;
+  }
+}
+
 StudioBridge::StudioBridge(QObject* parent) : QObject(parent) {
   // T15: ONE IpcClient per Studio process. It is a plain value member (not a
   // QObject) and is only ever touched from a worker thread; ApplyManager
@@ -195,9 +292,19 @@ StudioBridge::StudioBridge(QObject* parent) : QObject(parent) {
   if (settings_.check_updates) {
     checkForUpdates();
   }
+  // Plan todo 17: publish the C-19 tray hooks. QmlShell's tray reads copies
+  // at menu-popup time; this registration is what makes Jeda/Lanjut/status
+  // live once the (optional) tray exists.
+  SetStudioTrayHooks(
+      {[this]() { pause(); },
+       [this]() { resume(); },
+       [this]() { return statusTitle(); }});
 }
 
 StudioBridge::~StudioBridge() {
+  // Plan todo 17: drop the tray hooks before members die so a still-visible
+  // tray menu can never invoke a destroyed bridge.
+  ClearStudioTrayHooks();
   // The QML engine owns this singleton, so the destruction order is: engine
   // teardown -> here. Stop the timer so no NEW poll launches, then cancel and
   // drain every in-flight worker BEFORE members die: each lambda captures
@@ -242,6 +349,7 @@ void StudioBridge::OnPollDone() {
     ApplyStatus(failed);
     display_capability_ = false;
     display_coverage_.clear();
+    ApplyPlaylistLive(PlaylistLiveState{});
     MergeCoverageIntoDisplays();
     emit displaysChanged();
     return;
@@ -250,12 +358,13 @@ void StudioBridge::OnPollDone() {
   // unit-tested by studio_logic_test); this class only maps the resulting view
   // onto QML properties and the Indonesian sentences MainWindow painted.
   ApplyStatus(DecideEngineStatus(res));
-  // Row 19: the additive display fields ride the same get_state ack.
-  // DecideEngineStatus parses EngineState internally but only carries the
-  // status view across, so display_capability / display_coverage are parsed
-  // once more here (ParseEngineState never throws and defaults old-engine
-  // absences to capability 0 / empty maps).
+  // Row 19 + plan todo 9: the additive display + playlist fields ride the
+  // same get_state ack. DecideEngineStatus parses EngineState internally but
+  // only carries the status view across, so those fields are parsed once more
+  // here (ParseEngineState never throws and defaults old-engine absences to
+  // capability 0 / empty maps / playlist off).
   const EngineState state = ParseEngineState(res.raw);
+  ApplyPlaylistLive(PlaylistLiveFromState(state));
   display_capability_ = DisplayCapabilityFromState(state);
   display_coverage_ = state.display_coverage;
   MergeCoverageIntoDisplays();
@@ -300,9 +409,9 @@ void StudioBridge::ApplyStatus(const EngineStatusView& view) {
       status_detail_ = tr("Dijeda — %1").arg(short_name);
     } else if (view.kind == EngineStatusView::Kind::kDegraded) {
       status_detail_ =
-          tr("Engine aktif tapi tak tampil — %1").arg(short_name);
+          tr("Wallpaper aktif tapi tak tampil • %1").arg(short_name);
     } else {
-      status_detail_ = tr("Engine aktif — %1").arg(short_name);
+      status_detail_ = tr("Wallpaper aktif • %1").arg(short_name);
     }
     QString tip_detail =
         view.video.isEmpty() ? tr("(belum ada video aktif)") : view.video;
@@ -312,8 +421,8 @@ void StudioBridge::ApplyStatus(const EngineStatusView& view) {
     }
     status_hint_ = tr("pid %1\n%2").arg(view.pid).arg(tip_detail);
   } else if (view.kind == EngineStatusView::Kind::kNotRunning) {
-    status_detail_ = tr("Engine mati — klik Nyalakan Engine");
-    status_hint_ = tr("Engine tidak jalan");
+    status_detail_ = tr("Tidak aktif — pilih video untuk mulai");
+    status_hint_ = tr("Wallpaper tidak aktif");
   } else {
     status_detail_ = tr("Terputus — coba lagi");
     // The transport error is the "never swallow an IPC failure" path, so it
@@ -323,6 +432,9 @@ void StudioBridge::ApplyStatus(const EngineStatusView& view) {
     status_hint_ = FriendlyIpcError(technical);
   }
   emit engineStatusChanged();
+  // Plan todo 17: refresh the Studio tray tooltip (friendly statusTitle,
+  // never the word "engine") whenever the polled status repaints.
+  NotifyStudioTrayStatusChanged();
 
   // The native preview follows the engine's active video - that is the whole
   // reason PreviewWidget is embedded in the shell. Only on change, so the
@@ -366,6 +478,21 @@ void StudioBridge::pickVideo() {
                      "Semua File (*)"));
   if (path.isEmpty()) {
     return;  // cancelled: leave the selection untouched
+  }
+  if (selected_video_ == path) {
+    return;
+  }
+  selected_video_ = path;
+  AppendLog(QStringLiteral("Dipilih: %1").arg(path));
+  emit selectedVideoChanged();
+}
+
+// Task 27: the card click / Enter / Space path. Same publish semantics as
+// pickVideo (never applies, logs "Dipilih: ..."), but for a path the caller
+// already holds. An empty path keeps the current selection untouched.
+void StudioBridge::selectVideo(const QString& path) {
+  if (path.isEmpty()) {
+    return;
   }
   if (selected_video_ == path) {
     return;
@@ -441,6 +568,13 @@ void StudioBridge::ApplyDisplayModel(
   duplicate_mode_notice_ =
       DuplicateModeNoticeText(DetectKeyCollision(store, monitors));
   emit displaysChanged();
+}
+
+void StudioBridge::ApplyPlaylistLive(const PlaylistLiveState& live) {
+  playlist_live_enabled_ = live.enabled;
+  playlist_live_size_ = live.size;
+  playlist_live_index_ = live.index;
+  emit engineStatusChanged();
 }
 
 bool StudioBridge::IsKnownDisplayKey(const QString& key) const {
@@ -561,6 +695,42 @@ void StudioBridge::clearMonitorAssignment(const QString& key) {
   }
   ClearLastError();
   ApplyDisplayModel(last_monitors_, store, display_coverage_);
+}
+
+int StudioBridge::applyToAllMonitors(const QString& path) {
+  // Brief C-14 / GATE 0 #3: "Semua layar" = monitor_id -1 + DELETE every
+  // per-key override. The video itself is installed by the CALLER via
+  // applyWallpaper(path); this function only moves the global target and
+  // clears overrides. Returns the number of overrides cleared so the caller
+  // can decide the C-14 confirmation (NeedsAllScreensConfirm(count)).
+  Q_UNUSED(path);
+  setQuickMonitor(-1);
+  QStringList keys;
+  for (const QVariant& v : displays_) {
+    const QVariantMap m = v.toMap();
+    if (!m.value(QStringLiteral("assignedPath")).toString().isEmpty()) {
+      keys.append(m.value(QStringLiteral("key")).toString());
+    }
+  }
+  for (const QString& key : keys) {
+    clearMonitorAssignment(key);
+  }
+  if (!keys.isEmpty()) {
+    AppendLog(tr("Pasang ke semua layar: %1 override dihapus")
+                  .arg(keys.size()));
+  }
+  return keys.size();
+}
+
+void StudioBridge::openWindowsDisplaySettings() {
+  // Brief B9 / C-15: open Windows Display Settings. Best-effort: a launch
+  // failure is logged, not raised as lastError (nothing user-actionable).
+  const HINSTANCE rc = ShellExecuteW(nullptr, L"open", L"ms-settings:display",
+                                      nullptr, nullptr, SW_SHOWNORMAL);
+  if (reinterpret_cast<INT_PTR>(rc) <= 32) {
+    AppendLog(tr("Gagal membuka Pengaturan Layar Windows (ShellExecute %1)")
+                  .arg(static_cast<qint64>(reinterpret_cast<INT_PTR>(rc))));
+  }
 }
 
 void StudioBridge::setQuickFit(const QString& fit_mode) {
@@ -787,7 +957,7 @@ void StudioBridge::OnApplyDone() {
   }
   ClearLastError();
   // The live status sentence is the success feedback (it flips to
-  // "Engine aktif - <file>"), so no extra log line is invented here.
+  // "Wallpaper aktif • <file>"), so no extra log line is invented here.
   loadPreview(pending_apply_path_);
   requestPoster(pending_apply_path_);
   requestStatusPoll();
@@ -813,6 +983,38 @@ void StudioBridge::resume() {
   RunPauseResume(/*do_pause=*/false);
 }
 
+void StudioBridge::togglePause() {
+  // B3: one button, toggle - consult the live kind, never blindly pause.
+  if (status_.kind == EngineStatusView::Kind::kPaused) {
+    resume();
+    return;
+  }
+  if (engine_running_) {
+    pause();
+  }
+  // kNotRunning / kDisconnected: nothing to toggle; no IPC, no log noise.
+}
+
+void StudioBridge::copyToClipboard(const QString& text) {
+  // Empty text is a valid QML call (e.g. a dialog opened before any
+  // technical detail existed) and must never reach the clipboard API.
+  if (text.isEmpty()) {
+    return;
+  }
+  // QGuiApplication::clipboard() is not safe when only a QCoreApplication
+  // exists (studio_logic_test runs that way on purpose - no QPA plugin).
+  // The real shell is a QApplication, so the cast succeeds there.
+  auto* gui = qobject_cast<QGuiApplication*>(QCoreApplication::instance());
+  if (gui == nullptr) {
+    return;
+  }
+  QClipboard* clipboard = gui->clipboard();
+  if (clipboard == nullptr) {
+    return;
+  }
+  clipboard->setText(text);
+}
+
 void StudioBridge::OnPauseResumeDone() {
   IpcResult res;
   QString thrown;
@@ -829,23 +1031,26 @@ void StudioBridge::OnPauseResumeDone() {
       AppendLog(tr("Engine paused (IPC)"));
       ClearLastError();
     } else if (res.status == IpcStatus::kNotRunning) {
-      SetLastError(tr("Engine mati — klik Nyalakan Engine dulu"));
+      SetLastError(tr("Tidak ada wallpaper aktif. Pilih video untuk mulai, "
+                      "lalu coba lagi."));
     } else {
       const QString technical = QString::fromStdString(res.error);
       if (!technical.isEmpty()) AppendLog(technical);
-      SetLastError(tr("Jeda gagal: %1").arg(FriendlyIpcError(technical)));
+      SetLastError(tr("Jeda gagal: %1. Coba lagi.")
+                       .arg(FriendlyIpcError(technical)));
     }
   } else if (op == 2) {
     if (res.status == IpcStatus::kOk) {
       AppendLog(tr("Engine resumed (IPC)"));
       ClearLastError();
     } else if (res.status == IpcStatus::kNotRunning) {
-      SetLastError(tr("Engine mati — klik Nyalakan Engine dulu"));
+      SetLastError(tr("Tidak ada wallpaper aktif. Pilih video untuk mulai, "
+                      "lalu coba lagi."));
     } else {
       const QString technical = QString::fromStdString(res.error);
       if (!technical.isEmpty()) AppendLog(technical);
-      SetLastError(
-          tr("Lanjutkan gagal: %1").arg(FriendlyIpcError(technical)));
+      SetLastError(tr("Lanjutkan gagal: %1. Coba lagi.")
+                       .arg(FriendlyIpcError(technical)));
     }
   }
   // Refresh right away instead of waiting up to 1.5s for the label to flip.

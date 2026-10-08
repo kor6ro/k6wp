@@ -22,6 +22,8 @@
 
 #include <vector>
 
+#include <string>
+
 #include "library_manager.hpp"
 #include "thumbnailer.hpp"
 
@@ -46,6 +48,11 @@ class LibraryGridModel : public QAbstractListModel {
     kCodecRole,
     kFpsRole,
     kSizeRole,
+    // Appended at the end on purpose: existing role VALUES are a QML contract
+    // and must never be renumbered (plan todo 6).
+    kDisplayNameRole,  // clean QString, no [file hilang]/[belum dioptimasi]
+    kMissingRole,      // bool: the file is gone
+    kOptimizedRole,    // bool: resolution meets the display-ready floor
   };
   Q_ENUM(Roles)
 
@@ -180,5 +187,46 @@ class LibraryGridModel : public QAbstractListModel {
   // "metadata pending" without racing a completion that already landed.
   std::vector<std::filesystem::path> pending_probes_;
 };
+
+// --- library card roles (plan todo 6 / brief B1) -----------------------------
+// Pure derivations the displayName / missing / optimized roles read. They are
+// separate free functions so the legacy `label` role keeps its badge text
+// byte for byte: EntryLabel still emits [file hilang] / [belum dioptimasi]
+// plus the em-dash placeholders, while QML consumes these structured roles.
+//
+// Two shapes per rule: the label-string form unit-tests the exact strings the
+// legacy formatter produces; the entry form is what data() uses (no label
+// round-trip). Both implement the same rules.
+
+// Legacy badge suffixes EntryLabel may append (UTF-8, on their own line).
+inline constexpr const char* kBadgeMissing = "[file hilang]";
+inline constexpr const char* kBadgeUnoptimized = "[belum dioptimasi]";
+
+// Resolution floor for the `optimized` role, orientation-independent: the
+// LONG side must reach 1280 and the SHORT side 720 (the compressor's lowest
+// simple-preset target), so landscape 1920x1080 and portrait 1080x1920 both
+// count. Pinned by studio_logic_test so a silent change cannot flip the
+// polarity drill: a clean SMALL-res label must be optimized=false — the
+// absence of [belum dioptimasi] does NOT mean optimized.
+inline constexpr int kOptimizedMinLongSide = 1280;
+inline constexpr int kOptimizedMinShortSide = 720;
+
+// Clean display text: `label` with every trailing badge line removed. A label
+// that never carried a badge is returned unchanged (em-dashes stay — they are
+// metadata placeholders, not badges).
+std::string DisplayNameFor(const std::string& label);
+
+// True when `label` carries the [file hilang] badge (the file is gone).
+bool MissingFor(const std::string& label);
+// Entry-shaped form data() reads: broken is computed by LibraryManager::
+// ListItems() (dst missing on disk), never persisted.
+bool MissingFor(const LibraryEntry& entry);
+
+// True when the resolution parses and meets the optimized floor (long side
+// >= kOptimizedMinLongSide && short side >= kOptimizedMinShortSide).
+// Resolution ONLY: [belum dioptimasi] tracks in-place imports, not quality,
+// so its absence must not flip this to true.
+bool OptimizedFor(const std::string& label);
+bool OptimizedFor(const LibraryEntry& entry);
 
 }  // namespace k6wp

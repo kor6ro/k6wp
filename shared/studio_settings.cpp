@@ -25,6 +25,8 @@ bool NeedsSettingsMigration(const nlohmann::json& raw) {
       "start_with_windows",      "cache_dir",
       "lockscreen_sync",         "lockscreen_offset_sec",
       "compress_advanced_visible", "check_updates",
+      "closeToTray",             "playlistSource",
+      "performancePreset",
   };
   for (const char* field : kFields) {
     if (!raw.contains(field)) {
@@ -32,6 +34,28 @@ bool NeedsSettingsMigration(const nlohmann::json& raw) {
     }
   }
   return false;
+}
+
+// Tolerant enum read for the plan-todo-8 string fields: a missing key, a
+// non-string value, or a value outside `allowed` all normalize to `def`.
+// Old files must never fail to load because of a hand-edited preset name.
+std::string TolerantEnumString(const nlohmann::json& raw, const char* key,
+                               const char* def,
+                               std::initializer_list<const char*> allowed) {
+  if (!raw.contains(key)) {
+    return def;
+  }
+  const nlohmann::json& v = raw.at(key);
+  if (!v.is_string()) {
+    return def;
+  }
+  const std::string s = v.get<std::string>();
+  for (const char* a : allowed) {
+    if (s == a) {
+      return s;
+    }
+  }
+  return def;
 }
 
 std::filesystem::path K6wpLocalDir(const wchar_t* leaf) {
@@ -71,6 +95,9 @@ StudioSettings DefaultStudioSettings() {
   s.lockscreen_offset_sec = 1.0;
   s.compress_advanced_visible = false;
   s.check_updates = true;
+  s.close_to_tray = false;
+  s.playlist_source = "all";
+  s.performance_preset = "Seimbang";
   s.cache_dir = DefaultStudioCacheDir().wstring();
   return s;
 }
@@ -142,6 +169,9 @@ void SaveStudioSettings(const std::filesystem::path& path,
   j["lockscreen_offset_sec"] = copy.lockscreen_offset_sec;
   j["compress_advanced_visible"] = copy.compress_advanced_visible;
   j["check_updates"] = copy.check_updates;
+  j["closeToTray"] = copy.close_to_tray;
+  j["playlistSource"] = copy.playlist_source;
+  j["performancePreset"] = copy.performance_preset;
   j["cache_dir"] = std::filesystem::path(copy.cache_dir).u8string();
 
   // HIGH-4 crash-safety parity with config.json: publish through the shared
@@ -173,6 +203,19 @@ void ValidateStudioSettings(StudioSettings& settings) {
   if (mode != "match_monitor" && mode != "source" && mode != "720p" &&
       mode != "1080p" && mode != "2160p") {
     throw ConfigError("unknown default_resolution_mode: " + mode);
+  }
+  // Plan-todo-8 enums normalize in place (never throw): an out-of-set value
+  // from a hand-edited file becomes the safe default instead of failing the
+  // whole load. Header contract: "future normalizing rules can rewrite in
+  // place".
+  if (settings.playlist_source != "all" &&
+      settings.playlist_source != "custom") {
+    settings.playlist_source = "all";
+  }
+  if (settings.performance_preset != "Hemat" &&
+      settings.performance_preset != "Seimbang" &&
+      settings.performance_preset != "Maksimal") {
+    settings.performance_preset = "Seimbang";
   }
 }
 
@@ -214,6 +257,14 @@ StudioSettings MigrateStudioSettings(const nlohmann::json& raw) {
     s.compress_advanced_visible = raw.value("compress_advanced_visible",
                                             defaults.compress_advanced_visible);
     s.check_updates = raw.value("check_updates", defaults.check_updates);
+    // Plan todo 8: additive UI preferences. Missing / out-of-set values
+    // normalize to the safe defaults (old-file tolerance; schema stays v3).
+    s.close_to_tray = raw.value("closeToTray", defaults.close_to_tray);
+    s.playlist_source = TolerantEnumString(raw, "playlistSource", "all",
+                                           {"all", "custom"});
+    s.performance_preset =
+        TolerantEnumString(raw, "performancePreset", "Seimbang",
+                           {"Hemat", "Seimbang", "Maksimal"});
     if (raw.contains("cache_dir")) {
       s.cache_dir =
           std::filesystem::u8path(raw.value("cache_dir", "")).wstring();

@@ -47,6 +47,7 @@
 #include "first_run_wizard.hpp"
 #include "ipc_client.hpp"
 #include "ipc_protocol.hpp"
+#include "library_format.hpp"
 #include "library_grid_model.hpp"
 #include "lockscreen.hpp"
 #include "monitor_util.hpp"
@@ -1921,11 +1922,18 @@ int main(int argc, char** argv) {
             "bridge displays(): portrait entry geometry + orientation + scale");
       Check(displays_changed >= 1, "ApplyDisplayModel emits displaysChanged");
 
-      // (iii) through the bridge property.
+      // (iii) through the bridge property. Task 25: also prove displaysChanged
+      // fired for the colliding feed and print the notice text for evidence.
+      const int changed_before_collision = displays_changed;
       bridge.ApplyDisplayModel(colliding_monitors, colliding_store,
                                no_coverage);
+      Check(displays_changed > changed_before_collision,
+            "ApplyDisplayModel(colliding monitors) emits displaysChanged");
       Check(!bridge.duplicateModeNotice().isEmpty(),
             "bridge duplicateModeNotice non-empty for colliding fixture");
+      std::printf(
+          "QA-HAPPY duplicateModeNotice (colliding ApplyDisplayModel): %s\n",
+          bridge.duplicateModeNotice().toUtf8().constData());
       bridge.ApplyDisplayModel({primary, second}, distinct_store, no_coverage);
       Check(bridge.duplicateModeNotice().isEmpty(),
             "bridge duplicateModeNotice empty for non-colliding fixture");
@@ -2028,6 +2036,1092 @@ int main(int argc, char** argv) {
       }
       Check(geometry_ok,
             "refreshDisplays: entry geometry matches ListMonitors()");
+    }
+    (void)SetLocalAppDataDir(QString::fromStdWString(real_localappdata));
+  }
+
+  // 22. Friendly status surface (plan todo 4 / B2 / brief C-3 + C-20 +
+  //     glossary §5): StatusTitleFor / StatusVideoNameFor are the pure
+  //     derivations the statusTitle / statusVideoName properties read.
+  //     Covers every BridgeStatusKind mapping, the unknown-kind default
+  //     (failure drill - the default branch is asserted explicitly), the
+  //     empty-video-name contract, and detail passthrough.
+  {
+    using K = k6wp::BridgeStatusKind;
+    const QString active_detail = QStringLiteral("Wallpaper aktif • a.mp4");
+    const QString paused_detail = QStringLiteral("Dijeda — a.mp4");
+    const QString degraded_detail =
+        QStringLiteral("Wallpaper aktif tapi tak tampil • a.mp4");
+    const QString idle_detail =
+        QStringLiteral("Tidak aktif — pilih video untuk mulai");
+
+    // --- each StatusKind mapping -------------------------------------------
+    Check(k6wp::StatusTitleFor(K::kConnected, active_detail, true) ==
+              QStringLiteral("Wallpaper aktif"),
+          "statusTitle connected+video -> Wallpaper aktif");
+    Check(k6wp::StatusTitleFor(K::kConnected, idle_detail, false) ==
+              QStringLiteral("Tidak aktif"),
+          "statusTitle connected without video -> Tidak aktif");
+    Check(k6wp::StatusTitleFor(K::kPaused, paused_detail, true) ==
+              QStringLiteral("Dijeda"),
+          "statusTitle paused -> Dijeda");
+    Check(k6wp::StatusTitleFor(K::kDegraded, degraded_detail, true) ==
+              QStringLiteral("Wallpaper aktif"),
+          "statusTitle degraded+video -> Wallpaper aktif");
+    Check(k6wp::StatusTitleFor(K::kDegraded, idle_detail, false) ==
+              QStringLiteral("Tidak aktif"),
+          "statusTitle degraded without video -> Tidak aktif");
+    Check(k6wp::StatusTitleFor(K::kNotRunning, idle_detail, false) ==
+              QStringLiteral("Tidak aktif"),
+          "statusTitle not-running -> Tidak aktif");
+    Check(k6wp::StatusTitleFor(K::kDisconnected, idle_detail, false) ==
+              QStringLiteral("Tidak aktif"),
+          "statusTitle disconnected -> Tidak aktif");
+
+    // --- video name derivation ---------------------------------------------
+    Check(k6wp::StatusVideoNameFor(K::kConnected, active_detail, true) ==
+              QStringLiteral("a.mp4"),
+          "statusVideoName connected -> trailing file name");
+    Check(k6wp::StatusVideoNameFor(K::kPaused, paused_detail, true) ==
+              QStringLiteral("a.mp4"),
+          "statusVideoName paused -> trailing file name");
+    Check(k6wp::StatusVideoNameFor(K::kDegraded, degraded_detail, true) ==
+              QStringLiteral("a.mp4"),
+          "statusVideoName degraded -> trailing file name");
+
+    // --- empty video name ---------------------------------------------------
+    Check(k6wp::StatusVideoNameFor(K::kConnected, active_detail, false)
+              .isEmpty(),
+          "statusVideoName videoActive=false -> empty");
+    Check(k6wp::StatusVideoNameFor(
+              K::kPaused, QStringLiteral("Dijeda — (belum ada video aktif)"),
+              false)
+              .isEmpty(),
+          "statusVideoName paused-without-video fallback -> empty");
+    Check(k6wp::StatusVideoNameFor(K::kConnected,
+                                   QStringLiteral("Wallpaper aktif • "),
+                                   true)
+              .isEmpty(),
+          "statusVideoName trailing separator with no name -> empty");
+    Check(k6wp::StatusVideoNameFor(K::kConnected, QString(), true).isEmpty(),
+          "statusVideoName empty detail -> empty");
+
+    // --- unknown-kind default + detail passthrough (failure drill) ----------
+    const K unknown = static_cast<K>(99);
+    Check(k6wp::StatusTitleFor(unknown, QStringLiteral("mentah"), true) ==
+              QStringLiteral("mentah"),
+          "statusTitle unknown kind + detail -> detail passthrough");
+    Check(k6wp::StatusTitleFor(unknown, QString(), true) ==
+              QStringLiteral("Tidak aktif"),
+          "statusTitle unknown kind + empty detail -> default Tidak aktif");
+    Check(k6wp::StatusVideoNameFor(unknown, active_detail, true) ==
+              QStringLiteral("a.mp4"),
+          "statusVideoName unknown kind still derives the name from detail");
+  }
+
+  // 22b. Invokable safety (todo 4 B3/B9): copyToClipboard must ignore empty
+  //      text without crashing, and togglePause on a dead pipe must be a
+  //      no-op (no IPC, no lastError). QCoreApplication has no
+  //      QGuiApplication, so a non-null clipboard guard is the contract
+  //      under test here - the real shell (QApplication) is covered by that
+  //      same guard.
+  {
+    const std::wstring real_localappdata = LocalAppDataDir();
+    QTemporaryDir fake_home;
+    Check(fake_home.isValid(), "status-invokable temp dir is valid");
+    const bool redirected =
+        fake_home.isValid() && SetLocalAppDataDir(fake_home.path());
+    Check(redirected, "status-invokable: LOCALAPPDATA redirected");
+    if (redirected) {
+      const QDir media(fake_home.path());
+      Check(QDir().mkpath(media.filePath(QStringLiteral("K6WP"))),
+            "status-invokable: fake K6WP data dir created");
+      {
+        k6wp::StudioSettings s = k6wp::DefaultStudioSettings();
+        s.check_updates = false;
+        k6wp::SaveStudioSettings(k6wp::DefaultStudioSettingsPath(), s);
+      }
+      k6wp::StudioBridge bridge;
+      // Fresh bridge: default EngineStatusView kind is kDisconnected, so
+      // the derived surface must already read as idle.
+      Check(bridge.statusTitle() == QStringLiteral("Tidak aktif"),
+            "fresh bridge statusTitle -> Tidak aktif (default kind)");
+      Check(bridge.statusVideoName().isEmpty(),
+            "fresh bridge statusVideoName -> empty");
+      // Empty text must not reach the clipboard API (no crash).
+      bridge.copyToClipboard(QString());
+      // Non-empty with no QGuiApplication clipboard: silent no-op, no crash.
+      bridge.copyToClipboard(QStringLiteral("Salin untuk dukungan"));
+      // Dead pipe: togglePause is a no-op - nothing to toggle, no error.
+      bridge.togglePause();
+      Check(bridge.lastError().isEmpty(),
+            "togglePause on a dead pipe leaves lastError empty (no-op)");
+    }
+    (void)SetLocalAppDataDir(QString::fromStdWString(real_localappdata));
+  }
+
+  // 23. Library card roles (plan todo 6 / brief B1): DisplayNameFor /
+  //     MissingFor / OptimizedFor are the pure derivations the
+  //     displayName/missing/optimized roles read. The legacy label keeps its
+  //     badge text byte for byte; QML consumes the structured roles instead.
+  //     Failure drill: a clean SMALL-res label must be optimized=false —
+  //     optimized tracks the resolution floor, NOT the absence of a badge.
+  {
+    const std::string bullet = "\xE2\x80\xA2";   // •
+    const std::string emdash = "\xE2\x80\x94";    // —
+
+    // Threshold pinned (like kCompressFirstThresholdBytes): if someone
+    // changes the floor, this suite must go red rather than flip polarity
+    // silently.
+    Check(k6wp::kOptimizedMinLongSide == 1280 &&
+              k6wp::kOptimizedMinShortSide == 720,
+          "roles: optimized floor pinned at 1280 long / 720 short");
+
+    // Legacy role values must never be renumbered; new roles append after
+    // kSizeRole.
+    Check(k6wp::LibraryGridModel::kLabelRole == Qt::UserRole + 1 &&
+              k6wp::LibraryGridModel::kThumbUrlRole == Qt::UserRole + 2 &&
+              k6wp::LibraryGridModel::kSizeRole == Qt::UserRole + 8,
+          "roles: legacy role values unchanged (UserRole+1..+8)");
+    Check(k6wp::LibraryGridModel::kDisplayNameRole == Qt::UserRole + 9 &&
+              k6wp::LibraryGridModel::kMissingRole == Qt::UserRole + 10 &&
+              k6wp::LibraryGridModel::kOptimizedRole == Qt::UserRole + 11,
+          "roles: new roles appended after kSizeRole (never renumbered)");
+
+    // --- legacy EntryLabel bytes must stay identical -------------------------
+    k6wp::LibraryEntry legacy;
+    legacy.dst = std::filesystem::path(L"C:/lib/clip.mp4");
+    legacy.res = "1920x1080";
+    legacy.duration = 370.0;  // 6 mnt 10 dtk
+    legacy.broken = true;
+    const std::string legacy_broken = k6wp::EntryLabel(legacy);
+    Check(legacy_broken == "clip.mp4\n1920x1080 " + bullet +
+                               " 6 mnt 10 dtk\n[file hilang]",
+          "roles: legacy label for a missing file is byte-identical");
+    legacy.broken = false;
+    legacy.src = legacy.dst;  // in-place reference
+    legacy.duration = 0.0;
+    const std::string legacy_inplace = k6wp::EntryLabel(legacy);
+    Check(legacy_inplace == "clip.mp4\n1920x1080 " + bullet + " " + emdash +
+                                "\n[belum dioptimasi]",
+          "roles: legacy label for an in-place entry is byte-identical "
+          "(em-dash + badge intact)");
+
+    // --- DisplayNameFor ------------------------------------------------------
+    const std::string badged =
+        "clip.mp4\n1920x1080 " + bullet + " 6 mnt 10 dtk\n[file hilang]";
+    const std::string unopt_badged =
+        "clip.mp4\n640x480 " + bullet + " 30 dtk\n[belum dioptimasi]";
+    const std::string clean =
+        "clip.mp4\n1920x1080 " + bullet + " 6 mnt 10 dtk";
+    const std::string no_meta = "clip.mp4\n" + emdash + " " + bullet + " " +
+                                emdash;
+
+    Check(k6wp::DisplayNameFor(badged) == clean,
+          "roles: [file hilang] label -> displayName is the badge-free label");
+    Check(!HasSubstr(k6wp::DisplayNameFor(badged), "[file hilang]"),
+          "roles: displayName carries no [file hilang] text");
+    Check(!HasSubstr(k6wp::DisplayNameFor(badged), "[belum dioptimasi]"),
+          "roles: displayName carries no [belum dioptimasi] text");
+    Check(k6wp::DisplayNameFor(unopt_badged) ==
+              "clip.mp4\n640x480 " + bullet + " 30 dtk",
+          "roles: [belum dioptimasi] label -> displayName strips that badge");
+    Check(k6wp::DisplayNameFor(clean) == clean,
+          "roles: a clean label is already its own displayName");
+    Check(k6wp::DisplayNameFor(no_meta) == no_meta,
+          "roles: em-dash metadata is formatting, not a badge - kept intact");
+    Check(k6wp::DisplayNameFor("[file hilang]").empty(),
+          "roles: a badge-only string -> empty displayName");
+    Check(k6wp::DisplayNameFor("") == "",
+          "roles: empty label -> empty displayName");
+
+    // --- MissingFor ----------------------------------------------------------
+    Check(k6wp::MissingFor(badged), "roles: [file hilang] label -> missing=true");
+    Check(!k6wp::MissingFor(clean), "roles: clean label -> missing=false");
+    Check(!k6wp::MissingFor(unopt_badged),
+          "roles: [belum dioptimasi] badge is NOT missing");
+    Check(!k6wp::MissingFor(no_meta),
+          "roles: em-dash label is NOT missing");
+    k6wp::LibraryEntry gone;
+    gone.dst = std::filesystem::path(L"C:/lib/gone.mp4");
+    gone.res = "1920x1080";
+    gone.broken = true;
+    Check(k6wp::MissingFor(gone), "roles: broken entry -> missing=true");
+    gone.broken = false;
+    Check(!k6wp::MissingFor(gone), "roles: intact entry -> missing=false");
+
+    // --- OptimizedFor (polarity drill) ---------------------------------------
+    // A label WITHOUT any badge but with a resolution below the floor must be
+    // optimized=false. optimized tracks the resolution threshold — the absence
+    // of [belum dioptimasi] does NOT mean optimized. Assert polarity twice so
+    // an inverted implementation cannot sneak through on one leg.
+    const std::string small_clean = "tiny.mp4\n640x480 " + bullet + " 30 dtk";
+    Check(!HasSubstr(small_clean, "[belum dioptimasi]"),
+          "roles: drill fixture has no badge at all");
+    Check(k6wp::OptimizedFor(small_clean) == false,
+          "roles: small clean label below floor -> optimized=false (polarity)");
+    Check(k6wp::OptimizedFor("almost.mp4\n1279x719 " + bullet + " 1 mnt") ==
+              false,
+          "roles: 1279x719 one pixel below floor -> optimized=false");
+    Check(k6wp::OptimizedFor("hd.mp4\n1280x720 " + bullet + " 1 mnt") == true,
+          "roles: exactly 1280x720 at floor -> optimized=true");
+    Check(k6wp::OptimizedFor(clean) == true,
+          "roles: 1920x1080 at/above floor -> optimized=true");
+    Check(k6wp::OptimizedFor(
+              "portrait.mp4\n1080x1920 " + bullet + " 1 mnt") == true,
+          "roles: portrait 1080x1920 counts via the long/short sides");
+    Check(k6wp::OptimizedFor(no_meta) == false,
+          "roles: em-dash res (unknown) -> optimized=false");
+    Check(k6wp::OptimizedFor("") == false,
+          "roles: empty label -> optimized=false");
+    Check(k6wp::OptimizedFor("nolinebreak.mp4") == false,
+          "roles: label without a res line -> optimized=false");
+    Check(k6wp::OptimizedFor("max.mp4\n" + bullet + " 30 dtk") == false,
+          "roles: filename x must not be parsed as a resolution");
+    // OptimizedFor reads ONLY resolution: the missing-file badge does not
+    // flip a 1080p verdict (missing is its own role, asserted above).
+    Check(k6wp::OptimizedFor(badged) == true,
+          "roles: 1920x1080 missing-file label keeps its resolution verdict");
+    // Entry-shaped form (what data() reads).
+    k6wp::LibraryEntry e;
+    e.dst = std::filesystem::path(L"C:/lib/a.mp4");
+    e.res = "640x480";
+    Check(!k6wp::OptimizedFor(e), "roles: entry 640x480 -> optimized=false");
+    e.res = "1920x1080";
+    Check(k6wp::OptimizedFor(e), "roles: entry 1920x1080 -> optimized=true");
+    e.res = "0x0";
+    Check(!k6wp::OptimizedFor(e), "roles: unprobed 0x0 entry -> optimized=false");
+    e.res = "";
+    Check(!k6wp::OptimizedFor(e), "roles: empty res entry -> optimized=false");
+    e.res = "abc";
+    Check(!k6wp::OptimizedFor(e), "roles: garbage res entry -> optimized=false");
+
+    // --- roleNames + data() wiring over a seeded library ---------------------
+    QTemporaryDir role_dir;
+    Check(role_dir.isValid(), "roles: temp library dir is valid");
+    if (role_dir.isValid()) {
+      const QDir media(role_dir.path());
+      const QString video = WriteSizedFile(media, "ok.mp4", 4096);
+      const auto lib_json =
+          ToPath(media.filePath(QStringLiteral("library.json")));
+      (void)SetEnvironmentVariableW(L"K6WP_LIBRARY_JSON",
+                                    lib_json.wstring().c_str());
+
+      // present: in-place reference (src==dst) -> [belum dioptimasi] badge,
+      // 1080p -> optimized; gone: dst never written -> ListItems computes
+      // broken=true -> [file hilang] + missing, 640x480 -> not optimized.
+      k6wp::LibraryEntry present;
+      present.src = present.dst = ToPath(video);
+      present.res = "1920x1080";
+      present.duration = 370.0;
+      present.codec = "h264";
+      present.width = 1920;
+      present.height = 1080;
+      k6wp::LibraryEntry vanished;
+      vanished.src = vanished.dst =
+          ToPath(media.filePath(QStringLiteral("vanished.mp4")));
+      vanished.res = "640x480";
+      vanished.duration = 30.0;
+      vanished.codec = "h264";
+      vanished.width = 640;
+      vanished.height = 480;
+      {
+        k6wp::LibraryManager seed_mgr(lib_json);
+        seed_mgr.Add(present);
+        seed_mgr.Add(vanished);
+      }
+
+      k6wp::LibraryGridModel model;
+      Check(model.count() == 2, "roles: seeded library yields 2 rows");
+
+      const QHash<int, QByteArray> names = model.roleNames();
+      Check(names.value(k6wp::LibraryGridModel::kLabelRole) == "label" &&
+                names.value(k6wp::LibraryGridModel::kDisplayNameRole) ==
+                    "displayName" &&
+                names.value(k6wp::LibraryGridModel::kMissingRole) == "missing" &&
+                names.value(k6wp::LibraryGridModel::kOptimizedRole) ==
+                    "optimized",
+            "roles: roleNames carries label + displayName + missing + optimized");
+
+      // ListItems sorts by filename: ok.mp4 < vanished.mp4. Identify rows by
+      // dst rather than assuming order.
+      int visited = 0;
+      for (int row = 0; row < model.count(); ++row) {
+        const QModelIndex idx = model.index(row);
+        const QString dst = model.dstAt(row);
+        const QString label =
+            model.data(idx, k6wp::LibraryGridModel::kLabelRole).toString();
+        const QString display = model
+                                    .data(idx, k6wp::LibraryGridModel::
+                                                    kDisplayNameRole)
+                                    .toString();
+        const bool missing =
+            model.data(idx, k6wp::LibraryGridModel::kMissingRole).toBool();
+        const bool optimized =
+            model.data(idx, k6wp::LibraryGridModel::kOptimizedRole).toBool();
+        Check(!display.contains(QString::fromUtf8("[file hilang]")) &&
+                  !display.contains(QString::fromUtf8("[belum dioptimasi]")),
+              "roles: data() displayName never carries badge text");
+        if (dst.contains(QStringLiteral("vanished"))) {
+          ++visited;
+          Check(label.contains(QString::fromUtf8("[file hilang]")),
+                "roles: data() legacy label still shows the missing badge");
+          Check(missing, "roles: data() missing=true for the vanished row");
+          Check(!optimized,
+                "roles: data() optimized=false for the 640x480 vanished row");
+          Check(display ==
+                    QString::fromStdString(k6wp::DisplayNameFor(
+                        label.toStdString())),
+                "roles: data() displayName matches the pure DisplayNameFor");
+        } else {
+          ++visited;
+          Check(label.contains(QString::fromUtf8("[belum dioptimasi]")),
+                "roles: data() legacy label still shows the in-place badge");
+          Check(!missing, "roles: data() missing=false for the intact row");
+          Check(optimized, "roles: data() optimized=true for the 1080p row");
+        }
+      }
+      Check(visited == 2, "roles: both seeded rows visited");
+
+      (void)SetEnvironmentVariableW(L"K6WP_LIBRARY_JSON", nullptr);
+    }
+  }
+
+  // 24. Studio settings plan todo 8 (GAP-7): closeToTray / playlistSource /
+  //     performancePreset are additive inside schema v3 with safe old-file
+  //     defaults. A file written before they existed must load cleanly to
+  //     the defaults; Save must write the keys; a fresh reload must return
+  //     identical values; deleting ONE key from a saved file must still
+  //     load that key at its default (the failure drill that proves
+  //     old-file tolerance — production files look exactly like that);
+  //     out-of-set enum values normalize instead of failing the load.
+  {
+    QTemporaryDir settings_dir;
+    Check(settings_dir.isValid(), "todo8 settings temp dir is valid");
+    const auto p = ToPath(
+        settings_dir.filePath(QStringLiteral("studio_settings.json")));
+    std::error_code ec;
+    std::filesystem::create_directories(p.parent_path(), ec);
+
+    // --- Old-file tolerance: every pre-todo-8 key present, none of the
+    // three new ones (byte-shape of a real production file today).
+    {
+      const nlohmann::json old_file = {
+          {"version", 3},
+          {"auto_compress_on_import", true},
+          {"compress_output_dir", "C:\\K6WP\\wallpapers"},
+          {"default_crf", 22},
+          {"default_fps", 30},
+          {"default_resolution_mode", "match_monitor"},
+          {"start_with_windows", false},
+          {"cache_dir", "C:\\K6WP\\cache"},
+          {"lockscreen_sync", false},
+          {"lockscreen_offset_sec", 1.0},
+          {"compress_advanced_visible", false},
+          {"check_updates", true},
+      };
+      {
+        std::ofstream out(p, std::ios::binary);
+        out << old_file.dump(2);
+      }
+      k6wp::StudioSettings s;
+      bool loaded = false;
+      try {
+        s = k6wp::LoadStudioSettings(p);
+        loaded = true;
+      } catch (...) {
+        loaded = false;
+      }
+      Check(loaded, "todo8 old file without new keys loads cleanly");
+      Check(s.version == 3, "todo8 old file stays at schema v3 (no bump)");
+      Check(s.close_to_tray == false,
+            "todo8 old file -> close_to_tray defaults false");
+      Check(s.playlist_source == "all",
+            "todo8 old file -> playlist_source defaults all");
+      Check(s.performance_preset == "Seimbang",
+            "todo8 old file -> performance_preset defaults Seimbang");
+      // The loader self-heals: the rewritten file now carries the keys.
+      {
+        std::ifstream in(p, std::ios::binary);
+        const std::string rewritten((std::istreambuf_iterator<char>(in)),
+                                    std::istreambuf_iterator<char>());
+        Check(HasSubstr(rewritten, "\"closeToTray\"") &&
+                  HasSubstr(rewritten, "\"playlistSource\"") &&
+                  HasSubstr(rewritten, "\"performancePreset\""),
+              "todo8 self-heal rewrite writes the new keys");
+      }
+    }
+
+    // --- Round-trip + cross-instance persistence: Save writes the keys,
+    // a fresh Load returns identical values.
+    {
+      k6wp::StudioSettings s = k6wp::DefaultStudioSettings();
+      s.close_to_tray = true;
+      s.playlist_source = "custom";
+      s.performance_preset = "Maksimal";
+      k6wp::SaveStudioSettings(p, s);
+      {
+        std::ifstream in(p, std::ios::binary);
+        const std::string text((std::istreambuf_iterator<char>(in)),
+                               std::istreambuf_iterator<char>());
+        Check(HasSubstr(text, "\"closeToTray\"") &&
+                  HasSubstr(text, "\"playlistSource\"") &&
+                  HasSubstr(text, "\"performancePreset\""),
+              "todo8 save writes the three keys into the JSON");
+        Check(HasSubstr(text, "\"playlistSource\": \"custom\"") &&
+                  HasSubstr(text, "\"performancePreset\": \"Maksimal\""),
+              "todo8 saved JSON carries the non-default values");
+      }
+      k6wp::StudioSettings back;
+      bool loaded = false;
+      try {
+        back = k6wp::LoadStudioSettings(p);
+        loaded = true;
+      } catch (...) {
+        loaded = false;
+      }
+      Check(loaded, "todo8 round-trip reload succeeds");
+      Check(loaded && back.close_to_tray == true &&
+                back.playlist_source == "custom" &&
+                back.performance_preset == "Maksimal",
+            "todo8 reload returns identical values (cross-instance)");
+    }
+
+    // --- Failure drill: delete ONE key from the saved file -> that key
+    // loads at its default, the surviving keys keep their saved values.
+    {
+      nlohmann::json j;
+      {
+        std::ifstream in(p, std::ios::binary);
+        j = nlohmann::json::parse(
+            std::string((std::istreambuf_iterator<char>(in)),
+                        std::istreambuf_iterator<char>()));
+      }
+      j.erase("performancePreset");
+      {
+        std::ofstream out(p, std::ios::binary | std::ios::trunc);
+        out << j.dump(2);
+      }
+      k6wp::StudioSettings s;
+      bool loaded = false;
+      try {
+        s = k6wp::LoadStudioSettings(p);
+        loaded = true;
+      } catch (...) {
+        loaded = false;
+      }
+      Check(loaded, "todo8 file with deleted key still loads");
+      Check(s.performance_preset == "Seimbang",
+            "todo8 deleted performancePreset key -> default Seimbang");
+      Check(s.close_to_tray == true && s.playlist_source == "custom",
+            "todo8 surviving keys keep their saved values");
+    }
+
+    // --- Validation: out-of-set enum values normalize to the safe defaults
+    // (playlistSource anything else -> all; performancePreset anything else
+    // -> Seimbang); a valid sibling key survives untouched.
+    {
+      nlohmann::json j = {
+          {"version", 3},
+          {"auto_compress_on_import", true},
+          {"compress_output_dir", "C:\\K6WP\\wallpapers"},
+          {"default_crf", 22},
+          {"default_fps", 30},
+          {"default_resolution_mode", "match_monitor"},
+          {"start_with_windows", false},
+          {"cache_dir", "C:\\K6WP\\cache"},
+          {"lockscreen_sync", false},
+          {"lockscreen_offset_sec", 1.0},
+          {"compress_advanced_visible", false},
+          {"check_updates", true},
+          {"closeToTray", true},
+          {"playlistSource", "bogus"},
+          {"performancePreset", "Ultra"},
+      };
+      {
+        std::ofstream out(p, std::ios::binary | std::ios::trunc);
+        out << j.dump(2);
+      }
+      k6wp::StudioSettings s;
+      bool loaded = false;
+      try {
+        s = k6wp::LoadStudioSettings(p);
+        loaded = true;
+      } catch (...) {
+        loaded = false;
+      }
+      Check(loaded, "todo8 out-of-set enums still load cleanly");
+      Check(s.playlist_source == "all",
+            "todo8 playlistSource bogus -> normalized to all");
+      Check(s.performance_preset == "Seimbang",
+            "todo8 performancePreset bogus -> normalized to Seimbang");
+      Check(s.close_to_tray == true,
+            "todo8 valid closeToTray preserved alongside normalization");
+    }
+  }
+
+  // 25. Settings.playlistSource (plan todo 9): Q_PROPERTY over the todo-8
+  //     studio_settings key. Default "all"; set "custom" persists via
+  //     apply(); unknown values are refused without moving the property.
+  {
+    const std::wstring real_localappdata = LocalAppDataDir();
+    QTemporaryDir fake_home;
+    Check(fake_home.isValid(), "playlistSource temp dir is valid");
+    const bool redirected =
+        fake_home.isValid() && SetLocalAppDataDir(fake_home.path());
+    Check(redirected, "playlistSource: LOCALAPPDATA redirected");
+    if (redirected) {
+      const QDir media(fake_home.path());
+      Check(QDir().mkpath(media.filePath(QStringLiteral("K6WP"))),
+            "playlistSource: fake K6WP data dir created");
+      {
+        k6wp::SettingsBridge bridge;
+        Check(bridge.playlistSource() == QStringLiteral("all"),
+              "playlistSource defaults to all");
+        bridge.setPlaylistSource(QStringLiteral("custom"));
+        Check(bridge.playlistSource() == QStringLiteral("custom"),
+              "setPlaylistSource custom accepted");
+        bridge.setPlaylistSource(QStringLiteral("bogus"));
+        Check(bridge.playlistSource() == QStringLiteral("custom"),
+              "bogus playlistSource refused, property unchanged");
+        Check(!bridge.lastError().isEmpty(),
+              "bogus playlistSource sets lastError");
+        bridge.apply();
+        Check(bridge.lastError().isEmpty(),
+              "apply after a valid set clears lastError");
+      }
+      {
+        k6wp::SettingsBridge again;
+        Check(again.playlistSource() == QStringLiteral("custom"),
+              "playlistSource persists through apply + reload");
+      }
+    }
+    (void)SetLocalAppDataDir(QString::fromStdWString(real_localappdata));
+  }
+
+  // 26. Studio.playlistLive* (plan todo 9): read-only get_state playlist
+  //     snapshot. Pure ParseEngineState decode + bridge property defaults +
+  //     ApplyPlaylistLive seam (the same shape as displayCapability).
+  {
+    // --- pure decode over fixture ack payloads --------------------------
+    const nlohmann::json no_pl = {{"state", {{"pid", 7ULL}}}};
+    k6wp::PlaylistLiveState live =
+        k6wp::PlaylistLiveFromState(k6wp::ParseEngineState(no_pl));
+    Check(!live.enabled && live.size == 0 && live.index == -1,
+          "playlistLive defaults when get_state lacks the keys");
+
+    const nlohmann::json with_pl = {
+        {"state",
+         {{"pid", 7ULL},
+          {"playlist_enabled", true},
+          {"playlist_size", 3},
+          {"playlist_index", 1}}}};
+    live = k6wp::PlaylistLiveFromState(k6wp::ParseEngineState(with_pl));
+    Check(live.enabled && live.size == 3 && live.index == 1,
+          "playlistLive parses enabled/size/index from the ack");
+
+    const nlohmann::json wrong = {
+        {"state",
+         {{"pid", 7ULL},
+          {"playlist_enabled", "yes"},
+          {"playlist_size", "three"},
+          {"playlist_index", 1.5}}}};
+    live = k6wp::PlaylistLiveFromState(k6wp::ParseEngineState(wrong));
+    Check(!live.enabled && live.size == 0 && live.index == -1,
+          "playlistLive wrong-typed keys fall back to defaults");
+
+    // --- bridge property defaults + ApplyPlaylistLive seam --------------
+    const std::wstring real_localappdata = LocalAppDataDir();
+    QTemporaryDir fake_home;
+    Check(fake_home.isValid(), "playlistLive bridge temp dir is valid");
+    const bool redirected =
+        fake_home.isValid() && SetLocalAppDataDir(fake_home.path());
+    Check(redirected, "playlistLive: LOCALAPPDATA redirected");
+    if (redirected) {
+      const QDir media(fake_home.path());
+      Check(QDir().mkpath(media.filePath(QStringLiteral("K6WP"))),
+            "playlistLive: fake K6WP data dir created");
+      {
+        k6wp::StudioSettings s = k6wp::DefaultStudioSettings();
+        s.check_updates = false;
+        k6wp::SaveStudioSettings(k6wp::DefaultStudioSettingsPath(), s);
+      }
+      k6wp::StudioBridge bridge;
+      Check(!bridge.playlistLiveEnabled() && bridge.playlistLiveSize() == 0 &&
+                bridge.playlistLiveIndex() == -1,
+            "bridge playlistLive* start at the old-engine defaults");
+      int status_repaints = 0;
+      QObject::connect(&bridge, &k6wp::StudioBridge::engineStatusChanged,
+                       &bridge, [&status_repaints]() { ++status_repaints; });
+      bridge.ApplyPlaylistLive(k6wp::PlaylistLiveState{true, 3, 2});
+      Check(bridge.playlistLiveEnabled() && bridge.playlistLiveSize() == 3 &&
+                bridge.playlistLiveIndex() == 2,
+            "ApplyPlaylistLive surfaces enabled/size/index on the bridge");
+      Check(status_repaints >= 1,
+            "ApplyPlaylistLive repaints via engineStatusChanged");
+      bridge.ApplyPlaylistLive(k6wp::PlaylistLiveState{});
+      Check(!bridge.playlistLiveEnabled() && bridge.playlistLiveSize() == 0 &&
+                bridge.playlistLiveIndex() == -1,
+            "ApplyPlaylistLive defaults reset the bridge properties");
+    }
+    (void)SetLocalAppDataDir(QString::fromStdWString(real_localappdata));
+  }
+
+  // 27. Plan todo 11 (brief C-14 + GATE 0 #3): NeedsAllScreensConfirm pure
+  //     predicate + applyToAllMonitors one-shot (global target + clear
+  //     overrides, return count). Failure drill: empty displays model ->
+  //     returns 0, no crash. Happy path: two active overrides -> returns 2,
+  //     displays.json emptied, quickMonitor snaps to -1, the video is NOT
+  //     played by this function (caller's applyWallpaper job).
+  {
+    Check(!k6wp::NeedsAllScreensConfirm(0),
+          "confirm: NeedsAllScreensConfirm(0) -> false");
+    Check(k6wp::NeedsAllScreensConfirm(2),
+          "confirm: NeedsAllScreensConfirm(2) -> true");
+    Check(k6wp::NeedsAllScreensConfirm(1),
+          "confirm: NeedsAllScreensConfirm(1) -> true");
+
+    const std::wstring real_localappdata = LocalAppDataDir();
+    QTemporaryDir fake_home;
+    Check(fake_home.isValid(), "applyToAll temp dir is valid");
+    const bool redirected =
+        fake_home.isValid() && SetLocalAppDataDir(fake_home.path());
+    Check(redirected, "applyToAll: LOCALAPPDATA redirected");
+    if (redirected) {
+      const QDir media(fake_home.path());
+      Check(QDir().mkpath(media.filePath(QStringLiteral("K6WP"))),
+            "applyToAll: fake K6WP data dir created");
+      {
+        k6wp::StudioSettings s = k6wp::DefaultStudioSettings();
+        s.check_updates = false;
+        k6wp::SaveStudioSettings(k6wp::DefaultStudioSettingsPath(), s);
+      }
+
+      k6wp::MonitorInfo primary;
+      primary.id = 0;
+      primary.x = 0;
+      primary.y = 0;
+      primary.width = 1920;
+      primary.height = 1080;
+      primary.is_primary = true;
+      primary.device_name = L"\\\\.\\DISPLAY1";
+      primary.orientation = 0;
+      primary.refresh_hz = 60;
+      primary.scale_pct = 100;
+
+      k6wp::MonitorInfo second;
+      second.id = 1;
+      second.x = 1920;
+      second.y = 0;
+      second.width = 1080;
+      second.height = 1920;
+      second.is_primary = false;
+      second.device_name = L"\\\\.\\DISPLAY2";
+      second.orientation = 0;
+      second.refresh_hz = 60;
+      second.scale_pct = 100;
+
+      const std::vector<k6wp::MonitorInfo> fixture = {primary, second};
+
+      // --- failure drill: EMPTY displays model -> return 0, no crash ------
+      {
+        k6wp::StudioBridge bridge;
+        bridge.ApplyDisplayModel({}, k6wp::DisplaysConfig{},
+                                 std::map<std::string, std::string>{});
+        Check(bridge.displays().isEmpty(),
+              "applyToAll empty-drill: displays model is empty");
+        const int cleared =
+            bridge.applyToAllMonitors(QStringLiteral("C:\\Videos\\x.mp4"));
+        Check(cleared == 0, "applyToAll empty displays -> returns 0 (no crash)");
+        Check(bridge.quickMonitor() == -1,
+              "applyToAll empty displays still sets quickMonitor -1");
+        Check(!k6wp::NeedsAllScreensConfirm(cleared),
+              "applyToAll empty-drill: NeedsAllScreensConfirm(0) -> false");
+      }
+
+      // --- happy path: two active overrides -> returns 2, store emptied ----
+      {
+        k6wp::StudioBridge bridge;
+        const QString key1 = QString::fromStdWString(primary.device_name);
+        const QString key2 = QString::fromStdWString(second.device_name);
+        const QString video = media.filePath(QStringLiteral("wall.mp4"));
+        {
+          QFile f(video);
+          Check(f.open(QIODevice::WriteOnly | QIODevice::Truncate),
+                "applyToAll: stand-in video file created");
+          f.write("x");
+          f.close();
+        }
+        bridge.ApplyDisplayModel(fixture, k6wp::DisplaysConfig{},
+                                 std::map<std::string, std::string>{});
+        bridge.assignVideoToMonitor(key1, video);
+        bridge.assignVideoToMonitor(key2, video);
+        Check(!bridge.displays().isEmpty() &&
+                  !bridge.displays()
+                       .at(0)
+                       .toMap()
+                       .value("assignedPath")
+                       .toString()
+                       .isEmpty() &&
+                  !bridge.displays()
+                       .at(1)
+                       .toMap()
+                       .value("assignedPath")
+                       .toString()
+                       .isEmpty(),
+              "applyToAll happy-drill: both model entries carry assignments");
+        Check(!k6wp::NeedsAllScreensConfirm(0),
+              "applyToAll happy-drill: overrides exist -> confirm true");
+
+        const int cleared =
+            bridge.applyToAllMonitors(QStringLiteral("C:\\Videos\\all.mp4"));
+        Check(cleared == 2, "applyToAll with 2 overrides -> returns 2");
+        Check(bridge.quickMonitor() == -1,
+              "applyToAll sets quickMonitor to -1 (global)");
+        k6wp::DisplaysConfig back;
+        bool loaded = false;
+        try {
+          back = k6wp::LoadDisplays(k6wp::DefaultDisplaysPath());
+          loaded = true;
+        } catch (...) {
+          loaded = false;
+        }
+        Check(loaded && back.assignments.empty(),
+              "applyToAll: displays.json assignments emptied");
+        bool model_clean = true;
+        for (const QVariant& v : bridge.displays()) {
+          if (!v.toMap().value("assignedPath").toString().isEmpty()) {
+            model_clean = false;
+            break;
+          }
+        }
+        Check(model_clean,
+              "applyToAll: model entries have empty assignedPath after clear");
+        Check(bridge.lastError().isEmpty(),
+              "applyToAll: a successful one-shot clears lastError");
+      }
+
+      // --- no-override case: model present, nothing assigned -> return 0 ---
+      {
+        k6wp::StudioBridge bridge;
+        bridge.ApplyDisplayModel(fixture, k6wp::DisplaysConfig{},
+                                 std::map<std::string, std::string>{});
+        const int cleared =
+            bridge.applyToAllMonitors(QStringLiteral("C:\\Videos\\all.mp4"));
+        Check(cleared == 0,
+              "applyToAll with no overrides -> returns 0");
+        Check(bridge.quickMonitor() == -1,
+              "applyToAll no-overrides still sets quickMonitor -1");
+      }
+    }
+    (void)SetLocalAppDataDir(QString::fromStdWString(real_localappdata));
+  }
+
+  // 28. Plan todo 14 (brief B8 + D1): performance preset pure mapping
+  //     (PresetToValues / ValuesToPreset) + SettingsBridge.performancePreset.
+  //     D1 final numbers (decided at S7): Seimbang = current values (auto/
+  //     auto, 30 fps, CRF 22, native 0x0); Hemat = reduced-res + cap-fps
+  //     (auto/integrated, 24 fps, CRF 26, 1280x720); Maksimal = full (all/
+  //     discrete, 30 fps, CRF 16, native 0x0). Failure drills: unknown
+  //     preset string -> Seimbang values, no crash; ValuesToPreset of
+  //     mixed/garbage values still returns one of the three names. Restart
+  //     handling: presets touching affinity/GPU flip engineRestartNeeded
+  //     and emit performancePresetApplied(true) + the friendly
+  //     "Menerapkan performa…" log line (never the word "engine").
+  {
+    using k6wp::PresetToValues;
+    using k6wp::PerformancePresetValues;
+    using k6wp::ValuesToPreset;
+
+    // --- D1 mapping: exact numbers per preset ------------------------------
+    const PerformancePresetValues seimbang = PresetToValues("Seimbang");
+    Check(seimbang.cpuAffinity == "auto" && seimbang.gpuAdapter == "auto",
+          "preset Seimbang: cpuAffinity/gpuAdapter stay auto");
+    Check(seimbang.fpsCap == 30 && seimbang.crf == 22,
+          "preset Seimbang: fpsCap 30 + crf 22 (D1 current values)");
+    Check(seimbang.speed == 1.0 && seimbang.resolutionW == 0 &&
+              seimbang.resolutionH == 0,
+          "preset Seimbang: speed 1.0 + native resolution (0x0)");
+
+    const PerformancePresetValues hemat = PresetToValues("Hemat");
+    Check(hemat.cpuAffinity == "auto" && hemat.gpuAdapter == "integrated",
+          "preset Hemat: cpuAffinity auto + gpuAdapter integrated");
+    Check(hemat.fpsCap == 24 && hemat.crf == 26,
+          "preset Hemat: fpsCap 24 (cap-fps) + crf 26 (lighter encode)");
+    Check(hemat.resolutionW == 1280 && hemat.resolutionH == 720,
+          "preset Hemat: reduced resolution 1280x720");
+
+    const PerformancePresetValues maksimal = PresetToValues("Maksimal");
+    Check(maksimal.cpuAffinity == "all" && maksimal.gpuAdapter == "discrete",
+          "preset Maksimal: cpuAffinity all + gpuAdapter discrete");
+    Check(maksimal.fpsCap == 30 && maksimal.crf == 16,
+          "preset Maksimal: fpsCap 30 (schema max) + crf 16 (min = full)");
+    Check(maksimal.resolutionW == 0 && maksimal.resolutionH == 0,
+          "preset Maksimal: native resolution (0x0)");
+
+    // --- failure drill: unknown preset -> Seimbang, no crash --------------
+    const PerformancePresetValues unknown = PresetToValues("Ultra");
+    Check(unknown.cpuAffinity == seimbang.cpuAffinity &&
+              unknown.gpuAdapter == seimbang.gpuAdapter &&
+              unknown.fpsCap == seimbang.fpsCap && unknown.crf == seimbang.crf &&
+              unknown.resolutionW == seimbang.resolutionW &&
+              unknown.resolutionH == seimbang.resolutionH,
+          "preset unknown -> falls back to Seimbang values (no crash)");
+    const PerformancePresetValues empty = PresetToValues("");
+    Check(empty.cpuAffinity == "auto" && empty.fpsCap == 30 &&
+              empty.crf == 22,
+          "preset empty string -> Seimbang values (no crash)");
+
+    // --- round-trip: ValuesToPreset(PresetToValues(p)) == p ---------------
+    Check(ValuesToPreset(seimbang) == "Seimbang",
+          "round-trip: Seimbang -> values -> Seimbang");
+    Check(ValuesToPreset(hemat) == "Hemat",
+          "round-trip: Hemat -> values -> Hemat");
+    Check(ValuesToPreset(maksimal) == "Maksimal",
+          "round-trip: Maksimal -> values -> Maksimal");
+
+    // --- nearest-preset: mixed values land on the closest preset ----------
+    PerformancePresetValues mixed = hemat;
+    mixed.fpsCap = 25;  // 1 off Hemat's cap, 5 off Seimbang's
+    Check(ValuesToPreset(mixed) == "Hemat",
+          "nearest: Hemat-like values with fps drift -> Hemat");
+    PerformancePresetValues almost_seimbang = seimbang;
+    almost_seimbang.crf = 23;
+    Check(ValuesToPreset(almost_seimbang) == "Seimbang",
+          "nearest: Seimbang-like values with crf drift -> Seimbang");
+    PerformancePresetValues garbage;
+    garbage.cpuAffinity = "nonsense";
+    garbage.gpuAdapter = "nonsense";
+    garbage.fpsCap = 999;
+    garbage.crf = -5;
+    garbage.speed = 42.0;
+    garbage.resolutionW = 12345;
+    garbage.resolutionH = 6789;
+    const std::string garbage_preset = ValuesToPreset(garbage);
+    Check(garbage_preset == "Hemat" || garbage_preset == "Seimbang" ||
+              garbage_preset == "Maksimal",
+          "nearest: garbage values still return one of the three names");
+
+    // --- bridge property + restart handling --------------------------------
+    const std::wstring real_localappdata = LocalAppDataDir();
+    QTemporaryDir fake_home;
+    Check(fake_home.isValid(), "performancePreset temp dir is valid");
+    const bool redirected =
+        fake_home.isValid() && SetLocalAppDataDir(fake_home.path());
+    Check(redirected, "performancePreset: LOCALAPPDATA redirected");
+    if (redirected) {
+      const QDir media(fake_home.path());
+      Check(QDir().mkpath(media.filePath(QStringLiteral("K6WP"))),
+            "performancePreset: fake K6WP data dir created");
+      {
+        k6wp::StudioSettings s = k6wp::DefaultStudioSettings();
+        s.check_updates = false;
+        k6wp::SaveStudioSettings(k6wp::DefaultStudioSettingsPath(), s);
+      }
+      k6wp::SettingsBridge bridge;
+      Check(bridge.performancePreset() == QStringLiteral("Seimbang"),
+            "performancePreset defaults to Seimbang");
+      Check(!bridge.engineRestartNeeded(),
+            "default Seimbang values keep engineRestartNeeded false");
+
+      int applied = 0;
+      bool last_needs_restart = false;
+      QObject::connect(&bridge, &k6wp::SettingsBridge::performancePresetApplied,
+                       &bridge, [&](bool needs_restart) {
+                         ++applied;
+                         last_needs_restart = needs_restart;
+                       });
+
+      bridge.setPerformancePreset(QStringLiteral("Hemat"));
+      Check(bridge.performancePreset() == QStringLiteral("Hemat"),
+            "setPerformancePreset Hemat accepted");
+      Check(bridge.engineRestartNeeded(),
+            "Hemat (integrated GPU) flips engineRestartNeeded");
+      Check(bridge.cpuAffinity() == QStringLiteral("auto") &&
+                bridge.gpuAdapter() == QStringLiteral("integrated") &&
+                bridge.fpsCap() == 24 && bridge.crf() == 26 &&
+                bridge.resolutionW() == 1280 && bridge.resolutionH() == 720,
+            "Hemat mapped values land on the config properties");
+      Check(applied == 1 && last_needs_restart,
+            "performancePresetApplied(true) emitted for Hemat");
+      bool notice_ok = false;
+      for (const QString& line : bridge.log()) {
+        if (line.contains(QStringLiteral("Menerapkan performa"))) {
+          notice_ok = !line.contains(QStringLiteral("engine"),
+                                     Qt::CaseInsensitive);
+        }
+      }
+      Check(notice_ok,
+            "restart notice 'Menerapkan performa…' logged without 'engine'");
+
+      bridge.setPerformancePreset(QStringLiteral("Maksimal"));
+      Check(bridge.performancePreset() == QStringLiteral("Maksimal") &&
+                bridge.cpuAffinity() == QStringLiteral("all") &&
+                bridge.gpuAdapter() == QStringLiteral("discrete") &&
+                bridge.fpsCap() == 30 && bridge.crf() == 16,
+            "Maksimal mapped values land on the config properties");
+      Check(bridge.engineRestartNeeded() && applied == 2 && last_needs_restart,
+            "Maksimal flips engineRestartNeeded + emits applied(true)");
+
+      bridge.setPerformancePreset(QStringLiteral("Seimbang"));
+      Check(bridge.performancePreset() == QStringLiteral("Seimbang") &&
+                !bridge.engineRestartNeeded() &&
+                bridge.cpuAffinity() == QStringLiteral("auto") &&
+                bridge.gpuAdapter() == QStringLiteral("auto") &&
+                bridge.fpsCap() == 30 && bridge.crf() == 22,
+            "Seimbang restores auto/auto -> engineRestartNeeded false");
+      Check(applied == 3 && !last_needs_restart,
+            "performancePresetApplied(false) emitted for Seimbang");
+
+      bridge.setPerformancePreset(QStringLiteral("bogus"));
+      Check(bridge.performancePreset() == QStringLiteral("Seimbang"),
+            "bogus preset refused, property unchanged");
+      Check(!bridge.lastError().isEmpty(), "bogus preset sets lastError");
+      Check(applied == 3, "bogus preset does not emit performancePresetApplied");
+
+      {
+        k6wp::SettingsBridge again;
+        Check(again.performancePreset() == QStringLiteral("Seimbang"),
+              "performancePreset persists through apply + reload");
+      }
+    }
+    (void)SetLocalAppDataDir(QString::fromStdWString(real_localappdata));
+  }
+
+  // 29. Write-through persistence (DEF-2 / F3-08): behavioral toggles
+  //     (closeToTray, checkUpdates, lockscreenSync, autoCompressOnImport)
+  //     must persist to studio_settings.json immediately on set — WITHOUT
+  //     an explicit apply() call. The exact F3-08 failure: onToggled →
+  //     setter wrote memory + emit only; SaveStudioSettings ran solely in
+  //     apply(); quit-flush did not cover it (JSON stayed false).
+  //     Quit-flush is a safety net, not the contract: a crash before clean
+  //     quit must not lose the toggle. Each leg toggles, then reads the
+  //     JSON bytes directly from disk — the proof that no apply() is needed.
+  {
+    const std::wstring real_localappdata = LocalAppDataDir();
+    QTemporaryDir fake_home;
+    Check(fake_home.isValid(), "writethrough temp dir is valid");
+    const bool redirected =
+        fake_home.isValid() && SetLocalAppDataDir(fake_home.path());
+    Check(redirected, "writethrough: LOCALAPPDATA redirected");
+    if (redirected) {
+      const QDir media(fake_home.path());
+      Check(QDir().mkpath(media.filePath(QStringLiteral("K6WP"))),
+            "writethrough: fake K6WP data dir created");
+      {
+        k6wp::StudioSettings s = k6wp::DefaultStudioSettings();
+        s.check_updates = true;
+        k6wp::SaveStudioSettings(k6wp::DefaultStudioSettingsPath(), s);
+      }
+      const auto settings_json =
+          media.filePath(QStringLiteral("K6WP/studio_settings.json"));
+
+      const auto read_json = [&settings_json]() {
+        std::ifstream in(ToPath(settings_json), std::ios::binary);
+        return std::string((std::istreambuf_iterator<char>(in)),
+                           std::istreambuf_iterator<char>());
+      };
+
+      // --- closeToTray: toggle true WITHOUT apply() -> JSON on disk ------
+      {
+        k6wp::SettingsBridge bridge;
+        Check(!bridge.closeToTray(),
+              "writethrough closeToTray starts false (default)");
+        bridge.setCloseToTray(true);  // NO apply() call
+        Check(bridge.closeToTray(),
+              "writethrough setCloseToTray(true) updates the property");
+        const std::string text = read_json();
+        Check(HasSubstr(text, "\"closeToTray\": true") ||
+                  HasSubstr(text, "\"closeToTray\":true"),
+              "writethrough closeToTray=true is on disk WITHOUT apply()");
+        {
+          k6wp::SettingsBridge again;
+          Check(again.closeToTray(),
+                "writethrough closeToTray persists through reload (no apply)");
+        }
+      }
+
+      // --- closeToTray: toggle false WITHOUT apply() -> JSON on disk ------
+      {
+        k6wp::SettingsBridge bridge;
+        Check(bridge.closeToTray(),
+              "writethrough closeToTray starts true (reloaded)");
+        bridge.setCloseToTray(false);  // NO apply() call
+        Check(!bridge.closeToTray(),
+              "writethrough setCloseToTray(false) updates the property");
+        const std::string text = read_json();
+        Check(HasSubstr(text, "\"closeToTray\": false") ||
+                  HasSubstr(text, "\"closeToTray\":false"),
+              "writethrough closeToTray=false is on disk WITHOUT apply()");
+      }
+
+      // --- checkUpdates: toggle false WITHOUT apply() -> JSON on disk -----
+      {
+        k6wp::SettingsBridge bridge;
+        Check(bridge.checkUpdates(),
+              "writethrough checkUpdates starts true (default)");
+        bridge.setCheckUpdates(false);  // NO apply() call
+        Check(!bridge.checkUpdates(),
+              "writethrough setCheckUpdates(false) updates the property");
+        const std::string text = read_json();
+        Check(HasSubstr(text, "\"check_updates\": false") ||
+                  HasSubstr(text, "\"check_updates\":false"),
+              "writethrough checkUpdates=false is on disk WITHOUT apply()");
+        {
+          k6wp::SettingsBridge again;
+          Check(!again.checkUpdates(),
+                "writethrough checkUpdates persists through reload (no apply)");
+        }
+      }
+
+      // --- lockscreenSync: toggle true WITHOUT apply() -> JSON on disk ----
+      {
+        k6wp::SettingsBridge bridge;
+        Check(!bridge.lockscreenSync(),
+              "writethrough lockscreenSync starts false (default)");
+        bridge.setLockscreenSync(true);  // NO apply() call
+        Check(bridge.lockscreenSync(),
+              "writethrough setLockscreenSync(true) updates the property");
+        const std::string text = read_json();
+        Check(HasSubstr(text, "\"lockscreen_sync\": true") ||
+                  HasSubstr(text, "\"lockscreen_sync\":true"),
+              "writethrough lockscreenSync=true is on disk WITHOUT apply()");
+      }
+
+      // --- autoCompressOnImport: toggle false WITHOUT apply() -> JSON ------
+      {
+        k6wp::SettingsBridge bridge;
+        Check(bridge.autoCompressOnImport(),
+              "writethrough autoCompressOnImport starts true (default)");
+        bridge.setAutoCompressOnImport(false);  // NO apply() call
+        Check(!bridge.autoCompressOnImport(),
+              "writethrough setAutoCompressOnImport(false) updates the property");
+        const std::string text = read_json();
+        Check(HasSubstr(text, "\"auto_compress_on_import\": false") ||
+                  HasSubstr(text, "\"auto_compress_on_import\":false"),
+              "writethrough autoCompressOnImport=false is on disk WITHOUT apply()");
+      }
+
+      // --- playlistSource: set custom WITHOUT apply() -> JSON on disk -----
+      {
+        k6wp::SettingsBridge bridge;
+        Check(bridge.playlistSource() == QStringLiteral("all"),
+              "writethrough playlistSource starts all (default)");
+        bridge.setPlaylistSource(QStringLiteral("custom"));  // NO apply() call
+        Check(bridge.playlistSource() == QStringLiteral("custom"),
+              "writethrough setPlaylistSource(custom) updates the property");
+        const std::string text = read_json();
+        Check(HasSubstr(text, "\"playlistSource\": \"custom\"") ||
+                  HasSubstr(text, "\"playlistSource\":\"custom\""),
+              "writethrough playlistSource=custom is on disk WITHOUT apply()");
+      }
+
+      // QA-HAPPY dump: the on-disk JSON after all toggles, for evidence.
+      {
+        const std::string text = read_json();
+        std::printf("QA-HAPPY writethrough studio_settings.json:\n%s\n",
+                    text.c_str());
+      }
     }
     (void)SetLocalAppDataDir(QString::fromStdWString(real_localappdata));
   }

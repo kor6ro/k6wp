@@ -40,6 +40,7 @@
 #include <QtQml/qqmlregistration.h>
 
 #include <atomic>
+#include <functional>
 #include <map>
 #include <string>
 #include <vector>
@@ -58,6 +59,32 @@ class QTimer;
 namespace k6wp {
 
 class UpdateChecker;
+
+// Plan todo 17 / brief B10 + C-19: the Studio tray's engine-side actions.
+// Defined in studio_bridge.cpp (NOT qml_shell.cpp) because studio_logic_test
+// compiles studio_bridge.cpp but not qml_shell.cpp, and the IPC pause/resume
+// + friendly status live on StudioBridge. QmlShell's QSystemTrayIcon
+// registers here on construction and reads the copies at menu-popup time;
+// StudioBridge::ApplyStatus pushes tooltip updates through the listener.
+// Menu copy is C-19 verbatim: "Buka K6WP Studio / Jeda / Lanjut / Keluar" —
+// deliberately NOT the engine tray's quick-switch MRU (engine_app.cpp).
+struct StudioTrayHooks {
+  std::function<void()> pause;          // "Jeda"
+  std::function<void()> resume;         // "Lanjut"
+  std::function<QString()> status_tip;  // friendly status, never "engine"
+};
+void SetStudioTrayHooks(StudioTrayHooks hooks);
+// Clears the hooks; QmlShell's tray dtor and StudioBridge's dtor both call
+// this so a dying side never leaves a dangling std::function.
+void ClearStudioTrayHooks();
+// Copies of the current hooks (empty std::function when unset). GUI-thread
+// only; the tray reads them at menu-popup / action time.
+StudioTrayHooks GetStudioTrayHooks();
+// Called by StudioBridge::ApplyStatus after engineStatusChanged, so the tray
+// tooltip tracks the live status without the shell polling IPC.
+void NotifyStudioTrayStatusChanged();
+// Tray installs this when it appears; cleared by ClearStudioTrayHooks.
+void SetStudioTrayStatusListener(std::function<void()> listener);
 
 // QML-facing mirror of EngineStatusView::Kind. The VALUES are the stable
 // contract studio/qml/Main.qml switches on (it redeclares the same order as
@@ -118,6 +145,56 @@ QString DuplicateModeNoticeText(const std::vector<std::wstring>& keys);
 // feature-detect the engine emits; old engines leave the key absent).
 bool DisplayCapabilityFromState(const EngineState& state);
 
+// Plan todo 11 / brief C-14 + GATE 0 #3: the pure C-14 confirmation
+// predicate. "Semua layar" is always safe to execute (monitor_id=-1), but
+// the confirm dialog is required only when at least one per-key override
+// would be replaced: assignment_count > 0. Beside the bridge so
+// studio_logic_test can drive it without the QML singleton.
+//   0 -> false (no overrides: apply immediately + toast)
+//   2 -> true  (overrides exist: show C-14 "akan ikut diganti" dialog)
+bool NeedsAllScreensConfirm(int assignment_count);
+
+// Plan todo 9: playlist live snapshot decoded from the parsed get_state ack
+// (playlist_enabled / playlist_size / playlist_index; engine_app already
+// emits them). Absent or wrong-typed keys -> enabled false / size 0 /
+// index -1. Beside the bridge so studio_logic_test can drive it with fixture
+// ack payloads without a live engine.
+struct PlaylistLiveState {
+  bool enabled = false;
+  int size = 0;
+  int index = -1;
+};
+PlaylistLiveState PlaylistLiveFromState(const EngineState& state);
+
+// --- friendly status surface (plan todo 4 / B2 / brief C-3 + C-20 + glossary §5) --
+//
+// Pure derivations the statusTitle / statusVideoName properties read. They
+// live beside the bridge (not inside it) so studio_logic_test can drive
+// them with fixture kind/detail pairs without constructing the QML
+// singleton. `kind` is the BridgeStatusKind QML already switches on;
+// `detail` is the live engineStatusDetail sentence (the video name is
+// derived from its trailing segment); `video_active` mirrors the
+// videoActive property.
+//
+// StatusTitleFor: the short state label, glossary §5 wording.
+//   kConnected/kDegraded + video_active -> "Wallpaper aktif"
+//   kConnected/kDegraded, no video      -> "Tidak aktif"
+//   kPaused                              -> "Dijeda"
+//   kNotRunning/kDisconnected            -> "Tidak aktif"
+//   unknown kind + non-empty detail      -> `detail` (passthrough; never
+//                                           invents a label)
+//   unknown kind + empty detail          -> "Tidak aktif" (documented default)
+//
+// StatusVideoNameFor: the active video's display name, or empty when
+// nothing is playing. Never invents a name: video_active false, the
+// "(belum ada video aktif)" fallback, or a trailing separator with no
+// segment all yield empty. `kind` is accepted for signature symmetry with
+// StatusTitleFor and does not change the derivation.
+QString StatusTitleFor(BridgeStatusKind kind, const QString& detail,
+                       bool video_active);
+QString StatusVideoNameFor(BridgeStatusKind kind, const QString& detail,
+                           bool video_active);
+
 // NOT `final`, unlike most classes in this project: Qt's QML type
 // registration instantiates QQmlElement<T> which INHERITS from T, so a final
 // QML_ELEMENT class does not compile (C3246). This is a hard Qt requirement,
@@ -149,6 +226,10 @@ class StudioBridge : public QObject {
   Q_PROPERTY(int engineStatusKind READ engineStatusKind NOTIFY engineStatusChanged)
   Q_PROPERTY(QString engineStatusDetail READ engineStatusDetail NOTIFY engineStatusChanged)
   Q_PROPERTY(QString engineStatusHint READ engineStatusHint NOTIFY engineStatusChanged)
+  // Friendly status surface (B2 / todo 4): derived, not stored - see the
+  // StatusTitleFor / StatusVideoNameFor free-function contract above.
+  Q_PROPERTY(QString statusTitle READ statusTitle NOTIFY engineStatusChanged)
+  Q_PROPERTY(QString statusVideoName READ statusVideoName NOTIFY engineStatusChanged)
   Q_PROPERTY(quint64 enginePid READ enginePid NOTIFY engineStatusChanged)
   Q_PROPERTY(bool videoActive READ videoActive NOTIFY engineStatusChanged)
   Q_PROPERTY(bool engineRunning READ engineRunning NOTIFY engineStatusChanged)
@@ -196,6 +277,11 @@ class StudioBridge : public QObject {
   // Non-empty Indonesian IS-7 refusal when DetectKeyCollision reports
   // colliding keys; empty otherwise.
   Q_PROPERTY(QString duplicateModeNotice READ duplicateModeNotice NOTIFY displaysChanged)
+  // Plan todo 9: read-only playlist live state from the last get_state ack.
+  // Repainted by engineStatusChanged with the rest of the status group.
+  Q_PROPERTY(bool playlistLiveEnabled READ playlistLiveEnabled NOTIFY engineStatusChanged)
+  Q_PROPERTY(int playlistLiveSize READ playlistLiveSize NOTIFY engineStatusChanged)
+  Q_PROPERTY(int playlistLiveIndex READ playlistLiveIndex NOTIFY engineStatusChanged)
 
   QString selectedVideo() const { return selected_video_; }
   QString quickFit() const { return quick_fit_; }
@@ -206,21 +292,34 @@ class StudioBridge : public QObject {
   QVariantList displays() const { return displays_; }
   bool displayCapability() const { return display_capability_; }
   QString duplicateModeNotice() const { return duplicate_mode_notice_; }
+  bool playlistLiveEnabled() const { return playlist_live_enabled_; }
+  int playlistLiveSize() const { return playlist_live_size_; }
+  int playlistLiveIndex() const { return playlist_live_index_; }
 
   // --- Live engine status (all repainted together by engineStatusChanged) ---
 
   // BridgeStatusKind as int (see the enum above for the exact order).
   int engineStatusKind() const { return static_cast<int>(status_.kind); }
-  // The status sentence shown in the UI. The wording is copied verbatim from
-  // wallpaper_tab/main_window so Phase 1 speaks exactly like the old UI:
-  //   "Engine aktif — <video>" / "Engine aktif tapi tak tampil — <video>" /
-  //   "Dijeda — <video>" / "Engine mati — klik Nyalakan Engine" /
+  // The status sentence shown in the UI. Wording follows brief C-20 /
+  // glossary §5 (plan todo 4):
+  //   "Wallpaper aktif • <video>" / "Wallpaper aktif tapi tak tampil • <video>" /
+  //   "Dijeda — <video>" / "Tidak aktif — pilih video untuk mulai" /
   //   "Terputus — coba lagi"
   QString engineStatusDetail() const { return status_detail_; }
   // Tooltip detail: the full video path (or the same "(belum ada video aktif)"
   // fallback), plus the headless-slot hint on kDegraded, plus the transport
   // error on kDisconnected. Empty while the first poll is still in flight.
   QString engineStatusHint() const { return status_hint_; }
+  // Friendly state label / video name, derived from kind+detail+videoActive
+  // via the pure free functions (B2). Repainted by engineStatusChanged.
+  QString statusTitle() const {
+    return StatusTitleFor(static_cast<BridgeStatusKind>(status_.kind),
+                          status_detail_, video_active_);
+  }
+  QString statusVideoName() const {
+    return StatusVideoNameFor(static_cast<BridgeStatusKind>(status_.kind),
+                              status_detail_, video_active_);
+  }
   // Engine PID from the get_state ack; 0 when unknown (not running, or the
   // ack carried no pid).
   quint64 enginePid() const { return status_.pid; }
@@ -273,6 +372,13 @@ class StudioBridge : public QObject {
   // Publishes the chosen file to selectedVideo. Does NOT apply: the QML flow is
   // pick-then-apply, so "Terapkan Wallpaper" reads the selection afterwards.
   Q_INVOKABLE void pickVideo();
+  // Task 27 (koleksi card select-only): publishes an ALREADY-KNOWN path (a
+  // library card's dst) to selectedVideo, exactly like pickVideo does for the
+  // dialog path. Still does NOT apply - a card click only selects, and the
+  // explicit "Pasang" affordances (card hover button, row menu, right rail)
+  // read selectedVideo / applyAt afterwards. Empty path is ignored; clearing
+  // stays owned by clearSelectedVideo() ("Hapus").
+  Q_INVOKABLE void selectVideo(const QString& path);
   Q_INVOKABLE void clearSelectedVideo();
 
   // --- Quick settings ("Pengaturan cepat") ----------------------------------
@@ -305,11 +411,31 @@ class StudioBridge : public QObject {
   // set_display_video push. Unknown key refuses exactly like assign.
   Q_INVOKABLE void clearMonitorAssignment(const QString& key);
 
+  // Plan todo 11 / brief B7 + C-14 + GATE 0 #3: one-shot "Pasang ke semua
+  // layar". ONE C++ action: setQuickMonitor(-1) (global monitor_id) +
+  // clearMonitorAssignment for every key with an active assignment in the
+  // displays model, each following the existing persist + best-effort IPC
+  // pattern. Returns the number of overrides cleared — the CALLER uses it
+  // to decide the C-14 confirmation (NeedsAllScreensConfirm(count)). Does
+  // NOT play the video: the caller installs it via applyWallpaper(path);
+  // this function only moves the target + clears overrides. Empty displays
+  // model -> returns 0, no crash.
+  Q_INVOKABLE int applyToAllMonitors(const QString& path);
+
+  // Brief B9 / C-15: open Windows Display Settings (ms-settings:display)
+  // via ShellExecuteW. Best-effort: a launch failure is logged, not raised
+  // as lastError (nothing user-actionable Studio can do about it).
+  Q_INVOKABLE void openWindowsDisplaySettings();
+
   // The one place displays_ / duplicate_mode_notice_ are rebuilt.
   // refreshDisplays() feeds it live data; studio_logic_test feeds fixtures.
   void ApplyDisplayModel(const std::vector<MonitorInfo>& monitors,
                          const DisplaysConfig& store,
                          const std::map<std::string, std::string>& coverage);
+
+  // The one place playlistLive* is rebuilt from a parsed get_state.
+  // OnPollDone feeds it live data; studio_logic_test feeds fixtures.
+  void ApplyPlaylistLive(const PlaylistLiveState& live);
 
   // Fires one GetState round-trip on a worker and repaints the properties
   // above when it lands. A no-op while a poll is in flight. The QTimer calls
@@ -336,6 +462,16 @@ class StudioBridge : public QObject {
   // without waiting up to 1.5s. Workers, like every other blocking call.
   Q_INVOKABLE void pause();
   Q_INVOKABLE void resume();
+  // B3 / todo 4: one QML button. Pauses when the engine is active, resumes
+  // when paused, reusing the pause/resume IPC path above. Consults the live
+  // status kind - never blindly pauses. No-op when the pipe is dead
+  // (kNotRunning / kDisconnected): nothing to toggle.
+  Q_INVOKABLE void togglePause();
+  // B9 / todo 4: puts `text` on the system clipboard for "Salin untuk
+  // dukungan". Empty text is ignored (a dialog can open before any
+  // technical detail exists) and a missing QGuiApplication clipboard is a
+  // silent no-op - neither path may crash.
+  Q_INVOKABLE void copyToClipboard(const QString& text);
 
   // Requests the preview poster for `videoPath` (usually activeVideoPath()).
   // Non-blocking: the cached thumbnail is returned immediately when present,
@@ -480,6 +616,11 @@ class StudioBridge : public QObject {
   QString duplicate_mode_notice_;
   std::map<std::string, std::string> display_coverage_;
   std::vector<MonitorInfo> last_monitors_;
+  // Plan todo 9: playlist live snapshot from the last get_state (see the
+  // PlaylistLiveState contract above).
+  bool playlist_live_enabled_ = false;
+  int playlist_live_size_ = 0;
+  int playlist_live_index_ = -1;
 };
 
 }  // namespace k6wp

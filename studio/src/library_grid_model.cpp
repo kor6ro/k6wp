@@ -25,6 +25,109 @@
 
 namespace k6wp {
 
+namespace {
+
+// Parse "WxH" out of a resolution token. Rejects empty / "0x0" / anything
+// without digits on both sides of a single 'x'.
+bool ParseWxH(const std::string& text, int* width, int* height) {
+  const std::size_t x = text.find('x');
+  if (x == std::string::npos || x == 0 || x + 1 >= text.size()) {
+    return false;
+  }
+  int w = 0;
+  int h = 0;
+  try {
+    std::size_t w_used = 0;
+    std::size_t h_used = 0;
+    w = std::stoi(text.substr(0, x), &w_used);
+    h = std::stoi(text.substr(x + 1), &h_used);
+    if (w_used != x || h_used != text.size() - x - 1) {
+      return false;  // trailing junk after the digits
+    }
+  } catch (const std::exception&) {
+    return false;
+  }
+  if (w <= 0 || h <= 0) {
+    return false;  // covers "0x0"
+  }
+  *width = w;
+  *height = h;
+  return true;
+}
+
+// The res token of an EntryLabel string: line 2, up to the first bullet
+// (" • ", UTF-8 \xE2\x80\xA2). Line 1 is the filename and must never be
+// parsed — names like "max.mp4" contain an 'x' too.
+bool LabelResolution(const std::string& label, int* width, int* height) {
+  const std::size_t nl = label.find('\n');
+  if (nl == std::string::npos) {
+    return false;
+  }
+  const std::string line2 = label.substr(nl + 1);
+  const std::size_t bullet = line2.find("\xE2\x80\xA2");
+  std::string res =
+      (bullet == std::string::npos) ? line2 : line2.substr(0, bullet);
+  while (!res.empty() && (res.back() == ' ' || res.back() == '\t')) {
+    res.pop_back();
+  }
+  while (!res.empty() && (res.front() == ' ' || res.front() == '\t')) {
+    res.erase(res.begin());
+  }
+  return ParseWxH(res, width, height);
+}
+
+}  // namespace
+
+// --- library card roles -------------------------------------------------------
+
+std::string DisplayNameFor(const std::string& label) {
+  std::string out = label;
+  // Strip trailing badge lines (EntryLabel appends at most one, after '\n',
+  // but the loop tolerates a hand-built multi-badge string).
+  for (;;) {
+    const std::size_t nl = out.rfind('\n');
+    const std::string tail =
+        (nl == std::string::npos) ? out : out.substr(nl + 1);
+    if (tail != kBadgeMissing && tail != kBadgeUnoptimized) {
+      return out;
+    }
+    if (nl == std::string::npos) {
+      return std::string();  // the whole string was one badge
+    }
+    out.erase(nl);
+  }
+}
+
+bool MissingFor(const std::string& label) {
+  return label.find(kBadgeMissing) != std::string::npos;
+}
+
+bool MissingFor(const LibraryEntry& entry) { return entry.broken; }
+
+bool OptimizedFor(const std::string& label) {
+  int w = 0;
+  int h = 0;
+  if (!LabelResolution(label, &w, &h)) {
+    return false;
+  }
+  const int long_side = std::max(w, h);
+  const int short_side = std::min(w, h);
+  return long_side >= kOptimizedMinLongSide &&
+         short_side >= kOptimizedMinShortSide;
+}
+
+bool OptimizedFor(const LibraryEntry& entry) {
+  int w = 0;
+  int h = 0;
+  if (!ParseWxH(entry.res, &w, &h)) {
+    return false;
+  }
+  const int long_side = std::max(w, h);
+  const int short_side = std::min(w, h);
+  return long_side >= kOptimizedMinLongSide &&
+         short_side >= kOptimizedMinShortSide;
+}
+
 LibraryGridModel::LibraryGridModel(QObject* parent) : QAbstractListModel(parent) {
   if (QmlShell* shell = ActiveQmlShell()) {
     shell->SetImportTarget(this);
@@ -61,6 +164,9 @@ QHash<int, QByteArray> LibraryGridModel::roleNames() const {
       {kCodecRole, "codec"},
       {kFpsRole, "fps"},
       {kSizeRole, "sizeBytes"},
+      {kDisplayNameRole, "displayName"},
+      {kMissingRole, "missing"},
+      {kOptimizedRole, "optimized"},
   };
 }
 
@@ -89,6 +195,14 @@ QVariant LibraryGridModel::data(const QModelIndex& index, int role) const {
       return e.fps;
     case kSizeRole:
       return static_cast<qulonglong>(e.size);
+    case kDisplayNameRole:
+      // Derived from the same EntryLabel string the legacy role returns, so
+      // the two can never disagree about what the row is.
+      return QString::fromStdString(DisplayNameFor(EntryLabel(e)));
+    case kMissingRole:
+      return MissingFor(e);
+    case kOptimizedRole:
+      return OptimizedFor(e);
     default:
       return QVariant();
   }

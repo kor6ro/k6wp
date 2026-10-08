@@ -68,6 +68,16 @@ class PlaylistBridge : public QObject {
   Q_INVOKABLE void moveDown(int row);
   Q_INVOKABLE void clear();
   Q_INVOKABLE QString pathAt(int row) const;
+  // Materializes cfg_.order from the Studio library (LibraryManager::
+  // ListItems, dst paths). Skips entries whose dst is missing on disk
+  // (exists == false). Writes through the existing atomic Save(). Returns
+  // false + lastError when the valid count exceeds kPlaylistMaxEntries
+  // (500) — the on-disk file is left byte-identical. Idempotent: two
+  // consecutive syncs over an unchanged library produce a byte-identical
+  // playlist.json. Single writer: Studio (this bridge) is the only order
+  // materializer; QML debounce lands in todo 10 and only calls this
+  // invokable.
+  Q_INVOKABLE bool syncOrderFromLibrary();
 
  signals:
   void changed();

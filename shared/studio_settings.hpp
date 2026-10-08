@@ -11,7 +11,10 @@ namespace k6wp {
 // (missing fields are defaulted on load); v1 = lockscreen sync fields;
 // v2 = compressor advanced-box visibility; v3 = current (dead controls
 // keep_original/start_minimized removed; old files carrying them migrate
-// by ignoring those keys).
+// by ignoring those keys). The plan-todo-8 UI preferences (closeToTray /
+// playlistSource / performancePreset) are ADDITIVE inside v3: files
+// written before they existed migrate by defaulting them — no version
+// bump, same pattern check_updates followed when it landed.
 inline constexpr int kStudioSettingsSchemaVersion = 3;
 
 // Studio-side preferences, stored at %LOCALAPPDATA%/K6WP/studio_settings.json.
@@ -44,6 +47,16 @@ struct StudioSettings {
   // (plus manual Help -> "Check for updates"); network failures are silent.
   // Files missing this key (written before it existed) migrate it to true.
   bool check_updates = true;
+  // Plan todo 8 (GAP-7) — Studio UI preferences, ADDITIVE inside schema v3
+  // (same no-bump pattern as check_updates above). Old files without these
+  // keys load to the defaults and the loader self-heals the file. JSON keys
+  // are camelCase to match the QML bindings the follow-up todos expose; C++
+  // fields stay snake_case like every other field in this struct.
+  bool close_to_tray = false;  // JSON "closeToTray": exit to tray, not quit
+  // JSON "playlistSource": rotation source, "all" | "custom".
+  std::string playlist_source = "all";
+  // JSON "performancePreset": "Hemat" | "Seimbang" | "Maksimal".
+  std::string performance_preset = "Seimbang";
 };
 
 // Defaults with environment-resolved directories (LOCALAPPDATA, USERPROFILE
@@ -72,13 +85,20 @@ void SaveStudioSettings(const std::filesystem::path& path,
 //   - default_fps not in [1, 30]
 //   - empty compress_output_dir / cache_dir
 //   - unknown default_resolution_mode
+// Normalizes (rewrites in place, never throws) the plan-todo-8 enum fields
+// to their safe defaults when the value is outside the accepted set:
+//   - playlist_source not in {all, custom} -> "all"
+//   - performance_preset not in {Hemat, Seimbang, Maksimal} -> "Seimbang"
 // Takes a non-const ref so future normalizing rules can rewrite in place.
 void ValidateStudioSettings(StudioSettings& settings);
 
 // Converts a raw JSON object into StudioSettings. Missing fields are filled
-// with defaults (v0/v1/v2 -> v3 migration). Keys keep_original and
-// start_minimized were removed in v3 and are ignored when present in old
-// files. Throws ConfigError on unknown schema version or type-corrupt fields.
+// with defaults (v0/v1/v2 -> v3 migration; the todo-8 keys default when
+// absent). Keys keep_original and start_minimized were removed in v3 and
+// are ignored when present in old files. Out-of-set playlistSource /
+// performancePreset values normalize to their defaults (old-file tolerance:
+// a bad hand-edited enum must not fail the load). Throws ConfigError on
+// unknown schema version or type-corrupt fields.
 StudioSettings MigrateStudioSettings(const nlohmann::json& raw);
 
 // %LOCALAPPDATA%/K6WP/studio_settings.json (falls back to
