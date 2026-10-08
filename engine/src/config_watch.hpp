@@ -29,6 +29,10 @@ namespace k6wp {
 class ConfigWatcher {
  public:
   using ConfigCallback = std::function<void(const WallpaperConfig&)>;
+  // Row 16: callback for the second watched file (displays.json). No
+  // argument — the owner re-reads the file through its own loader; the
+  // watcher owns only change detection + debounce dispatch.
+  using SecondCallback = std::function<void()>;
 
   ConfigWatcher() = default;
   ~ConfigWatcher();
@@ -40,6 +44,28 @@ class ConfigWatcher {
   // (re)loaded. An empty path is a no-op (Poll() returns immediately).
   void Start(const std::filesystem::path& config_path,
              ConfigCallback on_change);
+
+  // Row 16 (event-driven displays.json watch): registers a SECOND watched
+  // basename that must live in the SAME directory as `config_path`, sharing
+  // the ONE directory handle, the ONE overlapped completion event and the
+  // ONE debounce timer. OnDirectoryEvent() matches the basename against both
+  // watched names and arms the shared 250 ms debounce; OnDebounceExpired()
+  // then runs each pending file's mtime+size check. No second handle, no
+  // second timer, no new poll: the second file adds zero periodic wakeups.
+  //
+  // Records the initial mtime/size snapshot and does NOT invoke the callback
+  // at registration (boot-time apply is a separate owner concern). Call once,
+  // after Start(); an empty path clears the registration.
+  void WatchSecondFile(const std::filesystem::path& path,
+                       SecondCallback on_change);
+
+  // Row 16: the second file's half of CheckForChange() — stat mtime+size,
+  // invoke the second callback when either changed. Driven by
+  // OnDebounceExpired() for a displays-file event, and directly when no
+  // debounce window is set (unit probes). Returns true when a change was
+  // observed AND the callback ran. Public so engine_units_test can exercise
+  // the reload callback without a Win32 message window.
+  bool CheckSecondForChange();
 
   // Polls for file changes (mtime + size). Call from the engine's idle loop.
   // Internally throttled: the file is stat'ed at most once per
@@ -138,6 +164,17 @@ class ConfigWatcher {
   void* overlapped_ = nullptr;    // heap OVERLAPPED* (defined in the .cpp)
   std::vector<std::uint8_t> notify_buf_;  // kNotifyBufferBytes receive buffer
   std::wstring watch_filename_;  // target basename, e.g. L"config.json"
+  // Row 16: second watched file (displays.json) — same directory handle and
+  // debounce timer, its own basename/callback/snapshot. Event-only by
+  // design: there is deliberately NO Poll() fallback for it (a poll would be
+  // a wakeup the row forbids); a dead event watch degrades it to boot-time
+  // only, logged once at registration.
+  std::filesystem::path second_path_;
+  SecondCallback on_second_change_;
+  std::wstring watch_filename2_;  // second basename, e.g. L"displays.json"
+  std::filesystem::file_time_type second_mtime_{};
+  std::uintmax_t second_size_ = 0;
+  bool second_snapshot_valid_ = false;
   bool event_armed_ = false;     // a ReadDirectoryChangesW is outstanding
   bool event_driven_ = false;    // setup succeeded → wait-array path is live
   // P2.1 (Todo 3) debounce state (loop thread only): hidden window for
@@ -146,6 +183,10 @@ class ConfigWatcher {
   void* debounce_hwnd_ = nullptr;  // engine hidden message window (void* HWND)
   bool debounce_pending_ = false;  // a 250 ms quiet-period timer is armed
   int debounce_events_ = 0;        // FS events coalesced into the pending arm
+  // Row 16: which file(s) the ONE shared timer must check on expiry. Both
+  // may be set when one event burst touches both files.
+  bool debounce_pending_config_ = false;
+  bool debounce_pending_second_ = false;
 
   // Unthrottled stat mtime+size → conditional TryReload. Shared by Poll()
   // (which throttles before calling) and OnDebounceExpired().
@@ -153,8 +194,9 @@ class ConfigWatcher {
   // P2.1 (Todo 3): (re-)arms the 250 ms quiet-period timer on the debounce
   // window (KillTimer + SetTimer). Returns true when deferred to the timer;
   // false when no debounce window is set — the caller then runs the direct
-  // conditional reload (Todo 2 path) so no change is ever lost.
-  bool ArmDebounce();
+  // conditional reload (Todo 2 path) so no change is ever lost. Row 16:
+  // `is_second` marks which file this arm is for; both share the one timer.
+  bool ArmDebounce(bool is_second);
   // (Re)issues the outstanding ReadDirectoryChangesW. On failure drops to
   // the Poll() fallback (event_driven_ = false) with one reason log line.
   void IssueWatch();

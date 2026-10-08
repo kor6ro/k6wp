@@ -35,6 +35,7 @@ constexpr const char* kCmdNames[] = {
     "set_monitor",
     "get_state",
     "quit",
+    "set_display_video",
 };
 
 }  // namespace
@@ -53,6 +54,8 @@ const char* CmdToString(Cmd cmd) noexcept {
       return "get_state";
     case Cmd::quit:
       return "quit";
+    case Cmd::set_display_video:
+      return "set_display_video";
   }
   return nullptr;
 }
@@ -224,6 +227,30 @@ EngineState ParseEngineState(const nlohmann::json& raw) {
     s.paused = state.value("paused", false);
     s.headless_slots = state.value("headless_slots", 0);
     s.live = state.value("live", true);
+    // Row 15, additive: absent keys default safely (old-engine compat —
+    // capability 0 + empty maps). Wrong-type present values also fall back
+    // to those defaults; parsing never throws out of here.
+    if (auto cap = state.find("display_capability");
+        cap != state.end() && cap->is_number_integer()) {
+      s.display_capability = cap->get<int>();
+    }
+    if (auto a = state.find("display_assignments");
+        a != state.end() && a->is_object()) {
+      for (auto it = a->begin(); it != a->end(); ++it) {
+        if (it.value().is_string()) {
+          s.display_assignments.emplace(it.key(),
+                                        it.value().get<std::string>());
+        }
+      }
+    }
+    if (auto c = state.find("display_coverage");
+        c != state.end() && c->is_object()) {
+      for (auto it = c->begin(); it != c->end(); ++it) {
+        if (it.value().is_string()) {
+          s.display_coverage.emplace(it.key(), it.value().get<std::string>());
+        }
+      }
+    }
   } catch (const std::exception&) {
   }
   return s;

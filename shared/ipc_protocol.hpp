@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <map>
 #include <stdexcept>
 #include <string>
 
@@ -44,6 +45,15 @@ std::wstring CurrentSessionPipeName();
 inline constexpr size_t kMaxPayloadBytes = 64 * 1024;
 
 // Commands understood by the engine.
+//
+// APPEND-ONLY contract (row 13): existing numeric values must never move or
+// be reordered — the static_asserts below lock them. kProtocolVersion stays 1
+// across additive commands; an older engine that does not know a newer name
+// answers with an error ack because CmdFromString returns false for unknown
+// names and Decode rejects the frame (shared/ipc_protocol.cpp) — never a
+// crash. set_display_video was appended after quit for multi-monitor
+// per-slot assignment (GDI device \\.\DISPLAYn + UTF-8 path, or
+// {"clear":true} to drop it).
 enum class Cmd {
   set_video,
   pause,
@@ -51,7 +61,16 @@ enum class Cmd {
   set_monitor,
   get_state,
   quit,
+  set_display_video,
 };
+
+static_assert(static_cast<int>(Cmd::set_video) == 0);
+static_assert(static_cast<int>(Cmd::pause) == 1);
+static_assert(static_cast<int>(Cmd::resume) == 2);
+static_assert(static_cast<int>(Cmd::set_monitor) == 3);
+static_assert(static_cast<int>(Cmd::get_state) == 4);
+static_assert(static_cast<int>(Cmd::quit) == 5);
+static_assert(static_cast<int>(Cmd::set_display_video) == 6);
 
 // One NDJSON message, serialized as:
 //   {"version":1,"cmd":"set_video","payload":{...}}\n
@@ -70,6 +89,19 @@ struct EngineState {
   bool paused = false;
   int headless_slots = 0;
   bool live = true;
+  // Row 15, additive: per-monitor assignment map (GDI device name ->
+  // utf-8 video path) from displays.json. Missing key -> empty (engines
+  // older than row 15 never emit it).
+  std::map<std::string, std::string> display_assignments;
+  // Row 15, additive: feature-detect Studio reads before trusting the two
+  // maps. 0 = engine predates the display get_state fields (or emitted a
+  // wrong-type value); 1 = display_assignments / display_coverage are
+  // meaningful. Missing key -> 0.
+  int display_capability = 0;
+  // Row 15, additive: per-device placement verdict ("covered",
+  // "clipped-left/top/right/bottom", "headless") from row 4's
+  // Slot::coverage_reason chain. Missing key -> empty.
+  std::map<std::string, std::string> display_coverage;
 };
 EngineState ParseEngineState(const nlohmann::json& raw);
 

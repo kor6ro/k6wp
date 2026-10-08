@@ -176,6 +176,124 @@ Rectangle {
     // preview hidden until the last one closes.
     property int openDialogs: 0
 
+    // --- row 39: click-to-assign armed state ------------------------------
+    // QML-only by design: no C++ member, no new bridge invokable. A library /
+    // playlist assign affordance sets the path; the row-41 monitor sub-tabs
+    // consume it and clear it once the assignment is dispatched. The armed
+    // banner sits
+    // under the tab bar so it is visible on every tab and carries the Batal
+    // affordance.
+    property string armedAssignPath: ""
+
+    // Broken-entry gate (row 22): an empty path never arms, so a rect click
+    // can never dispatch an empty assignment.
+    function armAssign(path) {
+        const p = String(path === undefined || path === null ? "" : path)
+        if (p.length === 0)
+            return false
+        root.armedAssignPath = p
+        return true
+    }
+
+    function disarmAssign() {
+        root.armedAssignPath = ""
+    }
+
+    // Basename for the armed banner (Windows or POSIX separators).
+    function fileNameOf(path) {
+        const p = String(path === undefined || path === null ? "" : path)
+        const slash = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"))
+        return slash >= 0 ? p.slice(slash + 1) : p
+    }
+
+    // --- row 41: monitor sub-tabs (selected monitor state) -----------------
+    // Exactly one selected key at a time. The primary monitor's key is the
+    // default; with no primary, the first entry with a non-empty key wins
+    // (deterministic Studio.displays order). Empty until the first
+    // refreshDisplays() lands - the Wallpaper view is the start page, so that
+    // refresh also runs from Component.onCompleted below.
+    property string selectedMonitorKey: ""
+
+    function defaultMonitorKey() {
+        const all = Studio.displays
+        for (let i = 0; i < all.length; ++i) {
+            const entry = all[i]
+            if (String(entry.key).length > 0 && entry.isPrimary === true)
+                return String(entry.key)
+        }
+        for (let i = 0; i < all.length; ++i) {
+            const entry = all[i]
+            if (String(entry.key).length > 0)
+                return String(entry.key)
+        }
+        return ""
+    }
+
+    // Keeps the selection valid across refreshes: a monitor that is still
+    // modelled stays selected; a vanished one falls back to the default rule
+    // instead of pointing at nothing.
+    function ensureSelectedMonitor() {
+        const all = Studio.displays
+        for (let i = 0; i < all.length; ++i) {
+            if (String(all[i].key) === root.selectedMonitorKey
+                    && String(all[i].key).length > 0)
+                return
+        }
+        root.selectedMonitorKey = root.defaultMonitorKey()
+    }
+
+    function selectedMonitorEntry() {
+        const all = Studio.displays
+        for (let i = 0; i < all.length; ++i) {
+            if (String(all[i].key) === root.selectedMonitorKey)
+                return all[i]
+        }
+        return null
+    }
+
+    function selectedMonitorLabel() {
+        const entry = root.selectedMonitorEntry()
+        return entry === null ? "" : String(entry.label)
+    }
+
+    // Enable rule for the monitor-scoped Hapus (the clear itself is the
+    // row-19 clearMonitorAssignment() invokable).
+    function selectedMonitorHasAssignment() {
+        const entry = root.selectedMonitorEntry()
+        return entry !== null && String(entry.assignedPath).length > 0
+    }
+
+    // A sub-tab click scopes the Wallpaper view to that monitor. The preview
+    // hole keeps its native-surface contract, so its geometry is re-pushed
+    // through the existing syncPreview() exactly like the layout-change
+    // handlers do; the quick settings are re-read through the existing
+    // refreshQuickSettings() pattern so the panel cannot be stale on the new
+    // scope. While a video is armed (row 39), the click is ALSO the
+    // assignment gesture: assign the armed path to the just-selected monitor
+    // and disarm - row 39's onAssignRequested clearing, moved from the deleted
+    // canvas rects onto the monitor sub-tabs.
+    function selectMonitor(key) {
+        const k = String(key === undefined || key === null ? "" : key)
+        if (k.length === 0)
+            return
+        root.selectedMonitorKey = k
+        root.syncPreview()
+        Studio.refreshQuickSettings()
+        if (root.armedAssignPath.length > 0)
+            root.assignArmedToSelectedMonitor()
+    }
+
+    // The single place a monitor assignment is dispatched (row 39 mechanism):
+    // assignVideoToMonitor(selected key, armed path) then clear the armed
+    // state. The bridge emits displaysChanged, so the sub-tab repaints with
+    // the new assignment / coverage.
+    function assignArmedToSelectedMonitor() {
+        if (root.armedAssignPath.length === 0 || root.selectedMonitorKey.length === 0)
+            return
+        Studio.assignVideoToMonitor(root.selectedMonitorKey, root.armedAssignPath)
+        root.disarmAssign()
+    }
+
     function startCompressFirst() {
         Compress.setSourcePath(offerPath)
         Compress.setResolutionText("1920x1080")
@@ -241,6 +359,11 @@ Rectangle {
             if (batteryBox)
                 batteryBox.checked = Studio.quickBattery
         }
+        // Row 41: the monitor list was rebuilt (refreshDisplays) - keep the
+        // sub-tab selection pointing at a monitor that still exists.
+        function onDisplaysChanged() {
+            root.ensureSelectedMonitor()
+        }
     }
 
     Pane {
@@ -303,7 +426,15 @@ Rectangle {
                 // Re-read on entry: the Wallpaper tab's quick settings mirror
                 // config.json + the autostart registry, either of which the
                 // Pengaturan tab can change.
-                onCurrentIndexChanged: if (currentIndex === 0) Studio.refreshQuickSettings()
+                onCurrentIndexChanged: {
+                    if (currentIndex === 0) {
+                        Studio.refreshQuickSettings()
+                        // Row 41: re-read the monitor list whenever the
+                        // Wallpaper view is shown (row 21's refresh-on-show
+                        // pattern, now owned by this view).
+                        Studio.refreshDisplays()
+                    }
+                }
 
                 // Tab labels are the existing Studio tab names.
                 TabButton {
@@ -317,6 +448,48 @@ Rectangle {
                 }
             }
 
+            // Row 39: the click-to-assign armed indicator, directly under the
+            // tab bar so it cannot be hidden by tab switching. Invisible while disarmed (a layout skips invisible
+            // items), so it costs no space in the normal case.
+            Pane {
+                id: armedAssignBanner
+                objectName: "armedAssignBanner"
+                Layout.fillWidth: true
+                visible: root.armedAssignPath.length > 0
+                padding: 8
+                Material.elevation: 1
+                // Row 42: an accent wash makes the armed state read as an active
+                // mode instead of one more grey bar. It is a background tint -
+                // no border, no new control, wording unchanged.
+                background: Rectangle {
+                    color: Material.accent
+                    opacity: 0.18
+                }
+
+                RowLayout {
+                    anchors.fill: parent
+                    spacing: 8
+
+                    Label {
+                        id: armedAssignLabel
+                        objectName: "armedAssignLabel"
+                        Layout.fillWidth: true
+                        elide: Text.ElideMiddle
+                        text: qsTr("Penugasan siap: klik sub-tab layar tujuan untuk %1")
+                              .arg(root.fileNameOf(root.armedAssignPath))
+                    }
+
+                    Button {
+                        id: armedAssignCancel
+                        objectName: "armedAssignCancel"
+                        text: qsTr("Batal")
+                        onClicked: root.disarmAssign()
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("Batalkan penugasan layar")
+                    }
+                }
+            }
+
             StackLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
@@ -327,6 +500,208 @@ Rectangle {
                 // ---------------------------------------------------------
                 Item {
 
+                    // Row 41: the monitor sub-tab strip sits above the two
+                    // columns so selecting a monitor scopes the whole view
+                    // (preview caption + actions), not just one column.
+                    ColumnLayout {
+                        anchors.fill: parent
+                        anchors.margins: 10
+                        spacing: 8
+
+                        // --- row 41: monitor sub-tabs ----------------------
+                        // One sub-tab per entry of Studio.displays, filtered to
+                        // entries with a non-empty key (a zero-key entry
+                        // renders NO button - row 20's zero-size guard). The
+                        // selected button is the scope for the preview caption
+                        // and for the monitor actions; it is also the
+                        // assignment target while a video is armed (row 39).
+                        Pane {
+                            id: monitorSubTabs
+                            objectName: "monitorSubTabs"
+                            Layout.fillWidth: true
+                            Material.elevation: 1
+                            padding: 8
+
+                            ColumnLayout {
+                                anchors.fill: parent
+                                spacing: 6
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+
+                                    Label {
+                                        text: qsTr("Layar:")
+                                        font.bold: true
+                                    }
+
+                                    Repeater {
+                                        id: monitorTabRepeater
+                                        // The binding re-evaluates on every
+                                        // displaysChanged; entries without a
+                                        // key never reach the repeater, so no
+                                        // button is created for them.
+                                        model: {
+                                            const all = Studio.displays
+                                            const out = []
+                                            for (let i = 0; i < all.length; ++i) {
+                                                const entry = all[i]
+                                                if (String(entry.key).length > 0)
+                                                    out.push(entry)
+                                            }
+                                            return out
+                                        }
+
+                                        delegate: Button {
+                                            id: monitorTabButton
+                                            objectName: "monitorSubTab"
+                                            required property var modelData
+
+                                            // `text` is not painted (the custom
+                                            // contentItem below is), but it is
+                                            // what screen readers and UIA see.
+                                            text: String(modelData.label) + " " + String(modelData.resolutionLabel)
+
+                                            // flat/highlighted (not checkable):
+                                            // selectedMonitorKey is the single
+                                            // source of truth, so a click can
+                                            // never destroy the binding that
+                                            // paints the selection. While a
+                                            // video is armed every sub-tab is
+                                            // raised (non-flat) because each one
+                                            // is a valid assignment target.
+                                            flat: root.selectedMonitorKey !== String(modelData.key)
+                                                  && root.armedAssignPath.length === 0
+                                            highlighted: root.selectedMonitorKey === String(modelData.key)
+                                            onClicked: root.selectMonitor(String(modelData.key))
+
+                                            // Row 42: the raw device key was a
+                                            // developer string in a user-facing
+                                            // bubble; say what the click does,
+                                            // and what it will do while armed.
+                                            ToolTip.visible: hovered
+                                            ToolTip.text: root.armedAssignPath.length > 0
+                                                          ? qsTr("Klik untuk menugaskan video ke layar ini")
+                                                          : qsTr("Pilih layar ini")
+
+                                            contentItem: ColumnLayout {
+                                                spacing: 3
+
+                                                RowLayout {
+                                                    spacing: 6
+
+                                                    Label {
+                                                        Layout.fillWidth: true
+                                                        elide: Text.ElideRight
+                                                        font.bold: true
+                                                        text: modelData.label
+                                                    }
+
+                                                    // Primary mark (row 19
+                                                    // isPrimary), shown only on
+                                                    // the primary monitor. Row 42:
+                                                    // no explicit accent color -
+                                                    // accent-on-accent made the
+                                                    // badge nearly invisible on
+                                                    // the highlighted (selected)
+                                                    // button; it inherits the
+                                                    // button's foreground instead.
+                                                    Label {
+                                                        visible: modelData.isPrimary === true
+                                                        text: qsTr("UTAMA")
+                                                        font.bold: true
+                                                        font.pixelSize: 10
+                                                        opacity: 0.8
+                                                    }
+                                                }
+
+                                                Label {
+                                                    text: modelData.resolutionLabel
+                                                    opacity: 0.7
+                                                    font.pixelSize: 11
+                                                }
+
+                                                Label {
+                                                    visible: String(modelData.assignedPath).length > 0
+                                                    text: root.fileNameOf(modelData.assignedPath)
+                                                    elide: Text.ElideMiddle
+                                                    Layout.maximumWidth: 220
+                                                    opacity: 0.8
+                                                    font.pixelSize: 10
+                                                }
+
+                                                // Duplicate-mode badge: the full
+                                                // IS-7 notice sits once under the
+                                                // row (one per button would
+                                                // repeat the same sentence).
+                                                Label {
+                                                    visible: Studio.duplicateModeNotice.length > 0
+                                                    text: qsTr("mode duplikat")
+                                                    color: "orange"
+                                                    font.pixelSize: 10
+                                                }
+
+                                                // Degraded: an assignment exists
+                                                // but its file is missing.
+                                                Label {
+                                                    visible: String(modelData.assignedPath).length > 0
+                                                             && modelData.assignedExists === false
+                                                    text: qsTr("file tidak ditemukan")
+                                                    color: "red"
+                                                    font.pixelSize: 10
+                                                }
+
+                                                // Coverage: anything other than
+                                                // "covered" is a warning the
+                                                // engine log explains.
+                                                Label {
+                                                    visible: String(modelData.coverage) !== "covered"
+                                                    text: qsTr("cek engine.log")
+                                                    color: "orange"
+                                                    font.pixelSize: 10
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    Label {
+                                        Layout.fillWidth: true
+                                        visible: monitorTabRepeater.count === 0
+                                        opacity: 0.7
+                                        text: qsTr("Tidak ada layar terdeteksi")
+                                    }
+
+                                    // The Hapus path: drop the selected
+                                    // monitor's assignment through the row-19
+                                    // invokable (the inverse of the armed
+                                    // assign click).
+                                    Button {
+                                        id: clearMonitorAssignmentButton
+                                        objectName: "clearMonitorAssignment"
+                                        text: qsTr("Hapus penugasan")
+                                        enabled: root.selectedMonitorKey.length > 0
+                                                 && root.selectedMonitorHasAssignment()
+                                        onClicked: Studio.clearMonitorAssignment(root.selectedMonitorKey)
+                                        ToolTip.visible: hovered
+                                        ToolTip.text: qsTr("Hapus penugasan video untuk layar terpilih")
+                                    }
+                                }
+
+                                // The full IS-7 duplicate-mode notice: the
+                                // state rows 19/23/24 used to surface on the
+                                // canvas now lives on the sub-tab row.
+                                Label {
+                                    id: duplicateModeNoticeLabel
+                                    objectName: "duplicateModeNotice"
+                                    Layout.fillWidth: true
+                                    visible: Studio.duplicateModeNotice.length > 0
+                                    wrapMode: Text.WordWrap
+                                    color: "orange"
+                                    text: Studio.duplicateModeNotice
+                                }
+                            }
+                        }
+
                     // Two columns instead of one tall stack: the old layout
                     // pushed everything full-width down the page, so a 1936px
                     // window left ~75% of the width empty while the preview sat
@@ -335,8 +710,8 @@ Rectangle {
                     // right rail is a fixed 340px for the things that are
                     // short text or fixed controls.
                     RowLayout {
-                        anchors.fill: parent
-                        anchors.margins: 10
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
                         spacing: 8
 
                         // -----------------------------------------------------
@@ -347,8 +722,27 @@ Rectangle {
                             Layout.fillHeight: true
                             spacing: 8
 
-                            Label {
-                                text: qsTr("Pratinjau:")
+                            // Row 41: the preview hole is scoped to the
+                            // selected monitor; the caption names it. The
+                            // native mpv surface itself stays engine-wide -
+                            // StudioBridge exposes no per-monitor preview.
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 8
+
+                                Label {
+                                    text: qsTr("Pratinjau:")
+                                }
+
+                                Label {
+                                    Layout.fillWidth: true
+                                    elide: Text.ElideRight
+                                    opacity: 0.7
+                                    font.pixelSize: 12
+                                    text: root.selectedMonitorLabel().length > 0
+                                          ? qsTr("cakupan: %1").arg(root.selectedMonitorLabel())
+                                          : qsTr("cakupan: semua layar")
+                                }
                             }
 
                             // The hole for the native mpv preview. Its rectangle
@@ -458,6 +852,7 @@ Rectangle {
                                 boundsBehavior: Flickable.StopAtBounds
 
                                 delegate: Item {
+                                    id: libraryCell
                                     width: libraryGrid.cellWidth
                                     height: libraryGrid.cellHeight
 
@@ -479,6 +874,27 @@ Rectangle {
                                         anchors.margins: 4
                                         Material.elevation: 1
 
+                                        // Row 42: the cell-wide click surface
+                                        // is declared first so the thumbnail,
+                                        // filename and assign affordance all
+                                        // paint above it. Images and labels do
+                                        // not handle mouse events in Qt Quick,
+                                        // so clicks on them still reach this
+                                        // area; only the assign button consumes
+                                        // its own clicks, keeping the existing
+                                        // double-click / right-click behavior.
+                                        MouseArea {
+                                            id: dragArea
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                            onDoubleClicked: Library.applyAt(index)
+                                            onClicked: function (mouse) {
+                                                if (mouse.button === Qt.RightButton)
+                                                    rowMenu.popup()
+                                            }
+                                        }
+
                                         ColumnLayout {
                                             anchors.fill: parent
                                             anchors.margins: 8
@@ -499,8 +915,13 @@ Rectangle {
                                                                      Library.ensureThumbnail(index)
                                             }
 
+                                            // Row 42: the filename keeps its
+                                            // two lines but reserves the
+                                            // card's bottom-right corner, where
+                                            // the assign affordance sits.
                                             Label {
                                                 Layout.fillWidth: true
+                                                Layout.rightMargin: 58
                                                 maximumLineCount: 2
                                                 elide: Text.ElideRight
                                                 wrapMode: Text.WordWrap
@@ -509,15 +930,53 @@ Rectangle {
                                             }
                                         }
 
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            hoverEnabled: true
-                                            acceptedButtons: Qt.LeftButton | Qt.RightButton
-                                            onDoubleClicked: Library.applyAt(index)
-                                            onClicked: function (mouse) {
-                                                if (mouse.button === Qt.RightButton)
-                                                    rowMenu.popup()
-                                            }
+                                        // Row 39 click-to-assign affordance,
+                                        // moved by row 42 into the card's
+                                        // bottom-right corner (inside the
+                                        // filename strip): it can no longer
+                                        // cover the thumbnail, and the row's
+                                        // click surface below stays intact.
+                                        // Disabled for a broken entry (empty
+                                        // dst), the same non-empty-path gate
+                                        // the old drag target used.
+                                        Button {
+                                            id: libraryAssignButton
+                                            objectName: "libraryAssignAffordance"
+                                            anchors.right: parent.right
+                                            anchors.bottom: parent.bottom
+                                            anchors.margins: 8
+                                            text: qsTr("Tandai")
+                                            flat: true
+                                            implicitWidth: 52
+                                            implicitHeight: 22
+                                            // Material's 8px vertical button
+                                            // padding survives `padding: 0`
+                                            // (the style binds top/bottom
+                                            // padding separately) and would
+                                            // leave a 22px-tall button with
+                                            // only 6px of content height,
+                                            // which clips the label away - the
+                                            // compact size owns its paddings
+                                            // explicitly.
+                                            topPadding: 3
+                                            bottomPadding: 3
+                                            leftPadding: 6
+                                            rightPadding: 6
+                                            font.pixelSize: 10
+                                            enabled: libraryCell.dst.length > 0
+                                            onClicked: root.armAssign(libraryCell.dst)
+                                            // Row 42 tooltip fix: the arm
+                                            // click shifts the whole view down
+                                            // while the pointer is stationary,
+                                            // and Qt does not re-evaluate hover
+                                            // without a mouse move - so the
+                                            // bubble stayed pinned over the
+                                            // search box. It now hides the
+                                            // moment the armed banner takes
+                                            // over (the banner carries the next
+                                            // instruction).
+                                            ToolTip.visible: hovered && root.armedAssignPath.length === 0
+                                            ToolTip.text: qsTr("Tandai video ini untuk ditugaskan ke layar")
                                         }
 
                                         Menu {
@@ -678,12 +1137,14 @@ Rectangle {
                                         spacing: 2
 
                                         delegate: RowLayout {
+                                            id: playlistCell
                                             required property var modelData
                                             required property int index
 
                                             width: playlistList.width
                                             spacing: 6
-                                            opacity: modelData.exists === false ? 0.6 : 1.0
+                                            // Existing missing-file dim.
+                                            opacity: (modelData.exists === false ? 0.6 : 1.0)
 
                                             Label {
                                                 Layout.fillWidth: true
@@ -692,6 +1153,32 @@ Rectangle {
                                                 color: modelData.exists === false
                                                        ? "red"
                                                        : Material.foreground
+
+                                                // The label is the drag handle; the Naik /
+                                                // Turun / Hapus buttons must stay clickable,
+                                                // so they deliberately have no MouseArea.
+                                                MouseArea {
+                                                    id: playlistDragArea
+                                                    anchors.fill: parent
+                                                }
+                                            }
+
+                                            // Row 39 click-to-assign affordance,
+                                            // disabled for a broken entry (empty
+                                            // path). Row 42 tooltip fix: same
+                                            // armed guard as the library
+                                            // affordance - the arm click shifts
+                                            // the layout under a stationary
+                                            // pointer, so the bubble must not
+                                            // outlive its hint.
+                                            Button {
+                                                id: playlistAssignButton
+                                                objectName: "playlistAssignAffordance"
+                                                text: qsTr("Tandai")
+                                                enabled: playlistCell.modelData.path.length > 0
+                                                onClicked: root.armAssign(playlistCell.modelData.path)
+                                                ToolTip.visible: hovered && root.armedAssignPath.length === 0
+                                                ToolTip.text: qsTr("Tandai video ini untuk ditugaskan ke layar")
                                             }
 
                                             Button {
@@ -1035,6 +1522,7 @@ Rectangle {
                                 }
                             }
                         }
+                    }
                     }
                 }
 
@@ -2219,6 +2707,13 @@ Rectangle {
         property int page: 0
     }
 
-    Component.onCompleted: if (Library.firstRunEligible && !Studio.videoActive)
-                               firstRunDialog.open()
+    Component.onCompleted: {
+        // Row 41: the Wallpaper view is the start page, so its monitor list
+        // has to be populated here as well - onCurrentIndexChanged cannot
+        // fire for the initial show. refreshDisplays() emits displaysChanged,
+        // which seeds selectedMonitorKey through ensureSelectedMonitor().
+        Studio.refreshDisplays()
+        if (Library.firstRunEligible && !Studio.videoActive)
+            firstRunDialog.open()
+    }
 }

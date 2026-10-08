@@ -7,6 +7,12 @@
 
 namespace k6wp::launcher {
 
+// Wait budget: the worker itself does a handful of registry + ACL calls
+// (milliseconds), so the only unbounded input is the human reading the UAC
+// consent dialog. 2 minutes is generous for that, and a hard bound matters
+// because a user who walks away must not hang the uninstaller forever.
+inline constexpr unsigned long kElevatedWorkerWaitMs = 120000;
+
 enum class ElevatedWaitOutcome {
   kRestored,      // the worker finished the policy restore
   kDeclined,      // ERROR_CANCELLED: the user dismissed the UAC prompt

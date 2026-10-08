@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <filesystem>
 
 #include "multi_monitor.hpp"
 
@@ -43,9 +44,43 @@ std::vector<MonitorInfo> FilterMonitors(int active) {
   return out;
 }
 
+// Row 11: test-only GetSpanGeometry override (SetSpanGeometryOverride).
+const SpanGeometry* g_span_geometry_override = nullptr;
+
+bool SamePlacementRect(const PlacementRect& a, const PlacementRect& b) {
+  return a.left == b.left && a.top == b.top && a.right == b.right &&
+         a.bottom == b.bottom;
+}
+
+// Row 15: UTF-8 GDI device key -> wide (MonitorInfo::device_name is wide,
+// MONITORINFOEXW.szDevice). Empty/undecodable input -> empty wide key,
+// which no slot matches (unknown device).
+std::wstring WidenDeviceKey(const std::string& device) {
+  if (device.empty()) return {};
+  const int n =
+      MultiByteToWideChar(CP_UTF8, 0, device.c_str(), -1, nullptr, 0);
+  if (n <= 0) return {};
+  std::wstring out(static_cast<std::size_t>(n - 1), L'\0');
+  MultiByteToWideChar(CP_UTF8, 0, device.c_str(), -1, out.data(), n);
+  return out;
+}
+
+// Row 17: wide -> UTF-8 for the row's display: log lines (%s on device keys
+// and assignment paths). Empty/undecodable input -> empty string.
+std::string NarrowUtf8(const std::wstring& w) {
+  if (w.empty()) return {};
+  const int n =
+      WideCharToMultiByte(CP_UTF8, 0, w.c_str(), -1, nullptr, 0, nullptr, nullptr);
+  if (n <= 0) return {};
+  std::string out(static_cast<std::size_t>(n - 1), '\0');
+  WideCharToMultiByte(CP_UTF8, 0, w.c_str(), -1, out.data(), n, nullptr, nullptr);
+  return out;
+}
+
 }  // namespace
 
-MultiMonitor::MultiMonitor(LogFn log) : log_(log) {}
+MultiMonitor::MultiMonitor(LogFn log, SlotFactory factory)
+    : log_(log), factory_(std::move(factory)) {}
 
 MultiMonitor::~MultiMonitor() { ClearSlots(); }
 
@@ -58,9 +93,13 @@ MultiMonitor::MultiMonitor(MultiMonitor&& other) noexcept
       active_monitor_(other.active_monitor_.load(std::memory_order_relaxed)),
       span_filter_logged_(other.span_filter_logged_),
       filter_armed_(other.filter_armed_),
+      factory_(std::move(other.factory_)),
       slots_(std::move(other.slots_)),
+      retained_assignments_(std::move(other.retained_assignments_)),
       initialized_(other.initialized_),
       headless_host_(other.headless_host_),
+      shared_host_(other.shared_host_),
+      attached_host_rect_(other.attached_host_rect_),
       global_paused_(other.global_paused_.load(std::memory_order_relaxed)) {
   other.initialized_ = false;
 }
@@ -77,9 +116,13 @@ MultiMonitor& MultiMonitor::operator=(MultiMonitor&& other) noexcept {
                           std::memory_order_relaxed);
     span_filter_logged_ = other.span_filter_logged_;
     filter_armed_ = other.filter_armed_;
+    factory_ = std::move(other.factory_);
     slots_ = std::move(other.slots_);
+    retained_assignments_ = std::move(other.retained_assignments_);
     initialized_ = other.initialized_;
     headless_host_ = other.headless_host_;
+    shared_host_ = other.shared_host_;
+    attached_host_rect_ = other.attached_host_rect_;
     global_paused_.store(other.global_paused_.load(std::memory_order_relaxed),
                          std::memory_order_relaxed);
     other.initialized_ = false;
@@ -88,12 +131,19 @@ MultiMonitor& MultiMonitor::operator=(MultiMonitor&& other) noexcept {
 }
 
 SpanGeometry MultiMonitor::GetSpanGeometry() noexcept {
+  if (g_span_geometry_override != nullptr) {
+    return *g_span_geometry_override;
+  }
   SpanGeometry g;
   g.x = ::GetSystemMetrics(SM_XVIRTUALSCREEN);
   g.y = ::GetSystemMetrics(SM_YVIRTUALSCREEN);
   g.width = ::GetSystemMetrics(SM_CXVIRTUALSCREEN);
   g.height = ::GetSystemMetrics(SM_CYVIRTUALSCREEN);
   return g;
+}
+
+void MultiMonitor::SetSpanGeometryOverride(const SpanGeometry* g) {
+  g_span_geometry_override = g;
 }
 
 void MultiMonitor::ClearSlots() {
@@ -103,16 +153,29 @@ void MultiMonitor::ClearSlots() {
   initialized_ = false;
 }
 
+// Row 7: resolve the desktop host once for the current attach pass. Every
+// subsequent SetSharedHost in this pass hands the SAME SharedHost to each
+// slot injector - no per-slot FindDesktopWindows / 0x052C spawn.
+void MultiMonitor::ResolveHostForPass() {
+  shared_host_ = ResolveSharedHost(inject_mode_, log_);
+}
+
 bool MultiMonitor::AttachSlot(const MonitorInfo& mi) {
   Slot slot;
   slot.info = mi;
-  slot.injector = std::make_unique<DesktopInjector>(log_);
+  slot.injector = factory_.make_injector(log_);
   slot.injector->SetInjectMode(inject_mode_);
+  // Row 7: pass the pass's resolved host down before Attach - Attach itself
+  // no longer discovers or spawns a host.
+  slot.injector->SetSharedHost(shared_host_);
   // Attach failure degrades to a headless renderer: it embeds mpv into the
   // hidden host (headless_host_, set by EngineApp) so mpv never spawns its
   // own framed window (Todo 2). A monitor that refuses injection must not
   // kill the engine or the surviving monitors.
   const bool attached = slot.injector->Attach(mi.x, mi.y, mi.width, mi.height);
+  // Row 4: persist the attach path's coverage verdict on the slot so rows
+  // 15/19 can surface it as get_state display_coverage (logging only here).
+  slot.coverage_reason = slot.injector->last_coverage_reason();
   if (!attached) {
     char buf[160];
     std::snprintf(buf, sizeof(buf),
@@ -121,7 +184,7 @@ bool MultiMonitor::AttachSlot(const MonitorInfo& mi) {
                   mi.id, mi.width, mi.height);
     LogLine(log_, buf);
   }
-  slot.renderer = std::make_unique<MpvRenderer>();
+  slot.renderer = factory_.make_renderer();
   if (!adapter_pin_.empty()) slot.renderer->SetAdapterPin(adapter_pin_);
   void* hwnd = attached ? slot.injector->injected_hwnd() : headless_host_;
   if (!slot.renderer->Create(hwnd)) {
@@ -166,6 +229,7 @@ bool MultiMonitor::AttachSpanSlot() {
       return false;
     }
   }
+  ResolveHostForPass();
   return AttachSlot(mi);
 }
 
@@ -183,6 +247,9 @@ void MultiMonitor::ReattachSpanLocked(Slot& slot, int x, int y, int w, int h,
     w = primary.width;
     h = primary.height;
   }
+  // Row 7: the span re-anchor reuses the pass's shared host too (its caller
+  // resolved it before reaching this funnel).
+  slot.injector->SetSharedHost(shared_host_);
   slot.injector->Detach();
   if (slot.injector->Attach(x, y, w, h) && slot.renderer) {
     if (reassert) {
@@ -200,6 +267,10 @@ void MultiMonitor::SetInjectMode(InjectMode mode) { inject_mode_ = mode; }
 
 void MultiMonitor::SetAdapterPin(const std::string& substr) {
   adapter_pin_ = substr;
+}
+
+void MultiMonitor::SetSlotFactory(SlotFactory factory) {
+  factory_ = std::move(factory);
 }
 
 void MultiMonitor::SetActiveMonitor(int id) {
@@ -228,6 +299,10 @@ int MultiMonitor::active_monitor() const {
 }
 
 void MultiMonitor::ApplyActiveFilter(const std::vector<MonitorInfo>& desired) {
+  // Row 7: one host resolution covers this whole pass - the teardown below,
+  // every newcomer AttachSlot, and (when this is Init/OnDisplayChange/Reanchor
+  // converging the set) the survivors re-attached by the caller.
+  ResolveHostForPass();
   // Tear down slots outside the desired set (vanished monitor or filtered
   // out by the active target).
   for (auto it = slots_.begin(); it != slots_.end();) {
@@ -266,11 +341,13 @@ bool MultiMonitor::Init(MultiMonitorMode mode) {
     if (AttachSpanSlot()) {
       initialized_ = true;
     }
+    attached_host_rect_ = shared_host_.client_rect;
     filter_armed_ = true;
     return initialized_;
   }
   ApplyActiveFilter(FilterMonitors(active_monitor_.load(std::memory_order_acquire)));
   filter_armed_ = true;
+  attached_host_rect_ = shared_host_.client_rect;
   if (!initialized_) {
     LogLine(log_, "multi_monitor: Init found no monitors, engine keeps running");
   }
@@ -284,19 +361,29 @@ void MultiMonitor::OnDisplayChange() {
   // attach failures degrade to fewer live slots, never an exception.
   try {
     if (mode_ == MultiMonitorMode::Span) {
-      const SpanGeometry g = GetSpanGeometry();
       const auto it = slots_.find(kSpanSlotId);
       if (it == slots_.end()) {
         AttachSpanSlot();
+        attached_host_rect_ = shared_host_.client_rect;
         return;
       }
+      // Row 11: resolve the host BEFORE the change checks - the host-rect
+      // comparison needs a live measurement, and row 7 treats pass entries
+      // as unconditional resolutions.
+      ResolveHostForPass();
+      const SpanGeometry g = GetSpanGeometry();
       Slot& slot = it->second;
-      if (slot.info.x == g.x && slot.info.y == g.y &&
-          slot.info.width == g.width && slot.info.height == g.height) {
-        return;  // Geometry unchanged — nothing to do.
+      const bool geometry_changed =
+          !(slot.info.x == g.x && slot.info.y == g.y &&
+            slot.info.width == g.width && slot.info.height == g.height);
+      const bool host_moved =
+          !SamePlacementRect(shared_host_.client_rect, attached_host_rect_);
+      if (!geometry_changed && !host_moved) {
+        return;  // Geometry and host unchanged — nothing to do.
       }
-      // Re-attach the injector at the new span size, keep the renderer
-      // instance (no video reload needed — SetHWND re-points it).
+      // Re-attach the injector at the current span size against the
+      // refreshed host, keep the renderer instance (no video reload needed —
+      // SetHWND re-points it).
       if (slot.injector) {
         ReattachSpanLocked(slot, g.x, g.y, g.width, g.height, /*reassert=*/false);
       }
@@ -304,6 +391,7 @@ void MultiMonitor::OnDisplayChange() {
       slot.info.y = g.y;
       slot.info.width = g.width;
       slot.info.height = g.height;
+      attached_host_rect_ = shared_host_.client_rect;
       return;
     }
     const std::vector<MonitorInfo> desired =
@@ -312,6 +400,11 @@ void MultiMonitor::OnDisplayChange() {
     //    monitors torn down, filtered-out monitors removed, newcomers
     //    attached). Reuses the OnDisplayChange teardown/attach pattern.
     ApplyActiveFilter(desired);
+    // Row 11: a host that moved or was recreated (Explorer restart, DPI
+    // change) must re-place survivors even when every monitor rect is
+    // unchanged - children are parented to the host client origin.
+    const bool host_moved =
+        !SamePlacementRect(shared_host_.client_rect, attached_host_rect_);
     // 2. Refresh sizes of survivors.
     for (const MonitorInfo& mi : desired) {
       const auto it = slots_.find(mi.id);
@@ -324,7 +417,8 @@ void MultiMonitor::OnDisplayChange() {
                               it->second.info.x != mi.x ||
                               it->second.info.y != mi.y);
         it->second.info = mi;
-        if (resized && it->second.injector) {
+        if ((resized || host_moved) && it->second.injector) {
+          it->second.injector->SetSharedHost(shared_host_);
           it->second.injector->OnDisplayChange(mi.x, mi.y, mi.width, mi.height);
           if (it->second.renderer) {
             void* hwnd = it->second.injector->injected_hwnd();
@@ -340,6 +434,8 @@ void MultiMonitor::OnDisplayChange() {
         }
       }
     }
+    ReapplyRetainedLocked();
+    attached_host_rect_ = shared_host_.client_rect;
     initialized_ = !slots_.empty();
   } catch (...) {
     LogLine(log_, "multi_monitor: OnDisplayChange failed, keeping live slots");
@@ -355,6 +451,189 @@ bool MultiMonitor::LoadLoopAll(const std::string& path, bool force) {
   }
   if (any && !path.empty()) last_video_ = path;
   return any;
+}
+
+bool MultiMonitor::HasAssignment(const std::string& device) const {
+  const std::wstring key = WidenDeviceKey(device);
+  if (key.empty()) return false;
+  for (const auto& kv : slots_) {
+    if (kv.second.info.device_name == key) return true;
+  }
+  return false;
+}
+
+bool MultiMonitor::LoadLoopSlot(const std::string& device,
+                                const std::string& path,
+                                const std::string& fit_mode) {
+  const std::wstring key = WidenDeviceKey(device);
+  if (key.empty() || path.empty()) return false;
+  for (auto& kv : slots_) {
+    Slot& slot = kv.second;
+    if (slot.info.device_name != key) continue;
+    if (!slot.renderer || !slot.renderer->LoadLoop(path)) return false;
+    if (!fit_mode.empty()) {
+      double aspect = 0.0;
+      if (slot.info.width > 0 && slot.info.height > 0) {
+        aspect = static_cast<double>(slot.info.width) /
+                 static_cast<double>(slot.info.height);
+      }
+      slot.renderer->SetFitMode(fit_mode, aspect);
+    }
+    return true;
+  }
+  return false;
+}
+
+BootAssignmentStats MultiMonitor::ApplyBootAssignments(
+    const DisplaysConfig& cfg, const std::string& fit_mode) {
+  BootAssignmentStats stats;
+  for (const auto& [key, assignment] : cfg.assignments) {
+    if (key.empty() || assignment.path.empty()) continue;
+    const std::string device = NarrowUtf8(key);
+    const std::string path_utf8 = NarrowUtf8(assignment.path);
+    bool slot_live = false;
+    for (const auto& kv : slots_) {
+      if (kv.second.info.device_name == key) {
+        slot_live = true;
+        break;
+      }
+    }
+    if (!slot_live) {
+      retained_assignments_[key] = assignment.path;
+      ++stats.retained;
+      char buf[320];
+      std::snprintf(buf, sizeof(buf),
+                    "display: retained assignment for absent %s",
+                    device.c_str());
+      LogLine(log_, buf);
+      continue;
+    }
+    std::error_code ec;
+    const std::filesystem::path as_path(assignment.path);
+    if (!std::filesystem::exists(as_path, ec) || ec) {
+      ++stats.skipped_missing;
+      char buf[512];
+      std::snprintf(buf, sizeof(buf),
+                    "display: assignment path missing for %s: %s - falling "
+                    "back to default",
+                    device.c_str(), path_utf8.c_str());
+      LogLine(log_, buf);
+      continue;
+    }
+    if (LoadLoopSlot(device, path_utf8, fit_mode)) {
+      ++stats.applied;
+      char buf[320];
+      std::snprintf(buf, sizeof(buf), "display: applied %s to %s",
+                    path_utf8.c_str(), device.c_str());
+      LogLine(log_, buf);
+    } else {
+      char buf[320];
+      std::snprintf(buf, sizeof(buf),
+                    "display: assignment apply failed for %s: %s",
+                    device.c_str(), path_utf8.c_str());
+      LogLine(log_, buf);
+    }
+  }
+  return stats;
+}
+
+std::vector<std::wstring> MultiMonitor::DetectKeyCollisionForCommand(
+    const DisplaysConfig& cfg, const DisplayVideoCommand& cmd,
+    const std::vector<MonitorInfo>& monitors, LogFn log) {
+  // Row 33 (IS-7/GAP-14): prospective assignment map = cfg with cmd
+  // applied (assign overwrites the device key; clear erases it), then the
+  // REAL DetectKeyCollision. Pure gate — callers own the mutation.
+  DisplaysConfig prospective = cfg;
+  if (cmd.clear) {
+    prospective.assignments.erase(WidenDeviceKey(cmd.device));
+  } else {
+    MonitorAssignment assignment;
+    assignment.path = WidenDeviceKey(cmd.path);
+    std::error_code ec;
+    assignment.exists = !cmd.path.empty() &&
+                        std::filesystem::exists(
+                            std::filesystem::u8path(cmd.path), ec) &&
+                        !ec;
+    prospective.assignments[WidenDeviceKey(cmd.device)] = std::move(assignment);
+  }
+  const std::vector<std::wstring> hits =
+      DetectKeyCollision(prospective, monitors);
+  if (hits.empty()) return hits;
+  if (log != nullptr) {
+    std::string keys;
+    for (std::size_t i = 0; i < hits.size(); ++i) {
+      if (i != 0) keys += ", ";
+      keys += NarrowUtf8(hits[i]);
+    }
+    char buf[512];
+    std::snprintf(buf, sizeof(buf),
+                  "ipc: set_display_video refused (duplicate-mode collision): %s",
+                  keys.c_str());
+    LogLine(log, buf);
+  }
+  return hits;
+}
+
+std::vector<std::wstring> MultiMonitor::DropCollidingAssignments(
+    DisplaysConfig& cfg, const std::vector<MonitorInfo>& monitors, LogFn log) {
+  // Row 33 (IS-7/GAP-14): keep-first load-path gate. DetectKeyCollision
+  // returns sorted keys (it sorts + uniques at the end); cfg.assignments
+  // is std::map keyed by the same wide device names, so hits[0] is the
+  // first colliding key in map order — it survives, the rest drop.
+  const std::vector<std::wstring> hits = DetectKeyCollision(cfg, monitors);
+  if (hits.empty()) return {};
+  if (log != nullptr) {
+    std::string keys;
+    for (std::size_t i = 0; i < hits.size(); ++i) {
+      if (i != 0) keys += ", ";
+      keys += NarrowUtf8(hits[i]);
+    }
+    char buf[512];
+    std::snprintf(buf, sizeof(buf),
+                  "display: refusing assignments with colliding keys: %s",
+                  keys.c_str());
+    LogLine(log, buf);
+  }
+  for (std::size_t i = 1; i < hits.size(); ++i) {
+    cfg.assignments.erase(hits[i]);
+  }
+  return std::vector<std::wstring>(hits.begin() + 1, hits.end());
+}
+
+void MultiMonitor::ReapplyRetainedLocked() {
+  if (retained_assignments_.empty()) return;
+  if (mode_ == MultiMonitorMode::Span) return;
+  for (auto it = retained_assignments_.begin();
+       it != retained_assignments_.end();) {
+    const std::wstring& key = it->first;
+    const std::wstring& path = it->second;
+    Slot* slot = nullptr;
+    for (auto& kv : slots_) {
+      if (kv.second.info.device_name == key) {
+        slot = &kv.second;
+        break;
+      }
+    }
+    if (slot == nullptr || slot->renderer == nullptr || path.empty()) {
+      ++it;
+      continue;
+    }
+    std::error_code ec;
+    if (!std::filesystem::exists(std::filesystem::path(path), ec) || ec) {
+      ++it;
+      continue;
+    }
+    const std::string path_utf8 = NarrowUtf8(path);
+    if (slot->renderer->LoadLoop(path_utf8)) {
+      char buf[320];
+      std::snprintf(buf, sizeof(buf), "display: applied %s to %s",
+                    path_utf8.c_str(), NarrowUtf8(key).c_str());
+      LogLine(log_, buf);
+      it = retained_assignments_.erase(it);
+    } else {
+      ++it;
+    }
+  }
 }
 
 int MultiMonitor::VerifyPinAndRevert() {
@@ -374,7 +653,7 @@ int MultiMonitor::VerifyPinAndRevert() {
                   "reverting to unpinned",
                   kv.first);
     LogLine(log_, buf);
-    auto fresh = std::make_unique<MpvRenderer>();
+    auto fresh = factory_.make_renderer();
     void* hwnd = (slot.injector && slot.injector->injected_hwnd() != nullptr)
                      ? slot.injector->injected_hwnd()
                      : headless_host_;
@@ -496,9 +775,11 @@ void MultiMonitor::Reanchor() {
         AttachSpanSlot();
       } else if (it->second.injector) {
         const SpanGeometry g = GetSpanGeometry();
+        ResolveHostForPass();
         ReattachSpanLocked(it->second, it->second.info.x, it->second.info.y,
                            g.width, g.height, /*reassert=*/true);
       }
+      attached_host_rect_ = shared_host_.client_rect;
       initialized_ = !slots_.empty();
       return;
     }
@@ -516,6 +797,9 @@ void MultiMonitor::Reanchor() {
         continue;
       } else if (it->second.injector) {
         it->second.info = mi;
+        // Row 7: survivors take the pass's shared host too (ApplyActiveFilter
+        // above resolved it for this Reanchor pass).
+        it->second.injector->SetSharedHost(shared_host_);
         it->second.injector->Detach();
         if (it->second.injector->Attach(mi.x, mi.y, mi.width, mi.height) &&
             it->second.renderer) {
@@ -527,6 +811,7 @@ void MultiMonitor::Reanchor() {
         }
       }
     }
+    attached_host_rect_ = shared_host_.client_rect;
     initialized_ = !slots_.empty();
   } catch (...) {
     LogLine(log_, "multi_monitor: Reanchor failed, keeping live slots");
@@ -552,6 +837,12 @@ int MultiMonitor::headless_slot_count() const {
     }
   }
   return n;
+}
+
+std::string MultiMonitor::SlotCoverageReason(int monitor_id) const {
+  const auto it = slots_.find(monitor_id);
+  if (it == slots_.end()) return {};
+  return it->second.coverage_reason;
 }
 
 std::vector<int> MultiMonitor::monitor_ids() const {

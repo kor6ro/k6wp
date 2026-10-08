@@ -89,7 +89,8 @@ qt_add_qml_module(studio
   URI K6WP
   VERSION 1.0
   RESOURCE_PREFIX "/qt/qml"
-  QML_FILES qml/Main.qml
+  QML_FILES
+    qml/Main.qml
 )
 
 # About dialog version string (canonical K6WP_VERSION lives in the root
@@ -278,9 +279,19 @@ add_executable(studio_logic_test
   # mapping that StudioBridge used to show raw. Included so the mapping itself
   # is unit-testable, not just its call sites.
   src/user_errors.cpp
+  # Row 19: the Display model bridge. studio_bridge.cpp + update_checker.cpp
+  # (the ctor's optional update check) are compiled here so the display
+  # surface (displays / displayCapability / duplicateModeNotice + the
+  # assign/clear invokables) is unit-testable in this suite; winhttp is what
+  # update_checker.cpp links against in the studio target too.
+  src/studio_bridge.cpp
+  src/update_checker.cpp
 )
-target_link_libraries(studio_logic_test PRIVATE k6wp_shared Qt6::Widgets Qt6::Concurrent Qt6::Qml shell32)
+target_link_libraries(studio_logic_test PRIVATE k6wp_shared Qt6::Widgets Qt6::Concurrent Qt6::Qml shell32 winhttp)
 target_include_directories(studio_logic_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+# studio_bridge.hpp stamps the About-dialog version the same way the studio
+# target does (K6WP_VERSION_STR; generated/version.h carries the same value).
+target_compile_definitions(studio_logic_test PRIVATE "K6WP_VERSION_STR=\"${K6WP_VERSION}\"")
 target_compile_options(studio_logic_test PRIVATE /Zc:__cplusplus /permissive-)
 add_test(NAME studio_logic_test COMMAND studio_logic_test)
 # MED-5 part 2: the live compress-queue leg needs compressor.exe next to the
@@ -393,19 +404,21 @@ set(K6WP_TS_EN "${CMAKE_CURRENT_SOURCE_DIR}/i18n/studio_en.ts")
 set(K6WP_QM_EN "${CMAKE_CURRENT_BINARY_DIR}/i18n/studio_en.qm")
 set(K6WP_I18N_STAMP "${CMAKE_CURRENT_BINARY_DIR}/i18n/lupdate.stamp")
 
-# lupdate needs the QML source, not just the C++: qsTr() in qml/Main.qml is
-# where the Studio UI text lives, and qt_add_qml_module compiles that file
-# into a qrc, so no on-disk .qml would be found by a build-tree scan. Passing
-# the file explicitly is safe for the lookup that matters - lupdate takes the
-# QML context from the file name alone (QQmlTranslation::
-# contextFromQmlFilename), so "qml/Main.qml" yields the same "Main" context the
-# QML engine asks for at runtime from /qt/qml/K6WP/Main.qml.
+# lupdate needs the QML sources, not just the C++: qsTr() in qml/Main.qml
+# is where the Studio UI text lives, and qt_add_qml_module
+# compiles that file into a qrc, so no on-disk .qml would be found by a
+# build-tree scan. Passing the file explicitly is safe for the lookup that
+# matters - lupdate takes the QML context from the file name alone
+# (QQmlTranslation::contextFromQmlFilename), so "qml/Main.qml" yields the same
+# "Main" context the QML engine asks for at runtime from /qt/qml/K6WP/Main.qml.
 #
 # Argument order is load-bearing in lupdate 6.8: sources must come BEFORE -ts.
 # The reverse order aborts with "File '...' has no recognized extension".
 file(GLOB K6WP_TR_SOURCES CONFIGURE_DEPENDS
   "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/*.hpp")
+set(K6WP_TR_QML_SOURCES
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/Main.qml")
 
 # Both tools degrade to a clear no-op target instead of failing the configure:
 # a Studio that cannot translate is still a working Studio (main.cpp falls back
@@ -419,10 +432,10 @@ if(K6WP_LUPDATE)
     COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_CURRENT_SOURCE_DIR}/i18n"
     COMMAND "${K6WP_LUPDATE}" -locations relative
             -source-language id -target-language en
-            ${K6WP_TR_SOURCES} "${CMAKE_CURRENT_SOURCE_DIR}/qml/Main.qml"
+            ${K6WP_TR_SOURCES} ${K6WP_TR_QML_SOURCES}
             -ts "${K6WP_TS_EN}"
     COMMAND "${CMAKE_COMMAND}" -E touch "${K6WP_I18N_STAMP}"
-    DEPENDS ${K6WP_TR_SOURCES} "${CMAKE_CURRENT_SOURCE_DIR}/qml/Main.qml"
+    DEPENDS ${K6WP_TR_SOURCES} ${K6WP_TR_QML_SOURCES}
             "${K6WP_LUPDATE}"
     COMMENT "lupdate: extracting translatable strings into i18n/studio_en.ts"
     VERBATIM

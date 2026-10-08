@@ -3,11 +3,26 @@
 // header for the threading contract).
 #include "ipc_marshal.hpp"
 
+#include <cctype>
 #include <filesystem>
 
+#include "ipc_protocol.hpp"
 #include "thirdparty/json.hpp"
 
 namespace k6wp {
+namespace {
+
+bool IsGdiDeviceName(const std::string& d) {
+  const std::string prefix = "\\\\.\\DISPLAY";
+  if (d.size() <= prefix.size()) return false;
+  if (d.compare(0, prefix.size(), prefix) != 0) return false;
+  for (size_t i = prefix.size(); i < d.size(); ++i) {
+    if (!std::isdigit(static_cast<unsigned char>(d[i]))) return false;
+  }
+  return true;
+}
+
+}  // namespace
 
 std::optional<int> ParseSetMonitorPayload(const std::string& payload_json) {
   int id = -1;
@@ -55,6 +70,40 @@ std::optional<std::string> ValidateSetVideoPayload(
     return std::nullopt;
   }
   return utf8_path;
+}
+
+std::optional<DisplayVideoCommand> ParseSetDisplayVideoPayload(
+    const std::string& payload_json) {
+  if (payload_json.size() > kMaxPayloadBytes) return std::nullopt;
+  DisplayVideoCommand cmd;
+  try {
+    const nlohmann::json payload = nlohmann::json::parse(payload_json);
+    if (!payload.is_object()) return std::nullopt;
+    if (!payload.contains("device") || !payload.at("device").is_string()) {
+      return std::nullopt;
+    }
+    cmd.device = payload.at("device").get<std::string>();
+    if (!IsGdiDeviceName(cmd.device)) return std::nullopt;
+
+    bool clear = false;
+    if (payload.contains("clear")) {
+      if (!payload.at("clear").is_boolean()) return std::nullopt;
+      clear = payload.at("clear").get<bool>();
+    }
+
+    const bool has_path = payload.contains("path");
+    if (clear) {
+      if (has_path) return std::nullopt;
+      cmd.clear = true;
+      return cmd;
+    }
+    if (!has_path || !payload.at("path").is_string()) return std::nullopt;
+    cmd.path = payload.at("path").get<std::string>();
+    if (cmd.path.empty()) return std::nullopt;
+  } catch (...) {
+    return std::nullopt;
+  }
+  return cmd;
 }
 
 }  // namespace k6wp

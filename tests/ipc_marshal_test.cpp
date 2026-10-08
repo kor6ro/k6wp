@@ -14,6 +14,7 @@
 #include <string>
 
 #include "ipc_marshal.hpp"
+#include "ipc_protocol.hpp"  // kMaxPayloadBytes (row 13: oversize-payload reject)
 
 namespace {
 
@@ -95,6 +96,85 @@ void TestVideoRejected() {
   CHECK(!k6wp::ValidateSetVideoPayload("garbage").has_value());
 }
 
+// --- set_display_video: accepted shapes (row 13) ----------------------------
+void TestDisplayVideoAccepted() {
+  auto a = k6wp::ParseSetDisplayVideoPayload(
+      R"({"device":"\\\\.\\DISPLAY1","path":"C:/Videos/a.mp4"})");
+  CHECK(a.has_value());
+  if (a) {
+    CHECK(!a->clear);
+    CHECK(a->device == "\\\\.\\DISPLAY1");
+    CHECK(a->path == "C:/Videos/a.mp4");
+  }
+
+  auto b = k6wp::ParseSetDisplayVideoPayload(
+      R"({"device":"\\\\.\\DISPLAY2","clear":true})");
+  CHECK(b.has_value());
+  if (b) {
+    CHECK(b->clear);
+    CHECK(b->device == "\\\\.\\DISPLAY2");
+    CHECK(b->path.empty());
+  }
+
+  auto c = k6wp::ParseSetDisplayVideoPayload(
+      R"({"device":"\\\\.\\DISPLAY10","path":"D:/x.mp4","extra":1})");
+  CHECK(c.has_value());
+  if (c) {
+    CHECK(!c->clear);
+    CHECK(c->device == "\\\\.\\DISPLAY10");
+  }
+
+  auto d = k6wp::ParseSetDisplayVideoPayload(
+      R"({"device":"\\\\.\\DISPLAY3","path":"C:/b.mp4","clear":false})");
+  CHECK(d.has_value());
+  if (d) {
+    CHECK(!d->clear);
+    CHECK(d->path == "C:/b.mp4");
+  }
+}
+
+// --- set_display_video: rejected shapes (ack {"error"}, nothing queued) -----
+void TestDisplayVideoRejected() {
+  CHECK(!k6wp::ParseSetDisplayVideoPayload(R"({"path":"C:/a.mp4"})")
+             .has_value());
+  CHECK(!k6wp::ParseSetDisplayVideoPayload(R"({"device":"\\\\.\\DISPLAY1"})")
+             .has_value());
+  CHECK(!k6wp::ParseSetDisplayVideoPayload(R"({"device":"","path":"C:/a.mp4"})")
+             .has_value());
+  CHECK(!k6wp::ParseSetDisplayVideoPayload(
+                R"({"device":"\\\\.\\DISPLAY1","path":""})")
+             .has_value());
+  CHECK(!k6wp::ParseSetDisplayVideoPayload(
+                R"({"device":42,"path":"C:/a.mp4"})")
+             .has_value());
+  CHECK(!k6wp::ParseSetDisplayVideoPayload(
+                R"({"device":"\\\\.\\DISPLAY1","path":42})")
+             .has_value());
+  CHECK(!k6wp::ParseSetDisplayVideoPayload(
+                R"({"device":"\\\\.\\DISPLAY1","clear":"yes"})")
+             .has_value());
+  CHECK(!k6wp::ParseSetDisplayVideoPayload(
+                R"({"device":"DISPLAY1","path":"C:/a.mp4"})")
+             .has_value());
+  CHECK(!k6wp::ParseSetDisplayVideoPayload(
+                R"({"device":"\\\\.\\DISPLAY","path":"C:/a.mp4"})")
+             .has_value());
+  CHECK(!k6wp::ParseSetDisplayVideoPayload(
+                R"({"device":"\\\\.\\DISPLAYx","path":"C:/a.mp4"})")
+             .has_value());
+  CHECK(!k6wp::ParseSetDisplayVideoPayload(
+                R"({"device":"\\\\.\\DISPLAY1","path":"C:/a.mp4","clear":true})")
+             .has_value());
+  CHECK(!k6wp::ParseSetDisplayVideoPayload(R"([])").has_value());
+  CHECK(!k6wp::ParseSetDisplayVideoPayload("garbage").has_value());
+  CHECK(!k6wp::ParseSetDisplayVideoPayload("").has_value());
+
+  const std::string big(k6wp::kMaxPayloadBytes + 1, 'x');
+  const std::string huge =
+      R"({"device":"\\\\.\\DISPLAY1","path":")" + big + R"("})";
+  CHECK(!k6wp::ParseSetDisplayVideoPayload(huge).has_value());
+}
+
 }  // namespace
 
 int main() {
@@ -102,6 +182,8 @@ int main() {
   TestMonitorRejected();
   TestVideoAccepted();
   TestVideoRejected();
+  TestDisplayVideoAccepted();
+  TestDisplayVideoRejected();
   std::printf("ipc_marshal_test: %d checks, %d failures\n", g_checks,
               g_failures);
   return g_failures == 0 ? 0 : 1;

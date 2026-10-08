@@ -50,12 +50,33 @@ class PendingCommandQueue {
     return true;
   }
 
+  void SetDisplayVideo(std::string payload) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    display_video_ = std::move(payload);
+    has_display_video_ = true;
+  }
+  void ClearDisplayVideo() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    display_video_.clear();
+    has_display_video_ = false;
+  }
+  bool TakeDisplayVideo(std::string* out) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!has_display_video_) return false;
+    if (out != nullptr) *out = std::move(display_video_);
+    display_video_.clear();
+    has_display_video_ = false;
+    return true;
+  }
+
  private:
   std::mutex mutex_;
   std::string video_;
   bool has_video_ = false;
   std::string monitor_;
   bool has_monitor_ = false;
+  std::string display_video_;
+  bool has_display_video_ = false;
 };
 
 }  // namespace k6wp

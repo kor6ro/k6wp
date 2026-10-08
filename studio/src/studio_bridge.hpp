@@ -40,11 +40,16 @@
 #include <QtQml/qqmlregistration.h>
 
 #include <atomic>
+#include <map>
+#include <string>
+#include <vector>
 
 #include "apply_manager.hpp"
+#include "displays_schema.hpp"
 #include "engine_status_controller.hpp"
 #include "ipc_client.hpp"
 #include "links.hpp"
+#include "monitor_util.hpp"
 #include "studio_settings.hpp"
 #include "thumbnailer.hpp"
 
@@ -88,6 +93,30 @@ struct ApplyOutcome {
   bool restarted = false;
   QString error;
 };
+
+// --- Display model (row 19, read-only canvas data) ---------------------------
+//
+// Pure helpers the Display canvas is modelled on. They live beside the bridge
+// (not inside it) so studio_logic_test can drive them with fixture monitor
+// lists without constructing the full QML singleton.
+
+// One QVariantMap per MonitorInfo, in list order, with exactly the keys the
+// Display canvas consumes: {key, label, x, y, width, height, isPrimary,
+// orientation ("portrait"|"landscape"), scalePercent, refreshHz,
+// resolutionLabel, assignedPath, assignedExists, coverage}. `store` joins the
+// per-monitor assignment map; `coverage` is the opaque get_state
+// display_coverage token map (missing key -> empty string).
+QVariantList BuildDisplayEntries(
+    const std::vector<MonitorInfo>& monitors, const DisplaysConfig& store,
+    const std::map<std::string, std::string>& coverage);
+
+// IS-7 refusal sentence (Indonesian) naming the colliding keys; empty when
+// `keys` is empty.
+QString DuplicateModeNoticeText(const std::vector<std::wstring>& keys);
+
+// True only when the parsed get_state carried display_capability == 1 (the
+// feature-detect the engine emits; old engines leave the key absent).
+bool DisplayCapabilityFromState(const EngineState& state);
 
 // NOT `final`, unlike most classes in this project: Qt's QML type
 // registration instantiates QQmlElement<T> which INHERITS from T, so a final
@@ -157,12 +186,26 @@ class StudioBridge : public QObject {
   // layar" (-1), then one entry per ListMonitors() row, primary first.
   Q_PROPERTY(QVariantList monitorChoices READ monitorChoices NOTIFY quickSettingsChanged)
 
+  // Display model (row 19): the read-only monitor canvas data. Entries are
+  // BuildDisplayEntries() maps (see the free-function contract above).
+  // Nothing here is writable beyond assignVideoToMonitor /
+  // clearMonitorAssignment.
+  Q_PROPERTY(QVariantList displays READ displays NOTIFY displaysChanged)
+  // True only when the last get_state carried display_capability:1.
+  Q_PROPERTY(bool displayCapability READ displayCapability NOTIFY displaysChanged)
+  // Non-empty Indonesian IS-7 refusal when DetectKeyCollision reports
+  // colliding keys; empty otherwise.
+  Q_PROPERTY(QString duplicateModeNotice READ duplicateModeNotice NOTIFY displaysChanged)
+
   QString selectedVideo() const { return selected_video_; }
   QString quickFit() const { return quick_fit_; }
   int quickMonitor() const { return quick_monitor_; }
   bool quickAutostart() const { return quick_autostart_; }
   bool quickBattery() const { return quick_battery_; }
   QVariantList monitorChoices() const { return monitor_choices_; }
+  QVariantList displays() const { return displays_; }
+  bool displayCapability() const { return display_capability_; }
+  QString duplicateModeNotice() const { return duplicate_mode_notice_; }
 
   // --- Live engine status (all repainted together by engineStatusChanged) ---
 
@@ -246,6 +289,28 @@ class StudioBridge : public QObject {
   // when the Wallpaper tab is shown, so a Pengaturan change shows up here.
   Q_INVOKABLE void refreshQuickSettings();
 
+  // --- Display model (row 19) ------------------------------------------------
+
+  // Re-reads the display model from ListMonitors() + displays.json + the
+  // cached get_state display_coverage, then rebuilds displays_ /
+  // duplicate_mode_notice_ and emits displaysChanged.
+  Q_INVOKABLE void refreshDisplays();
+
+  // Persists the assignment via SaveDisplays (displays.json), then pushes
+  // set_display_video over IPC. An unknown key is refused with an Indonesian
+  // lastError: no file write, no displaysChanged.
+  Q_INVOKABLE void assignVideoToMonitor(const QString& key, const QString& path);
+
+  // Drops the assignment for `key`: SaveDisplays + a clear
+  // set_display_video push. Unknown key refuses exactly like assign.
+  Q_INVOKABLE void clearMonitorAssignment(const QString& key);
+
+  // The one place displays_ / duplicate_mode_notice_ are rebuilt.
+  // refreshDisplays() feeds it live data; studio_logic_test feeds fixtures.
+  void ApplyDisplayModel(const std::vector<MonitorInfo>& monitors,
+                         const DisplaysConfig& store,
+                         const std::map<std::string, std::string>& coverage);
+
   // Fires one GetState round-trip on a worker and repaints the properties
   // above when it lands. A no-op while a poll is in flight. The QTimer calls
   // this every 1500 ms; QML may call it too (e.g. after pause/resume).
@@ -309,6 +374,8 @@ class StudioBridge : public QObject {
   // Repaints quickFit / quickMonitor / quickAutostart / quickBattery /
   // monitorChoices together.
   void quickSettingsChanged();
+  // Repaints displays / displayCapability / duplicateModeNotice together.
+  void displaysChanged();
 
  private slots:
   // QFutureWatcher::finished handlers. All run on the GUI thread (queued).
@@ -329,6 +396,12 @@ class StudioBridge : public QObject {
   // finished slot knows what to log (the MainWindow::pending_pause_op_ idea).
   void RunPauseResume(bool do_pause);
   void RunUpdateCheck(bool interactive);
+  // True when `key` is one of the keys currently modelled in displays_ -
+  // the assign/clear unknown-key guard (QML only ever offers modelled keys).
+  bool IsKnownDisplayKey(const QString& key) const;
+  // Writes the fresh get_state display_coverage tokens onto the existing
+  // entries (geometry stays whatever ApplyDisplayModel last built).
+  void MergeCoverageIntoDisplays();
 
   // T15: the ONE IpcClient of this Studio process, a plain value member --
   // IpcClient is NOT a QObject and must never be given Q_PROPERTY access.
@@ -398,6 +471,15 @@ class StudioBridge : public QObject {
   bool quick_autostart_ = false;
   bool quick_battery_ = false;
   QVariantList monitor_choices_;
+  // Display model (row 19). display_capability_/display_coverage_ come from
+  // the last get_state (OnPollDone); last_monitors_ is the monitor list the
+  // current displays_ entries were built from, so assign/clear can rebuild
+  // the model after a successful persist without re-enumerating.
+  QVariantList displays_;
+  bool display_capability_ = false;
+  QString duplicate_mode_notice_;
+  std::map<std::string, std::string> display_coverage_;
+  std::vector<MonitorInfo> last_monitors_;
 };
 
 }  // namespace k6wp

@@ -24,7 +24,7 @@ int g_failures = 0;
     }                                                                     \
   } while (0)
 
-// --- Test 1: round-trip encode -> decode for all 6 command types ----------
+// --- Test 1: round-trip encode -> decode for all 7 command types ----------
 void TestRoundTripAllCmds() {
   const std::vector<std::pair<k6wp::Cmd, nlohmann::json>> cases = {
       {k6wp::Cmd::set_video,
@@ -35,6 +35,8 @@ void TestRoundTripAllCmds() {
        {{"monitor_id", 0}, {"width", 1920}, {"height", 1080}}},
       {k6wp::Cmd::get_state, nlohmann::json::object()},
       {k6wp::Cmd::quit, nlohmann::json::object()},
+      {k6wp::Cmd::set_display_video,
+       {{"device", "\\\\.\\DISPLAY1"}, {"path", "C:/Videos/a.mp4"}}},
   };
   for (const auto& [cmd, payload] : cases) {
     k6wp::IpcMessage msg;
@@ -189,7 +191,7 @@ void TestFramingAndHelpers() {
   CHECK(out.cmd == k6wp::Cmd::pause);
 
   // CmdToString / CmdFromString round-trip.
-  for (int i = 0; i < 6; ++i) {
+  for (int i = 0; i < 7; ++i) {
     const k6wp::Cmd cmd = static_cast<k6wp::Cmd>(i);
     const char* name = k6wp::CmdToString(cmd);
     CHECK(name != nullptr);
@@ -229,6 +231,56 @@ void TestQuitCommand() {
   CHECK(dispatched.cmd == k6wp::Cmd::quit);
 }
 
+// --- Row 13: set_display_video framing + additive-compat proofs ------------
+void TestSetDisplayVideoFraming() {
+  k6wp::IpcMessage msg;
+  msg.version = k6wp::kProtocolVersion;
+  msg.cmd = k6wp::Cmd::set_display_video;
+  msg.payload = {{"device", "\\\\.\\DISPLAY1"}, {"path", "C:/Videos/a.mp4"}};
+  const std::string wire = k6wp::Encode(msg);
+  CHECK(!wire.empty());
+  CHECK(wire.back() == '\n');
+  CHECK(wire.find("\"cmd\":\"set_display_video\"") != std::string::npos);
+
+  k6wp::IpcMessage out;
+  CHECK(k6wp::Decode(wire, out));
+  CHECK(out.version == k6wp::kProtocolVersion);
+  CHECK(out.cmd == k6wp::Cmd::set_display_video);
+  CHECK(out.payload == msg.payload);
+
+  CHECK(std::string(k6wp::CmdToString(k6wp::Cmd::set_display_video)) ==
+        "set_display_video");
+  k6wp::Cmd back = k6wp::Cmd::get_state;
+  CHECK(k6wp::CmdFromString("set_display_video", back));
+  CHECK(back == k6wp::Cmd::set_display_video);
+
+  CHECK(static_cast<int>(k6wp::Cmd::set_video) == 0);
+  CHECK(static_cast<int>(k6wp::Cmd::pause) == 1);
+  CHECK(static_cast<int>(k6wp::Cmd::resume) == 2);
+  CHECK(static_cast<int>(k6wp::Cmd::set_monitor) == 3);
+  CHECK(static_cast<int>(k6wp::Cmd::get_state) == 4);
+  CHECK(static_cast<int>(k6wp::Cmd::quit) == 5);
+  CHECK(static_cast<int>(k6wp::Cmd::set_display_video) == 6);
+  CHECK(k6wp::kProtocolVersion == 1);
+
+  k6wp::IpcMessage old_engine_out;
+  CHECK(!k6wp::Decode(
+      "{\"version\":1,\"cmd\":\"set_display_future\",\"payload\":{}}\n",
+      old_engine_out));
+
+  const std::string big(70 * 1024, 'x');
+  k6wp::IpcMessage big_msg;
+  big_msg.cmd = k6wp::Cmd::set_display_video;
+  big_msg.payload = {{"device", "\\\\.\\DISPLAY1"}, {"path", big}};
+  bool threw = false;
+  try {
+    (void)k6wp::Encode(big_msg);
+  } catch (const k6wp::IpcError&) {
+    threw = true;
+  }
+  CHECK(threw);
+}
+
 }  // namespace
 
 int main() {
@@ -242,6 +294,7 @@ int main() {
   TestMissingCmd();
   TestFramingAndHelpers();
   TestQuitCommand();
+  TestSetDisplayVideoFraming();
 
   std::printf("ipc_test: %d checks, %d failures\n", g_checks, g_failures);
   return g_failures == 0 ? 0 : 1;

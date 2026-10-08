@@ -18,6 +18,7 @@
 
 #include "cli_options.hpp"
 #include "config_watch.hpp"
+#include "displays_schema.hpp"
 #include "fullscreen_watch.hpp"
 #include "ipc_server.hpp"
 #include "mpv_renderer.hpp"
@@ -176,6 +177,27 @@ class EngineApp {
   // (HandleMessage); the IPC worker path goes through
   // ParseSetMonitorPayload + IpcCommandMarshal::QueueMonitor instead.
   bool HandleSetMonitor(const std::string& payload_json);
+  // Row 15: per-monitor assignment executor for set_display_video. Payload
+  // via ParseSetDisplayVideoPayload (row 13): {"device","path"} assigns,
+  // {"device","clear":true} drops the override. clear -> erase the device's
+  // displays.json assignment and reload current_video_utf8_ onto that slot;
+  // assign -> MultiMonitor::LoadLoopSlot onto the slot whose GDI device name
+  // matches, fit mode applied to that slot only. Persisted atomically via
+  // SaveDisplays (displays.json; NOT PersistConfigField — that is
+  // config.json-only). Unknown device key -> false +
+  // "ipc: set_display_video rejected (unknown device)" BEFORE any mutation
+  // (displays.json stays byte-identical). MAIN THREAD ONLY (HandleMessage
+  // kSetDisplayVideoMessage consume site); the IPC worker path validates
+  // with ParseSetDisplayVideoPayload + IpcCommandMarshal::QueueDisplayVideo.
+  bool HandleSetDisplayVideo(const std::string& payload_json);
+  // Row 16: displays.json reload, invoked by ConfigWatcher's shared 250 ms
+  // debounce (same directory handle + timer as config.json — no new wakeup).
+  // Re-reads displays.json, skips when the assignment map equals
+  // applied_displays_ (engine's own SaveDisplays echo), keeps last-good on
+  // corrupt input (log + return, no slot teardown) and re-converges the
+  // matching live slots via MultiMonitor::LoadLoopSlot. Catches everything:
+  // a write/parse failure must never unwind the message loop. MAIN THREAD.
+  void OnDisplaysFileChanged();
   std::filesystem::path ResolvedConfigPath() const;
   // CRIT-2 main-thread halves: pop the pending value (IpcCommandMarshal)
   // and run the matching Handle* executor above. Called from HandleMessage
@@ -219,6 +241,11 @@ class EngineApp {
   // stopped in Shutdown(). Value member is safe: config_watch.hpp is
   // Win32-free, so no incomplete-type pimpl issues.
   ConfigWatcher config_watcher_;
+  // Row 16: last assignment map the engine loaded + converged to the live
+  // slots (self-write echo comparison and last-good retention). Written by
+  // OnDisplaysFileChanged and by HandleSetDisplayVideo after its live apply;
+  // read/written on the main loop thread only.
+  DisplaysConfig applied_displays_;
   // Fullscreen auto-pause (Todo 34): started in Init(), polled in Run(),
   // stopped in Shutdown(). Win32-free header, value member is safe.
   FullscreenWatch fullscreen_watch_;

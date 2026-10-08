@@ -15,6 +15,7 @@ add_executable(engine
   src/lockscreen_glue.cpp
   src/working_set_trim.cpp
   src/desktop_inject.cpp
+  src/desktop_placement.cpp
   src/bench_hook.cpp
   src/mpv_renderer.cpp
   src/config_watch.cpp
@@ -127,17 +128,30 @@ add_test(NAME crash_dump_prune_test COMMAND crash_dump_prune_test)
 # engine_units_test (P0-3): pure-logic coverage for the units split out of
 # engine_app.cpp - cli_options (argv), PauseController (owner bitmask),
 # PendingCommandQueue (worker->main handoff) and TestSimulator (QA schedule).
-# windows.h-free; no engine_app / mpv link deps.
+# Row 16 adds src/config_watch.cpp + src/log_file.cpp (the REAL ConfigWatcher
+# second-file mtime/size + reload-callback path, driven with no message
+# window) and links k6wp_shared (LoadConfig) + user32 (the watcher TU's
+# SetTimer/KillTimer references). The test TU stays windows.h-free; no
+# engine_app / mpv link deps.
 add_executable(engine_units_test
   ../tests/engine_units_test.cpp
   src/cli_options.cpp
   src/test_simulator.cpp
+  src/config_watch.cpp
+  src/log_file.cpp
 )
+target_link_libraries(engine_units_test PRIVATE k6wp_shared user32)
 target_include_directories(engine_units_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 add_test(NAME engine_units_test COMMAND engine_units_test)
 
 # engine_state_test (P0-2): the extracted PinVerifySchedule deadline/counter and
 # PlaylistController reload/snapshot/rotation, driven through fake hooks.
+# Row 17: src/multi_monitor.cpp is compiled in so the boot-time assignment
+# convergence checks drive the REAL MultiMonitor against link-level
+# DesktopInjector / MpvRenderer / ListMonitors stubs in the test TU
+# (multi_monitor_factory_test pattern; row 12 verified k6wp_shared +
+# TU stubs coexist - displays_schema.obj does not pull monitor_util.obj).
+# Still mpv-free: no mpv_renderer.cpp, no mpv.lib.
 add_executable(engine_state_test
   ../tests/engine_state_test.cpp
   src/pin_verify_schedule.cpp
@@ -145,8 +159,129 @@ add_executable(engine_state_test
   src/occlusion_poke_scheduler.cpp
   src/ipc_command_marshal.cpp
   src/ipc_marshal.cpp
+  src/multi_monitor.cpp
 )
 target_link_libraries(engine_state_test PRIVATE k6wp_shared user32)
 target_include_directories(engine_state_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 add_test(NAME engine_state_test COMMAND engine_state_test)
+
+# desktop_placement_test (multi-monitor extend setup, row 3): pure geometry
+# helpers extracted from DesktopInjector::CreateAndAttach (the :261-265
+# inline offset math). windows.h-free; no engine/mpv link deps.
+add_executable(desktop_placement_test
+  ../tests/desktop_placement_test.cpp
+  src/desktop_placement.cpp
+)
+target_include_directories(desktop_placement_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+add_test(NAME desktop_placement_test COMMAND desktop_placement_test)
+
+# multi_monitor_factory_test (multi-monitor extend setup, row 6): the
+# injectable SlotFactory seam. Compiles src/multi_monitor.cpp standalone
+# against link-level DesktopInjector / MpvRenderer / ListMonitors stubs
+# defined in the test TU (tests/occlusion_test.cpp pattern), proving a
+# headless MultiMonitor links WITHOUT desktop_inject.cpp, mpv_renderer.cpp
+# or mpv.lib - target_link_libraries below must never grow an mpv entry.
+# user32: GetSystemMetrics in MultiMonitor::GetSpanGeometry.
+# Row 9: src/desktop_placement.cpp is linked so the false-success test can
+# drive the REAL CoversMonitor/CoverageReason on screen-space rects; still
+# no mpv, still no desktop_inject.cpp.
+# Row 33: k6wp_shared added so multi_monitor.cpp's row-33 gates
+# (DetectKeyCollisionForCommand / DropCollidingAssignments -> REAL
+# DetectKeyCollision, shared/displays_schema) resolve at link — same reason
+# placement_test links k6wp_shared (row 12 comment).
+add_executable(multi_monitor_factory_test
+  ../tests/multi_monitor_factory_test.cpp
+  src/multi_monitor.cpp
+  src/desktop_placement.cpp
+)
+target_link_libraries(multi_monitor_factory_test PRIVATE user32 k6wp_shared)
+target_include_directories(multi_monitor_factory_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_SOURCE_DIR}/shared
+)
+add_test(NAME multi_monitor_factory_test COMMAND multi_monitor_factory_test)
+
+# workerw_span_test (multi-monitor extend setup, row 10): the strategy-B
+# span gate. Pure containment k6wp::WorkerWSpansRect (desktop_placement,
+# windows.h-free, synthetic rects) plus the thin HWND wrapper
+# k6wp::WorkerWSpansVirtualScreen from desktop_inject.cpp (GetWindowRect +
+# the four SM_*VIRTUALSCREEN metrics), incl. the nullptr -> false no-crash
+# guard. user32: window/metric APIs in desktop_inject.cpp; gdi32:
+# GetStockObject in its RegisterClass path.
+add_executable(workerw_span_test
+  ../tests/workerw_span_test.cpp
+  src/desktop_inject.cpp
+  src/desktop_placement.cpp
+)
+target_link_libraries(workerw_span_test PRIVATE user32 gdi32)
+target_include_directories(workerw_span_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+add_test(NAME workerw_span_test COMMAND workerw_span_test)
+
+# desktop_zorder_test (multi-monitor extend setup, row 8): the ONE z-order
+# contract across injection branches. Drives the REAL
+# k6wp::ResolveZOrderInsertAfter from desktop_inject.cpp (the GetParent
+# sibling guard, k6wp linkage per the row-10 pattern; desktop_inject.hpp
+# stays windows.h-free) over a hidden parent/child hierarchy: the DefView
+# handle is returned ONLY when GetParent(DefView)==GetParent(target);
+# anything else falls back to HWND_BOTTOM with reason
+# "z-order: sibling-mismatch-fallback". user32/gdi32 mirror
+# workerw_span_test (same desktop_inject.cpp link closure).
+add_executable(desktop_zorder_test
+  ../tests/desktop_zorder_test.cpp
+  src/desktop_inject.cpp
+  src/desktop_placement.cpp
+)
+target_link_libraries(desktop_zorder_test PRIVATE user32 gdi32)
+target_include_directories(desktop_zorder_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+add_test(NAME desktop_zorder_test COMMAND desktop_zorder_test)
+
+# multi_monitor_placement_test (multi-monitor extend setup, row 12): the
+# placement matrix - 1/2/3 monitors, negative origins (left/above primary),
+# portrait secondary, duplicate mode (shared physical rect) and mixed-DPI.
+# Same link model as multi_monitor_factory_test (row 6): src/multi_monitor.cpp
+# + src/desktop_placement.cpp against TU-level DesktopInjector / MpvRenderer /
+# ListMonitors stubs, so the binary never links desktop_inject.cpp,
+# mpv_renderer.cpp or mpv.lib - target_link_libraries below must never grow
+# an mpv entry. k6wp_shared is linked ONLY for DetectKeyCollision (row 5,
+# shared/displays_schema.hpp); the TU still owns ListMonitors /
+# GetPrimaryMonitor so monitor_util.obj is never pulled. user32:
+# GetSystemMetrics in MultiMonitor::GetSpanGeometry.
+add_executable(multi_monitor_placement_test
+  ../tests/multi_monitor_placement_test.cpp
+  src/multi_monitor.cpp
+  src/desktop_placement.cpp
+)
+target_link_libraries(multi_monitor_placement_test PRIVATE user32 k6wp_shared)
+target_include_directories(multi_monitor_placement_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_SOURCE_DIR}/shared
+)
+add_test(NAME multi_monitor_placement_test COMMAND multi_monitor_placement_test)
+
+# display_assignment_test (multi-monitor extend setup, row 18): the full
+# per-monitor assignment lifecycle over the fake-pipe pattern
+# (tests/fake_pipe_test.cpp / studio_logic_test SyncMonitor dedup). Cases
+# (a)-(f): assign->get_state map, clear->default revert, unknown-device
+# reject, missing-path degraded coverage + reject, IS-7 collision refusal
+# via the REAL DetectKeyCollision, old-engine ParseEngineState defaults.
+# Link model (engine_state_test row-17 pattern): src/multi_monitor.cpp +
+# src/ipc_marshal.cpp compiled in; DesktopInjector / MpvRenderer /
+# ListMonitors stubs live in the test TU, so the binary never links
+# desktop_inject.cpp, mpv_renderer.cpp or mpv.lib. studio/src/ipc_client.cpp
+# is compiled in for the REAL IpcClient (Qt-free, fake_pipe_test pattern).
+# k6wp_shared: displays_schema (Save/Load/DetectKeyCollision) +
+# ipc_protocol (ParseEngineState). user32: GetSystemMetrics in
+# multi_monitor.cpp.
+add_executable(display_assignment_test
+  ../tests/display_assignment_test.cpp
+  ../studio/src/ipc_client.cpp
+  src/ipc_marshal.cpp
+  src/multi_monitor.cpp
+)
+target_link_libraries(display_assignment_test PRIVATE k6wp_shared user32)
+target_include_directories(display_assignment_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_SOURCE_DIR}/studio/src
+)
+add_test(NAME display_assignment_test COMMAND display_assignment_test)
 endif()

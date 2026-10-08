@@ -18,27 +18,64 @@ No item is invented: untested legs are listed as untested.
   hosts are **code-quoted** — no machine here runs them. If the video
   lands above the icons on an older build, that branch is the suspect.
 
-## 2. Multi-monitor / DPI edges (single-monitor-proven-only)
+## 2. Multi-monitor / DPI edges (dev-box verified; rig artifact outstanding)
 
-Test machine: single 1920x1080 monitor, 100% scaling. Everything below
-holds on that setup; the rest is honestly marked.
+Test machine: single 1920x1080 monitor, 100% scaling. The placement rewrite
+is exercised on that setup and by the headless placement matrix; the rest is
+honestly marked. No 2-physical-monitor run exists yet, so the headline
+multi-monitor claim is not live-proven. See the capture instruction at the
+end of this section.
 
-- **Live-proven**: inject rect == monitor rect 0,0,1920,1080;
-  PerMonitorV2 manifest + runtime awareness `2`
-  (`task-4-dpi-geometry*.txt`); synthetic same-resolution
-  WM_DISPLAYCHANGE re-enumerates with no crash/duplicates; Explorer
-  restart re-anchors to the fresh Progman HWND (learnings T3).
-- **VM-only**: real resolution/DPI change at runtime (the re-attach
-  resize leg), mixed-DPI multi-monitor (125/150%), monitors above/left
-  of primary (negative virtual coords). The per-monitor x/y threading
-  fix (learnings T4 follow-up) is **code-quoted + coordinate argument**,
-  never seen live on a second monitor.
-- **Code-quoted**: span mode (`MultiMonitorMode::Span`) has no CLI flag
-  and is engine-code-only; its geometry (virtual-screen union) was
-  verified by reading the metrics, not by displaying.
-- If a secondary monitor shows the video at the wrong offset or with
-  black bars, capture `monitor_dump.exe` JSON + the injected window
-  rects before reporting.
+- **Live-proven on the dev box (single monitor)**: inject rect == monitor
+  rect 0,0,1920,1080; PerMonitorV2 manifest + runtime awareness `2`
+  (`task-4-dpi-geometry*.txt`); synthetic same-resolution WM_DISPLAYCHANGE
+  re-enumerates with no crash/duplicates; Explorer restart re-anchors to the
+  fresh Progman HWND (learnings T3). The 24H2 WorkerW path emits exactly one
+  `placement: host-resolution` line per attach pass and one
+  `reason=placement: covered` line per monitor, deterministic across
+  consecutive `--exit-after-ms` runs (task-7 evidence).
+- **Test-proven, not live**: the multi-monitor placement matrix
+  (`multi_monitor_placement_test`, `desktop_placement_test`,
+  `multi_monitor_factory_test`, `desktop_zorder_test`, `workerw_span_test`)
+  locks negative virtual coordinates, portrait rects, a non-spanning host and
+  the single z-order contract with synthetic monitor fixtures. A non-covering
+  child logs `placement: RETRY-FALSE-SUCCESS` and degrades to headless
+  (surfaced as the existing `kDegraded` indicator). This proves the
+  mechanism; it does not replace a real two-monitor observation.
+- **VM-only / code-quoted**: real resolution or DPI change at runtime (the
+  re-attach resize leg) and true mixed-DPI multi-monitor (125/150%) have no
+  live run on any machine here. The DPI>100% path is argued from
+  PerMonitorV2 physical pixels + runtime awareness `2` (learnings T4
+  follow-up), never observed.
+- **Code-quoted**: span mode (`MultiMonitorMode::Span`) has no CLI flag and
+  is engine-code-only; its geometry (virtual-screen union) was verified by
+  reading the metrics, not by displaying. Automatic span is out of scope for
+  this release (see §10).
+- **Out of scope by decision: HDR / colour handling.** No HDR metadata, no
+  tone mapping and no colour-management path ships; SDR video is mapped as
+  before. This is a recorded scope boundary (plan Must-NOT-have), not a
+  defect: do not file an HDR fidelity report as a regression.
+- **Duplicate-mode per-monitor assignment is refused, not supported.** Under
+  Duplicate both monitors report the same rect, so `DetectKeyCollision`
+  refuses a per-monitor map that would stack two videos on one rect. The
+  refusal is engine-side, not only in the Studio UI. A Duplicate-mode rig
+  keeps today's single global video.
+- **`\\.\DISPLAYn` assignment keys renumber on a port change and require
+  re-assignment.** `displays.json` is keyed on the GDI device name, which is
+  not hardware-stable; docking/undocking or a port change can renumber it. An
+  assignment whose key no longer matches logs a retention/re-key warning and
+  falls back to the global video rather than landing on the wrong screen.
+  Re-assign after such a change.
+- **Awaiting rig artifact**: the 2-physical-monitor run has not happened yet,
+  so no third-party bundle is in the evidence ledger and IS-1 stays UNPROVEN.
+  When it lands, replace this placeholder with the real path:
+  `<rig-bundle>: .omo/evidence/2monitor-<timestamp>/summary.txt` (produced by
+  `tools/run_2monitor_evidence.ps1` per `docs/runbook-2monitor.md`). Until
+  then the 2-monitor claim stays unproven; wait for the real artifact.
+- If a secondary monitor shows the video at the wrong offset or with black
+  bars, run `tools/run_2monitor_evidence.ps1` and send back the bundle
+  (extended `monitor_dump.exe` JSON + `injected_windows.json` rect census +
+  `placement.log`), per `docs/runbook-2monitor.md`.
 
 ## 3. Hardware variance (NVENC / QSV / AMF / x264, perf)
 
@@ -265,12 +302,21 @@ runtime beyond Qt + the vendor binaries listed in `vendor/VERSIONS.md`.
   is `MPV_ERROR_NOT_IMPLEMENTED` in vendored libmpv (blocked on
   upstream PR #17764, see tech-debt). ANGLE rejected (no pinnable
   source vs `vendor/VERSIONS.md` policy).
-- **Live-proven**: multi-monitor stays N mpv instances (one decode per
-  monitor). Mitigations that ship: per-slot occlusion pause (P2.5),
+- **Live-proven on the dev box**: multi-monitor stays N mpv instances (one
+  decode per monitor). Mitigations that ship: per-slot occlusion pause (P2.5),
   lean mpv profile (P1.1), E-core affinity + iGPU pin (Phase 3-lite —
   `docs/bench_phase3.json`: 1080p playback 0.02% CPU, 141.8 MB WS,
-  hwdec d3d11va on Intel UHD, RTX dec 0%).
-- **Untested**: 2-physical-monitor rig (single-monitor lab only).
+  hwdec d3d11va on Intel UHD, RTX dec 0%). Per-monitor *video assignment*
+  now ships (`displays.json`, `set_display_video`, Studio monitor sub-tabs), but
+  it is still one decode per monitor.
+- **Still no 2-physical-monitor run**: the placement rewrite and the
+  per-monitor assignment map are covered by the headless placement matrix and
+  the dev-box single-monitor run only (`multi_monitor_placement_test` and
+  friends, one `reason=placement: covered` line per monitor in `engine.log`).
+  A third-party two-monitor artifact is **awaiting collection**: the run-book
+  (`docs/runbook-2monitor.md`) and `tools/run_2monitor_evidence.ps1` exist to
+  produce it (see §2's placeholder). IS-1 stays UNPROVEN until that artifact
+  is pasted back; no unproven 2-monitor claim is made here.
 
 ## 10. Phase 4 final-pass notes (2026-09-22, `docs/bench_phase4.json`)
 
@@ -287,10 +333,11 @@ runtime beyond Qt + the vendor binaries listed in `vendor/VERSIONS.md`.
   never a stuck software-decode session. Override with
   `"gpu_adapter": "discrete"` / `"integrated"` (restart required).
 - **Span-auto conditions**: span mode (`MultiMonitorMode::Span`) is still
-  engine-code-only with no CLI/Studio flag; per-monitor (`-1` = all
-  screens) is the only shipped topology. Automatic span (one decode across
-  the virtual-screen union) arrives only with the single-decode render API
-  (§9) — until then every monitor owns its decode instance.
+  engine-code-only with no CLI/Studio flag; per-monitor (`-1` = all screens)
+  is the only shipped topology, and the new per-monitor video assignment
+  (`displays.json`, §2) does not change that. Automatic span (one decode
+  across the virtual-screen union) arrives only with the single-decode render
+  API (§9); until then every monitor owns its decode instance.
 - **ffmpeg essentials scope**: the 8.1.2 essentials build carries exactly
   what the pipeline calls — `h264_nvenc`, `h264_qsv`, `h264_amf`, `libx264`
   encoders, `scale`/`fps` filters, mp4 `faststart`. Anything outside that

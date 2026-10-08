@@ -25,17 +25,19 @@ namespace k6wp {
 // raw JSON object text embedded verbatim into the ack.
 //
 // Ack contract (CRIT-2, audit-remediation todo 11 — "diterima" vs "selesai"):
-// set_video / set_monitor handlers VALIDATE on this worker thread and queue
-// the command for the main message loop (private UINT + PostMessageW); their
-// true return — the {"ok":true} ack — means "diterima" (accepted + queued),
-// NOT "selesai" (applied to the desktop). Window creation and renderer
-// teardown only ever run on the main loop thread. Clients that need
-// certainty verify via get_state (video/monitor fields reflect applied
-// state). A false return means {"error"} ("ditolak"): nothing was queued.
+// set_video / set_monitor / set_display_video handlers VALIDATE on this
+// worker thread and queue the command for the main message loop (private
+// UINT + PostMessageW); their true return — the {"ok":true} ack — means
+// "diterima" (accepted + queued), NOT "selesai" (applied to the desktop).
+// Window creation and renderer teardown only ever run on the main loop
+// thread. Clients that need certainty verify via get_state (video/monitor
+// fields reflect applied state). A false return means {"error"} ("ditolak"):
+// nothing was queued.
 struct IpcHandlers {
   // Return true = {"ok":true}, false = {"error":"handler rejected ..."}.
   std::function<bool(const std::string& payload_json)> set_video;
   std::function<bool(const std::string& payload_json)> set_monitor;
+  std::function<bool(const std::string& payload_json)> set_display_video;
   std::function<void()> pause;
   std::function<void()> resume;
   // Must return a JSON object (e.g. "{}" when nothing to report).

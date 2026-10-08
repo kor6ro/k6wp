@@ -14,12 +14,16 @@
 
 #include <atomic>
 #include <cstddef>
+#include <functional>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "desktop_inject.hpp"
+#include "displays_schema.hpp"
+#include "ipc_marshal.hpp"  // DisplayVideoCommand — row 33 command gate
 #include "monitor_util.hpp"
 #include "mpv_renderer.hpp"
 
@@ -35,9 +39,51 @@ struct SpanGeometry {
   int height = 0;
 };
 
+// Injectable per-slot construction seam (extend-setup row 6, GAP-11/IS-5):
+// MultiMonitor asks a SlotFactory to build each slot's DesktopInjector and
+// MpvRenderer instead of calling make_unique inline, so tests can swap the
+// construction without touching desktop_inject.cpp / mpv_renderer.cpp (and
+// therefore without libmpv) at link time. Production passes
+// DefaultSlotFactory() - identical objects, arguments and call order as the
+// pre-seam code (the test suite asserts that order verbatim).
+struct SlotFactory {
+  // Builds a slot's DesktopInjector; receives MultiMonitor's LogFn (the
+  // pre-seam code passed log_ to make_unique<DesktopInjector>).
+  std::function<std::unique_ptr<DesktopInjector>(LogFn)> make_injector;
+  // Builds a slot's MpvRenderer (AttachSlot and the pin-revert recreate).
+  std::function<std::unique_ptr<MpvRenderer>()> make_renderer;
+};
+
+// The production factory: make_unique<DesktopInjector>(log) and
+// make_unique<MpvRenderer>() - exactly what AttachSlot/VerifyPinAndRevert
+// called before the seam. inline so the make_unique calls are emitted ONLY
+// in TUs that materialise the MultiMonitor constructor's default argument
+// (engine_app.cpp in production); multi_monitor.cpp itself never references
+// them, so a test linking multi_monitor.cpp without libmpv still links.
+inline SlotFactory DefaultSlotFactory() {
+  SlotFactory factory;
+  factory.make_injector = [](LogFn log) {
+    return std::make_unique<DesktopInjector>(log);
+  };
+  factory.make_renderer = []() { return std::make_unique<MpvRenderer>(); };
+  return factory;
+}
+
+// Row 17: outcome of one MultiMonitor::ApplyBootAssignments pass (engine
+// boot summary + test observables).
+struct BootAssignmentStats {
+  int applied = 0;          // live slot loaded the assignment path
+  int retained = 0;         // device absent -> kept for OnDisplayChange
+  int skipped_missing = 0;  // path fails exists -> slot keeps the default
+};
+
 class MultiMonitor {
  public:
-  explicit MultiMonitor(LogFn log = nullptr);
+  // `factory` defaults to DefaultSlotFactory() (production behaviour).
+  // Tests inject a fake here or via SetSlotFactory(); both members must be
+  // non-empty (the default argument guarantees that in production).
+  explicit MultiMonitor(LogFn log = nullptr,
+                        SlotFactory factory = DefaultSlotFactory());
   ~MultiMonitor();
 
   MultiMonitor(const MultiMonitor&) = delete;
@@ -70,6 +116,13 @@ class MultiMonitor {
   // VerifyPinAndRevert() drops it per-slot on revert.
   void SetAdapterPin(const std::string& substr);
 
+  // Test seam (row 6): replace the per-slot construction. Call before
+  // Init(); affects slots created AFTER the call only (live slots keep
+  // their instances, like SetAdapterPin). Both members must be non-empty -
+  // an empty std::function makes the next slot creation throw
+  // std::bad_function_call. Production never calls this.
+  void SetSlotFactory(SlotFactory factory);
+
   // Enumerate via ListMonitors() and attach. PerMonitor: one slot per
   // monitor; Span: a single slot across the virtual screen. Returns true
   // when at least one slot is live (a headless renderer counts — Attach
@@ -89,6 +142,72 @@ class MultiMonitor {
   // when at least one renderer accepted it; false with no live slots.
   // force=true re-issues loadfile on every slot (device-lost recovery).
   bool LoadLoopAll(const std::string& path, bool force = false);
+
+  // Row 15: true when a live slot's GDI device name matches `device`
+  // (UTF-8, e.g. \\.\DISPLAY1). The set_display_video resolve predicate:
+  // an unknown/absent key returns false and the caller rejects the command
+  // before touching any slot or displays.json. Does not read
+  // displays.json — "assignment" here means a live slot for that device
+  // key, not a persisted path.
+  bool HasAssignment(const std::string& device) const;
+
+  // Row 15: per-slot variant of LoadLoopAll — load+loop `path` on the ONE
+  // live slot whose GDI device name matches `device`, then apply
+  // `fit_mode` to that slot only (empty = leave the slot's fit mode
+  // alone). Returns true when that slot's renderer accepted the path;
+  // false when no slot matches the key (unknown device), the path is
+  // empty, or the renderer refused. Does not touch other slots and does
+  // NOT update last_video_ (a per-slot assignment is not the global
+  // load; pin-revert keeps reloading last_video_ — rows 16/17 own the
+  // assignment re-apply story).
+  bool LoadLoopSlot(const std::string& device, const std::string& path,
+                    const std::string& fit_mode = std::string());
+
+  // Row 17: boot-time assignment convergence. Call AFTER Init() and
+  // LoadLoopAll(default) so live slots already carry the default video.
+  // For each displays.json assignment, matched to a live slot by GDI device
+  // key (MonitorInfo::device_name):
+  //   (a) device key matches no live monitor -> RETAINED in memory and
+  //       re-applied by OnDisplayChange when the device returns;
+  //       logs "display: retained assignment for absent <device>";
+  //   (b) path fails std::filesystem::exists -> skipped for that slot,
+  //       which keeps the default video; logs "display: assignment path
+  //       missing for <device>: <path> - falling back to default";
+  //   (c) successful apply logs "display: applied <path> to <device>".
+  // An empty cfg is a no-op: zero per-slot LoadLoop calls, zero logs - the
+  // caller's own LoadLoopAll boot load is untouched (IS-4). Never throws.
+  BootAssignmentStats ApplyBootAssignments(const DisplaysConfig& cfg,
+                                           const std::string& fit_mode);
+
+  // Row 33 (IS-7/GAP-14): command-path collision gate for
+  // set_display_video. EngineApp::HandleSetDisplayVideo (engine_app.cpp) AND
+  // display_assignment_test case (e) both call this — one production
+  // decision, no harness copy. Builds the prospective assignment map from
+  // cfg + cmd (assign overwrites the device key; clear erases it) and runs
+  // the REAL DetectKeyCollision (shared/displays_schema) against `monitors`.
+  // Returns the colliding keys; empty = the command may proceed to mutate.
+  // When non-empty and `log` != nullptr, logs the exact refusal line
+  // "ipc: set_display_video refused (duplicate-mode collision): <keys>"
+  // (keys comma-joined, map order). Pure: no slot, file, or cfg mutation.
+  // DetectKeyCollision semantics unchanged — this is a call site, not a
+  // second detector.
+  static std::vector<std::wstring> DetectKeyCollisionForCommand(
+      const DisplaysConfig& cfg, const DisplayVideoCommand& cmd,
+      const std::vector<MonitorInfo>& monitors, LogFn log);
+
+  // Row 33 (IS-7/GAP-14): load-path collision gate for the displays.json
+  // consumers (boot convergence + OnDisplaysFileChanged). Runs the REAL
+  // DetectKeyCollision on cfg against `monitors`; on collision drops every
+  // colliding key EXCEPT the first in map order (keep-first — std::map
+  // iteration order matches DetectKeyCollision's sorted output) and, when
+  // `log` != nullptr, logs the exact refusal line
+  // "display: refusing assignments with colliding keys: <keys>". Returns
+  // the dropped keys (empty = clean map). Mutates cfg in place. Does NOT
+  // persist displays.json — the store stays dumb (SaveDisplays untouched);
+  // enforcement lives at the consumers.
+  static std::vector<std::wstring> DropCollidingAssignments(
+      DisplaysConfig& cfg, const std::vector<MonitorInfo>& monitors,
+      LogFn log);
 
   // P3L.3 pin verify/revert pass (PATCH A). For each slot created WITH a
   // pin that has started playback but reports hwdec inactive ("no" is only
@@ -138,8 +257,20 @@ class MultiMonitor {
   // slots whose injection failed. Unchanged behavior for has_headless_slots().
   int headless_slot_count() const;
 
+  // Row 4: last CoverageReason token recorded for a slot's attach attempts
+  // ("" when the monitor id has no live slot). Rows 15/19 map it to the
+  // get_state display_coverage field.
+  std::string SlotCoverageReason(int monitor_id) const;
+
   // Current virtual-screen geometry (GetSystemMetrics in the .cpp).
   static SpanGeometry GetSpanGeometry() noexcept;
+
+  // Test-only seam (row 11 failure QA): when non-null, GetSpanGeometry()
+  // returns *g instead of the live GetSystemMetrics values, so a headless
+  // suite can force the non-positive virtual-screen fixture that drives
+  // ReattachSpanLocked's primary-resolution fallback. Production never
+  // calls this; pass nullptr to restore the live metrics.
+  static void SetSpanGeometryOverride(const SpanGeometry* g);
 
  private:
   // MpvRenderer holds a std::mutex (non-movable), so both RAII members are
@@ -149,13 +280,18 @@ class MultiMonitor {
     std::unique_ptr<DesktopInjector> injector;
     std::unique_ptr<MpvRenderer> renderer;
     std::atomic<bool> paused{false};
+    // Row 4: last CoverageReason token from this slot's attach path
+    // (DesktopInjector::last_coverage_reason, copied in AttachSlot).
+    // Rows 15/19 map it to the get_state display_coverage field.
+    std::string coverage_reason;
     Slot() = default;
     Slot(const Slot&) = delete;
     Slot& operator=(const Slot&) = delete;
     Slot(Slot&& other) noexcept
         : info(std::move(other.info)),
           injector(std::move(other.injector)),
-          renderer(std::move(other.renderer)) {
+          renderer(std::move(other.renderer)),
+          coverage_reason(std::move(other.coverage_reason)) {
       paused.store(other.paused.load(std::memory_order_relaxed),
                    std::memory_order_relaxed);
     }
@@ -164,6 +300,7 @@ class MultiMonitor {
         info = std::move(other.info);
         injector = std::move(other.injector);
         renderer = std::move(other.renderer);
+        coverage_reason = std::move(other.coverage_reason);
         paused.store(other.paused.load(std::memory_order_relaxed),
                      std::memory_order_relaxed);
       }
@@ -171,9 +308,21 @@ class MultiMonitor {
     }
   };
 
+ public:
+  // Live slot map (monitor id -> slot) for tests/diagnostics (row 6). The
+  // slot payload stays private; hold the reference only across read-only
+  // checks, never across Init/OnDisplayChange/Shutdown.
+  const std::map<int, Slot>& slots() const { return slots_; }
+
+ private:
   void ClearSlots();
   bool AttachSlot(const MonitorInfo& mi);
   bool AttachSpanSlot();
+  // Row 7: resolve the desktop host ONCE for the current attach pass and
+  // store it in shared_host_. Called at each pass entry that attaches or
+  // re-attaches (ApplyActiveFilter, the span paths); every slot then receives
+  // the SAME host via SetSharedHost instead of spawning its own.
+  void ResolveHostForPass();
   // Shared span re-anchor for OnDisplayChange (reassert=false) and Reanchor
   // (reassert=true): primary-resolution size fallback + hidden-host attach
   // fallback. `slot.injector` must be non-null. No logging here so the
@@ -183,6 +332,12 @@ class MultiMonitor {
   // Diff the live slots against DesiredMonitors(): tear down the unwanted,
   // attach the missing. Shared by Init/OnDisplayChange/Reanchor/SetActive.
   void ApplyActiveFilter(const std::vector<MonitorInfo>& desired);
+  // Row 17: re-apply retained_assignments_ onto live slots whose device key
+  // has returned (OnDisplayChange pass, PerMonitor only - span mode skips:
+  // the span slot is not keyed by a real GDI device name). Entries that
+  // still have no live slot stay retained silently; a successful LoadLoop
+  // erases the entry and logs "display: applied <path> to <device>".
+  void ReapplyRetainedLocked();
 
   LogFn log_ = nullptr;
   MultiMonitorMode mode_ = MultiMonitorMode::PerMonitor;
@@ -199,9 +354,30 @@ class MultiMonitor {
   // stores; Init attaches) from a live retarget to an empty set (must
   // re-attach immediately so recovery from an absent id restores slots).
   bool filter_armed_ = false;
+  // Row 6: per-slot construction seam; non-empty via the constructor's
+  // DefaultSlotFactory() default argument (production) or SetSlotFactory.
+  SlotFactory factory_;
   std::map<int, Slot> slots_;
+  // Row 17: assignments whose device key matched no live monitor at boot
+  // (or while converged). Keyed by GDI device name (wide, same as
+  // MonitorInfo::device_name); re-applied by OnDisplayChange -> 
+  // ReapplyRetainedLocked when the device returns. Survives
+  // Init/OnDisplayChange/Shutdown (engine keeps the map for hotplug).
+  std::map<std::wstring, std::wstring> retained_assignments_;
   bool initialized_ = false;
   void* headless_host_ = nullptr;
+  // Row 7: the attach pass's shared host (ResolveSharedHost). Persists across
+  // passes so Reanchor/OnDisplayChange survivors get the fresh resolution and
+  // row 11 can compare the measured client_rect against the live host.
+  SharedHost shared_host_;
+  // Row 11: host client_rect the live slots were last attached against.
+  // Written ONLY at the end of Init/OnDisplayChange/Reanchor (pass-end),
+  // never by ResolveHostForPass - OnDisplayChange compares the freshly
+  // resolved shared_host_.client_rect against this to detect a moved or
+  // recreated host while every monitor rect is unchanged. Update-in-
+  // ResolveHostForPass would make that comparison vacuous (the pass refresh
+  // would also refresh the snapshot before the survivor loop runs).
+  PlacementRect attached_host_rect_{};
   std::atomic<bool> global_paused_{false};
   Slot* SlotAt(size_t idx);
   const Slot* SlotAt(size_t idx) const;

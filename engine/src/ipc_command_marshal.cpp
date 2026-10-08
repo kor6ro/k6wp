@@ -55,4 +55,31 @@ bool IpcCommandMarshal::QueueMonitor(const std::string& payload_json) {
   return true;
 }
 
+bool IpcCommandMarshal::QueueDisplayVideo(const std::string& payload_json) {
+  // Worker-side half: validate only (pure ParseSetDisplayVideoPayload, row
+  // 13). A reject here acks {"error"} and queues nothing. NO desktop
+  // mutation on this thread (CRIT-2): the per-slot apply + displays.json
+  // persist runs on the main loop (row 15's HandleSetDisplayVideo).
+  if (!ParseSetDisplayVideoPayload(payload_json)) {
+    if (log_) {
+      log_("ipc: set_display_video rejected (missing/invalid device, path or clear)");
+    }
+    return false;
+  }
+  const HWND hwnd = static_cast<HWND>(hwnd_.load(std::memory_order_acquire));
+  pending_.SetDisplayVideo(payload_json);
+  if (hwnd == nullptr || !PostMessageW(hwnd, kSetDisplayVideoMessage, 0, 0)) {
+    pending_.ClearDisplayVideo();
+    if (log_) {
+      log_("warning: set_display_video post failed (error %lu), command dropped",
+           GetLastError());
+    }
+    return false;
+  }
+  if (log_) {
+    log_("ipc: set_display_video diterima (queued for main loop, verify via get_state)");
+  }
+  return true;
+}
+
 }  // namespace k6wp

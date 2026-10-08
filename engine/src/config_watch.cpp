@@ -125,6 +125,50 @@ void ConfigWatcher::Start(const std::filesystem::path& config_path,
   }
 }
 
+void ConfigWatcher::WatchSecondFile(const std::filesystem::path& path,
+                                    SecondCallback on_change) {
+  second_path_ = path;
+  on_second_change_ = std::move(on_change);
+  watch_filename2_.clear();
+  second_mtime_ = {};
+  second_size_ = 0;
+  second_snapshot_valid_ = false;
+  if (second_path_.empty()) return;
+
+  // The directory handle is per-directory, so a second basename can only be
+  // observed when it lives next to the config file (same handle, no second
+  // watch handle — row 16 hard constraint). Refuse loudly otherwise.
+  if (started_ && !config_path_.empty() &&
+      second_path_.parent_path() != config_path_.parent_path()) {
+    Log("warning: config-watch: second file '%ls' not in config directory "
+        "'%ls'; not watched (no separate handle by design)",
+        second_path_.c_str(), config_path_.parent_path().c_str());
+    return;
+  }
+
+  std::error_code ec;
+  if (std::filesystem::exists(second_path_, ec)) {
+    const auto mtime = std::filesystem::last_write_time(second_path_, ec);
+    if (!ec) {
+      second_mtime_ = mtime;
+      second_size_ = std::filesystem::file_size(second_path_, ec);
+      if (ec) second_size_ = 0;
+      second_snapshot_valid_ = true;
+    }
+  }
+  watch_filename2_ = second_path_.filename().wstring();
+  if (!started_) return;  // unit probes register without a directory watch
+  if (!event_driven_) {
+    Log("warning: config-watch: second-file watch unavailable (event watch "
+        "not armed); live reload of '%ls' disabled, no poll fallback",
+        second_path_.c_str());
+    return;
+  }
+  Log("config-watch: second-file watch armed '%ls' (same directory handle, "
+      "one debounce timer, no poll)",
+      second_path_.c_str());
+}
+
 void ConfigWatcher::Poll() {
   if (!started_ || config_path_.empty()) return;
 
@@ -153,7 +197,8 @@ void* ConfigWatcher::EventHandle() const {
 
 void ConfigWatcher::SetDebounceWindow(void* hwnd) { debounce_hwnd_ = hwnd; }
 
-bool ConfigWatcher::ArmDebounce() {
+bool ConfigWatcher::ArmDebounce(bool is_second) {
+  if (is_second && second_path_.empty()) return false;
   if (debounce_hwnd_ == nullptr) return false;  // no window → direct path
   HWND hwnd = static_cast<HWND>(debounce_hwnd_);
   constexpr UINT_PTR kId = static_cast<UINT_PTR>(kDebounceTimerId);
@@ -162,10 +207,17 @@ bool ConfigWatcher::ArmDebounce() {
     Log("config-watch: debounce armed (250ms quiet)");
   }
   debounce_pending_ = true;
+  if (is_second) {
+    debounce_pending_second_ = true;
+  } else {
+    debounce_pending_config_ = true;
+  }
   ++debounce_events_;
   if (SetTimer(hwnd, kId, static_cast<UINT>(kDebounceMs), nullptr) == 0) {
     const DWORD err = GetLastError();
     debounce_pending_ = false;
+    debounce_pending_config_ = false;
+    debounce_pending_second_ = false;
     debounce_events_ = 0;
     Log("config-watch: SetTimer failed (%lu), direct reload fallback",
         static_cast<unsigned long>(err));
@@ -181,14 +233,23 @@ void ConfigWatcher::OnDebounceExpired() {
               static_cast<UINT_PTR>(kDebounceTimerId));
   }
   debounce_pending_ = false;
+  // Row 16: one shared timer, per-file pending flags — run each file's
+  // change check exactly once. UNCHANGED config path: stat mtime+size →
+  // LoadConfig → callback; corrupt → keep-last-valid + log (CheckForChange/
+  // TryReload). Second file: same stat rule → owner callback.
+  const bool check_config = debounce_pending_config_;
+  const bool check_second = debounce_pending_second_;
+  debounce_pending_config_ = false;
+  debounce_pending_second_ = false;
   const int coalesced = debounce_events_;
   debounce_events_ = 0;
-  // UNCHANGED old path: stat mtime+size → LoadConfig → callback; corrupt →
-  // keep-last-valid + log (inside CheckForChange/TryReload).
-  last_poll_ = std::chrono::steady_clock::now();
   Log("config-watch: debounce expired (250ms quiet, %d event%s coalesced)",
       coalesced, coalesced == 1 ? "" : "s");
-  CheckForChange();
+  if (check_config) {
+    last_poll_ = std::chrono::steady_clock::now();
+    CheckForChange();
+  }
+  if (check_second) CheckSecondForChange();
 }
 
 bool ConfigWatcher::OnDirectoryEvent() {
@@ -211,10 +272,16 @@ bool ConfigWatcher::OnDirectoryEvent() {
       Log("config-watch: event=rdevchange overflow (buffer overrun), "
           "full-rescan fallback");
       if (event_driven_) IssueWatch();
-      if (!ArmDebounce()) {
+      // Row 16: notifications were lost for the whole directory — rescan
+      // BOTH watched files, coalesced through the one debounce (or directly
+      // when no window is set).
+      const bool armed_config = ArmDebounce(false);
+      const bool armed_second = ArmDebounce(true);
+      if (!armed_config) {
         last_poll_ = std::chrono::steady_clock::now();
         CheckForChange();
       }
+      if (!armed_second) CheckSecondForChange();
       return true;
     }
     // The watch died (directory deleted, handle invalid, ...): drop back to
@@ -226,14 +293,16 @@ bool ConfigWatcher::OnDirectoryEvent() {
   }
   event_armed_ = false;
 
-  // Parse the FILE_NOTIFY_INFORMATION chain; only basenames equal to the
-  // watched config filename with MODIFIED / ADDED / RENAMED_OLD_NAME /
-  // RENAMED_NEW_NAME (atomic temp+rename save) arm the 250 ms debounce
-  // (Todo 3: KillTimer + SetTimer re-arm on the hidden window; expiry runs
-  // the unchanged CheckForChange path via OnDebounceExpired, so 10 rapid
-  // writes coalesce into exactly 1 reload after 250 ms quiet). Without a
-  // debounce window the direct conditional reload runs (Todo 2 path).
-  bool matched = false;
+  // Parse the FILE_NOTIFY_INFORMATION chain; basenames equal to the watched
+  // config filename OR the row-16 second filename with MODIFIED / ADDED /
+  // RENAMED_OLD_NAME / RENAMED_NEW_NAME (atomic temp+rename save) arm the
+  // 250 ms debounce (KillTimer + SetTimer re-arm on the hidden window;
+  // expiry dispatches each pending file through OnDebounceExpired, so 10
+  // rapid writes coalesce into exactly 1 reload per file after 250 ms quiet).
+  // Without a debounce window the direct conditional reload runs (Todo 2
+  // path). Both names share this one walk/handle/timer.
+  bool matched_config = false;
+  bool matched_second = false;
   if (bytes > 0 && bytes <= notify_buf_.size()) {
     DWORD offset = 0;
     for (;;) {
@@ -253,7 +322,12 @@ bool ConfigWatcher::OnDirectoryEvent() {
             (slash == std::wstring::npos) ? name : name.substr(slash + 1);
         if (!watch_filename_.empty() &&
             ::_wcsicmp(base.c_str(), watch_filename_.c_str()) == 0) {
-          matched = true;
+          matched_config = true;
+          Log("config-watch: event=rdevchange action=%lu file='%ls'",
+              static_cast<unsigned long>(info->Action), base.c_str());
+        } else if (!watch_filename2_.empty() &&
+                   ::_wcsicmp(base.c_str(), watch_filename2_.c_str()) == 0) {
+          matched_second = true;
           Log("config-watch: event=rdevchange action=%lu file='%ls'",
               static_cast<unsigned long>(info->Action), base.c_str());
         }
@@ -263,14 +337,17 @@ bool ConfigWatcher::OnDirectoryEvent() {
       if (offset >= bytes) break;  // malformed-chain guard
     }
   }
-  if (matched) {
-    if (!ArmDebounce()) {
+  if (matched_config) {
+    if (!ArmDebounce(false)) {
       last_poll_ = std::chrono::steady_clock::now();
       CheckForChange();
     }
   }
+  if (matched_second) {
+    if (!ArmDebounce(true)) CheckSecondForChange();
+  }
   if (event_driven_) IssueWatch();  // re-arm (falls back on failure)
-  return matched;
+  return matched_config || matched_second;
 }
 
 void ConfigWatcher::CheckForChange() {
@@ -291,6 +368,43 @@ void ConfigWatcher::CheckForChange() {
     last_size_ = size;
     TryReload();
   }
+}
+
+bool ConfigWatcher::CheckSecondForChange() {
+  if (second_path_.empty() || on_second_change_ == nullptr) return false;
+
+  std::error_code ec;
+  if (!std::filesystem::exists(second_path_, ec)) {
+    // Deleted between events: consume the snapshot so a later re-create is
+    // seen as a change again. No callback on deletion (watch+reload only).
+    second_snapshot_valid_ = false;
+    second_mtime_ = {};
+    second_size_ = 0;
+    return false;
+  }
+
+  const auto mtime = std::filesystem::last_write_time(second_path_, ec);
+  if (ec) return false;
+  std::uintmax_t size = std::filesystem::file_size(second_path_, ec);
+  if (ec) size = 0;
+
+  if (second_snapshot_valid_ && mtime == second_mtime_ && size == second_size_) {
+    return false;
+  }
+  second_mtime_ = mtime;
+  second_size_ = size;
+  second_snapshot_valid_ = true;
+  // The owner's callback re-reads the file and re-converges; its own catch
+  // keeps a corrupt file from throwing. The backstop here guarantees a
+  // callback bug can never unwind the engine's message loop.
+  try {
+    on_second_change_();
+  } catch (const std::exception& e) {
+    Log("config-watch: second-file callback failed (ignored): %s", e.what());
+  } catch (...) {
+    Log("config-watch: second-file callback failed (ignored: unknown error)");
+  }
+  return true;
 }
 
 void ConfigWatcher::IssueWatch() {
@@ -338,6 +452,8 @@ void ConfigWatcher::TeardownWatch() {
               static_cast<UINT_PTR>(kDebounceTimerId));
   }
   debounce_pending_ = false;
+  debounce_pending_config_ = false;
+  debounce_pending_second_ = false;
   debounce_events_ = 0;
   if (dir_handle_ != nullptr && overlapped_ != nullptr) {
     // Mirror the ipc_server Stop discipline: cancel outstanding I/O before
@@ -360,6 +476,7 @@ void ConfigWatcher::TeardownWatch() {
   notify_buf_.clear();
   notify_buf_.shrink_to_fit();
   watch_filename_.clear();
+  watch_filename2_.clear();
   event_armed_ = false;
   event_driven_ = false;
 }
@@ -369,6 +486,13 @@ void ConfigWatcher::Stop() {
   // thread), so there is no join — zero-join BY DESIGN. The <200 ms budget
   // applies to the whole Stop below; teardown timing is logged as evidence.
   const auto t0 = std::chrono::steady_clock::now();
+  // Row 16: the second-file registration dies with the watcher in both
+  // branches (a later Start() must re-register it).
+  second_path_.clear();
+  on_second_change_ = nullptr;
+  second_mtime_ = {};
+  second_size_ = 0;
+  second_snapshot_valid_ = false;
   if (!started_) {
     TeardownWatch();  // belt-and-braces: never leak dir/event handles
     const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
