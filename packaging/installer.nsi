@@ -123,6 +123,7 @@ Icon "k6wp-on.ico"
 
 VIProductVersion "${K6WP_VERSION_STR_4}"
 VIAddVersionKey "ProductName" "${APP_NAME}"
+VIAddVersionKey "CompanyName" "K6WP contributors"
 VIAddVersionKey "FileDescription" "${APP_NAME} Setup"
 VIAddVersionKey "FileVersion" "${APP_VERSION}"
 VIAddVersionKey "ProductVersion" "${APP_VERSION}"

@@ -97,17 +97,87 @@ holds on that setup; the rest is honestly marked.
 
 ## 4. AV / SmartScreen (unsigned bundle)
 
-- **Code-quoted, no AV-vendor test performed**: the exes are
-  **unsigned** — expect Windows SmartScreen "Unknown publisher" on
-  first run, and possible heuristic flags because the engine injects a
-  window into the desktop (SetParent to Progman/WorkerW) and the app
-  writes an HKCU `...\Run` autostart value. Both behaviors are
-  legitimate (uninstall removes the Run value; injector is TOOLWINDOW +
-  NOACTIVATE, never a keylogger shape) but match common heuristics.
-- Mitigation status: per-user install (no admin/UAC), HKCU-only,
-  stock NSIS plugins, no bundled third-party runtime beyond Qt +
-  documented vendor binaries. Signing (cert + timestamp) is the real
-  fix and is **not done** — do not promise clean AV verdicts.
+**Code-quoted, no AV-vendor test performed.** Every distributed binary is
+currently **unsigned**. Signing reduces false positives; it does **not**
+guarantee clean verdicts — and no clean verdict is promised anywhere in
+this document or by the tooling below.
+
+### 4.1 Causes (why a scanner may flag this bundle)
+
+| # | Trigger | Where | Why heuristics care |
+|---|---------|-------|---------------------|
+| 1 | Unsigned binaries | every shipped exe (`K6WP.exe`, `engine.exe`, `studio.exe`, `compressor.exe`, `monitor_dump.exe`, vendored `ffmpeg.exe`/`ffprobe.exe`) | No publisher identity, no reputation history; "Unknown publisher" SmartScreen dialog on first run is the guaranteed user-visible effect. |
+| 2 | Unsigned NSIS installer | `dist\K6WP-Setup.exe` (compiled from `packaging/installer.nsi`, stock NSIS, no third-party plugins) | Unsigned installers are a top heuristic trigger on their own, independent of what they install. |
+| 3 | Desktop `SetParent` injection | `engine/src/desktop_inject.cpp` (SetParent into Progman/WorkerW, TOOLWINDOW + NOACTIVATE) | Injecting a window into the desktop shell matches "desktop hijacker" heuristics. This is a **core feature** (live wallpaper rendering) — documented here, never removed. |
+| 4 | HKCU `...\Run` autostart | shared autostart helper + launcher `--engine --silent` path + optional installer checkbox (default on) | Persist-across-logon registry writes match "persistent threat" heuristics. This is a **core feature** (wallpaper engine must restart with the session) — documented here, never removed. Uninstall removes the Run value. |
+
+Existing mitigations that stay in place: per-user install (no admin/UAC),
+HKCU-only registry footprint, stock NSIS plugins, no bundled third-party
+runtime beyond Qt + the vendor binaries listed in `vendor/VERSIONS.md`.
+
+### 4.2 Current status (2026-10-08)
+
+- The repo now has a **signing pipeline ready** but **no certificate
+  obtained**. `packaging/sign_outputs.ps1` signs every staged exe +
+  `dist\K6WP-Setup.exe` (SHA256 + RFC3161 timestamp) when
+  `K6WP_SIGN_PFX` + `K6WP_SIGN_PFX_PASSWORD` are set, and is a strict
+  no-op (exit 0, clear message) otherwise. Every build published so far
+  came from the no-op path: **all distributed binaries are unsigned**.
+- Expected effects on user machines today: SmartScreen "Unknown
+  publisher" / "Windows protected your PC" on first run, and possible AV
+  heuristic flags from causes 3 + 4 even after signing (those behaviors
+  are inherent to the product).
+- **No AV-vendor scanning of any kind has been performed. No clean-verdict
+  claim is made or implied.**
+
+### 4.3 Action plan (concrete services, in rough order of effort)
+
+1. **SignPath.io** — free OSS code-signing for **public** GitHub repos
+   (this repo, `github.com/kor6ro/k6wp`, is public and therefore
+   eligible). SignPath issues and hosts the certificate, signs via their
+   CI integration or signing service, and charges nothing for qualifying
+   open-source projects. Best first step: adapt the release job to submit
+   `K6WP-Setup.exe` + the staged exes (same SHA256/RFC3161 parameters
+   `sign_outputs.ps1` uses) through SignPath instead of a local PFX.
+2. **Azure Trusted Signing** — ~$9.99/month (identity-validated, Microsoft
+   manages the cert; check current pricing/terms). Works with `signtool`
+   against the Trusted Signing URI or the official GitHub Action; the
+   output is a normal Authenticode signature with RFC 3161 timestamp, so
+   no change to the artifacts, only to how the signature is produced.
+3. **Retail OV/EV code-signing certificate** (public CA: Sectigo,
+   DigiCert, SSL.com, Certum — Certum has a low-cost open-source
+   offering) **+ this repo's script unchanged**: export the cert as a
+   PFX, set `K6WP_SIGN_PFX` / `K6WP_SIGN_PFX_PASSWORD`, run
+   `packaging\sign_outputs.ps1`. EV historically skipped the SmartScreen
+   "unknown publisher" reputation cold-start; OV now accumulates
+   reputation too. Cost varies (~tens to low hundreds USD/year).
+4. **False-positive submission portals** (after signing, or immediately —
+   submissions are accepted for unsigned samples too, but whitelisting
+   unsigned new files is much slower and less likely):
+   - Microsoft Security Intelligence (Defender):
+     <https://www.microsoft.com/wdsi/filesubmission>
+   - Kaspersky: <https://opentip.kaspersky.com/> (submit sample from the
+     result page)
+   - ESET: <https://support.eset.com/en/report-sample>
+   - Malwarebytes: <https://www.malwarebytes.com/faqp#falsepositive>
+   - Avast/AVG: <https://www.avast.com/false-positive-file-form.php>
+   - Bitdefender: <https://www.bitdefender.com/en-us/consumer/support/submit-sample>
+   - Norton/LifeLock: <https://support.norton.com/sp/en/us/home/current/solutions/v135877749>
+   Expect days-to-weeks per vendor, case-by-case verdicts, and **no
+   guarantee of a clean result** — especially for the injection (cause 3)
+   and autostart (cause 4) behaviors, which are legitimate product
+   features but permanently interesting to heuristics.
+
+### 4.4 Release order when signing is enabled (documented, not yet exercised)
+
+1. `powershell -ExecutionPolicy Bypass -File packaging\make_zip.ps1`
+   (build + stage + ZIP + asserts; unchanged, signing is NOT wired into it).
+2. `makensis packaging\installer.nsi` → `dist\K6WP-Setup.exe`.
+3. `powershell -ExecutionPolicy Bypass -File packaging\sign_outputs.ps1`
+   (signs every staged exe + `dist\K6WP-Setup.exe` in place).
+4. Re-zip the signed stage so the portable ZIP matches the installer:
+   `Compress-Archive -Force -Path "dist\stage\K6WP-portable-<ver>\*" -DestinationPath "dist\K6WP-portable-<ver>.zip"`
+   (the ZIP from step 1 predates the signing and must be refreshed).
 
 ## 5. Installer / bundle failure legs (proven)
 

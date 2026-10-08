@@ -107,7 +107,12 @@ Requirements: Windows 10 1703+ (PerMonitorV2) / Windows 11, 64-bit.
 > version has no installer attached yet, Option A is the working path.
 
 > Unsigned build: expect a Windows SmartScreen "Unknown publisher" prompt on
-> first run. See `packaging/known-limitations.md` §4.
+> first run. See `packaging/known-limitations.md` §4. Maintainers can sign
+> release artifacts (staged exes + `dist\K6WP-Setup.exe`, SHA256 + RFC 3161
+> timestamp) with `packaging\sign_outputs.ps1` — strictly opt-in, enabled by
+> setting the `K6WP_SIGN_PFX` / `K6WP_SIGN_PFX_PASSWORD` environment
+> variables; with them unset the script is a no-op, which is the state of
+> every build published so far.
 
 ## Build from source
 
