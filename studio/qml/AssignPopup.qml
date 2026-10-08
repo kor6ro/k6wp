@@ -127,12 +127,25 @@ Popup {
         id: contentColumn
         spacing: Theme.space1
 
-        Label {
+        RowLayout {
             Layout.fillWidth: true
-            text: qsTr("Pasang ke")
-            font.pixelSize: Theme.fontM
-            font.weight: Theme.fontWeightSemibold
-            color: Theme.text
+            spacing: Theme.space1
+
+            Label {
+                text: Theme.glyph.screen
+                font.family: Theme.glyphFont
+                font.pixelSize: Theme.fontM
+                color: Theme.text2
+                Accessible.ignored: true
+            }
+
+            Label {
+                Layout.fillWidth: true
+                text: qsTr("Pasang ke")
+                font.pixelSize: Theme.fontM
+                font.weight: Theme.fontWeightSemibold
+                color: Theme.text
+            }
         }
 
         ButtonGroup {

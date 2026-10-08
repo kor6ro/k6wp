@@ -37,6 +37,56 @@ Item {
     // ("Mode pengisian (mentah):", "Offset bingkai (detik):", ...); without
     // their own preferred width they overdraw into the control.
     readonly property int wideLabelWidth: 200
+
+    // --- task 33: adaptive layout + wheel physics -------------------------
+    // RECOMMENDED adaptive pattern: ONE reading column at every width. Below
+    // the breakpoint it is full-bleed; at/above it the column stops growing
+    // at contentMaxWidth and centres itself in the scroll pane, so a
+    // fullscreen window gets balanced gutters instead of the old "empty on
+    // the right" (pre-task-30 two-column) or a clipped right column (narrow).
+    //
+    // Why a capped+centred column rather than a two-column split at wide
+    // widths: the four groups are wildly uneven - Lanjutan alone is roughly
+    // as tall as the other three combined (~2000 px vs ~1000 px at the
+    // default DPI) - so ANY static column assignment leaves one column
+    // permanently short (dead space exactly like the reported emptiness) or
+    // must re-balance on every collapse toggle, which moves groups under the
+    // user's cursor mid-interaction. One capped column keeps the task-30
+    // invariants intact: same reading order, same tab order, collapse
+    // toggles only change the vertical flow. It is also the platform
+    // precedent (Windows 11 Settings / macOS System Settings both bound the
+    // settings column instead of stretching controls edge-to-edge).
+    //
+    // The 900 px number is measured from this page's content, not guessed:
+    //   * widest fixed row is Lanjutan > "Perkecil manual" > "Folder output:":
+    //     labelColWidth 132 + formColSpacing 12 + path label max 400
+    //     + formColSpacing 12 + [Ganti folder... ~125 + 12 + Buka folder
+    //     117] = ~810 px of preferred widths (task-24 UIA dump measures the
+    //     path label at 400x19 and "Buka folder" at 117x40).
+    //   * plus the 2 x 8 px page gutter = 826 and the 12 px scrollbar lane
+    //     = 838 px; 900 leaves every ElideMiddle path label its full 400 px
+    //     with ~60 px of slack and keeps helper text short.
+    //   * below 900 the column tracks the pane, so the 804 px narrow proof
+    //     stays full-width with nothing cut off.
+    readonly property int contentMaxWidth: 900
+
+    // One "clicky" wheel notch. Qt 6.6+ scrolls a notch by
+    // QStyleHints::wheelScrollLines() * 24 px - 72 px on the default Windows
+    // setting (Qt 6.8 qquickflickable.cpp wheelEvent, the
+    // "wheelDeceleration > _q_MaximumWheelDeceleration" branch) and
+    // flickDeceleration no longer applies to wheel input at all. 72 px per
+    // notch reads as "heavy" on this ~3000 px page, so the WheelHandler in
+    // the scroll container re-maps one notch to 120 px (~2.4 rows at the
+    // 40 px target + 10 px row spacing); trackpads keep their native pixel
+    // delta 1:1.
+    readonly property int wheelStep: 120
+
+    // The attached ScrollBar overlays the Flickable's right edge (Qt Quick
+    // Controls does not reserve layout space for it). Reserve the same 12 px
+    // hit lane VideoGrid.qml uses so a capped/centred column never slides
+    // under the handle.
+    readonly property int scrollBarLane: 12
+
     property var dialogOpened: function () {}
     property var dialogClosed: function () {}
     // Todo 15 wiring: the C-16 "Info teknis" dialog and the C-17 update flow
@@ -101,17 +151,58 @@ Item {
         }
     }
 
+    // Token-styled action button (task 31): replaces the stock Material
+    // background so pressing never flashes the blue Material ripple, and
+    // keyboard focus rings in ink (Theme.focusRing). A shared Theme.glyph
+    // icon leads the label; the 40px target and Enter/Space contract are
+    // unchanged.
     component SettingButton: Button {
+        id: settingButton
+        property string glyph: ""
         implicitHeight: 40
         focusPolicy: Qt.StrongFocus
+        leftPadding: Theme.space2
+        rightPadding: Theme.space2
         Accessible.name: text
         Keys.onReturnPressed: {
-            click()
+            settingButton.clicked()
             event.accepted = true
         }
         Keys.onEnterPressed: {
-            click()
+            settingButton.clicked()
             event.accepted = true
+        }
+        contentItem: RowLayout {
+            spacing: Theme.space1
+
+            Text {
+                visible: settingButton.glyph.length > 0
+                text: settingButton.glyph
+                font.family: Theme.glyphFont
+                font.pixelSize: Theme.fontM
+                color: settingButton.enabled ? Theme.text : Theme.text2
+                verticalAlignment: Text.AlignVCenter
+                Accessible.ignored: true
+            }
+
+            Text {
+                Layout.fillWidth: true
+                text: settingButton.text
+                font.pixelSize: Theme.fontM
+                color: settingButton.enabled ? Theme.text : Theme.text2
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                elide: Text.ElideRight
+            }
+        }
+        background: Rectangle {
+            radius: Theme.radiusS
+            color: settingButton.down ? Theme.pressedSurface
+                   : (settingButton.hovered || settingButton.activeFocus
+                      ? Theme.surface2 : Theme.surface)
+            border.width: settingButton.activeFocus ? 2 : 0
+            border.color: Theme.focusRing
+            opacity: settingButton.enabled ? 1.0 : 0.6
         }
     }
 
@@ -134,6 +225,112 @@ Item {
     component SubTitle: Label {
         font.weight: Theme.fontWeightSemibold
         color: Theme.text2
+    }
+
+    // Collapsible settings group (task 30). The old layout put Umum/Tampilan/
+    // Hemat daya in one column and Lanjutan in a second; at a narrow window
+    // the right column clipped. Every group now stacks in ONE vertical
+    // column and each header collapses its body.
+    //
+    // Default state: EXPANDED for all four groups. That preserves the
+    // pre-task behaviour (every control visible on entry, no setting hidden
+    // behind a default-collapsed header) and still gives the user an explicit
+    // way to shorten the long scroll at narrow widths.
+    //
+    // The header IS the toggle and stays reachable by keyboard/AT while the
+    // body is hidden: it is a >= 40px Button with an explicit surface-fill
+    // state (task 32: hover = surface2, focus/press = pressedSurface; NO
+    // outline ring on this list header), Enter/Space activation (Space is
+    // AbstractButton-native, Enter is explicit), a chevron indicator, and
+    // Accessible.name = group title.
+    // Qt 6.8's Accessible attached type has no expanded/expandable property,
+    // so the collapsed/expanded state is exposed as checkable/checked plus a
+    // plain-language description.
+    component SettingsGroup: ColumnLayout {
+        id: settingsGroup
+
+        property string title: ""
+        property bool expanded: true
+
+        Layout.fillWidth: true
+        spacing: settingsPage.formRowSpacing
+
+        Button {
+            id: groupHeader
+            // Instance objectName + "Header", so every group's toggle is
+            // uniquely addressable from QA/a11y tooling.
+            objectName: settingsGroup.objectName + "Header"
+            Layout.fillWidth: true
+            implicitHeight: 40
+            focusPolicy: Qt.StrongFocus
+            text: settingsGroup.title
+            Accessible.role: Accessible.Button
+            Accessible.name: settingsGroup.title
+            Accessible.checkable: true
+            Accessible.checked: settingsGroup.expanded
+            Accessible.description: settingsGroup.expanded
+                                    ? qsTr("Bagian dibuka. Aktifkan untuk menutup.")
+                                    : qsTr("Bagian ditutup. Aktifkan untuk membuka.")
+            onClicked: settingsGroup.expanded = !settingsGroup.expanded
+            Keys.onReturnPressed: {
+                settingsGroup.expanded = !settingsGroup.expanded
+                event.accepted = true
+            }
+            Keys.onEnterPressed: {
+                settingsGroup.expanded = !settingsGroup.expanded
+                event.accepted = true
+            }
+
+            contentItem: RowLayout {
+                spacing: Theme.space2
+
+                // Chevron: right when collapsed, down when expanded.
+                Label {
+                    Layout.alignment: Qt.AlignVCenter
+                    text: settingsGroup.expanded ? Theme.glyph.chevronDown
+                                                 : Theme.glyph.chevronRight
+                    font.family: Theme.glyphFont
+                    font.pixelSize: Theme.fontM
+                    color: Theme.text2
+                    // The header's own Accessible.name already carries the
+                    // group title + state; the decorative pieces stay ignored.
+                    Accessible.ignored: true
+                }
+
+                GroupTitle {
+                    Layout.alignment: Qt.AlignVCenter
+                    text: settingsGroup.title
+                    Accessible.ignored: true
+                }
+
+                Item {
+                    Layout.fillWidth: true
+                }
+            }
+
+            background: Rectangle {
+                radius: Theme.radiusS
+                // Task 32: list-header states are surface fills only - hover
+                // surface2, press/keyboard focus pressedSurface, no ring.
+                color: groupHeader.down || groupHeader.activeFocus
+                       ? Theme.pressedSurface
+                       : (groupHeader.hovered ? Theme.surface2 : Theme.surface)
+            }
+        }
+
+        GroupDivider {}
+
+        ColumnLayout {
+            id: groupBody
+            Layout.fillWidth: true
+            spacing: settingsPage.formRowSpacing
+            visible: settingsGroup.expanded
+        }
+
+        // Controls written inside each SettingsGroup instance are re-parented
+        // into groupBody, so they keep their ids in this file scope and stay
+        // bound to the same Settings/Studio/Compress properties.
+        default property alias content: groupBody.data
     }
 
     // A QML control's own value binding is destroyed by the first user edit,
@@ -295,31 +492,102 @@ Item {
         onTriggered: performanceNotice.visible = false
     }
 
-    ScrollView {
+    // --- scroll container (task 33: explicit Flickable, was a ScrollView) --
+    // An explicit Flickable exposes every physics knob the owner asked for:
+    //
+    //   * Wheel step: the WheelHandler below re-maps one notch to
+    //     settingsPage.wheelStep (see the constant comment above; Qt's
+    //     default is 72 px/notch on Windows). blocking:true is REQUIRED: a
+    //     non-blocking handler still lets QQuickFlickable::wheelEvent run
+    //     its own 72 px path for the same event (double scroll), because a
+    //     WheelHandler only accepts the event point when blocking is set
+    //     (Qt 6.8 qquickwheelhandler.cpp handleEventPoint).
+    //   * Flick velocity/decay (drag + touch flings; wheel goes through the
+    //     handler above): maximumFlickVelocity 2500 -> 4000 so a fast fling
+    //     is not clamped, flickDeceleration 1500 -> 1000 so it glides longer
+    //     before stopping.
+    //   * pixelAligned:false removes whole-pixel rounding of contentY, so
+    //     motion stays smooth on fractional-DPI displays.
+    //   * ScrollBar responsiveness: always-on 12 px, token-styled exactly
+    //     like the gallery scrollbar (VideoGrid.qml task 28/31), so it is
+    //     always grabbable and its handle tracks the wheel immediately
+    //     (contentY is the single source of truth).
+    Flickable {
+        id: settingsFlick
+        objectName: "settingsFlick"
         anchors.fill: parent
-        anchors.margins: 10
+        anchors.margins: Theme.space2
         clip: true
-        contentWidth: availableWidth
+        contentWidth: width
+        contentHeight: contentColumn.implicitHeight
+        boundsBehavior: Flickable.StopAtBounds
+        pixelAligned: false
+        maximumFlickVelocity: 4000
+        flickDeceleration: 1000
 
-        RowLayout {
-            width: settingsPage.width - 20
+        ScrollBar.vertical: ScrollBar {
+            id: settingsScrollBar
+            objectName: "settingsScrollBar"
+            policy: ScrollBar.AlwaysOn
+            implicitWidth: 12
+            background: Rectangle {
+                color: Theme.surface2
+                radius: Theme.radiusS
+            }
+            contentItem: Rectangle {
+                implicitWidth: 8
+                implicitHeight: 32
+                radius: Theme.radiusS
+                // Pressed reads as full ink, never a blue flash (task 31).
+                color: settingsScrollBar.pressed ? Theme.text : Theme.text2
+            }
+        }
+
+        WheelHandler {
+            id: wheelScroll
+            objectName: "settingsWheelScroll"
+            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+            blocking: true
+            onWheel: (event) => {
+                // Trackpads keep their native pixel delta; a clicky wheel
+                // (no pixel delta, 120-unit angle steps) is re-mapped to the
+                // 120 px notch. Both deltas share Qt's sign convention:
+                // positive = wheel away from user = scroll up = contentY
+                // decreases.
+                const delta = event.pixelDelta.y !== 0
+                            ? event.pixelDelta.y
+                            : event.angleDelta.y / 120 * settingsPage.wheelStep
+                if (delta === 0)
+                    return
+                const maxY = Math.max(0, settingsFlick.contentHeight - settingsFlick.height)
+                settingsFlick.contentY = Math.max(0, Math.min(maxY, settingsFlick.contentY - delta))
+            }
+        }
+
+        // ONE vertical column (task 30). The old left/right RowLayout turned
+        // narrow windows into a clipped right column; the four groups now
+        // stack in reading order and each one collapses, so the page scrolls
+        // vertically instead of cutting controls off. Task 32 tightened the
+        // page gutter to the 8 step and the group gap follows Theme.space4.
+        // Task 33 makes the column adaptive: full-bleed below the 900 px
+        // breakpoint (minus the 12 px scrollbar lane), capped and centred
+        // above it (see contentMaxWidth above for the measurement).
+        ColumnLayout {
+            id: contentColumn
+            width: Math.min(settingsFlick.width - settingsPage.scrollBarLane,
+                            settingsPage.contentMaxWidth)
+            x: Math.round((settingsFlick.width - settingsPage.scrollBarLane - width) / 2)
             spacing: Theme.space4
 
-            // =================================================================
-            // LEFT: the three user-facing groups (Umum / Tampilan / Hemat daya)
-            // =================================================================
-            ColumnLayout {
+            // --------------------------------- UMUM -----------------------
+            // C-18: language + restart note, start with Windows, close to
+            // tray (default off), plus the update auto-check checkbox and
+            // the C-17 "Cek pembaruan" button that replaced the old
+            // English update-check menu item.
+            SettingsGroup {
+                id: umumGroup
                 Layout.fillWidth: true
-                Layout.alignment: Qt.AlignTop
-                spacing: settingsPage.formRowSpacing
-
-                // ------------------------------- UMUM -------------------------
-                // C-18: language + restart note, start with Windows, close to
-                // tray (default off), plus the update auto-check checkbox and
-                // the C-17 "Cek pembaruan" button that replaced the old
-                // English update-check menu item.
-                GroupTitle { text: qsTr("Umum") }
-                GroupDivider {}
+                title: qsTr("Umum")
 
                 GridLayout {
                     Layout.fillWidth: true
@@ -379,6 +647,7 @@ Item {
                     SettingButton {
                         objectName: "checkUpdatesButton"
                         text: qsTr("Cek pembaruan")
+                        glyph: Theme.glyph.refresh
                         enabled: !Studio.updateCheckBusy
                         onClicked: settingsPage.checkUpdates()
                     }
@@ -395,6 +664,7 @@ Item {
                     SettingButton {
                         objectName: "aboutButton"
                         text: qsTr("Tentang K6WP Studio")
+                        glyph: Theme.glyph.info
                         onClicked: settingsPage.openAbout()
                     }
 
@@ -424,11 +694,15 @@ Item {
                     onToggled: Settings.setCloseToTray(checked)
                 }
 
-                // ----------------------------- TAMPILAN -----------------------
-                // C-12/D2: three icon choices; Center/raw moves to Lanjutan.
-                // quickFit mirrors config.json live (engine config watcher).
-                GroupTitle { text: qsTr("Tampilan") }
-                GroupDivider {}
+            }
+
+            // ----------------------------- TAMPILAN ------------------------
+            // C-12/D2: three icon choices; Center/raw moves to Lanjutan.
+            // quickFit mirrors config.json live (engine config watcher).
+            SettingsGroup {
+                id: tampilanGroup
+                Layout.fillWidth: true
+                title: qsTr("Tampilan")
 
                 Label {
                     text: qsTr("Isi layar:")
@@ -441,7 +715,7 @@ Item {
                     id: fitPenuhRadio
                     objectName: "fitPenuh"
                     ButtonGroup.group: fitChoiceGroup
-                    text: "\u25A0  " + qsTr("Penuh (memotong tepi)")
+                    text: Theme.glyph.fitFill + "  " + qsTr("Penuh (memotong tepi)")
                     Accessible.name: qsTr("Penuh (memotong tepi)")
                     checked: settingsPage.quickFitChoice === "fill"
                     onToggled: {
@@ -454,7 +728,7 @@ Item {
                     id: fitPasRadio
                     objectName: "fitPas"
                     ButtonGroup.group: fitChoiceGroup
-                    text: "\u25A1  " + qsTr("Pas (seluruh video terlihat)")
+                    text: Theme.glyph.fitPad + "  " + qsTr("Pas (seluruh video terlihat)")
                     Accessible.name: qsTr("Pas (seluruh video terlihat)")
                     checked: settingsPage.quickFitChoice === "fit"
                     onToggled: {
@@ -467,7 +741,7 @@ Item {
                     id: fitIsiRadio
                     objectName: "fitIsi"
                     ButtonGroup.group: fitChoiceGroup
-                    text: "\u2194  " + qsTr("Isi (mungkin melar)")
+                    text: Theme.glyph.fitStretch + "  " + qsTr("Isi (mungkin melar)")
                     Accessible.name: qsTr("Isi (mungkin melar)")
                     checked: settingsPage.quickFitChoice === "stretch"
                     onToggled: {
@@ -507,12 +781,16 @@ Item {
                     }
                 }
 
-                // ---------------------------- HEMAT DAYA ----------------------
-                // C-13: battery saver switch + mode, and the performance
-                // radio (Hemat/Seimbang/Maksimal -> Settings.performancePreset,
-                // todo 14). The raw values live in Lanjutan.
-                GroupTitle { text: qsTr("Hemat daya") }
-                GroupDivider {}
+            }
+
+            // ---------------------------- HEMAT DAYA -----------------------
+            // C-13: battery saver switch + mode, and the performance
+            // radio (Hemat/Seimbang/Maksimal -> Settings.performancePreset,
+            // todo 14). The raw values live in Lanjutan.
+            SettingsGroup {
+                id: hematDayaGroup
+                Layout.fillWidth: true
+                title: qsTr("Hemat daya")
 
                 SettingCheck {
                     id: batteryBox
@@ -615,17 +893,13 @@ Item {
                 }
             }
 
-            // =================================================================
-            // RIGHT: Lanjutan (raw values, manual compress, import defaults,
-            // cache, diagnostics)
-            // =================================================================
-            ColumnLayout {
+            // ----------------------------- LANJUTAN ------------------------
+            // Raw values, manual compress, import defaults, cache, and
+            // diagnostics: the last group of the single column.
+            SettingsGroup {
+                id: lanjutanGroup
                 Layout.fillWidth: true
-                Layout.alignment: Qt.AlignTop
-                spacing: settingsPage.formRowSpacing
-
-                GroupTitle { text: qsTr("Lanjutan") }
-                GroupDivider {}
+                title: qsTr("Lanjutan")
 
                 // --- raw playback values ---------------------------------------
                 // C-13: "Nilai mentah tetap di Lanjutan". These are the fields
@@ -783,6 +1057,7 @@ Item {
                         objectName: "reloadWallpaperButton"
                         visible: Settings.engineRestartNeeded
                         text: qsTr("Muat ulang wallpaper")
+                        glyph: Theme.glyph.refresh
                         onClicked: {
                             Settings.apply()
                             Studio.startEngine()
@@ -820,6 +1095,7 @@ Item {
                     SettingButton {
                         objectName: "manualCompressBrowse"
                         text: qsTr("Jelajahi...")
+                        glyph: Theme.glyph.external
                         onClicked: Compress.pickSource()
                     }
 
@@ -841,11 +1117,13 @@ Item {
 
                         SettingButton {
                             text: qsTr("Ganti folder...")
+                            glyph: Theme.glyph.external
                             onClicked: Compress.pickOutDir()
                         }
 
                         SettingButton {
                             text: qsTr("Buka folder")
+                            glyph: Theme.glyph.external
                             onClicked: Compress.openOutDir()
                         }
                     }
@@ -915,6 +1193,7 @@ Item {
                     SettingButton {
                         objectName: "manualCompressStart"
                         text: qsTr("Perkecil")
+                        glyph: Theme.glyph.shrink
                         enabled: Compress.sourcePath.length > 0 && !Compress.running
                         onClicked: Compress.start()
                     }
@@ -922,6 +1201,7 @@ Item {
                     SettingButton {
                         objectName: "manualCompressCancel"
                         text: qsTr("Batal")
+                        glyph: Theme.glyph.close
                         enabled: Compress.running
                         onClicked: Compress.cancel()
                     }
@@ -961,6 +1241,7 @@ Item {
 
                     SettingButton {
                         text: qsTr("Ubah...")
+                        glyph: Theme.glyph.external
                         onClicked: Settings.pickCompressOutputDir()
                     }
                 }
@@ -1052,11 +1333,13 @@ Item {
 
                         SettingButton {
                             text: qsTr("Ubah...")
+                            glyph: Theme.glyph.external
                             onClicked: Settings.pickCacheDir()
                         }
 
                         SettingButton {
                             text: qsTr("Bersihkan cache...")
+                            glyph: Theme.glyph.deleteFile
                             onClicked: cacheDialog.open()
                         }
                     }
@@ -1072,6 +1355,7 @@ Item {
                     SettingButton {
                         objectName: "infoTeknisButton"
                         text: qsTr("Info teknis")
+                        glyph: Theme.glyph.info
                         onClicked: settingsPage.openInfoTeknis()
                     }
 

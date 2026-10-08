@@ -42,7 +42,8 @@ Item {
 
             Label {
                 anchors.centerIn: parent
-                text: "\u25B6\uFE0E"
+                text: Theme.glyph.play
+                font.family: Theme.glyphFont
                 color: Theme.text2
                 opacity: 0.7
                 font.pixelSize: 32
@@ -74,8 +75,14 @@ Item {
             id: pickButton
             objectName: "emptyPickVideo"
             Layout.alignment: Qt.AlignHCenter
-            text: qsTr("+ Pilih video")
+            // The C-1 "+ Pilih video" affordance: the "+" is the shared
+            // Theme.glyph.plus icon, the label keeps the copy deck words.
+            text: qsTr("Pilih video")
             implicitHeight: 40
+            // Task 33: zero vertical padding keeps the 40dp content box
+            // centred (Material's verticalPadding otherwise squeezed it).
+            topPadding: 0
+            bottomPadding: 0
             focusPolicy: Qt.StrongFocus
             Accessible.name: text
             onClicked: Library.pickAndImport()
@@ -87,17 +94,35 @@ Item {
                 pickButton.clicked()
                 event.accepted = true
             }
-            contentItem: Text {
-                text: pickButton.text
-                font.pixelSize: Theme.fontM
-                font.weight: Theme.fontWeightSemibold
-                color: Theme.accentText
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
+            contentItem: RowLayout {
+                spacing: Theme.space1
+
+                Text {
+                    Layout.alignment: Qt.AlignVCenter
+                    text: Theme.glyph.plus
+                    font.family: Theme.glyphFont
+                    font.pixelSize: Theme.fontM
+                    font.weight: Theme.fontWeightSemibold
+                    color: Theme.accentText
+                    verticalAlignment: Text.AlignVCenter
+                    Accessible.ignored: true
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignVCenter
+                    text: pickButton.text
+                    font.pixelSize: Theme.fontM
+                    font.weight: Theme.fontWeightSemibold
+                    color: Theme.accentText
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
             }
             background: Rectangle {
                 radius: Theme.radiusS
-                color: Theme.accent
+                color: pickButton.down ? Qt.darker(Theme.accent, 1.15)
+                                       : Theme.accent
                 border.width: pickButton.activeFocus ? 2 : 0
                 border.color: Theme.accentText
             }

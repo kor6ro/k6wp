@@ -185,16 +185,22 @@ FocusScope {
         Studio.applyWallpaper(picked)
     }
 
-    // 40px dialog-style action button: token colours, visible focus ring,
+    // 40px dialog-style action button: token colours, a shared Theme.glyph
+    // icon, visible ink focus ring (never blue on the non-primary action),
     // Enter/Space activation, Accessible.name (repo pattern:
     // AppDialogs.DialogActionButton).
     component OnboardingButton: Button {
         id: onboardingButton
         property bool primary: false
+        property string glyph: ""
         implicitHeight: 40
+        // Task 33: zero vertical padding keeps the 40dp content box centred
+        // (Material's verticalPadding otherwise squeezed it to 12dp).
+        topPadding: 0
+        bottomPadding: 0
         focusPolicy: Qt.StrongFocus
-        leftPadding: Theme.space3
-        rightPadding: Theme.space3
+        leftPadding: Theme.space2
+        rightPadding: Theme.space2
         Accessible.name: text
         Keys.onReturnPressed: {
             onboardingButton.clicked()
@@ -204,24 +210,46 @@ FocusScope {
             onboardingButton.clicked()
             event.accepted = true
         }
-        contentItem: Text {
-            text: onboardingButton.text
-            font.pixelSize: Theme.fontM
-            font.weight: onboardingButton.primary ? Theme.fontWeightSemibold
-                                                  : Theme.fontWeightRegular
-            color: onboardingButton.primary ? Theme.accentText : Theme.text
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            elide: Text.ElideRight
+        contentItem: RowLayout {
+            spacing: Theme.space1
+
+            Text {
+                visible: onboardingButton.glyph.length > 0
+                Layout.alignment: Qt.AlignVCenter
+                text: onboardingButton.glyph
+                font.family: Theme.glyphFont
+                font.pixelSize: Theme.fontM
+                color: onboardingButton.primary ? Theme.accentText : Theme.text
+                verticalAlignment: Text.AlignVCenter
+                Accessible.ignored: true
+            }
+
+            Text {
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignVCenter
+                text: onboardingButton.text
+                font.pixelSize: Theme.fontM
+                font.weight: onboardingButton.primary ? Theme.fontWeightSemibold
+                                                      : Theme.fontWeightRegular
+                color: onboardingButton.primary ? Theme.accentText : Theme.text
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                elide: Text.ElideRight
+            }
         }
         background: Rectangle {
             radius: Theme.radiusS
             color: onboardingButton.primary
-                   ? Theme.accent
-                   : (onboardingButton.hovered || onboardingButton.activeFocus
-                      ? Theme.surface2 : Theme.surface)
+                   ? (onboardingButton.down ? Qt.darker(Theme.accent, 1.15)
+                                            : Theme.accent)
+                   : (onboardingButton.down ? Theme.pressedSurface
+                      : (onboardingButton.hovered
+                         || onboardingButton.activeFocus
+                         ? Theme.surface2 : Theme.surface))
             border.width: onboardingButton.activeFocus ? 2 : 0
-            border.color: onboardingButton.primary ? Theme.accentText : Theme.accent
+            border.color: onboardingButton.primary ? Theme.accentText
+                                                   : Theme.focusRing
+            opacity: onboardingButton.enabled ? 1.0 : 0.6
         }
     }
 
@@ -256,7 +284,8 @@ FocusScope {
 
                 Label {
                     anchors.centerIn: parent
-                    text: "\u25B6\uFE0E"
+                    text: Theme.glyph.play
+                    font.family: Theme.glyphFont
                     color: Theme.text2
                     opacity: 0.7
                     font.pixelSize: 36
@@ -291,11 +320,13 @@ FocusScope {
                     // lands.
                     focus: true
                     text: qsTr("Pilih video")
+                    glyph: Theme.glyph.plus
                     onClicked: onboardingView.pickVideo()
                 }
 
                 Label {
-                    text: "\u2192"
+                    text: Theme.glyph.arrowRight
+                    font.family: Theme.glyphFont
                     color: Theme.text2
                     font.pixelSize: Theme.fontM
                     Accessible.ignored: true
@@ -310,6 +341,7 @@ FocusScope {
                     // Focus is swapped in by the Connections above (property,
                     // not just activeFocus) once a pick lands.
                     text: qsTr("Selesai")
+                    glyph: Theme.glyph.check
                     onClicked: onboardingView.finish()
                 }
             }

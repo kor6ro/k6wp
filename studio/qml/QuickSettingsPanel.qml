@@ -76,7 +76,8 @@ Pane {
 
     Layout.fillWidth: true
     Material.elevation: 1
-    padding: 12
+    // Task 32: tightened from 12 to the 8 step (matches the StatusBar rail).
+    padding: Theme.space2
 
     // Keyboard/a11y contract (plan todo 15): >= 40px, Accessible.name,
     // Enter on top of the native Space activation.
@@ -114,8 +115,9 @@ Pane {
             objectName: "quickFitPenuh"
             ButtonGroup.group: fitChoiceGroup
             Layout.fillWidth: true
-            // D2/C-12 verbatim labels, with the icon glyph in front.
-            text: "\u25A0  " + qsTr("Penuh (memotong tepi)")
+            // D2/C-12 verbatim labels, with the shared Theme.glyph icon in
+            // front.
+            text: Theme.glyph.fitFill + "  " + qsTr("Penuh (memotong tepi)")
             Accessible.name: qsTr("Penuh (memotong tepi)")
             checked: quickSettingsPanel.quickFitChoice === "fill"
             onToggled: {
@@ -129,7 +131,7 @@ Pane {
             objectName: "quickFitPas"
             ButtonGroup.group: fitChoiceGroup
             Layout.fillWidth: true
-            text: "\u25A1  " + qsTr("Pas (seluruh video terlihat)")
+            text: Theme.glyph.fitPad + "  " + qsTr("Pas (seluruh video terlihat)")
             Accessible.name: qsTr("Pas (seluruh video terlihat)")
             checked: quickSettingsPanel.quickFitChoice === "fit"
             onToggled: {
@@ -143,7 +145,7 @@ Pane {
             objectName: "quickFitIsi"
             ButtonGroup.group: fitChoiceGroup
             Layout.fillWidth: true
-            text: "\u2194  " + qsTr("Isi (mungkin melar)")
+            text: Theme.glyph.fitStretch + "  " + qsTr("Isi (mungkin melar)")
             Accessible.name: qsTr("Isi (mungkin melar)")
             checked: quickSettingsPanel.quickFitChoice === "stretch"
             onToggled: {

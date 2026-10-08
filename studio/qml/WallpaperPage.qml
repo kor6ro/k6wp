@@ -2,7 +2,7 @@
 // preview caption + PreviewHole, the "Pasang ke" install-target row
 // (AssignRow + AssignPopup, todo 12), the C-15 warning banners, the
 // CollectionPage (Koleksi gallery with the Ganti otomatis panel) in the left
-// column, and the right rail (StatusBar + ActionButtons +
+// column, and the right rail (StatusBar with the one action row +
 // QuickSettingsPanel). Raw support details (process id, paths, log) are not
 // shown here - they live in the "Info teknis" dialog (AppDialogs.qml).
 //
@@ -181,8 +181,9 @@ Item {
     // (preview caption + actions), not just one column.
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 10
-        spacing: 8
+        // Task 32: page gutter follows the tightened 8 step.
+        anchors.margins: Theme.space2
+        spacing: Theme.space2
 
         // --- row 41: monitor sub-tabs ----------------------
         // One sub-tab per entry of Studio.displays, filtered to
@@ -255,16 +256,43 @@ Item {
                             ToolTip.visible: hovered
                             ToolTip.text: qsTr("Pilih layar ini")
 
+                            // Task 31/32: token-styled background (the stock
+                            // Material highlighted fill + blue ripple are
+                            // gone). Selection stays a tonal wash + bold
+                            // label; tab states are surface fills ONLY (no
+                            // border/outline ring) - focus steps to
+                            // pressedSurface, hover to surface2.
+                            background: Rectangle {
+                                radius: Theme.radiusS
+                                color: monitorTabButton.down
+                                       || monitorTabButton.activeFocus
+                                       ? Theme.pressedSurface
+                                       : (monitorTabButton.highlighted
+                                          || monitorTabButton.hovered
+                                          ? Theme.surface2 : "transparent")
+                            }
+
                             contentItem: ColumnLayout {
                                 spacing: 3
 
                                 RowLayout {
                                     spacing: 6
 
+                                    // Screen mark from the shared glyph set.
+                                    Label {
+                                        Layout.alignment: Qt.AlignVCenter
+                                        text: Theme.glyph.screen
+                                        font.family: Theme.glyphFont
+                                        color: Theme.text2
+                                        font.pixelSize: Theme.fontS
+                                        Accessible.ignored: true
+                                    }
+
                                     Label {
                                         Layout.fillWidth: true
                                         elide: Text.ElideRight
                                         font.bold: true
+                                        color: Theme.text
                                         text: modelData.label
                                     }
 
@@ -282,12 +310,14 @@ Item {
                                         text: qsTr("UTAMA")
                                         font.bold: true
                                         font.pixelSize: 10
+                                        color: Theme.text2
                                         opacity: 0.8
                                     }
                                 }
 
                                 Label {
                                     text: modelData.resolutionLabel
+                                    color: Theme.text2
                                     opacity: 0.7
                                     font.pixelSize: 11
                                 }
@@ -296,6 +326,7 @@ Item {
                                     visible: String(modelData.assignedPath).length > 0
                                     text: wallpaperPage.fileNameOf(modelData.assignedPath)
                                     elide: Text.ElideMiddle
+                                    color: Theme.text2
                                     Layout.maximumWidth: 220
                                     opacity: 0.8
                                     font.pixelSize: 10
@@ -307,7 +338,7 @@ Item {
                                     visible: String(modelData.assignedPath).length > 0
                                              && modelData.assignedExists === false
                                     text: qsTr("file tidak ditemukan")
-                                    color: "red"
+                                    color: Theme.statusError
                                     font.pixelSize: 10
                                 }
                             }
@@ -323,7 +354,8 @@ Item {
 
                     // The Hapus path: drop the selected
                     // monitor's assignment through the row-19
-                    // invokable.
+                    // invokable. Token-styled (task 31): shared glyph,
+                    // ink focus ring, no blue ripple.
                     Button {
                         id: clearMonitorAssignmentButton
                         objectName: "clearMonitorAssignment"
@@ -333,6 +365,41 @@ Item {
                         onClicked: Studio.clearMonitorAssignment(wallpaperPage.selectedMonitorKey)
                         ToolTip.visible: hovered
                         ToolTip.text: qsTr("Hapus penugasan video untuk layar terpilih")
+
+                        contentItem: RowLayout {
+                            spacing: Theme.space1
+
+                            Text {
+                                text: Theme.glyph.remove
+                                font.family: Theme.glyphFont
+                                font.pixelSize: Theme.fontM
+                                color: clearMonitorAssignmentButton.enabled
+                                       ? Theme.text : Theme.text2
+                                verticalAlignment: Text.AlignVCenter
+                                Accessible.ignored: true
+                            }
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: clearMonitorAssignmentButton.text
+                                font.pixelSize: Theme.fontM
+                                color: clearMonitorAssignmentButton.enabled
+                                       ? Theme.text : Theme.text2
+                                verticalAlignment: Text.AlignVCenter
+                                elide: Text.ElideRight
+                            }
+                        }
+                        background: Rectangle {
+                            radius: Theme.radiusS
+                            color: clearMonitorAssignmentButton.down
+                                   ? Theme.pressedSurface
+                                   : (clearMonitorAssignmentButton.hovered
+                                      || clearMonitorAssignmentButton.activeFocus
+                                      ? Theme.surface2 : Theme.surface)
+                            border.width: clearMonitorAssignmentButton.activeFocus ? 2 : 0
+                            border.color: Theme.focusRing
+                            opacity: clearMonitorAssignmentButton.enabled ? 1.0 : 0.6
+                        }
                     }
                 }
             }
@@ -447,15 +514,16 @@ Item {
 
                 StatusBar {
                     statusKindPaused: wallpaperPage.statusKindPaused
-                }
-
-                ActionButtons {
-                    formColSpacing: wallpaperPage.formColSpacing
-                    formRowSpacing: wallpaperPage.formRowSpacing
                     statusKindNotRunning: wallpaperPage.statusKindNotRunning
-                    // "Terapkan Wallpaper" now runs the same "Pasang ke"
-                    // install path as the gallery cards (todo 12).
+                    // Task 28: the unified action row installs through the
+                    // same "Pasang ke" entry point as the gallery cards
+                    // (multi-screen target + C-14 confirmation included).
                     installVideo: wallpaperPage.installVideo
+                    // Hapus opens the C-6 dialogs from the rail; they feed
+                    // the same dialog lifecycle pair so the native preview
+                    // steps aside while they are up.
+                    dialogOpened: wallpaperPage.dialogOpened
+                    dialogClosed: wallpaperPage.dialogClosed
                 }
 
                 QuickSettingsPanel {
@@ -525,23 +593,101 @@ Item {
             Item {
                 Layout.fillWidth: true
             }
+            // Footer buttons (task 31): token-styled like the rest of the
+            // app's dialogs - shared glyph, surface step on press, ink focus
+            // ring; the stock blue Material ripple is gone.
             Button {
+                id: confirmAllAccept
                 objectName: "confirmAllScreensAccept"
                 implicitHeight: 40
+                // Task 33: zero vertical padding keeps the 40dp content box
+                // centred (Material's verticalPadding otherwise squeezed it).
+                topPadding: 0
+                bottomPadding: 0
                 Accessible.name: text
                 text: qsTr("Pasang ke semua")
                 onClicked: {
                     confirmAllScreensDialog.close()
                     wallpaperPage.runAllScreens(wallpaperPage.pendingAllPath)
                 }
+                contentItem: RowLayout {
+                    spacing: Theme.space1
+
+                    Text {
+                        Layout.alignment: Qt.AlignVCenter
+                        text: Theme.glyph.check
+                        font.family: Theme.glyphFont
+                        font.pixelSize: Theme.fontM
+                        color: Theme.text
+                        verticalAlignment: Text.AlignVCenter
+                        Accessible.ignored: true
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        Layout.alignment: Qt.AlignVCenter
+                        text: confirmAllAccept.text
+                        font.pixelSize: Theme.fontM
+                        color: Theme.text
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        elide: Text.ElideRight
+                    }
+                }
+                background: Rectangle {
+                    radius: Theme.radiusS
+                    color: confirmAllAccept.down ? Theme.pressedSurface
+                           : (confirmAllAccept.hovered
+                              || confirmAllAccept.activeFocus
+                              ? Theme.surface2 : Theme.surface)
+                    border.width: confirmAllAccept.activeFocus ? 2 : 0
+                    border.color: Theme.focusRing
+                }
             }
             Button {
                 id: confirmAllCancel
                 objectName: "confirmAllScreensCancel"
                 implicitHeight: 40
+                // Task 33: zero vertical padding keeps the 40dp content box
+                // centred (Material's verticalPadding otherwise squeezed it).
+                topPadding: 0
+                bottomPadding: 0
                 Accessible.name: text
                 text: qsTr("Batal")
                 onClicked: confirmAllScreensDialog.close()
+                contentItem: RowLayout {
+                    spacing: Theme.space1
+
+                    Text {
+                        Layout.alignment: Qt.AlignVCenter
+                        text: Theme.glyph.close
+                        font.family: Theme.glyphFont
+                        font.pixelSize: Theme.fontM
+                        color: Theme.text
+                        verticalAlignment: Text.AlignVCenter
+                        Accessible.ignored: true
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        Layout.alignment: Qt.AlignVCenter
+                        text: confirmAllCancel.text
+                        font.pixelSize: Theme.fontM
+                        color: Theme.text
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        elide: Text.ElideRight
+                    }
+                }
+                background: Rectangle {
+                    radius: Theme.radiusS
+                    color: confirmAllCancel.down ? Theme.pressedSurface
+                           : (confirmAllCancel.hovered
+                              || confirmAllCancel.activeFocus
+                              ? Theme.surface2 : Theme.surface)
+                    border.width: confirmAllCancel.activeFocus ? 2 : 0
+                    border.color: Theme.focusRing
+                }
             }
         }
     }
@@ -576,7 +722,8 @@ Item {
             spacing: Theme.space2
 
             Label {
-                text: "\u2713"
+                text: Theme.glyph.check
+                font.family: Theme.glyphFont
                 color: Theme.statusActive
                 font.pixelSize: Theme.fontM
                 font.weight: Theme.fontWeightSemibold

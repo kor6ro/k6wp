@@ -5,6 +5,13 @@
 // Jeda / Lanjut are NOT here: the pause/resume pair merged into the single
 // StatusBar button (glossary §5 "Hentikan Wallpaper + Lanjutkan -> satu
 // tombol Jeda / Lanjut", plan todo 5).
+//
+// SUPERSEDED by task 28: the Beranda rail no longer instantiates this file -
+// StatusBar.qml owns the ONE action row (Jeda/Lanjut, Pilih video, Pasang,
+// Hapus) and the "Aktifkan lagi" recovery button next to the status sentence.
+// It stays in the tree only because studio/CMakeLists.txt lists it in
+// QML_FILES and this slice does not own CMakeLists. Do not re-instantiate:
+// the controls would show up twice on Beranda.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material

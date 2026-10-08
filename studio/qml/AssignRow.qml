@@ -73,6 +73,10 @@ RowLayout {
         id: targetButton
         objectName: "assignRowButton"
         implicitHeight: 40
+        // Task 33: zero vertical padding keeps the 40dp content box centred
+        // (Material's verticalPadding otherwise squeezed it to 12dp).
+        topPadding: 0
+        bottomPadding: 0
         focusPolicy: Qt.StrongFocus
         enabled: !assignRow.duplicateMode
         text: assignRow.targetLabel()
@@ -90,14 +94,17 @@ RowLayout {
             spacing: Theme.space1
 
             Label {
+                Layout.alignment: Qt.AlignVCenter
                 text: targetButton.text
                 font.pixelSize: Theme.fontM
                 color: targetButton.enabled ? Theme.text : Theme.text2
             }
 
-            // Dropdown chevron (glyph, never colour alone).
+            // Dropdown chevron (Theme.glyph set, never colour alone).
             Label {
-                text: "\u25BE"
+                Layout.alignment: Qt.AlignVCenter
+                text: Theme.glyph.chevronDown
+                font.family: Theme.glyphFont
                 font.pixelSize: Theme.fontS
                 color: Theme.text2
                 Accessible.ignored: true
@@ -105,10 +112,11 @@ RowLayout {
         }
         background: Rectangle {
             radius: Theme.radiusS
-            color: targetButton.hovered || targetButton.activeFocus
-                   ? Theme.surface2 : Theme.surface
+            color: targetButton.down ? Theme.pressedSurface
+                   : (targetButton.hovered || targetButton.activeFocus
+                      ? Theme.surface2 : Theme.surface)
             border.width: targetButton.activeFocus ? 2 : 1
-            border.color: targetButton.activeFocus ? Theme.accent
+            border.color: targetButton.activeFocus ? Theme.focusRing
                                                    : Theme.surface2
             opacity: targetButton.enabled ? 1.0 : 0.6
         }

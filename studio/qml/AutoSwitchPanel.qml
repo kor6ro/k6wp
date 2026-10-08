@@ -35,6 +35,9 @@ Pane {
 
     // The panel grows with its rows; explicit so the Pane height never
     // depends on how the style derives implicit size from the contentItem.
+    // Task 32: padding pinned to the tightened token instead of the style
+    // default, so the panel cannot drift with Material versions.
+    padding: Theme.space3
     implicitHeight: Math.max(panelColumn.implicitHeight + 2 * padding, 40)
 
     // C-11 >500 refuse state: raised by a failed sync whose collection is
@@ -114,14 +117,19 @@ Pane {
 
     Component.onCompleted: autoSwitchPanel.requestSync()
 
-    // Inline button: token colours, 40px target, Enter/Space activation and a
-    // visible focus ring (a11y contract).
+    // Inline button: token colours, a shared Theme.glyph icon, 40px target,
+    // Enter/Space activation and a visible ink focus ring (a11y contract).
     component PanelButton: Button {
         id: panelButton
+        property string glyph: ""
         implicitHeight: 40
+        // Task 33: zero vertical padding keeps the 40dp content box centred
+        // (Material's verticalPadding otherwise squeezed it to 12dp).
+        topPadding: 0
+        bottomPadding: 0
         focusPolicy: Qt.StrongFocus
-        leftPadding: Theme.space3
-        rightPadding: Theme.space3
+        leftPadding: Theme.space2
+        rightPadding: Theme.space2
         Accessible.name: text
         Keys.onReturnPressed: {
             panelButton.clicked()
@@ -131,18 +139,38 @@ Pane {
             panelButton.clicked()
             event.accepted = true
         }
-        contentItem: Text {
-            text: panelButton.text
-            font.pixelSize: Theme.fontM
-            font.weight: Theme.fontWeightSemibold
-            color: Theme.accentText
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            elide: Text.ElideRight
+        contentItem: RowLayout {
+            spacing: Theme.space1
+
+            Text {
+                visible: panelButton.glyph.length > 0
+                Layout.alignment: Qt.AlignVCenter
+                text: panelButton.glyph
+                font.family: Theme.glyphFont
+                font.pixelSize: Theme.fontM
+                color: Theme.accentText
+                verticalAlignment: Text.AlignVCenter
+                Accessible.ignored: true
+            }
+
+            Text {
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignVCenter
+                text: panelButton.text
+                font.pixelSize: Theme.fontM
+                font.weight: Theme.fontWeightSemibold
+                color: Theme.accentText
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                elide: Text.ElideRight
+            }
         }
         background: Rectangle {
             radius: Theme.radiusS
-            color: Theme.accent
+            // Press steps the accent one notch darker; focus keeps the ink
+            // (accentText) ring on the filled button.
+            color: panelButton.down ? Qt.darker(Theme.accent, 1.15)
+                                    : Theme.accent
             border.width: panelButton.activeFocus ? 2 : 0
             border.color: Theme.accentText
         }
@@ -288,7 +316,8 @@ Pane {
             // does not rely on colour alone).
             Label {
                 visible: autoSwitchPanel.customConfirmed
-                text: "\u2713"
+                text: Theme.glyph.check
+                font.family: Theme.glyphFont
                 color: Theme.statusActive
                 font.pixelSize: Theme.fontM
                 font.weight: Theme.fontWeightSemibold
@@ -344,7 +373,9 @@ Pane {
             Label {
                 // Glyph + colour never carry the state alone: the sentence
                 // itself names the configuration.
-                text: autoSwitchPanel.liveCurrent ? "\u25B6" : "\u25CB"
+                text: autoSwitchPanel.liveCurrent ? Theme.glyph.play
+                                                  : Theme.glyph.idle
+                font.family: Theme.glyphFont
                 color: autoSwitchPanel.liveCurrent ? Theme.statusActive
                                                    : Theme.statusIdle
                 font.pixelSize: Theme.fontS
@@ -395,7 +426,8 @@ Pane {
             spacing: Theme.space2
 
             Label {
-                text: "\u26A0\uFE0E"
+                text: Theme.glyph.warning
+                font.family: Theme.glyphFont
                 color: Theme.statusPaused
                 font.pixelSize: Theme.fontM
                 Accessible.ignored: true
@@ -414,6 +446,7 @@ Pane {
                 id: chooseOwnButton
                 objectName: "over500ChooseOwn"
                 text: qsTr("Pilih sendiri")
+                glyph: Theme.glyph.check
                 onClicked: {
                     syncDebounce.stop()
                     Settings.setPlaylistSource("custom")

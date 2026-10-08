@@ -90,15 +90,21 @@ Item {
              + "Log:\n" + log
     }
 
-    // Shared 40px dialog button component: token colours, visible focus ring,
-    // Enter/Space, Accessible.name. Used by the C-8/C-9 footers below.
+    // Shared 40px dialog button component: token colours, a shared
+    // Theme.glyph icon, visible focus ring (ink, never the blue accent),
+    // Enter/Space, Accessible.name. Used by every dialog footer below.
     component DialogActionButton: Button {
         id: dialogActionButton
         property bool primary: false
+        property string glyph: ""
         implicitHeight: 40
+        // Task 33: zero vertical padding keeps the 40dp content box centred
+        // (Material's verticalPadding otherwise squeezed it to 12dp).
+        topPadding: 0
+        bottomPadding: 0
         focusPolicy: Qt.StrongFocus
-        leftPadding: Theme.space3
-        rightPadding: Theme.space3
+        leftPadding: Theme.space2
+        rightPadding: Theme.space2
         Accessible.name: text
         Keys.onReturnPressed: {
             dialogActionButton.clicked()
@@ -108,24 +114,46 @@ Item {
             dialogActionButton.clicked()
             event.accepted = true
         }
-        contentItem: Text {
-            text: dialogActionButton.text
-            font.pixelSize: Theme.fontM
-            font.weight: dialogActionButton.primary ? Theme.fontWeightSemibold
-                                                    : Theme.fontWeightRegular
-            color: dialogActionButton.primary ? Theme.accentText : Theme.text
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            elide: Text.ElideRight
+        contentItem: RowLayout {
+            spacing: Theme.space1
+
+            Text {
+                visible: dialogActionButton.glyph.length > 0
+                Layout.alignment: Qt.AlignVCenter
+                text: dialogActionButton.glyph
+                font.family: Theme.glyphFont
+                font.pixelSize: Theme.fontM
+                color: dialogActionButton.primary ? Theme.accentText
+                                                  : Theme.text
+                verticalAlignment: Text.AlignVCenter
+                Accessible.ignored: true
+            }
+
+            Text {
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignVCenter
+                text: dialogActionButton.text
+                font.pixelSize: Theme.fontM
+                font.weight: dialogActionButton.primary ? Theme.fontWeightSemibold
+                                                        : Theme.fontWeightRegular
+                color: dialogActionButton.primary ? Theme.accentText : Theme.text
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                elide: Text.ElideRight
+            }
         }
         background: Rectangle {
             radius: Theme.radiusS
             color: dialogActionButton.primary
-                   ? Theme.accent
-                   : (dialogActionButton.hovered || dialogActionButton.activeFocus
-                      ? Theme.surface2 : Theme.surface)
+                   ? (dialogActionButton.down ? Qt.darker(Theme.accent, 1.15)
+                                              : Theme.accent)
+                   : (dialogActionButton.down ? Theme.pressedSurface
+                      : (dialogActionButton.hovered
+                         || dialogActionButton.activeFocus
+                         ? Theme.surface2 : Theme.surface))
             border.width: dialogActionButton.activeFocus ? 2 : 0
-            border.color: dialogActionButton.primary ? Theme.accentText : Theme.accent
+            border.color: dialogActionButton.primary ? Theme.accentText
+                                                     : Theme.focusRing
         }
     }
 
@@ -143,13 +171,38 @@ Item {
         border.color: Theme.surface2
     }
 
-    component DialogTitle: Label {
-        padding: Theme.space4
-        bottomPadding: 0
-        elide: Label.ElideRight
-        color: Theme.text
-        font.pixelSize: Theme.fontL
-        font.weight: Theme.fontWeightSemibold
+    // Shared dialog title row: one Theme.glyph icon + the dialog title. The
+    // glyph is decorative (the title text carries the name); padding matches
+    // the old Label-only header.
+    component DialogTitle: RowLayout {
+        id: dialogTitle
+        property string glyph: ""
+        property string titleText: ""
+        spacing: Theme.space2
+
+        Label {
+            Layout.leftMargin: Theme.space3
+            Layout.topMargin: Theme.space3
+            Layout.alignment: Qt.AlignVCenter
+            text: dialogTitle.glyph
+            visible: dialogTitle.glyph.length > 0
+            font.family: Theme.glyphFont
+            font.pixelSize: Theme.fontL
+            color: Theme.text2
+            Accessible.ignored: true
+        }
+
+        Label {
+            Layout.leftMargin: dialogTitle.glyph.length > 0 ? 0 : Theme.space3
+            Layout.topMargin: Theme.space3
+            Layout.fillWidth: true
+            Layout.alignment: Qt.AlignVCenter
+            text: dialogTitle.titleText
+            elide: Label.ElideRight
+            color: Theme.text
+            font.pixelSize: Theme.fontL
+            font.weight: Theme.fontWeightSemibold
+        }
     }
 
     // ======================================================================
@@ -162,12 +215,17 @@ Item {
         modal: true
         anchors.centerIn: parent
         width: Math.min(640, parent.width - 48)
+        // Task 32: tighter than the Material 24 default.
+        padding: Theme.space3
         // Pin the popup-local Material theme to the app Theme: attached
         // Material properties do not inherit across the popup boundary.
         Material.theme: Theme.dark ? Material.Dark : Material.Light
         Material.accent: Theme.accent
         background: DialogSurface {}
-        header: DialogTitle { text: infoTeknisDialog.title }
+        header: DialogTitle {
+            glyph: Theme.glyph.info
+            titleText: infoTeknisDialog.title
+        }
 
         onOpened: {
             appDialogs.dialogOpened()
@@ -257,7 +315,7 @@ Item {
                     color: Theme.surface2
                     radius: Theme.radiusS
                     border.width: infoTeknisLog.activeFocus ? 2 : 0
-                    border.color: Theme.accent
+                    border.color: Theme.focusRing
                 }
             }
 
@@ -288,6 +346,7 @@ Item {
                 id: infoTeknisCloseButton
                 objectName: "infoTeknisClose"
                 text: qsTr("Tutup")
+                glyph: Theme.glyph.close
                 onClicked: infoTeknisDialog.close()
             }
         }
@@ -310,10 +369,15 @@ Item {
         modal: true
         anchors.centerIn: Overlay.overlay
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        // Task 32: tighter than the Material 24 default.
+        padding: Theme.space3
         Material.theme: Theme.dark ? Material.Dark : Material.Light
         Material.accent: Theme.accent
         background: DialogSurface {}
-        header: DialogTitle { text: consentDialog.title }
+        header: DialogTitle {
+            glyph: Theme.glyph.hourglass
+            titleText: consentDialog.title
+        }
 
         onOpened: {
             appDialogs.dialogOpened()
@@ -352,6 +416,7 @@ Item {
                 objectName: "consentAccept"
                 primary: true
                 text: qsTr("Siapkan")
+                glyph: Theme.glyph.shrink
                 onClicked: {
                     consentDialog.close()
                     Compress.resolveConsent(true)
@@ -361,6 +426,7 @@ Item {
                 id: consentRejectButton
                 objectName: "consentReject"
                 text: qsTr("Batal")
+                glyph: Theme.glyph.close
                 onClicked: {
                     consentDialog.close()
                     Compress.resolveConsent(false)
@@ -390,10 +456,15 @@ Item {
         modal: true
         anchors.centerIn: Overlay.overlay
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        // Task 32: tighter than the Material 24 default.
+        padding: Theme.space3
         Material.theme: Theme.dark ? Material.Dark : Material.Light
         Material.accent: Theme.accent
         background: DialogSurface {}
-        header: DialogTitle { text: compressOfferDialog.title }
+        header: DialogTitle {
+            glyph: Theme.glyph.shrink
+            titleText: compressOfferDialog.title
+        }
 
         onOpened: {
             appDialogs.dialogOpened()
@@ -443,6 +514,7 @@ Item {
                 objectName: "offerAccept"
                 primary: true
                 text: qsTr("Siapkan otomatis")
+                glyph: Theme.glyph.shrink
                 onClicked: {
                     compressOfferDialog.close()
                     appDialogs.startCompressFirst()
@@ -452,6 +524,7 @@ Item {
                 id: offerDeclineButton
                 objectName: "offerDecline"
                 text: qsTr("Pasang saja")
+                glyph: Theme.glyph.check
                 onClicked: {
                     compressOfferDialog.close()
                     appDialogs.declineCompressFirst()
@@ -499,10 +572,15 @@ Item {
         title: qsTr("Tentang K6WP Studio")
         modal: true
         anchors.centerIn: parent
+        // Task 32: tighter than the Material 24 default.
+        padding: Theme.space3
         Material.theme: Theme.dark ? Material.Dark : Material.Light
         Material.accent: Theme.accent
         background: DialogSurface {}
-        header: DialogTitle { text: aboutDialog.title }
+        header: DialogTitle {
+            glyph: Theme.glyph.info
+            titleText: aboutDialog.title
+        }
 
         onOpened: {
             appDialogs.dialogOpened()
@@ -544,30 +622,37 @@ Item {
                 text: qsTr("Versi baru tersedia %1.").arg(Studio.latestVersion)
             }
 
-            RowLayout {
+            // Task 30: the three C-17 actions stack vertically, full width, in
+            // a narrow dialog instead of one crowded row. Same buttons, same
+            // order, same wiring - only the axis changed. DialogActionButton
+            // keeps its 40px hit target.
+            ColumnLayout {
+                Layout.fillWidth: true
                 spacing: Theme.space2
 
                 DialogActionButton {
                     id: aboutCheckButton
                     objectName: "aboutCheckUpdates"
+                    Layout.fillWidth: true
                     text: qsTr("Cek pembaruan")
+                    glyph: Theme.glyph.refresh
                     enabled: !Studio.updateCheckBusy
                     onClicked: appDialogs.checkUpdatesInteractive()
                 }
 
-                Item {
-                    Layout.fillWidth: true
-                }
-
                 DialogActionButton {
                     objectName: "aboutSupport"
+                    Layout.fillWidth: true
                     text: qsTr("Support development")
+                    glyph: Theme.glyph.external
                     onClicked: Qt.openUrlExternally(Studio.donateUrl)
                 }
 
                 DialogActionButton {
                     objectName: "aboutProject"
+                    Layout.fillWidth: true
                     text: qsTr("Project page")
+                    glyph: Theme.glyph.external
                     onClicked: Qt.openUrlExternally(Studio.projectUrl)
                 }
             }
@@ -584,6 +669,7 @@ Item {
                 id: aboutCloseButton
                 objectName: "aboutClose"
                 text: qsTr("Tutup")
+                glyph: Theme.glyph.close
                 onClicked: aboutDialog.close()
             }
         }
@@ -601,10 +687,15 @@ Item {
         modal: true
         anchors.centerIn: Overlay.overlay
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        // Task 32: tighter than the Material 24 default.
+        padding: Theme.space3
         Material.theme: Theme.dark ? Material.Dark : Material.Light
         Material.accent: Theme.accent
         background: DialogSurface {}
-        header: DialogTitle { text: updateDialog.title }
+        header: DialogTitle {
+            glyph: Theme.glyph.refresh
+            titleText: updateDialog.title
+        }
 
         onOpened: {
             appDialogs.dialogOpened()
@@ -640,6 +731,7 @@ Item {
                 objectName: "updateOpenRelease"
                 primary: true
                 text: qsTr("Buka halaman unduhan")
+                glyph: Theme.glyph.external
                 onClicked: {
                     updateDialog.close()
                     Qt.openUrlExternally(Studio.latestPageUrl)
@@ -650,6 +742,7 @@ Item {
                 id: updateLaterButton
                 objectName: "updateLater"
                 text: qsTr("Nanti")
+                glyph: Theme.glyph.close
                 onClicked: updateDialog.close()
             }
         }

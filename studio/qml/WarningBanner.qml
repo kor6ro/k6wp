@@ -64,14 +64,20 @@ Pane {
     Accessible.role: Accessible.AlertMessage
     Accessible.name: bannerLabel.text
 
-    // Inline banner button: token colours, 40px target, Enter/Space
-    // activation and a visible focus ring (a11y contract).
+    // Inline banner button: token colours, a shared Theme.glyph icon, 40px
+    // target, Enter/Space activation and a visible focus ring in ink (never
+    // the blue accent); pressing steps the surface.
     component BannerButton: Button {
         id: bannerButton
+        property string glyph: ""
         implicitHeight: 40
+        // Task 33: zero vertical padding so the contentItem spans the full
+        // 40dp control (Material's 14dp verticalPadding squeezed it to 12dp).
+        topPadding: 0
+        bottomPadding: 0
         focusPolicy: Qt.StrongFocus
-        leftPadding: Theme.space3
-        rightPadding: Theme.space3
+        leftPadding: Theme.space2
+        rightPadding: Theme.space2
         Accessible.name: text
         Keys.onReturnPressed: {
             bannerButton.clicked()
@@ -81,20 +87,38 @@ Pane {
             bannerButton.clicked()
             event.accepted = true
         }
-        contentItem: Text {
-            text: bannerButton.text
-            font.pixelSize: Theme.fontM
-            color: Theme.text
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            elide: Text.ElideRight
+        contentItem: RowLayout {
+            spacing: Theme.space1
+
+            Text {
+                visible: bannerButton.glyph.length > 0
+                Layout.alignment: Qt.AlignVCenter
+                text: bannerButton.glyph
+                font.family: Theme.glyphFont
+                font.pixelSize: Theme.fontM
+                color: Theme.text
+                verticalAlignment: Text.AlignVCenter
+                Accessible.ignored: true
+            }
+
+            Text {
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignVCenter
+                text: bannerButton.text
+                font.pixelSize: Theme.fontM
+                color: Theme.text
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                elide: Text.ElideRight
+            }
         }
         background: Rectangle {
             radius: Theme.radiusS
-            color: bannerButton.hovered || bannerButton.activeFocus
-                   ? Theme.surface2 : Theme.surface
+            color: bannerButton.down ? Theme.pressedSurface
+                   : (bannerButton.hovered || bannerButton.activeFocus
+                      ? Theme.surface2 : Theme.surface)
             border.width: bannerButton.activeFocus ? 2 : 1
-            border.color: bannerButton.activeFocus ? Theme.accent
+            border.color: bannerButton.activeFocus ? Theme.focusRing
                                                    : Theme.surface2
         }
     }
@@ -106,7 +130,8 @@ Pane {
 
         // Glyph + label: state is never colour alone.
         Label {
-            text: "\u26A0\uFE0E"
+            text: Theme.glyph.warning
+            font.family: Theme.glyphFont
             color: warningBanner.ink
             font.pixelSize: Theme.fontM
             Accessible.ignored: true
@@ -132,6 +157,7 @@ Pane {
             objectName: "bannerDisplaySettings"
             visible: warningBanner.kind === "duplicate"
             text: qsTr("Buka Pengaturan Layar Windows")
+            glyph: Theme.glyph.external
             onClicked: Studio.openWindowsDisplaySettings()
         }
 
@@ -141,6 +167,7 @@ Pane {
             visible: warningBanner.kind === "coverage"
             enabled: Studio.activeVideoPath.length > 0 && !Studio.busy
             text: qsTr("Muat ulang wallpaper")
+            glyph: Theme.glyph.refresh
             onClicked: Studio.applyWallpaper(Studio.activeVideoPath)
         }
 
@@ -149,6 +176,7 @@ Pane {
             objectName: "bannerFindFile"
             visible: warningBanner.kind === "missing"
             text: qsTr("Cari file")
+            glyph: Theme.glyph.external
             onClicked: Library.openLocationAt(warningBanner.firstMissingRow)
         }
 
@@ -156,6 +184,7 @@ Pane {
             objectName: "bannerRemoveEntry"
             visible: warningBanner.kind === "missing"
             text: qsTr("Hapus dari koleksi")
+            glyph: Theme.glyph.remove
             onClicked: Library.removeAt(warningBanner.firstMissingRow, false)
         }
     }

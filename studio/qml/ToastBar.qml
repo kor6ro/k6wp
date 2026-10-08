@@ -110,8 +110,11 @@ Rectangle {
 
         // Decorative glyph: the text label below carries the accessible name.
         Label {
-            text: toastBar.outcomeVisible ? "\u26A0\uFE0E" : "\u23F3"
-            color: toastBar.outcomeVisible ? Theme.statusPaused : Theme.accent
+            text: toastBar.outcomeVisible ? Theme.glyph.warning
+                                          : Theme.glyph.hourglass
+            font.family: Theme.glyphFont
+            color: toastBar.outcomeVisible ? Theme.statusPaused
+                                           : Theme.accent
             font.pixelSize: Theme.fontL
             Accessible.ignored: true
         }
@@ -170,14 +173,22 @@ Rectangle {
 
         // Batal button (C-8 progress copy: "Menyiapkan video… {p}% [Batal]").
         // >= 40px, Enter/Space, Accessible.name. Hidden during the outcome
-        // overlay - there is nothing left to cancel.
+        // overlay - there is nothing left to cancel. Task 31: hover/focus no
+        // longer flips the fill to the blue accent; a press darkens the red
+        // one step and focus keeps the ink border.
         Button {
             id: cancelButton
             objectName: "toastBarCancel"
             visible: !toastBar.outcomeVisible && Compress.running
             implicitHeight: 40
+            // Task 33: zero vertical padding keeps the 40dp content box
+            // centred (Material's verticalPadding otherwise squeezed it).
+            topPadding: 0
+            bottomPadding: 0
             focusPolicy: Qt.StrongFocus
             text: qsTr("Batal")
+            // `glyph`, not `icon`: Button.icon is a FINAL QQuickIcon property.
+            property string glyph: Theme.glyph.close
             Accessible.name: text
             onClicked: toastBar.cancelJob()
 
@@ -190,18 +201,35 @@ Rectangle {
                 event.accepted = true
             }
 
-            contentItem: Text {
-                text: cancelButton.text
-                font.pixelSize: Theme.fontM
-                font.weight: Theme.fontWeightSemibold
-                color: Theme.accentText
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
+            contentItem: RowLayout {
+                spacing: Theme.space1
+
+                Text {
+                    Layout.alignment: Qt.AlignVCenter
+                    text: cancelButton.glyph
+                    font.family: Theme.glyphFont
+                    font.pixelSize: Theme.fontM
+                    color: Theme.accentText
+                    verticalAlignment: Text.AlignVCenter
+                    Accessible.ignored: true
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignVCenter
+                    text: cancelButton.text
+                    font.pixelSize: Theme.fontM
+                    font.weight: Theme.fontWeightSemibold
+                    color: Theme.accentText
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
             }
             background: Rectangle {
                 radius: Theme.radiusS
-                color: cancelButton.hovered || cancelButton.activeFocus
-                       ? Theme.accent : Theme.statusError
+                color: cancelButton.down
+                       ? Qt.darker(Theme.statusError, 1.2)
+                       : Theme.statusError
                 border.width: cancelButton.activeFocus ? 2 : 0
                 border.color: Theme.accentText
             }

@@ -21,21 +21,29 @@ Dialog {
     title: qsTr("Bersihkan cache")
     modal: true
     anchors.centerIn: Overlay.overlay
+    // Task 32: tighter than the Material 24 default.
+    padding: Theme.space3
     Material.theme: Theme.dark ? Material.Dark : Material.Light
     Material.accent: Theme.accent
     onOpened: dialogOpened()
     onClosed: dialogClosed()
 
-    // 40px token button: visible focus ring, Enter/Space, Accessible.name.
-    // Mirrors AppDialogs.DialogActionButton; extracting a shared file would
-    // need CMake/qrc registration, so the small duplication is deliberate.
+    // 40px token button: shared Theme.glyph icon, ink focus ring (never the
+    // blue accent), Enter/Space, Accessible.name. Mirrors
+    // AppDialogs.DialogActionButton; extracting a shared file would need
+    // CMake/qrc registration, so the small duplication is deliberate.
     component DialogActionButton: Button {
         id: cacheActionButton
         property bool primary: false
+        property string glyph: ""
         implicitHeight: 40
+        // Task 33: zero vertical padding keeps the 40dp content box centred
+        // (Material's verticalPadding otherwise squeezed it to 12dp).
+        topPadding: 0
+        bottomPadding: 0
         focusPolicy: Qt.StrongFocus
-        leftPadding: Theme.space3
-        rightPadding: Theme.space3
+        leftPadding: Theme.space2
+        rightPadding: Theme.space2
         Accessible.name: text
         Keys.onReturnPressed: {
             cacheActionButton.clicked()
@@ -45,24 +53,45 @@ Dialog {
             cacheActionButton.clicked()
             event.accepted = true
         }
-        contentItem: Text {
-            text: cacheActionButton.text
-            font.pixelSize: Theme.fontM
-            font.weight: cacheActionButton.primary ? Theme.fontWeightSemibold
-                                                   : Theme.fontWeightRegular
-            color: cacheActionButton.primary ? Theme.accentText : Theme.text
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            elide: Text.ElideRight
+        contentItem: RowLayout {
+            spacing: Theme.space1
+
+            Text {
+                visible: cacheActionButton.glyph.length > 0
+                Layout.alignment: Qt.AlignVCenter
+                text: cacheActionButton.glyph
+                font.family: Theme.glyphFont
+                font.pixelSize: Theme.fontM
+                color: cacheActionButton.primary ? Theme.accentText : Theme.text
+                verticalAlignment: Text.AlignVCenter
+                Accessible.ignored: true
+            }
+
+            Text {
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignVCenter
+                text: cacheActionButton.text
+                font.pixelSize: Theme.fontM
+                font.weight: cacheActionButton.primary ? Theme.fontWeightSemibold
+                                                       : Theme.fontWeightRegular
+                color: cacheActionButton.primary ? Theme.accentText : Theme.text
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                elide: Text.ElideRight
+            }
         }
         background: Rectangle {
             radius: Theme.radiusS
             color: cacheActionButton.primary
-                   ? Theme.accent
-                   : (cacheActionButton.hovered || cacheActionButton.activeFocus
-                      ? Theme.surface2 : Theme.surface)
+                   ? (cacheActionButton.down ? Qt.darker(Theme.accent, 1.15)
+                                             : Theme.accent)
+                   : (cacheActionButton.down ? Theme.pressedSurface
+                      : (cacheActionButton.hovered
+                         || cacheActionButton.activeFocus
+                         ? Theme.surface2 : Theme.surface))
             border.width: cacheActionButton.activeFocus ? 2 : 0
-            border.color: cacheActionButton.primary ? Theme.accentText : Theme.accent
+            border.color: cacheActionButton.primary ? Theme.accentText
+                                                    : Theme.focusRing
         }
     }
 
@@ -73,14 +102,31 @@ Dialog {
         border.color: Theme.surface2
     }
 
-    header: Label {
-        text: cacheDialog.title
-        padding: Theme.space4
-        bottomPadding: 0
-        elide: Label.ElideRight
-        color: Theme.text
-        font.pixelSize: Theme.fontL
-        font.weight: Theme.fontWeightSemibold
+    // Title row: shared Theme.glyph icon + the dialog title.
+    header: RowLayout {
+        spacing: Theme.space2
+
+        Label {
+            Layout.leftMargin: Theme.space3
+            Layout.topMargin: Theme.space3
+            Layout.alignment: Qt.AlignVCenter
+            text: Theme.glyph.deleteFile
+            font.family: Theme.glyphFont
+            font.pixelSize: Theme.fontL
+            color: Theme.text2
+            Accessible.ignored: true
+        }
+
+        Label {
+            Layout.topMargin: Theme.space3
+            Layout.fillWidth: true
+            Layout.alignment: Qt.AlignVCenter
+            text: cacheDialog.title
+            elide: Label.ElideRight
+            color: Theme.text
+            font.pixelSize: Theme.fontL
+            font.weight: Theme.fontWeightSemibold
+        }
     }
 
     contentItem: Label {
@@ -103,6 +149,7 @@ Dialog {
             objectName: "cacheConfirm"
             primary: true
             text: qsTr("Ya")
+            glyph: Theme.glyph.check
             onClicked: {
                 cacheDialog.close()
                 Settings.clearCache()
@@ -112,6 +159,7 @@ Dialog {
             id: cacheCancelButton
             objectName: "cacheCancel"
             text: qsTr("Batal")
+            glyph: Theme.glyph.close
             onClicked: cacheDialog.close()
         }
     }

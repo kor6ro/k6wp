@@ -6,7 +6,7 @@
 //   Dipakai       - check badge, the video the engine is currently playing
 //   Hilang        - warning badge "File tidak ketemu" + Cari/Hapus dialog
 //   Belum siap    - hourglass badge "Perlu disiapkan" (optimized role, todo 6)
-//   Progres       - scrim + "Menyiapkan… {p}%" + × cancel (Compress.cancel)
+//   Progres       - scrim + "Menyiapkanâ€¦ {p}%" + Ã— cancel (Compress.cancel)
 //   Error         - warning badge "Tidak bisa dipakai" + Coba lagi
 //
 // Copy deck: C-4 (hover [Pasang] + [....]), C-5 (row menu), C-6 (TWO separate
@@ -24,6 +24,13 @@
 // Overlay rule B-WIREFRAME(f): the [....] menu anchors BELOW the card (never
 // over the preview hole above the gallery); every Dialog feeds
 // dialogOpened/dialogClosed so the native preview steps aside while it is up.
+//
+// Task 27 (select-only click): a single click - or Enter/Space on the focused
+// card - SELECTS the card (accent outline + "Terpilih" badge, stored as
+// Studio.selectedVideo, the clean selected-path surface the right-rail
+// "Pasang" reads). It never applies. Applying stays explicit: hover [Pasang],
+// the C-5 "Pasang" row-menu item, the right-rail action row, or the
+// documented double-click power path (README: "double-click live-switch").
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
@@ -49,7 +56,8 @@ Item {
     width: cellWidth
     height: cellHeight
 
-    // Keyboard contract: the card itself is a tab stop, Enter/Space install.
+    // Keyboard contract (task 27): the card is a tab stop; Enter/Space SELECT
+    // it. The wallpaper is only ever installed by an explicit "Pasang".
     activeFocusOnTab: true
 
     // Windows paths arrive with either separator (model dst uses '\', the
@@ -83,6 +91,14 @@ Item {
                                         || menuButton.activeFocus
                                         || retryButton.activeFocus
     readonly property bool revealed: hovered || focusWithin
+
+    // --- selected card (task 27 select-only click) -------------------------
+    // Derived from the bridge, never stored on the delegate: a card is selected
+    // while its dst is Studio.selectedVideo (the same picked-then-applied
+    // surface the right-rail "Pasang" reads), so "Hapus" in that rail clears
+    // the ring here too.
+    readonly property bool selected: dst.length > 0
+                                     && samePath(dst, Studio.selectedVideo)
 
     // --- Pilihan sendiri selection (todo 10) ------------------------------
     // The checkbox exists only in custom-source mode; membership is
@@ -125,11 +141,19 @@ Item {
                                         : ""
 
     Accessible.role: Accessible.ListItem
-    Accessible.name: stateLabel.length > 0
-                     ? displayName + " \u2014 " + stateLabel
-                     : displayName
+    Accessible.name: {
+        const parts = []
+        if (videoCard.selected)
+            parts.push(qsTr("Terpilih"))
+        if (videoCard.stateLabel.length > 0)
+            parts.push(videoCard.stateLabel)
+        return parts.length > 0
+                ? videoCard.displayName + " \u2014 " + parts.join(" \u2014 ")
+                : videoCard.displayName
+    }
 
-    // A broken entry cannot be installed: its action is the C-15 dialog.
+    // Explicit apply path (hover [Pasang], â‹¯ "Pasang", double-click): a broken
+    // entry cannot be installed, so its action is the C-15 dialog instead.
     function activate() {
         if (missing) {
             missingDialog.open()
@@ -138,10 +162,21 @@ Item {
         Library.applyAt(index)
     }
 
+    // Select-only click / Enter / Space (task 27): publishes this row's dst to
+    // Studio.selectedVideo via the bridge. Never applies. A missing entry keeps
+    // its established C-15 dialog action (nothing installable to select).
+    function select() {
+        if (missing) {
+            missingDialog.open()
+            return
+        }
+        Studio.selectVideo(videoCard.dst)
+    }
+
     Keys.onPressed: function (event) {
         if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter
                 || event.key === Qt.Key_Space) {
-            activate()
+            select()
             event.accepted = true
         }
     }
@@ -151,12 +186,20 @@ Item {
     // here, and later failures retry through onStatusChanged.
     Component.onCompleted: if (thumbUrl.length === 0) Library.ensureThumbnail(index)
 
-    // Inline card button: token colours, a real 40px target and a 2px focus
-    // ring so keyboard focus is always visible (a11y contract).
+    // Inline card button: token colours, a shared Theme.glyph icon, a real
+    // 40px target and a 2px focus ring so keyboard focus is always visible
+    // (a11y contract). Non-primary focus is ink (Theme.focusRing), never
+    // blue; pressing steps the surface.
     component CardButton: Button {
         id: cardButton
         property bool primary: false
+        property string glyph: ""
         implicitHeight: 40
+        // Task 33: zero vertical padding keeps the 40dp content box centred
+        // (Material's verticalPadding otherwise squeezed it to 12dp and sat
+        // the label 1px below the control centre).
+        topPadding: 0
+        bottomPadding: 0
         focusPolicy: Qt.StrongFocus
         leftPadding: Theme.space2
         rightPadding: Theme.space2
@@ -169,24 +212,44 @@ Item {
             cardButton.clicked()
             event.accepted = true
         }
-        contentItem: Text {
-            text: cardButton.text
-            font.pixelSize: Theme.fontM
-            font.weight: cardButton.primary ? Theme.fontWeightSemibold
-                                            : Theme.fontWeightRegular
-            color: cardButton.primary ? Theme.accentText : Theme.text
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            elide: Text.ElideRight
+        contentItem: RowLayout {
+            spacing: Theme.space1
+
+            Text {
+                visible: cardButton.glyph.length > 0
+                Layout.alignment: Qt.AlignVCenter
+                text: cardButton.glyph
+                font.family: Theme.glyphFont
+                font.pixelSize: Theme.fontM
+                color: cardButton.primary ? Theme.accentText : Theme.text
+                verticalAlignment: Text.AlignVCenter
+                Accessible.ignored: true
+            }
+
+            Text {
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignVCenter
+                text: cardButton.text
+                font.pixelSize: Theme.fontM
+                font.weight: cardButton.primary ? Theme.fontWeightSemibold
+                                                : Theme.fontWeightRegular
+                color: cardButton.primary ? Theme.accentText : Theme.text
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                elide: Text.ElideRight
+            }
         }
         background: Rectangle {
             radius: Theme.radiusS
             color: cardButton.primary
-                   ? Theme.accent
-                   : (cardButton.hovered || cardButton.activeFocus
-                      ? Theme.surface2 : Theme.surface)
+                   ? (cardButton.down ? Qt.darker(Theme.accent, 1.15)
+                                      : Theme.accent)
+                   : (cardButton.down ? Theme.pressedSurface
+                      : (cardButton.hovered || cardButton.activeFocus
+                         ? Theme.surface2 : Theme.surface))
             border.width: cardButton.activeFocus ? 2 : 0
-            border.color: cardButton.primary ? Theme.accentText : Theme.accent
+            border.color: cardButton.primary ? Theme.accentText
+                                             : Theme.focusRing
         }
     }
 
@@ -200,17 +263,20 @@ Item {
         color: badge.tint
         radius: Theme.radiusS
         implicitWidth: badgeRow.implicitWidth + 2 * Theme.space1
-        implicitHeight: badgeRow.implicitHeight + Theme.space1
-        RowLayout {
-            id: badgeRow
-            anchors.centerIn: parent
-            spacing: Theme.space1
-            Label {
-                text: badge.glyph
-                color: badge.ink
-                font.pixelSize: Theme.fontS
-                Accessible.ignored: true
-            }
+        // Task 33: symmetric 4dp vertical inset (this read `+ Theme.space1`,
+        // half the horizontal inset, so the badge read squashed).
+        implicitHeight: badgeRow.implicitHeight + 2 * Theme.space1
+            RowLayout {
+                id: badgeRow
+                anchors.centerIn: parent
+                spacing: Theme.space1
+                Label {
+                    text: badge.glyph
+                    font.family: Theme.glyphFont
+                    color: badge.ink
+                    font.pixelSize: Theme.fontS
+                    Accessible.ignored: true
+                }
             Label {
                 text: badge.label
                 color: badge.ink
@@ -248,16 +314,22 @@ Item {
             radius: Theme.radiusS
             color: cardCheck.checked
                    ? Theme.accent
-                   : (cardCheck.hovered || cardCheck.activeFocus
-                      ? Theme.surface2 : Theme.bg)
-            border.width: cardCheck.activeFocus ? 2 : 1
-            border.color: cardCheck.activeFocus || cardCheck.checked
-                          ? Theme.accent : Theme.text2
+                   : (cardCheck.down ? Theme.pressedSurface
+                      : (cardCheck.hovered || cardCheck.activeFocus
+                         ? Theme.surface2 : Theme.bg))
+            border.width: cardCheck.activeFocus || cardCheck.checked ? 2 : 1
+            // Checked keeps the accent marker (selection state, not a focus
+            // highlight); keyboard focus alone rings in ink.
+            border.color: cardCheck.checked
+                          ? Theme.accent
+                          : (cardCheck.activeFocus ? Theme.focusRing
+                                                   : Theme.text2)
 
             Text {
                 anchors.centerIn: parent
                 visible: cardCheck.checked
-                text: "\u2713"
+                text: Theme.glyph.check
+                font.family: Theme.glyphFont
                 color: Theme.accentText
                 font.pixelSize: Theme.fontM
                 font.weight: Theme.fontWeightSemibold
@@ -267,26 +339,77 @@ Item {
         contentItem: Item {}
     }
 
+    // Row-menu item (task 27; task 31 glyphs): the default Material menu
+    // painted a light surface and light item text in dark mode. Every
+    // surface, ink and highlight below comes from Theme tokens, the shared
+    // Theme.glyph icon leads each row, and the 40px row keeps the
+    // keyboard/touch target contract.
+    component CardMenuItem: MenuItem {
+        id: cardMenuItem
+        property string glyph: ""
+        implicitHeight: 40
+        // Task 33: 40dp menu rows centre exactly (see CardButton).
+        topPadding: 0
+        bottomPadding: 0
+        contentItem: RowLayout {
+            spacing: Theme.space2
+
+            Text {
+                visible: cardMenuItem.glyph.length > 0
+                Layout.alignment: Qt.AlignVCenter
+                text: cardMenuItem.glyph
+                font.family: Theme.glyphFont
+                font.pixelSize: Theme.fontM
+                color: Theme.text2
+                verticalAlignment: Text.AlignVCenter
+                Accessible.ignored: true
+            }
+
+            Text {
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignVCenter
+                text: cardMenuItem.text
+                font.pixelSize: Theme.fontM
+                color: cardMenuItem.enabled ? Theme.text : Theme.text2
+                verticalAlignment: Text.AlignVCenter
+                elide: Text.ElideRight
+            }
+        }
+        background: Rectangle {
+            radius: Theme.radiusS
+            color: cardMenuItem.highlighted ? Theme.surface2 : "transparent"
+        }
+    }
+
     Rectangle {
         id: frame
         anchors.fill: parent
         anchors.margins: Theme.space1
         radius: Theme.radiusM
-        color: videoCard.revealed ? Theme.surface2 : Theme.surface
-        // Focus ring is accent (the one allowed coloured edge, per a11y);
-        // hover gets a neutral outline.
-        border.width: videoCard.activeFocus ? 2 : (videoCard.hovered ? 1 : 0)
-        border.color: videoCard.activeFocus ? Theme.accent : Theme.text2
+        color: videoCard.revealed || videoCard.selected ? Theme.surface2
+                                                        : Theme.surface
+        // Focus ring is ink (Theme.focusRing); hover gets a neutral outline;
+        // the selected card keeps the accent edge + "Terpilih" badge so one
+        // click reads as selected even after focus moves away (task 27
+        // contract: the one accent selection outline that must stay).
+        border.width: videoCard.activeFocus || videoCard.selected ? 2
+                                     : (videoCard.hovered ? 1 : 0)
+        border.color: videoCard.selected ? Theme.accent
+                     : videoCard.activeFocus ? Theme.focusRing
+                     : Theme.text2
     }
 
-    // Whole-card click surface ("klik untuk memasangnya", C-1); the hover
-    // buttons above it consume their own clicks.
+    // Whole-card click surface (task 27): one click SELECTS the card; the
+    // wallpaper is only ever installed by an explicit "Pasang" (hover button,
+    // â‹¯ menu item, right-rail action). Double-click keeps the README's
+    // "double-click live-switch" shortcut and applies deliberately.
     MouseArea {
         id: cardMouse
         anchors.fill: frame
         hoverEnabled: true
         acceptedButtons: Qt.LeftButton
-        onClicked: videoCard.activate()
+        onClicked: videoCard.select()
+        onDoubleClicked: videoCard.activate()
     }
 
     ColumnLayout {
@@ -325,9 +448,20 @@ Item {
                 anchors.margins: Theme.space1
                 spacing: Theme.space1
 
+                // Selection badge (task 27): accent pair, so the selected card
+                // is identifiable by label + outline, never colour alone.
+                CardBadge {
+                    objectName: "selectedBadge"
+                    visible: videoCard.selected
+                    glyph: Theme.glyph.check
+                    label: qsTr("Terpilih")
+                    tint: Theme.accent
+                    ink: Theme.accentText
+                }
+
                 CardBadge {
                     visible: videoCard.used && !videoCard.missing
-                    glyph: "\u2713"
+                    glyph: Theme.glyph.check
                     label: qsTr("Dipakai")
                     tint: Theme.statusActiveTint
                     ink: Theme.statusActive
@@ -336,7 +470,7 @@ Item {
                 CardBadge {
                     objectName: "missingBadge"
                     visible: videoCard.missing
-                    glyph: "\u26A0\uFE0E"
+                    glyph: Theme.glyph.warning
                     label: qsTr("File tidak ketemu")
                     tint: Theme.statusErrorTint
                     ink: Theme.statusError
@@ -348,7 +482,7 @@ Item {
 
                 CardBadge {
                     visible: videoCard.failed && !videoCard.preparing
-                    glyph: "\u26A0\uFE0E"
+                    glyph: Theme.glyph.warning
                     label: qsTr("Tidak bisa dipakai")
                     tint: Theme.statusErrorTint
                     ink: Theme.statusError
@@ -357,7 +491,7 @@ Item {
                 CardBadge {
                     visible: videoCard.notReady && !videoCard.preparing
                              && !videoCard.failed
-                    glyph: "\u23F3"
+                    glyph: Theme.glyph.hourglass
                     label: qsTr("Perlu disiapkan")
                     tint: Theme.statusPausedTint
                     ink: Theme.statusPaused
@@ -378,8 +512,8 @@ Item {
             }
 
             // "Sedang disiapkan" overlay (todo 13 / B-STATE matrix): the
-            // scrim carries "Menyiapkan… N%" (D3 percent when available) and
-            // a × cancel button. The toast at the window bottom offers the
+            // scrim carries "Menyiapkanâ€¦ N%" (D3 percent when available) and
+            // a Ã— cancel button. The toast at the window bottom offers the
             // same cancel via "Batal"; both call Compress.cancel().
             Rectangle {
                 id: preparingOverlay
@@ -403,7 +537,7 @@ Item {
                 Accessible.name: text
             }
 
-            // × cancel: 40px target, Enter/Space, Accessible.name. Top-right
+            // Ã— cancel: 40px target, Enter/Space, Accessible.name. Top-right
             // of the thumbnail so it never collides with the status badges.
             Button {
                 id: preparingCancel
@@ -414,8 +548,15 @@ Item {
                 anchors.margins: Theme.space1
                 implicitWidth: 40
                 implicitHeight: 40
+                // Task 33: explicit zero padding on the glyph-only cancel
+                // (Material's verticalPadding otherwise squeezed the content
+                // box to 12dp).
+                topPadding: 0
+                bottomPadding: 0
+                leftPadding: 0
+                rightPadding: 0
                 focusPolicy: Qt.StrongFocus
-                text: "\u00D7"
+                text: Theme.glyph.close
                 Accessible.name: qsTr("Batal menyiapkan")
                 onClicked: Compress.cancel()
 
@@ -430,6 +571,7 @@ Item {
 
                 contentItem: Text {
                     text: preparingCancel.text
+                    font.family: Theme.glyphFont
                     font.pixelSize: Theme.fontL
                     font.weight: Theme.fontWeightSemibold
                     color: Theme.text
@@ -438,11 +580,13 @@ Item {
                 }
                 background: Rectangle {
                     radius: Theme.radiusS
-                    color: preparingCancel.hovered || preparingCancel.activeFocus
-                           ? Theme.surface2 : Theme.surface
+                    color: preparingCancel.down ? Theme.pressedSurface
+                           : (preparingCancel.hovered
+                              || preparingCancel.activeFocus
+                              ? Theme.surface2 : Theme.surface)
                     border.width: preparingCancel.activeFocus ? 2 : 1
                     border.color: preparingCancel.activeFocus
-                                  ? Theme.accent : Theme.text2
+                                  ? Theme.focusRing : Theme.text2
                 }
             }
         }
@@ -473,6 +617,7 @@ Item {
                     id: retryButton
                     visible: videoCard.failed
                     text: qsTr("Coba lagi")
+                    glyph: Theme.glyph.refresh
                     onClicked: {
                         Compress.setSourcePath(videoCard.dst)
                         Compress.start()
@@ -484,6 +629,7 @@ Item {
                     visible: videoCard.revealed
                     primary: true
                     text: qsTr("Pasang")
+                    glyph: Theme.glyph.check
                     Accessible.name: qsTr("Pasang") + " " + videoCard.displayName
                     onClicked: videoCard.activate()
                 }
@@ -493,7 +639,7 @@ Item {
                     objectName: "cardMenuButton"
                     visible: videoCard.revealed
                     implicitWidth: 40
-                    text: "\u22EF"
+                    text: Theme.glyph.menu
                     Accessible.name: qsTr("Menu kartu")
                     // open(), not popup(): popup() repositions the menu at the
                     // mouse cursor / window origin, while open() honours the
@@ -509,19 +655,49 @@ Item {
     // the preview hole above the gallery.
     Menu {
         id: rowMenu
-        y: videoCard.height
-        x: Math.max(0, videoCard.width - width)
+        // Parented to the [....] button (the proven StatusBar Hapus-menu
+        // pattern): a delegate-owned popup anchored to a live control opens
+        // reliably, and the button is the card's bottom-right corner, so the
+        // menu still opens below the card (B-WIREFRAME(f)).
+        parent: menuButton
+        // Below the button by default; a bottom-row card has no room below,
+        // so the menu then opens above the button - still inside the
+        // collection area, never over the preview hole. Decided on
+        // aboutToShow: the items (and implicitHeight) exist by then.
+        onAboutToShow: {
+            const overlay = rowMenu.Overlay.overlay
+            const sceneBottom = menuButton.mapToItem(null, 0, menuButton.height).y
+            if (overlay && sceneBottom + rowMenu.implicitHeight > overlay.height)
+                y = -(rowMenu.implicitHeight + Theme.space1)
+            else
+                y = menuButton.height + Theme.space1
+        }
+        x: menuButton.width - width
 
-        MenuItem {
+        background: Rectangle {
+            // Explicit implicit size: a custom background with 0 implicit
+            // size collapses the popup to nothing and it never shows.
+            implicitWidth: 240
+            implicitHeight: 260
+            radius: Theme.radiusM
+            color: Theme.bg
+            border.width: 1
+            border.color: Theme.surface2
+        }
+
+        CardMenuItem {
+            glyph: Theme.glyph.check
             text: qsTr("Pasang")
             onTriggered: videoCard.activate()
         }
-        MenuItem {
+        CardMenuItem {
+            glyph: Theme.glyph.plus
             text: qsTr("Tambah ke Ganti otomatis")
             enabled: !videoCard.missing
             onTriggered: Playlist.addPaths([videoCard.dst])
         }
-        MenuItem {
+        CardMenuItem {
+            glyph: Theme.glyph.shrink
             text: qsTr("Perkecil")
             enabled: !videoCard.missing
             // Todo 13: compression runs fully in the background. "Perkecil"
@@ -533,16 +709,24 @@ Item {
                 Compress.start()
             }
         }
-        MenuItem {
+        CardMenuItem {
+            glyph: Theme.glyph.external
             text: qsTr("Buka lokasi")
             onTriggered: Library.openLocationAt(videoCard.index)
         }
-        MenuSeparator {}
-        MenuItem {
+        MenuSeparator {
+            contentItem: Rectangle {
+                implicitHeight: 1
+                color: Theme.surface2
+            }
+        }
+        CardMenuItem {
+            glyph: Theme.glyph.remove
             text: qsTr("Hapus dari koleksi")
             onTriggered: removeCollectionDialog.open()
         }
-        MenuItem {
+        CardMenuItem {
+            glyph: Theme.glyph.deleteFile
             text: qsTr("Hapus file ke Recycle Bin")
             onTriggered: removeTrashDialog.open()
         }
@@ -556,6 +740,8 @@ Item {
         modal: true
         anchors.centerIn: Overlay.overlay
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        // Task 32: tighter than the Material 24 default.
+        padding: Theme.space3
         onOpened: {
             videoCard.dialogOpened()
             collectionCancelButton.forceActiveFocus()
@@ -588,6 +774,7 @@ Item {
             CardButton {
                 objectName: "removeCollectionConfirm"
                 text: qsTr("Hapus dari koleksi")
+                glyph: Theme.glyph.remove
                 onClicked: {
                     removeCollectionDialog.close()
                     Library.removeAt(videoCard.index, false)
@@ -597,6 +784,7 @@ Item {
                 id: collectionCancelButton
                 objectName: "removeCollectionCancel"
                 text: qsTr("Batal")
+                glyph: Theme.glyph.close
                 onClicked: removeCollectionDialog.close()
             }
         }
@@ -610,6 +798,8 @@ Item {
         modal: true
         anchors.centerIn: Overlay.overlay
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        // Task 32: tighter than the Material 24 default.
+        padding: Theme.space3
         onOpened: {
             videoCard.dialogOpened()
             trashCancelButton.forceActiveFocus()
@@ -642,6 +832,7 @@ Item {
             CardButton {
                 objectName: "removeTrashConfirm"
                 text: qsTr("Hapus file")
+                glyph: Theme.glyph.deleteFile
                 onClicked: {
                     removeTrashDialog.close()
                     Library.removeAt(videoCard.index, true)
@@ -651,6 +842,7 @@ Item {
                 id: trashCancelButton
                 objectName: "removeTrashCancel"
                 text: qsTr("Batal")
+                glyph: Theme.glyph.close
                 onClicked: removeTrashDialog.close()
             }
         }
@@ -664,6 +856,8 @@ Item {
         modal: true
         anchors.centerIn: Overlay.overlay
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        // Task 32: tighter than the Material 24 default.
+        padding: Theme.space3
         onOpened: videoCard.dialogOpened()
         onClosed: videoCard.dialogClosed()
 
@@ -688,6 +882,7 @@ Item {
             CardButton {
                 objectName: "missingFindFile"
                 text: qsTr("Cari file")
+                glyph: Theme.glyph.external
                 onClicked: {
                     missingDialog.close()
                     Library.openLocationAt(videoCard.index)
@@ -696,6 +891,7 @@ Item {
             CardButton {
                 objectName: "missingRemoveEntry"
                 text: qsTr("Hapus dari koleksi")
+                glyph: Theme.glyph.remove
                 onClicked: {
                     missingDialog.close()
                     removeCollectionDialog.open()
@@ -704,3 +900,4 @@ Item {
         }
     }
 }
+

@@ -12,10 +12,21 @@ ColumnLayout {
     property alias text: logArea.text
     property alias placeholderText: logArea.placeholderText
 
-    Label {
-        // Glossary §5: "Detail teknis (log)" -> "Info teknis".
-        text: qsTr("Info teknis")
-        font.bold: true
+    RowLayout {
+        spacing: Theme.space1
+
+        Label {
+            text: Theme.glyph.info
+            font.family: Theme.glyphFont
+            color: Theme.text2
+            Accessible.ignored: true
+        }
+
+        Label {
+            // Glossary §5: "Detail teknis (log)" -> "Info teknis".
+            text: qsTr("Info teknis")
+            font.bold: true
+        }
     }
 
     ScrollView {

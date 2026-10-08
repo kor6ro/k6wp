@@ -18,7 +18,8 @@
 // Language: Indonesian is the source language; user-visible strings are wrapped
 // in qsTr() and translated via studio/i18n/studio_en.ts.
 //
-// Spacing is Material 8dp: 8 / 16 / 24.
+// Spacing comes from the Theme.space* tokens (task 32 tightened the 4dp grid
+// to 4 / 8 / 12 / 16); the Material 8dp 8/16/24 scale is gone.
 //
 // Component split: all UI panels/dialogs live in sibling .qml files under
 // studio/qml/. Shared state (sizing, StatusKind, dialog lifecycle, compress
@@ -83,6 +84,21 @@ Rectangle {
     readonly property int pageBeranda: 0
     readonly property int pagePengaturan: 1
     property int currentPage: pageBeranda
+
+    // --- sidebar collapse (task 29) ----------------------------------------
+    // Default COLLAPSED on every launch; session-only, deliberately NOT
+    // persisted. Persisting the flag would add a studio_settings.json key and
+    // a SettingsBridge surface owned by the settings unit, while this slice
+    // only needs a deterministic start state plus the toggle. Widths:
+    // collapsed = a 40 px button + 2 x 4 dp margins (task 32 tightened the
+    // old 8 dp gutter); expanded keeps the previous 180 dp rail minus that
+    // same 8 dp. sidebarItemHeight keeps every entry a >= 40 px touch target
+    // in BOTH states (the previous 48 px rows were taller than the a11y
+    // minimum).
+    property bool sidebarCollapsed: true
+    readonly property int sidebarWidthCollapsed: 48
+    readonly property int sidebarWidthExpanded: 172
+    readonly property int sidebarItemHeight: 40
 
     // switchPage replaces the old tab-index setter: same refresh-on-entry
     // side effects, driven by the sidebar buttons instead of a TabBar.
@@ -409,9 +425,13 @@ Rectangle {
 
             Label {
                 Layout.fillWidth: true
-                Layout.leftMargin: 16
-                Layout.rightMargin: 16
-                Layout.topMargin: 6
+                Layout.leftMargin: Theme.space3
+                Layout.rightMargin: Theme.space3
+                // Task 33: match the top inset below the text as well - the
+                // notice is the first row of the shell, so an unbalanced
+                // bottom margin made it hug the sidebar/content row.
+                Layout.topMargin: Theme.space1
+                Layout.bottomMargin: Theme.space1
                 wrapMode: Text.WordWrap
                 visible: Studio.updateCheckMessage.length > 0
                 text: Studio.updateCheckMessage
@@ -427,106 +447,118 @@ Rectangle {
                 Layout.fillHeight: true
                 spacing: 0
 
-                // --- sidebar ------------------------------------------------
-                // One button per page. >= 40px targets, Accessible.name,
-                // highlighted = current page (no coloured accent border - the
-                // highlight is a tonal wash + bold text per B-TOKEN a11y).
-                // fillWidth:false + maximumWidth pin the rail so the content
+                // --- sidebar (task 29: collapsible, icons-only by default) ---
+                // The rail collapses to an icon strip (56 dp = a 40 px button
+                // + 2 x 8 dp margins) and expands to icon + label (180 dp).
+                // One entry per page; the label returns on expand and a hover
+                // tooltip carries it while collapsed. >= 40 px targets, focus
+                // ring, Accessible.name and Return/Enter activation survive in
+                // both states; the current-page highlight stays a tonal wash +
+                // bold label (B-TOKEN a11y, never colour alone).
+                // fillWidth:false + min/max pin the rail so the content
                 // StackLayout claims the rest of the row.
                 ColumnLayout {
-                    Layout.preferredWidth: 180
-                    Layout.minimumWidth: 160
-                    Layout.maximumWidth: 200
+                    id: sidebarRail
+                    Layout.preferredWidth: root.sidebarCollapsed
+                                           ? root.sidebarWidthCollapsed
+                                           : root.sidebarWidthExpanded
+                    Layout.minimumWidth: root.sidebarWidthCollapsed
+                    Layout.maximumWidth: root.sidebarWidthExpanded
                     Layout.fillWidth: false
                     Layout.fillHeight: true
                     spacing: 0
 
-                    // Beranda
+                    // Collapse/expand toggle. Glyph-only (Theme.glyph set:
+                    // expand / collapse from the bundled Material Design Icons
+                    // font); the
+                    // Accessible.name carries the action for screen readers
+                    // and the UIA tree, the tooltip repeats it visually.
+                    // Task 32: no focus ring here (sidebar chrome) - focus is
+                    // the pressedSurface fill step, hover surface2.
                     Button {
-                        id: sidebarBeranda
+                        id: sidebarToggle
+                        objectName: "sidebarToggle"
+                        Layout.fillWidth: true
+                        Layout.leftMargin: Theme.space1
+                        Layout.rightMargin: Theme.space1
+                        // Task 33: the toggle used to carry an 8dp top / 4dp
+                        // bottom margin, so the whole rail started with a
+                        // different inset than every entry below it. Uniform
+                        // 4dp insets make the toggle row and both nav rows
+                        // share one rhythm (and one height class).
+                        Layout.topMargin: Theme.space1
+                        Layout.bottomMargin: Theme.space1
+                        implicitHeight: root.sidebarItemHeight
+                        // Task 33: explicit 0 on all four sides. `padding: 0`
+                        // alone does NOT zero top/bottom: the Material style's
+                        // `verticalPadding: Material.buttonVerticalPadding`
+                        // (14dp) outranks the generic padding, which squeezed
+                        // the contentItem into a 12dp band and pushed the
+                        // glyph off the optical centre.
+                        topPadding: 0
+                        bottomPadding: 0
+                        leftPadding: 0
+                        rightPadding: 0
+                        focusPolicy: Qt.StrongFocus
+                        flat: true
+                        Accessible.name: root.sidebarCollapsed
+                                         ? qsTr("Bentangkan bilah samping")
+                                         : qsTr("Ciutkan bilah samping")
+                        ToolTip.visible: hovered
+                        ToolTip.text: sidebarToggle.Accessible.name
+                        onClicked: root.sidebarCollapsed = !root.sidebarCollapsed
+
+                        Keys.onReturnPressed: {
+                            root.sidebarCollapsed = !root.sidebarCollapsed
+                            event.accepted = true
+                        }
+                        Keys.onEnterPressed: {
+                            root.sidebarCollapsed = !root.sidebarCollapsed
+                            event.accepted = true
+                        }
+
+                        contentItem: Text {
+                            text: root.sidebarCollapsed
+                                  ? Theme.glyph.expand : Theme.glyph.collapse
+                            font.family: Theme.glyphFont
+                            font.pixelSize: Theme.fontL
+                            color: Theme.text2
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        background: Rectangle {
+                            radius: Theme.radiusS
+                            // Task 32: surface fill ONLY - press/focus step
+                            // to pressedSurface, hover to surface2, no border
+                            // ring (the sidebar must never show an outline).
+                            color: sidebarToggle.down || sidebarToggle.activeFocus
+                                   ? Theme.pressedSurface
+                                   : sidebarToggle.hovered ? Theme.surface2
+                                                           : "transparent"
+                        }
+                    }
+
+                    // Beranda: house glyph from the shared Theme.glyph set
+                    // (Material Design Icons home, inked by Theme tokens).
+                    SidebarNavButton {
                         objectName: "sidebarBeranda"
-                        Layout.fillWidth: true
-                        Layout.margins: Theme.space2
-                        implicitHeight: 48
-                        focusPolicy: Qt.StrongFocus
-                        flat: root.currentPage !== root.pageBeranda
-                        highlighted: root.currentPage === root.pageBeranda
-                        text: qsTr("Beranda")
-                        Accessible.name: text
-                        onClicked: root.switchPage(root.pageBeranda)
-
-                        Keys.onReturnPressed: {
-                            root.switchPage(root.pageBeranda)
-                            event.accepted = true
-                        }
-                        Keys.onEnterPressed: {
-                            root.switchPage(root.pageBeranda)
-                            event.accepted = true
-                        }
-
-                        contentItem: Text {
-                            text: sidebarBeranda.text
-                            font.pixelSize: Theme.fontM
-                            font.weight: root.currentPage === root.pageBeranda
-                                         ? Theme.fontWeightSemibold
-                                         : Theme.fontWeightRegular
-                            color: Theme.text
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-                        background: Rectangle {
-                            radius: Theme.radiusS
-                            color: root.currentPage === root.pageBeranda
-                                   ? Theme.surface2 : "transparent"
-                            border.width: sidebarBeranda.activeFocus ? 2 : 0
-                            border.color: Theme.accent
-                        }
+                        iconGlyph: Theme.glyph.home
+                        label: qsTr("Beranda")
+                        pageIndex: root.pageBeranda
                     }
 
-                    // Pengaturan
-                    Button {
-                        id: sidebarPengaturan
+                    // Pengaturan: gear glyph from the shared Theme.glyph set
+                    // (Material Design Icons cog, monochrome, inked by Theme
+                    // tokens).
+                    SidebarNavButton {
                         objectName: "sidebarPengaturan"
-                        Layout.fillWidth: true
-                        Layout.margins: Theme.space2
-                        implicitHeight: 48
-                        focusPolicy: Qt.StrongFocus
-                        flat: root.currentPage !== root.pagePengaturan
-                        highlighted: root.currentPage === root.pagePengaturan
-                        text: qsTr("Pengaturan")
-                        Accessible.name: text
-                        onClicked: root.switchPage(root.pagePengaturan)
-
-                        Keys.onReturnPressed: {
-                            root.switchPage(root.pagePengaturan)
-                            event.accepted = true
-                        }
-                        Keys.onEnterPressed: {
-                            root.switchPage(root.pagePengaturan)
-                            event.accepted = true
-                        }
-
-                        contentItem: Text {
-                            text: sidebarPengaturan.text
-                            font.pixelSize: Theme.fontM
-                            font.weight: root.currentPage === root.pagePengaturan
-                                         ? Theme.fontWeightSemibold
-                                         : Theme.fontWeightRegular
-                            color: Theme.text
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-                        background: Rectangle {
-                            radius: Theme.radiusS
-                            color: root.currentPage === root.pagePengaturan
-                                   ? Theme.surface2 : "transparent"
-                            border.width: sidebarPengaturan.activeFocus ? 2 : 0
-                            border.color: Theme.accent
-                        }
+                        iconGlyph: Theme.glyph.settings
+                        label: qsTr("Pengaturan")
+                        pageIndex: root.pagePengaturan
                     }
 
-                    // Absorbs the rail's leftover height so the two buttons
-                    // stay pinned to the top.
+                    // Absorbs the rail's leftover height so the buttons stay
+                    // pinned to the top.
                     Item {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
@@ -653,6 +685,106 @@ Rectangle {
         // initial show. refreshDisplays() emits displaysChanged, which seeds
         // selectedMonitorKey through ensureSelectedMonitor().
         Studio.refreshDisplays()
+    }
+
+    // --- sidebar nav entry (task 29; task 32 fill-only states) -------------
+    // Inline component: one entry per page, icon + label. It lives in this
+    // file because the QML module's file list is explicit in
+    // studio/CMakeLists.txt (a new .qml file would require touching it) and
+    // both entries must stay pixel-identical. The icon is a fixed 40x40 cell:
+    // centered in the collapsed rail and left-pinned with the label beside it
+    // when expanded. Both states keep a >= 40 px target, Accessible.name and
+    // Return/Enter activation; the label is the collapsed-state tooltip.
+    //
+    // Task 32 (the user's sidebar complaint): NO outline ring in any state.
+    // hover/selected paint surface2, press/keyboard focus paint
+    // pressedSurface - a visible surface step that keeps focus discoverable
+    // (documented tradeoff, Theme.focusRing comment) without the ring.
+    component SidebarNavButton: Button {
+        id: navButton
+        required property string iconGlyph
+        required property string label
+        required property int pageIndex
+
+        Layout.fillWidth: true
+        Layout.leftMargin: Theme.space1
+        Layout.rightMargin: Theme.space1
+        Layout.topMargin: Theme.space1
+        Layout.bottomMargin: Theme.space1
+        implicitHeight: root.sidebarItemHeight
+        // Task 33: explicit 0 on every side (see sidebarToggle). Material's
+        // `verticalPadding` (14dp) otherwise wins over `padding: 0` and both
+        // nav entries render their icon + label inside a 12dp band instead
+        // of the full 40dp control - Beranda and Pengaturan stay pixel-
+        // identical because they share this component unchanged.
+        topPadding: 0
+        bottomPadding: 0
+        leftPadding: 0
+        rightPadding: 0
+        focusPolicy: Qt.StrongFocus
+        flat: root.currentPage !== pageIndex
+        highlighted: root.currentPage === pageIndex
+        text: label
+        Accessible.name: label
+        ToolTip.visible: hovered && root.sidebarCollapsed
+        ToolTip.text: label
+        onClicked: root.switchPage(pageIndex)
+
+        Keys.onReturnPressed: {
+            root.switchPage(pageIndex)
+            event.accepted = true
+        }
+        Keys.onEnterPressed: {
+            root.switchPage(pageIndex)
+            event.accepted = true
+        }
+
+        contentItem: Item {
+            implicitHeight: root.sidebarItemHeight
+
+            Text {
+                id: navIcon
+                width: root.sidebarItemHeight
+                height: root.sidebarItemHeight
+                text: navButton.iconGlyph
+                font.family: Theme.glyphFont
+                font.pixelSize: Theme.fontXL
+                color: navButton.highlighted ? Theme.text : Theme.text2
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                anchors.verticalCenter: parent.verticalCenter
+                // Collapsed: centered in the rail. Expanded: pinned left.
+                anchors.left: root.sidebarCollapsed ? undefined : parent.left
+                anchors.horizontalCenter: root.sidebarCollapsed
+                                          ? parent.horizontalCenter : undefined
+            }
+
+            Text {
+                visible: !root.sidebarCollapsed
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.left: navIcon.right
+                anchors.leftMargin: Theme.space2
+                anchors.right: parent.right
+                text: navButton.label
+                font.pixelSize: Theme.fontM
+                font.weight: navButton.highlighted ? Theme.fontWeightSemibold
+                                                   : Theme.fontWeightRegular
+                color: Theme.text
+                elide: Text.ElideRight
+            }
+        }
+
+        background: Rectangle {
+            radius: Theme.radiusS
+            // Task 32: current page stays a tonal wash + bold label (never
+            // colour alone); hover adds the same wash; press and keyboard
+            // focus step one deeper to pressedSurface. NO border/outline ring
+            // in any state - that was the exact "Beranda outline" complaint.
+            color: navButton.down || navButton.activeFocus
+                   ? Theme.pressedSurface
+                   : (navButton.highlighted || navButton.hovered
+                      ? Theme.surface2 : "transparent")
+        }
     }
 
 }

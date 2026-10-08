@@ -103,8 +103,14 @@ ColumnLayout {
             id: addVideoButton
             objectName: "addVideoButton"
             visible: !Library.isEmpty
-            text: qsTr("+ Tambah video")
+            // C-7 "+ Tambah video": the "+" is the shared Theme.glyph.plus
+            // icon, the label keeps the copy deck words.
+            text: qsTr("Tambah video")
             implicitHeight: 40
+            // Task 33: zero vertical padding keeps the 40dp content box
+            // centred (Material's verticalPadding otherwise squeezed it).
+            topPadding: 0
+            bottomPadding: 0
             focusPolicy: Qt.StrongFocus
             Accessible.name: text
             onClicked: Library.pickAndImport()
@@ -116,20 +122,37 @@ ColumnLayout {
                 addVideoButton.clicked()
                 event.accepted = true
             }
-            contentItem: Text {
-                text: addVideoButton.text
-                font.pixelSize: Theme.fontM
-                color: Theme.text
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
+            contentItem: RowLayout {
+                spacing: Theme.space1
+
+                Text {
+                    Layout.alignment: Qt.AlignVCenter
+                    text: Theme.glyph.plus
+                    font.family: Theme.glyphFont
+                    font.pixelSize: Theme.fontM
+                    color: Theme.text
+                    verticalAlignment: Text.AlignVCenter
+                    Accessible.ignored: true
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignVCenter
+                    text: addVideoButton.text
+                    font.pixelSize: Theme.fontM
+                    color: Theme.text
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
             }
             background: Rectangle {
                 radius: Theme.radiusS
-                color: addVideoButton.hovered || addVideoButton.activeFocus
-                       ? Theme.surface2 : Theme.surface
+                color: addVideoButton.down ? Theme.pressedSurface
+                       : (addVideoButton.hovered || addVideoButton.activeFocus
+                          ? Theme.surface2 : Theme.surface)
                 border.width: addVideoButton.activeFocus ? 2 : 1
                 border.color: addVideoButton.activeFocus
-                              ? Theme.accent : Theme.surface2
+                              ? Theme.focusRing : Theme.surface2
             }
         }
     }
