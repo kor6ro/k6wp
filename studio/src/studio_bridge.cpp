@@ -487,6 +487,21 @@ void StudioBridge::pickVideo() {
   emit selectedVideoChanged();
 }
 
+// Task 27: the card click / Enter / Space path. Same publish semantics as
+// pickVideo (never applies, logs "Dipilih: ..."), but for a path the caller
+// already holds. An empty path keeps the current selection untouched.
+void StudioBridge::selectVideo(const QString& path) {
+  if (path.isEmpty()) {
+    return;
+  }
+  if (selected_video_ == path) {
+    return;
+  }
+  selected_video_ = path;
+  AppendLog(QStringLiteral("Dipilih: %1").arg(path));
+  emit selectedVideoChanged();
+}
+
 void StudioBridge::clearSelectedVideo() {
   if (selected_video_.isEmpty()) {
     return;

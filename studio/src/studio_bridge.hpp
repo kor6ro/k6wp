@@ -372,6 +372,13 @@ class StudioBridge : public QObject {
   // Publishes the chosen file to selectedVideo. Does NOT apply: the QML flow is
   // pick-then-apply, so "Terapkan Wallpaper" reads the selection afterwards.
   Q_INVOKABLE void pickVideo();
+  // Task 27 (koleksi card select-only): publishes an ALREADY-KNOWN path (a
+  // library card's dst) to selectedVideo, exactly like pickVideo does for the
+  // dialog path. Still does NOT apply - a card click only selects, and the
+  // explicit "Pasang" affordances (card hover button, row menu, right rail)
+  // read selectedVideo / applyAt afterwards. Empty path is ignored; clearing
+  // stays owned by clearSelectedVideo() ("Hapus").
+  Q_INVOKABLE void selectVideo(const QString& path);
   Q_INVOKABLE void clearSelectedVideo();
 
   // --- Quick settings ("Pengaturan cepat") ----------------------------------
