@@ -763,7 +763,17 @@ int EngineApp::Run() {
     // Wallpaper playlist: reload on file change; rotate when due. While paused
     // the loop wait is INFINITE, so this block does not run (zero-wakeup budget
     // preserved) and the resume edge below restarts the full interval.
-    playlist_.Reload();
+    // L1 (1.3.0-beta.2): the loop also wakes early on posted messages — stat
+    // playlist.json at most every 500 ms (ConfigWatcher::Poll cadence) so a
+    // message burst cannot multiply filesystem stats.
+    {
+      const auto now_pl = std::chrono::steady_clock::now();
+      if (last_playlist_reload_ == std::chrono::steady_clock::time_point{} ||
+          now_pl - last_playlist_reload_ >= std::chrono::milliseconds(500)) {
+        last_playlist_reload_ = now_pl;
+        playlist_.Reload();
+      }
+    }
     const bool slots_paused_now = SlotsPaused();
     playlist_.OnSlotsPausedChange(slots_paused_now);
     if (!slots_paused_now && playlist_.Due()) playlist_.Fire();

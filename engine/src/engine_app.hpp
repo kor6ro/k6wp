@@ -343,8 +343,13 @@ class EngineApp {
   // P3L.3: resolved `d3d11-adapter` substring (empty = unpinned).
   std::string adapter_pin_value_;
   // P3L.3 verify scheduling (PATCH A): armed with a steady-clock deadline
-  // after every (re)load; fired once by the Run loop.
+  // after every (re)load, fired once by the Run loop.
   PinVerifySchedule pin_verify_;
+  // L1 (1.3.0-beta.2): playlist_.Reload() throttle in the Run loop. The
+  // loop wakes early on posted messages (hooks, IPC, FS events) and
+  // Reload() stats playlist.json on every wake; stat at most every 500 ms
+  // (the ConfigWatcher::Poll cadence) so a burst cannot multiply stats.
+  std::chrono::steady_clock::time_point last_playlist_reload_{};
   // True while the headless renderer_ (not the slots) owns decode: the
   // headless half of the verify pass only runs then. CRIT-1: atomic —
   // written by the main-thread set_video/boot executors, read by the
