@@ -277,6 +277,7 @@ void MultiMonitor::SetActiveMonitor(int id) {
   if (id == active_monitor_.load(std::memory_order_acquire)) {
     return;
   }
+  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
   active_monitor_.store(id, std::memory_order_release);
   if (mode_ == MultiMonitorMode::Span) {
     if (!span_filter_logged_) {
@@ -330,6 +331,7 @@ void MultiMonitor::ApplyActiveFilter(const std::vector<MonitorInfo>& desired) {
 }
 
 bool MultiMonitor::Init(MultiMonitorMode mode) {
+  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
   ClearSlots();
   mode_ = mode;
   if (mode_ == MultiMonitorMode::Span) {
@@ -354,11 +356,17 @@ bool MultiMonitor::Init(MultiMonitorMode mode) {
   return initialized_;
 }
 
-void MultiMonitor::Shutdown() { ClearSlots(); }
+void MultiMonitor::Shutdown() {
+  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
+  ClearSlots();
+}
 
 void MultiMonitor::OnDisplayChange() {
   // Display-change handling must never take the engine down: allocation or
   // attach failures degrade to fewer live slots, never an exception.
+  // H1: the lock is taken before the try so an early exception cannot leave
+  // the map half-walked; lock_guard unlocks on unwind.
+  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
   try {
     if (mode_ == MultiMonitorMode::Span) {
       const auto it = slots_.find(kSpanSlotId);
@@ -443,6 +451,7 @@ void MultiMonitor::OnDisplayChange() {
 }
 
 bool MultiMonitor::LoadLoopAll(const std::string& path, bool force) {
+  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
   bool any = false;
   for (auto& kv : slots_) {
     if (kv.second.renderer && kv.second.renderer->LoadLoop(path, force)) {
@@ -454,6 +463,7 @@ bool MultiMonitor::LoadLoopAll(const std::string& path, bool force) {
 }
 
 bool MultiMonitor::HasAssignment(const std::string& device) const {
+  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
   const std::wstring key = WidenDeviceKey(device);
   if (key.empty()) return false;
   for (const auto& kv : slots_) {
@@ -465,6 +475,7 @@ bool MultiMonitor::HasAssignment(const std::string& device) const {
 bool MultiMonitor::LoadLoopSlot(const std::string& device,
                                 const std::string& path,
                                 const std::string& fit_mode) {
+  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
   const std::wstring key = WidenDeviceKey(device);
   if (key.empty() || path.empty()) return false;
   for (auto& kv : slots_) {
@@ -486,6 +497,7 @@ bool MultiMonitor::LoadLoopSlot(const std::string& device,
 
 BootAssignmentStats MultiMonitor::ApplyBootAssignments(
     const DisplaysConfig& cfg, const std::string& fit_mode) {
+  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
   BootAssignmentStats stats;
   for (const auto& [key, assignment] : cfg.assignments) {
     if (key.empty() || assignment.path.empty()) continue;
@@ -637,6 +649,7 @@ void MultiMonitor::ReapplyRetainedLocked() {
 }
 
 int MultiMonitor::VerifyPinAndRevert() {
+  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
   // PATCH A: revert = full renderer recreate WITHOUT pin + reload +
   // re-verify (never a runtime property swap). Per-slot, never throws:
   // allocation/Create failures keep the old (pinned) renderer instead of
@@ -680,6 +693,7 @@ int MultiMonitor::VerifyPinAndRevert() {
 }
 
 void MultiMonitor::ApplyFitModeAll(const std::string& fit_mode) {
+  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
   for (auto& kv : slots_) {
     if (!kv.second.renderer) continue;
     double aspect = 0.0;
@@ -692,12 +706,14 @@ void MultiMonitor::ApplyFitModeAll(const std::string& fit_mode) {
 }
 
 void MultiMonitor::ApplyFpsCapAll(int fps) {
+  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
   for (auto& kv : slots_) {
     if (kv.second.renderer) kv.second.renderer->SetFpsCap(fps);
   }
 }
 
 void MultiMonitor::PauseAll() {
+  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
   global_paused_.store(true, std::memory_order_relaxed);
   for (auto& kv : slots_) {
     if (kv.second.renderer) kv.second.renderer->Pause();
@@ -705,6 +721,7 @@ void MultiMonitor::PauseAll() {
 }
 
 void MultiMonitor::ResumeAll() {
+  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
   global_paused_.store(false, std::memory_order_relaxed);
   for (auto& kv : slots_) {
     if (!kv.second.renderer) continue;
@@ -738,6 +755,7 @@ const MultiMonitor::Slot* MultiMonitor::SlotAt(size_t idx) const {
 }
 
 void MultiMonitor::PauseSlot(size_t idx, bool pause) {
+  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
   Slot* slot = SlotAt(idx);
   if (slot == nullptr) {
     return;
@@ -760,6 +778,7 @@ void MultiMonitor::PauseSlot(size_t idx, bool pause) {
 }
 
 bool MultiMonitor::IsSlotPaused(size_t idx) const {
+  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
   const Slot* slot = SlotAt(idx);
   if (slot == nullptr) {
     return global_paused_.load(std::memory_order_relaxed);
@@ -769,6 +788,7 @@ bool MultiMonitor::IsSlotPaused(size_t idx) const {
 }
 
 void MultiMonitor::Reanchor() {
+  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
   try {
     if (mode_ == MultiMonitorMode::Span) {
       // Span mode: a single slot keyed by kSpanSlotId. Explorer restart /
@@ -824,9 +844,13 @@ void MultiMonitor::Reanchor() {
   }
 }
 
-size_t MultiMonitor::slot_count() const { return slots_.size(); }
+size_t MultiMonitor::slot_count() const {
+  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
+  return slots_.size();
+}
 
 bool MultiMonitor::has_headless_slots() const {
+  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
   for (const auto& kv : slots_) {
     if (kv.second.injector && kv.second.injector->injected_hwnd() == nullptr) {
       return true;
@@ -836,6 +860,7 @@ bool MultiMonitor::has_headless_slots() const {
 }
 
 int MultiMonitor::headless_slot_count() const {
+  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
   int n = 0;
   for (const auto& kv : slots_) {
     if (kv.second.injector && kv.second.injector->injected_hwnd() == nullptr) {
@@ -846,12 +871,29 @@ int MultiMonitor::headless_slot_count() const {
 }
 
 std::string MultiMonitor::SlotCoverageReason(int monitor_id) const {
+  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
   const auto it = slots_.find(monitor_id);
   if (it == slots_.end()) return {};
   return it->second.coverage_reason;
 }
 
+std::vector<SlotSnapshot> MultiMonitor::SnapshotSlots() const {
+  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
+  std::vector<SlotSnapshot> out;
+  out.reserve(slots_.size());
+  for (const auto& kv : slots_) {
+    SlotSnapshot s;
+    s.device = NarrowUtf8(kv.second.info.device_name);
+    s.coverage = kv.second.coverage_reason;
+    s.headless = kv.second.injector != nullptr &&
+                 kv.second.injector->injected_hwnd() == nullptr;
+    out.push_back(std::move(s));
+  }
+  return out;
+}
+
 std::vector<int> MultiMonitor::monitor_ids() const {
+  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
   std::vector<int> ids;
   ids.reserve(slots_.size());
   for (const auto& kv : slots_) {

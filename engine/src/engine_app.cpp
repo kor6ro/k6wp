@@ -1372,28 +1372,27 @@ std::string EngineApp::BuildStateJson() const {
   } catch (const std::exception&) {
   }
   nlohmann::json display_coverage = nlohmann::json::object();
-  for (const auto& [id, slot] : multi_monitor_.slots()) {
-    const bool headless = slot.injector != nullptr &&
-                          slot.injector->injected_hwnd() == nullptr;
+  // H1 (1.3.0-beta.2): this runs on the IPC worker thread while the main
+  // loop mutates the slot map (set_monitor / display change / re-anchor).
+  // SnapshotSlots() takes the slot mutex internally; iterating slots()
+  // here was a data race.
+  for (const auto& s : multi_monitor_.SnapshotSlots()) {
     // Row 34 (additive only): a slot whose assignment key is recorded in
     // display_assignments but whose path no longer exists on disk reports
     // "degraded" instead of the placement verdict (the slot keeps running
     // the default video while an assignment is recorded). Every other
     // device keeps exactly the covered|clipped-*|headless verdict below.
     std::string verdict =
-        headless ? "headless"
-                 : DisplayCoverageVerdict(
-                       multi_monitor_.SlotCoverageReason(id));
-    const std::string device = NarrowUtf8(slot.info.device_name);
-    if (display_assignments.contains(device)) {
+        s.headless ? "headless" : DisplayCoverageVerdict(s.coverage);
+    if (display_assignments.contains(s.device)) {
       std::error_code ec;
       const std::filesystem::path assigned_path(std::filesystem::u8path(
-          display_assignments.at(device).get<std::string>()));
+          display_assignments.at(s.device).get<std::string>()));
       if (!std::filesystem::exists(assigned_path, ec) || ec) {
         verdict = "degraded";
       }
     }
-    display_coverage[device] = std::move(verdict);
+    display_coverage[s.device] = std::move(verdict);
   }
   const nlohmann::json state = {
       {"running", running_.load(std::memory_order_acquire)},

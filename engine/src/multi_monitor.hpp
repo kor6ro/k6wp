@@ -17,6 +17,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <vector>
@@ -75,6 +76,19 @@ struct BootAssignmentStats {
   int applied = 0;          // live slot loaded the assignment path
   int retained = 0;         // device absent -> kept for OnDisplayChange
   int skipped_missing = 0;  // path fails exists -> slot keeps the default
+};
+
+// H1 (1.3.0-beta.2): thread-safe snapshot of one slot's get_state-relevant
+// facts. The IPC worker thread reads slot state (get_state ->
+// EngineApp::BuildStateJson) while the main loop mutates the slot map, so
+// the worker must never touch slots_ directly — it takes this snapshot
+// instead. device is the UTF-8 GDI device name (\\.\DISPLAYn), coverage the
+// slot's raw CoverageReason token ("" when none), headless true when the
+// injector attached no window.
+struct SlotSnapshot {
+  std::string device;
+  std::string coverage;
+  bool headless = false;
 };
 
 class MultiMonitor {
@@ -269,6 +283,13 @@ class MultiMonitor {
   // get_state display_coverage field.
   std::string SlotCoverageReason(int monitor_id) const;
 
+  // H1 (1.3.0-beta.2): thread-safe snapshot of every live slot's
+  // device/coverage/headless triple, taken under slots_mutex_. The ONLY
+  // sanctioned reader for the IPC worker thread (EngineApp::BuildStateJson
+  // runs there); iterating slots() from that thread races the main-loop
+  // mutators. Loops on the engine loop thread may use the direct accessors.
+  std::vector<SlotSnapshot> SnapshotSlots() const;
+
   // Current virtual-screen geometry (GetSystemMetrics in the .cpp).
   static SpanGeometry GetSpanGeometry() noexcept;
 
@@ -319,6 +340,9 @@ class MultiMonitor {
   // Live slot map (monitor id -> slot) for tests/diagnostics (row 6). The
   // slot payload stays private; hold the reference only across read-only
   // checks, never across Init/OnDisplayChange/Shutdown.
+  // H1 (1.3.0-beta.2): NOT thread-safe by design — the reference cannot be
+  // guarded across the caller's use. Engine-loop-thread callers only; the
+  // IPC worker must use SnapshotSlots().
   const std::map<int, Slot>& slots() const { return slots_; }
 
  private:
@@ -364,6 +388,15 @@ class MultiMonitor {
   // Row 6: per-slot construction seam; non-empty via the constructor's
   // DefaultSlotFactory() default argument (production) or SetSlotFactory.
   SlotFactory factory_;
+  // H1 (1.3.0-beta.2): guards slots_ AND the pass-scoped state read next to
+  // it (shared_host_, attached_host_rect_, retained_assignments_ writes).
+  // The IPC worker thread can call PauseAll/ResumeAll/SnapshotSlots/count
+  // readers while the main loop mutates the same map (set_monitor executor,
+  // OnDisplayChange, Reanchor) — plain map iteration across those threads is
+  // UB. Recursive because public methods nest (ApplyBootAssignments ->
+  // LoadLoopSlot); a single lock cannot invert order with anything else
+  // (renderers never call back into MultiMonitor), so it is deadlock-free.
+  mutable std::recursive_mutex slots_mutex_;
   std::map<int, Slot> slots_;
   // Row 17: assignments whose device key matched no live monitor at boot
   // (or while converged). Keyed by GDI device name (wide, same as
