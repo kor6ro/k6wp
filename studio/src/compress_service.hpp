@@ -98,6 +98,9 @@ class CompressService final : public QObject {
 
   // Kills the running job (its Finished(false, "Cancelled", ...) still
   // fires exactly once). No-op when idle.
+  // M1 (1.3.0-beta.2): the kill is a hard TerminateProcess, which bypasses
+  // compressor.exe's own partial-output cleanup, so this method also
+  // removes the partial output file (never when it resolves to the input).
   void CancelCurrent();
   // Drops every queued job, then CancelCurrent(). Queued jobs never started
   // get no Finished signal.

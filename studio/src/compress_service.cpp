@@ -120,8 +120,35 @@ void CompressService::CancelCurrent() {
   AppendLog(QStringLiteral("Compress: cancelling job #%1 (kill) ...")
                 .arg(current_.meta.job_id));
   cancelled_ = true;
+  // M1 (1.3.0-beta.2): process_.kill() is TerminateProcess — it bypasses
+  // compressor.exe's Ctrl+C handler and remove_partial() entirely (see the
+  // same note in compressor/src/ffmpeg_job.cpp), and ffmpeg writes the
+  // non-lockframe output directly to the final path. The partial file would
+  // survive every cancel, so remove it HERE. Guard: never delete when the
+  // output resolves to the input file (the compressor CLI refuses that pair,
+  // but this delete must not be able to eat the user's source video).
+  const QString partial = current_.req.out_path;
+  const QString source = current_.req.in_path;
   process_.kill();
   process_.waitForFinished(1000);
+  if (partial.isEmpty()) return;
+  const QFileInfo partial_info(partial);
+  if (!partial_info.exists()) return;
+  if (!source.isEmpty() &&
+      partial_info.absoluteFilePath().compare(
+          QFileInfo(source).absoluteFilePath(), Qt::CaseInsensitive) == 0) {
+    AppendLog(QStringLiteral("Compress: keeping '%1' (same file as input)")
+                  .arg(partial));
+    return;
+  }
+  if (QFile::remove(partial)) {
+    AppendLog(QStringLiteral("Compress: partial output removed: %1")
+                  .arg(partial));
+  } else {
+    AppendLog(QStringLiteral(
+                  "Compress: partial output could not be removed (locked?): %1")
+                  .arg(partial));
+  }
 }
 
 void CompressService::CancelAll() {
@@ -253,9 +280,13 @@ void CompressService::OnProcessFinished(int exit_code,
 
   if (cancelled_) {
     cancelled_ = false;
+    // M1 (1.3.0-beta.2): the old text claimed compressor.exe cleaned up the
+    // partial — false on the kill path, which skips its cleanup entirely.
+    // CancelCurrent removes it (and logs the outcome) before we get here.
     AppendLog(QStringLiteral(
-        "Compress: job #%1 cancelled by user; partial output cleaned up by "
-        "compressor.exe (Todo 16 verified)")
+                  "Compress: job #%1 cancelled by user; partial output "
+                  "removed by Studio (the hard kill bypasses the "
+                  "compressor's own cleanup)")
                   .arg(meta.job_id));
     ++batch_fail_;
     emit Finished(meta, false, QStringLiteral("Cancelled"), CompressOkInfo{});
