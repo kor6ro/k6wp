@@ -136,14 +136,17 @@ class MpvRenderer {
   void HandleEvent(mpv_event* ev);
 
   // Applies an observed hwdec-current value: updates hwdec_active_ (atomic),
-  // dedups the log line, and returns true when the dxva2 fallback must run.
-  // Call with event_mutex_ held; the caller runs TryFallbackHwdec() AFTER
-  // releasing event_mutex_ (it takes mutex_ — never nest the two).
+  // dedups the log line, and returns true when the next hwdec fallback link
+  // must run (TryFallbackHwdec advances the d3d11va → dxva2 → software
+  // chain). Call with event_mutex_ held; the caller runs
+  // TryFallbackHwdec() AFTER releasing event_mutex_ (it takes mutex_ —
+  // never nest the two).
   bool ApplyHwdecValue(const std::string& cur);
 
-  // If d3d11va failed (hwdec-current = "no"), tries dxva2 as next fallback.
-  // Takes mutex_ only (never event_mutex_). First caller wins via atomic
-  // exchange; callable from any thread.
+  // Fallback link for the hwdec chain (d3d11va → dxva2 → software). When
+  // hwdec-current stays "no" the caller advances one link: stage 0 requests
+  // dxva2, stage 1 requests software ("no"), stage 2 gives up (logged once).
+  // Takes mutex_ only (never event_mutex_); callable from any thread.
   void TryFallbackHwdec();
 
   // EOF watchdog check (called from event thread, NO mutex).
@@ -166,8 +169,13 @@ class MpvRenderer {
   bool initialized_ = false;
   // Set by the fallback path, cleared when hwdec goes active. Touched from
   // both the event thread and the main thread — atomic, first-writer-wins
-  // via exchange (a duplicate dxva2 set is idempotent and harmless).
+  // via exchange (a duplicate set is idempotent and harmless).
   std::atomic<bool> hwdec_fallback_attempted_{false};
+  // M3 (1.3.0-beta.2): hwdec fallback chain position, guarded by mutex_:
+  // 0 = d3d11va requested at Create, 1 = dxva2 requested, 2 = software
+  // requested. A one-shot dxva2 attempt (the old exchange guard) left the
+  // wallpaper black when dxva2 was also unavailable.
+  int hwdec_stage_ = 0;
   std::string last_hwdec_logged_;
   // Last vo-configured flag logged, so a VO restart is logged once per real
   // change instead of per event. Guarded by event_mutex_ (touched only in

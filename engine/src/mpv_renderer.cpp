@@ -671,15 +671,29 @@ void MpvRenderer::CheckEofWatchdog() {
 }
 
 void MpvRenderer::TryFallbackHwdec() {
-  // First caller wins; a duplicate dxva2 set would be idempotent anyway.
-  if (hwdec_fallback_attempted_.exchange(true, std::memory_order_acq_rel)) {
-    return;
-  }
+  hwdec_fallback_attempted_.store(true, std::memory_order_acq_rel);
   std::lock_guard<std::mutex> lock(mutex_);
   if (!mpv_) return;
 
-  // d3d11va was not active — try dxva2 as the second link in the chain.
-  mpv_set_property_string(mpv_, "hwdec", "dxva2");
+  // M3 (1.3.0-beta.2): advance the chain ONE link per call. The old
+  // one-shot exchange stopped at dxva2, so a machine with neither
+  // d3d11va nor dxva2 stayed black. Stage 2 is terminal: nothing left to
+  // request, the log already names software.
+  const char* next = nullptr;
+  switch (hwdec_stage_) {
+    case 0:
+      next = "dxva2";
+      break;
+    case 1:
+      next = "no";  // software decode — keeps the wallpaper visible
+      break;
+    default:
+      return;
+  }
+  ++hwdec_stage_;
+  LogImportant("mpv: hwdec inactive, falling back to %s (chain link %d/3)",
+               next, hwdec_stage_ + 1);
+  mpv_set_property_string(mpv_, "hwdec", next);
 }
 
 }  // namespace k6wp
