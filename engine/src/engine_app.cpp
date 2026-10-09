@@ -310,21 +310,33 @@ bool EngineApp::Init(int argc, char** argv) {
   // PauseAll/ResumeAll call from here).
   power_saver_ = std::make_unique<PowerSaver>(
       [this](PowerSaverState state, int fps) {
-        // P2.7 static: battery_mode is consulted only on the DC-capped path
-        // (PowerSaver emits kDcCapped solely when the saver is enabled and
-        // the box is on DC). Slot decode stops via the reused kPausePower
-        // bit (last frame shown); the fps-cap application is skipped.
-        if (state == PowerSaverState::kDcCapped &&
-            config_watcher_.GetConfig().battery_mode == "static") {
+        // H3 fix (1.3.0-beta.2): "cap24" must CAP decode on every decoder
+        // (headless renderer + live slots — the visible decode lives in the
+        // slots, and every slot renderer has the same SetFpsCap API as the
+        // headless one). The old branch set the kPausePower bit on the cap
+        // path, which froze the slots (last frame held) while the fps cap
+        // landed only on the usually-idle headless renderer — the log then
+        // claimed "capping to 24fps" over a frozen wallpaper. Only the
+        // explicit "static" battery_mode freezes.
+        const PowerCapAction action =
+            DecidePowerCapAction(state, config_watcher_.GetConfig().battery_mode);
+        if (action == PowerCapAction::kFreeze) {
           Log("power-saver: DC power (battery), static pause (slots held)");
           SetPauseOwner(kPausePower, true);
-        } else if (state == PowerSaverState::kDcCapped) {
-          if (renderer_) renderer_->SetFpsCap(24);
-          SetPauseOwner(kPausePower, true);
-        } else {
-          if (renderer_) renderer_->SetFpsCap(fps);
-          SetPauseOwner(kPausePower, false);
+          return;
         }
+        if (action == PowerCapAction::kCapFps) {
+          LogImportant("power-saver: DC power (battery), capping decode to %dfps",
+                      fps);
+        } else if (fps > 0) {
+          Log("power-saver: AC power, decode rate restored (%dfps)", fps);
+        }
+        if (renderer_) renderer_->SetFpsCap(fps);
+        multi_monitor_.ApplyFpsCapAll(fps);
+        // Clear the power bit on the non-freeze paths: a mode flip
+        // (static -> cap24) while paused on DC must resume immediately.
+        // No-op when the bit was never set (SetBit reports no change).
+        SetPauseOwner(kPausePower, false);
       },
       [this]() -> PowerReading {
         const WallpaperConfig cfg = config_watcher_.GetConfig();

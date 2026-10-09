@@ -9,6 +9,7 @@
 #include "config_watch.hpp"
 #include "pause_controller.hpp"
 #include "pending_queue.hpp"
+#include "power.hpp"
 #include "test_simulator.hpp"
 
 #include <cstdio>
@@ -282,6 +283,35 @@ void TestDisplaysSecondFileWatch() {
   fs::remove_all(dir, ec);
 }
 
+// H3 (1.3.0-beta.2): the battery-saver cap decision is pure, so the
+// static/cap24 split — and the AC restore — lock without a renderer.
+void TestPowerCapAction() {
+  using k6wp::PowerCapAction;
+  using k6wp::PowerSaverState;
+
+  Check(k6wp::DecidePowerCapAction(PowerSaverState::kDcCapped, "static") ==
+             PowerCapAction::kFreeze,
+        "power: DC + battery_mode static -> freeze");
+  Check(k6wp::DecidePowerCapAction(PowerSaverState::kDcCapped, "cap24") ==
+             PowerCapAction::kCapFps,
+        "power: DC + battery_mode cap24 -> cap fps (not pause)");
+  Check(k6wp::DecidePowerCapAction(PowerSaverState::kDcCapped, "") ==
+             PowerCapAction::kCapFps,
+        "power: DC + unknown mode defaults to cap fps (never a freeze)");
+  Check(k6wp::DecidePowerCapAction(PowerSaverState::kAcFullRate, "static") ==
+             PowerCapAction::kNone,
+        "power: AC -> restore (no cap, no freeze) even in static mode");
+  Check(k6wp::DecidePowerCapAction(PowerSaverState::kAcFullRate, "cap24") ==
+             PowerCapAction::kNone,
+        "power: AC + cap24 -> restore");
+  Check(k6wp::DecidePowerCapAction(PowerSaverState::kDisabled, "static") ==
+             PowerCapAction::kNone,
+        "power: saver disabled -> no action");
+  Check(k6wp::DecidePowerCapAction(PowerSaverState::kInertNoBattery,
+                                   "cap24") == PowerCapAction::kNone,
+        "power: no battery (inert) -> no action");
+}
+
 }  // namespace
 
 int main() {
@@ -290,6 +320,7 @@ int main() {
   TestPendingQueue();
   TestSimulator();
   TestDisplaysSecondFileWatch();
+  TestPowerCapAction();
 
   std::printf(g_failures == 0 ? "RESULT: ALL ENGINE-UNIT CHECKS PASSED\n"
                               : "RESULT: %d CHECK(S) FAILED\n",

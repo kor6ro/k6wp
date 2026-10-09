@@ -27,6 +27,15 @@ std::string FormatRestore(int fps) {
 PowerSaver::PowerSaver(CapApplier cap, Reader reader, LogFn log)
     : cap_(std::move(cap)), reader_(std::move(reader)), log_(std::move(log)) {}
 
+PowerCapAction DecidePowerCapAction(PowerSaverState state,
+                                    const std::string& battery_mode) {
+  if (state == PowerSaverState::kDcCapped) {
+    return battery_mode == "static" ? PowerCapAction::kFreeze
+                                    : PowerCapAction::kCapFps;
+  }
+  return PowerCapAction::kNone;
+}
+
 void PowerSaver::Update() {
   if (!reader_ || !cap_) return;
   const PowerReading reading = reader_();

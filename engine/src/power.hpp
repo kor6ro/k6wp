@@ -21,9 +21,10 @@
 //
 // The cap is applied through a caller-supplied CapApplier instead of a
 // renderer reference so the engine can fan the throttle out to EVERY
-// decoder (headless renderer + live MultiMonitor slots); the applier also
-// receives the new PowerSaverState so it can mirror the DC throttle on
-// decoders that have no fps-cap API (the live slots pause on DC).
+// decoder (headless renderer + live MultiMonitor slots): every slot's
+// renderer is an MpvRenderer, so slots have the same SetFpsCap API as the
+// headless renderer and are throttled the same way (H3 fix, 1.3.0-beta.2).
+// Only the explicit "static" battery_mode pauses decode; "cap24" caps it.
 
 #include <functional>
 #include <string>
@@ -39,6 +40,16 @@ enum class PowerSaverState {
   kAcFullRate,      // AC line (or unknown AC with a battery) — full rate.
   kDcCapped,        // DC line + saver ON — capped to 24 fps.
 };
+
+// What a PowerSaverState transition means for decode (H3 fix,
+// 1.3.0-beta.2). Pure decision — unit-tested without a renderer:
+//   kFreeze - DC + battery_mode "static": hold the last frame (pause).
+//   kCapFps - DC + any other mode ("cap24"): keep decoding, throttled.
+//   kNone   - AC / disabled / inert: restore the configured rate.
+enum class PowerCapAction { kNone, kCapFps, kFreeze };
+
+PowerCapAction DecidePowerCapAction(PowerSaverState state,
+                                    const std::string& battery_mode);
 
 // Windows.h-free snapshot of the power situation. Produced by
 // ReadSystemPower() (live Win32 query + config merge) or injected by tests.

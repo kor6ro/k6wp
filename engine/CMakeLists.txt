@@ -139,6 +139,9 @@ add_executable(engine_units_test
   src/test_simulator.cpp
   src/config_watch.cpp
   src/log_file.cpp
+  # H3 (1.3.0-beta.2): DecidePowerCapAction (battery static/cap24 split) is
+  # pure and unit-tested here; power.cpp carries no mpv/engine_app deps.
+  src/power.cpp
 )
 target_link_libraries(engine_units_test PRIVATE k6wp_shared user32)
 target_include_directories(engine_units_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)

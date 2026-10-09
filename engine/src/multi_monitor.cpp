@@ -691,6 +691,12 @@ void MultiMonitor::ApplyFitModeAll(const std::string& fit_mode) {
   }
 }
 
+void MultiMonitor::ApplyFpsCapAll(int fps) {
+  for (auto& kv : slots_) {
+    if (kv.second.renderer) kv.second.renderer->SetFpsCap(fps);
+  }
+}
+
 void MultiMonitor::PauseAll() {
   global_paused_.store(true, std::memory_order_relaxed);
   for (auto& kv : slots_) {

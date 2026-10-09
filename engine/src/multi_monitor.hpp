@@ -221,6 +221,13 @@ class MultiMonitor {
   // with no live slots. Called from the config-watch callback + set_video.
   void ApplyFitModeAll(const std::string& fit_mode);
 
+  // H3 fix (1.3.0-beta.2): apply the battery-saver decode rate to every
+  // live slot renderer (fps <= 0 clears the cap). The visible decode lives
+  // in the slots, so the DC "cap24" throttle must reach them exactly like
+  // the headless renderer it previously reached only. Main thread only
+  // (power transitions funnel through ApplyPauseState on the loop thread).
+  void ApplyFpsCapAll(int fps);
+
   // Pause / resume every live renderer (tray menu + power hooks funnel).
   // Global-driven pause: sets the global override (see global_paused_);
   // ResumeAll clears ONLY the global-driven pause — a slot individually
