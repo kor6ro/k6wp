@@ -7,6 +7,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0-beta.2] - 2026-10-10
+
+Audit-remediation release. Six fixes landed on `fix/1.3.0-beta.2-audit`,
+each verified by a green `ctest --preset msvc-dev` (33/33 suites) and, for
+the installer, a local `makensis` compile. No behavior contract changed:
+IPC wire format, config schema and displays.json schema are untouched.
+
+### Fixed
+
+- **Battery-saver "cap24" caps decode instead of freezing it (audit H3).**
+  On DC power with `battery_mode=cap24` the engine set the `kPausePower`
+  pause bit, which froze every visible slot (last frame held), while the
+  24 fps cap was applied only to the usually-idle headless renderer — the
+  log then claimed "capping to 24fps" over a frozen wallpaper. The cap now
+  fans out to every decoder through the new `MultiMonitor::ApplyFpsCapAll`
+  (the slots own the visible decode, and every slot renderer has the same
+  `SetFpsCap` API as the headless one), and `kPausePower` is reserved for
+  the explicit `static` mode. The decision itself is the new pure helper
+  `k6wp::DecidePowerCapAction` (`engine/src/power.{hpp,cpp}`), unit-tested
+  in `engine_units_test`. A mode flip (static → cap24) while paused on DC
+  resumes immediately.
+- **IPC worker thread no longer races the engine's slot map (audit H1).**
+  `pause`/`resume` (→ `ApplyPauseState` → `PauseAll`/`ResumeAll`) and
+  `get_state` (→ `BuildStateJson`) run on the IPC worker thread, while the
+  main loop mutates the same `MultiMonitor::slots_` map (set_monitor
+  executor, `OnDisplayChange`, `Reanchor`). Map iteration concurrent with
+  erase/insert is undefined behavior. `slots_` is now guarded by a
+  recursive mutex (`MultiMonitor::slots_mutex_`; recursive because public
+  methods nest, and a single lock cannot invert order with anything else),
+  and the worker's `get_state` reader goes through the new snapshot API
+  `MultiMonitor::SnapshotSlots()` instead of iterating the map directly.
+- **Installer upgrades no longer break a running installation (audit H2).**
+  Installing over the resident engine failed at the first locked exe
+  (`File` extraction) and the rollback then deleted the whole staged set —
+  including the previous installation's files. SEC_APP now stops this
+  install dir's processes first (`K6WP.exe --stop`, the same scoped helper
+  the uninstaller uses) and takes a per-file pre-existence census;
+  `RollbackPartial` deletes only files the run actually created, so a
+  failed upgrade leaves the previous version installed and uninstallable.
+  The root `*.dll` wildcard deletion is gone (leftover versioned DLLs are
+  inert next to the old exes).
+- **hwdec fallback now chains to software (audit M3).** The fallback was
+  one-shot at `dxva2`, so a machine with neither `d3d11va` nor `dxva2`
+  stayed black. `MpvRenderer::TryFallbackHwdec` advances the documented
+  chain (`d3d11va → dxva2 → software`) one link per observation via the
+  new `hwdec_stage_` counter, and logs each link.
+- **Compress cancel cleans up after the hard kill (audit M1).**
+  `CompressService::CancelCurrent` used `QProcess::kill()`
+  (TerminateProcess), which bypasses compressor.exe's own partial-output
+  cleanup entirely — every cancelled job left its `_k6wp.mp4` partial
+  behind while the log claimed "cleaned up by compressor.exe". Studio now
+  removes the partial itself (guarded: never when the output resolves to
+  the input file), and the log states which side did the cleanup. The
+  normal-failure path (compressor exits non-zero on its own) still relies
+  on the compressor's own `remove_partial()`, as before.
+- **Docs: test-suite inventory matches CMake (audit M4).** README said
+  "24 CTest suites" and the 1.3.0-beta.1 changelog said "32"; the actual
+  registered count is **33** (shared 7 / engine 13 / studio 7 / compressor
+  4 / launcher 2). The README breakdown now lists every suite.
+
+### Changed
+
+- `playlist_.Reload()` in the engine loop is throttled to 500 ms (the
+  ConfigWatcher poll cadence): the loop wakes early on posted messages,
+  and the reload stats `playlist.json` on every wake (audit L1).
+
 ## [1.3.0-beta.1] - 2026-10-08
 
 > **Beta release.** This is an explicit pre-release. The `v1.2.0` and `v1.2.1`

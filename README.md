@@ -150,30 +150,41 @@ cmake --preset release
 cmake --build --preset release
 ```
 
-Unit tests (`BUILD_TESTING=ON`, msvc-dev preset only): **24 CTest suites**,
+Unit tests (`BUILD_TESTING=ON`, msvc-dev preset only): **33 CTest suites**,
 all of which must exit 0. The authoritative list is the `add_test(NAME ...)`
 calls in each module's `CMakeLists.txt`:
 
-- `shared/CMakeLists.txt` (5): `config_test` (config schema
+- `shared/CMakeLists.txt` (7): `config_test` (config schema
   load/migrate/validate, incl. the v0→v5 chain and a schema-doc sync guard),
   `ipc_test` (NDJSON protocol round-trips), `sha1_test` (RFC 3174 vectors),
   `proc_util_test` (the `RunCaptured` subprocess helper), `playlist_test`
-  (playlist.json io/validation/migration + rotation helpers).
-- `engine/CMakeLists.txt` (7): `occlusion_test` (occlusion_watch pure
+  (playlist.json io/validation/migration + rotation helpers),
+  `displays_schema_test` (displays.json io/migration/validation, the `.bak`
+  contract, `DetectKeyCollision`), `monitor_util_test` (`MonitorInfo`
+  orientation/refresh/scale + the pure helpers).
+- `engine/CMakeLists.txt` (13): `occlusion_test` (occlusion_watch pure
   helpers), `ipc_marshal_test` (the PostMessage marshal payload),
   `gpu_pin_test` (the gpu_pin VendorId table), `tray_menu_test` (tray popup
   construction, incl. USER-handle balance), `crash_dump_prune_test` (the
   crash-dump retention cap), `engine_units_test` (cli_options argv,
-  PauseController bitmask, PendingCommandQueue handoff, TestSimulator),
-  `engine_state_test` (PinVerifySchedule + PlaylistController).
-- `studio/CMakeLists.txt` (6): `studio_async_test` (offscreen Qt proof that
+  PauseController bitmask, PendingCommandQueue handoff, TestSimulator,
+  `DecidePowerCapAction`), `engine_state_test` (PinVerifySchedule +
+  PlaylistController), `desktop_placement_test` (coverage verdicts),
+  `multi_monitor_factory_test` (the injectable `SlotFactory` seam),
+  `workerw_span_test` (the strategy-B span gate), `desktop_zorder_test`
+  (the one z-order contract), `multi_monitor_placement_test` (negative
+  origins, portrait, shared host), `display_assignment_test` (assignment
+  lifecycle + legacy regression).
+- `studio/CMakeLists.txt` (7): `studio_async_test` (offscreen Qt proof that
   IPC/engine waits do not block the GUI thread), `thumbnailer_test`,
   `library_crud_test` (LibraryManager metadata-index CRUD plus
   `ReferenceInPlace` and the shared-manager contract), `studio_logic_test`
   (Studio non-GUI logic, incl. `IsFirstRunCondition` and the CompressBridge
   no-result contract; needs the vendored ffmpeg/ffprobe and a local
   `compressor.exe`), `fake_pipe_test` (in-process fake IPC server),
-  `playlist_bridge_test` (PlaylistBridge CRUD/persist round-trip).
+  `playlist_bridge_test` (PlaylistBridge CRUD/persist round-trip),
+  `duplicate_banner_harness` (offscreen QML proof the duplicate-mode
+  `WarningBanner` renders).
 - `compressor/CMakeLists.txt` (4): `probe_json_test` (the single-JSON ffprobe
   parser), `compress_argv_contract` (golden Studio↔compressor argv dry-run,
   plus the in-place-compress guard), `compress_friendly_error` (the
