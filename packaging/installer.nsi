@@ -32,6 +32,13 @@
 ; uninstaller can restore it even when taskkill skips the engine's graceful
 ; restore path (engine/src/engine_app.cpp SaveOsWallpaper/RestoreOsWallpaper).
 ;
+; Install (Section SEC_APP): stops this install dir's running processes
+; FIRST (K6WP.exe --stop — the uninstaller's scoped helper) and snapshots a
+; per-file pre-existence census, so re-running the installer over a live
+; engine does not fail on a locked exe, and RollbackPartial deletes only the
+; files THIS run created (H2, 1.3.0-beta.2: a failed upgrade leaves the
+; previous installation intact).
+;
 ; Uninstall (Section "Uninstall"): stops engine/studio/K6WP via
 ; "$INSTDIR\K6WP.exe" --stop (its own IPC quit first, then a per-PID kill
 ; restricted to images inside $INSTDIR - never a machine-wide image-name
@@ -80,6 +87,68 @@ RequestExecutionLevel user
 !define RUN_SUBKEY "Software\Microsoft\Windows\CurrentVersion\Run"
 !define UNINST_SUBKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\K6WP"
 !define BACKUP_SUBKEY "Software\K6WP\WallpaperBackup"
+
+; ---------------------------------------------------------------------------
+; H2 (1.3.0-beta.2): upgrade-safe install.
+;
+; Two defects fixed here:
+;   1. Install over a RUNNING engine failed at the first locked exe and then
+;      rolled back by deleting the whole staged set — including the previous
+;      installation's files, leaving the user with a broken install.
+;   2. That rollback had no notion of "which files did this run create".
+;
+; SEC_APP now stops this install dir's processes (K6WP.exe --stop, the same
+; scoped helper the uninstaller uses) BEFORE any extraction, and snapshots a
+; per-file pre-existence census. RollbackPartial deletes ONLY files this run
+; created (flag 0); pre-existing files are never touched, so a failed upgrade
+; leaves the previous installation intact.
+Var /GLOBAL PreExistK6WP
+Var /GLOBAL PreExistEngine
+Var /GLOBAL PreExistStudio
+Var /GLOBAL PreExistCompressor
+Var /GLOBAL PreExistMonitorDump
+Var /GLOBAL PreExistFfmpeg
+Var /GLOBAL PreExistFfprobe
+Var /GLOBAL PreExistLibmpv
+Var /GLOBAL PreExistVcruntime
+Var /GLOBAL PreExistVcruntime1
+Var /GLOBAL PreExistMsvcp
+Var /GLOBAL PreExistConfigEx
+Var /GLOBAL PreExistPlaylistEx
+Var /GLOBAL PreExistUninstallBat
+Var /GLOBAL PreExistLicense
+Var /GLOBAL PreExistLicensesDir
+Var /GLOBAL PreExistPlatformsDir
+Var /GLOBAL PreExistImageformatsDir
+Var /GLOBAL PreExistStylesDir
+Var /GLOBAL PreExistIconenginesDir
+Var /GLOBAL PreExistQmlDir
+Var /GLOBAL PreExistNetinfoDir
+Var /GLOBAL PreExistTlsDir
+
+; Records 1 (exists) / 0 (absent) for one $INSTDIR-relative file or dir.
+!macro K6WP_PREFLAG_SET _var _rel
+  ${If} ${FileExists} "$INSTDIR\${_rel}"
+    StrCpy ${_var} 1
+  ${Else}
+    StrCpy ${_var} 0
+  ${EndIf}
+!macroend
+
+; Deletes one staged file ONLY when this run created it (flag 0).
+!macro K6WP_PREFLAG_DELETE_FILE _var _rel
+  ${If} ${_var} == 0
+    Delete "$INSTDIR\${_rel}"
+  ${EndIf}
+!macroend
+
+; RMDir /r one staged tree ONLY when this run created it (flag 0).
+!macro K6WP_PREFLAG_DELETE_DIR _var _rel
+  ${If} ${_var} == 0
+    RMDir /r "$INSTDIR\${_rel}"
+  ${EndIf}
+!macroend
+; ---------------------------------------------------------------------------
 
 ; Build outputs. Release preset is the production source (matches the
 ; subsystem-WINDOWS, ProductName-K6WP branded triple verified in
@@ -170,6 +239,47 @@ Section "!${APP_NAME} Application (required)" SEC_APP
   write_ok:
   FileClose $0
   Delete "$INSTDIR\.k6wp_write_test"
+
+  ; --- H2: stop the previous installation's processes BEFORE staging files.
+  ; NSIS cannot overwrite a running exe image: without this the first File
+  ; on a locked engine.exe failed, aborted the section, and the rollback
+  ; (fixed below) destroyed the previous installation. K6WP.exe --stop is
+  ; the scoped helper the uninstaller uses: IPC quit first, then a per-PID
+  ; kill limited to images inside $INSTDIR (never a machine-wide taskkill).
+  ; Its exit code is advisory — a survivor surfaces immediately at the File
+  ; stage, which retries once via the extraction-error path below.
+  ${If} ${FileExists} "$INSTDIR\K6WP.exe"
+    DetailPrint "Stopping running ${APP_NAME} processes before install..."
+    nsExec::ExecToLog '"$INSTDIR\K6WP.exe" --stop'
+    Pop $0
+    DetailPrint "Process stop helper exit code: $0"
+  ${EndIf}
+
+  ; --- H2: pre-install census consumed by RollbackPartial (create-only
+  ; teardown so a failed upgrade keeps the previous install intact).
+  !insertmacro K6WP_PREFLAG_SET $PreExistK6WP "K6WP.exe"
+  !insertmacro K6WP_PREFLAG_SET $PreExistEngine "engine.exe"
+  !insertmacro K6WP_PREFLAG_SET $PreExistStudio "studio.exe"
+  !insertmacro K6WP_PREFLAG_SET $PreExistCompressor "compressor.exe"
+  !insertmacro K6WP_PREFLAG_SET $PreExistMonitorDump "monitor_dump.exe"
+  !insertmacro K6WP_PREFLAG_SET $PreExistFfmpeg "ffmpeg.exe"
+  !insertmacro K6WP_PREFLAG_SET $PreExistFfprobe "ffprobe.exe"
+  !insertmacro K6WP_PREFLAG_SET $PreExistLibmpv "libmpv-2.dll"
+  !insertmacro K6WP_PREFLAG_SET $PreExistVcruntime "vcruntime140.dll"
+  !insertmacro K6WP_PREFLAG_SET $PreExistVcruntime1 "vcruntime140_1.dll"
+  !insertmacro K6WP_PREFLAG_SET $PreExistMsvcp "msvcp140.dll"
+  !insertmacro K6WP_PREFLAG_SET $PreExistConfigEx "config.json.example"
+  !insertmacro K6WP_PREFLAG_SET $PreExistPlaylistEx "playlist.json.example"
+  !insertmacro K6WP_PREFLAG_SET $PreExistUninstallBat "uninstall.bat"
+  !insertmacro K6WP_PREFLAG_SET $PreExistLicense "LICENSE"
+  !insertmacro K6WP_PREFLAG_SET $PreExistLicensesDir "LICENSES"
+  !insertmacro K6WP_PREFLAG_SET $PreExistPlatformsDir "platforms"
+  !insertmacro K6WP_PREFLAG_SET $PreExistImageformatsDir "imageformats"
+  !insertmacro K6WP_PREFLAG_SET $PreExistStylesDir "styles"
+  !insertmacro K6WP_PREFLAG_SET $PreExistIconenginesDir "iconengines"
+  !insertmacro K6WP_PREFLAG_SET $PreExistQmlDir "qml"
+  !insertmacro K6WP_PREFLAG_SET $PreExistNetinfoDir "networkinformation"
+  !insertmacro K6WP_PREFLAG_SET $PreExistTlsDir "tls"
 
   ; --- Belt-and-braces wallpaper backup (engine restores on clean exit too) --
   DetailPrint "Backing up current OS wallpaper path..."
@@ -271,40 +381,47 @@ SectionEnd
   !insertmacro MUI_DESCRIPTION_TEXT ${SEC_AUTO} "Launch ${APP_NAME} engine silently at logon via HKCU Run (no UAC). Uncheck to skip."
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
 
-; Rollback helper: delete exactly the staged file set (never user data), then
-; Abort the install. Mirrors the File list above; keep the two in sync.
+; Rollback helper (H2, 1.3.0-beta.2): delete exactly the files THIS run
+; created — the pre-install census (K6WP_PREFLAG_SET) decides per file, so
+; the previous installation's files are never touched. A failed upgrade
+; therefore leaves the old version installed (and uninstallable) instead of
+; a blown-away install dir.
+; Deliberate omissions vs the file list:
+;   - root "*.dll" wildcard: version-specific Qt payloads we cannot census
+;     individually; leftover DLLs are inert next to the old exes.
+;   - Uninstall.exe / the HKCU entries are never written before extraction
+;     completes, so they cannot need rollback.
 Function RollbackPartial
   ; Silent-safe: MessageBox would block a headless /S run, so only show it
   ; interactively; silent runs still delete the partial set and Abort.
   IfSilent rb_skip_msg 0
   MessageBox MB_ICONSTOP "${APP_NAME} setup failed while copying files. Rolling back the partial install."
 rb_skip_msg:
-  Delete "$INSTDIR\K6WP.exe"
-  Delete "$INSTDIR\engine.exe"
-  Delete "$INSTDIR\studio.exe"
-  Delete "$INSTDIR\compressor.exe"
-  Delete "$INSTDIR\monitor_dump.exe"
-  Delete "$INSTDIR\ffmpeg.exe"
-  Delete "$INSTDIR\ffprobe.exe"
-  Delete "$INSTDIR\libmpv-2.dll"
-  Delete "$INSTDIR\vcruntime140.dll"
-  Delete "$INSTDIR\vcruntime140_1.dll"
-  Delete "$INSTDIR\msvcp140.dll"
-  Delete "$INSTDIR\*.dll"
-  RMDir /r "$INSTDIR\platforms"
-  RMDir /r "$INSTDIR\imageformats"
-  RMDir /r "$INSTDIR\styles"
-  RMDir /r "$INSTDIR\iconengines"
-  RMDir /r "$INSTDIR\qml"
-  RMDir /r "$INSTDIR\networkinformation"
-  RMDir /r "$INSTDIR\tls"
-  Delete "$INSTDIR\config.json.example"
-  Delete "$INSTDIR\playlist.json.example"
-  Delete "$INSTDIR\uninstall.bat"
-  Delete "$INSTDIR\LICENSE"
-  RMDir /r "$INSTDIR\LICENSES"
+  !insertmacro K6WP_PREFLAG_DELETE_FILE $PreExistK6WP "K6WP.exe"
+  !insertmacro K6WP_PREFLAG_DELETE_FILE $PreExistEngine "engine.exe"
+  !insertmacro K6WP_PREFLAG_DELETE_FILE $PreExistStudio "studio.exe"
+  !insertmacro K6WP_PREFLAG_DELETE_FILE $PreExistCompressor "compressor.exe"
+  !insertmacro K6WP_PREFLAG_DELETE_FILE $PreExistMonitorDump "monitor_dump.exe"
+  !insertmacro K6WP_PREFLAG_DELETE_FILE $PreExistFfmpeg "ffmpeg.exe"
+  !insertmacro K6WP_PREFLAG_DELETE_FILE $PreExistFfprobe "ffprobe.exe"
+  !insertmacro K6WP_PREFLAG_DELETE_FILE $PreExistLibmpv "libmpv-2.dll"
+  !insertmacro K6WP_PREFLAG_DELETE_FILE $PreExistVcruntime "vcruntime140.dll"
+  !insertmacro K6WP_PREFLAG_DELETE_FILE $PreExistVcruntime1 "vcruntime140_1.dll"
+  !insertmacro K6WP_PREFLAG_DELETE_FILE $PreExistMsvcp "msvcp140.dll"
+  !insertmacro K6WP_PREFLAG_DELETE_FILE $PreExistConfigEx "config.json.example"
+  !insertmacro K6WP_PREFLAG_DELETE_FILE $PreExistPlaylistEx "playlist.json.example"
+  !insertmacro K6WP_PREFLAG_DELETE_FILE $PreExistUninstallBat "uninstall.bat"
+  !insertmacro K6WP_PREFLAG_DELETE_FILE $PreExistLicense "LICENSE"
+  !insertmacro K6WP_PREFLAG_DELETE_DIR $PreExistLicensesDir "LICENSES"
+  !insertmacro K6WP_PREFLAG_DELETE_DIR $PreExistPlatformsDir "platforms"
+  !insertmacro K6WP_PREFLAG_DELETE_DIR $PreExistImageformatsDir "imageformats"
+  !insertmacro K6WP_PREFLAG_DELETE_DIR $PreExistStylesDir "styles"
+  !insertmacro K6WP_PREFLAG_DELETE_DIR $PreExistIconenginesDir "iconengines"
+  !insertmacro K6WP_PREFLAG_DELETE_DIR $PreExistQmlDir "qml"
+  !insertmacro K6WP_PREFLAG_DELETE_DIR $PreExistNetinfoDir "networkinformation"
+  !insertmacro K6WP_PREFLAG_DELETE_DIR $PreExistTlsDir "tls"
   Delete "$INSTDIR\.k6wp_write_test"
-  RMDir "$INSTDIR"
+  RMDir "$INSTDIR"  ; only succeeds when the dir is empty
 FunctionEnd
 
 ; ---------------------------------------------------------------------------
