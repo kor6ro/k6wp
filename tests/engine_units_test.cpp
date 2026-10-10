@@ -7,6 +7,7 @@
 
 #include "cli_options.hpp"
 #include "config_watch.hpp"
+#include "crash_restart_guard.hpp"
 #include "pause_controller.hpp"
 #include "pending_queue.hpp"
 #include "power.hpp"
@@ -312,6 +313,57 @@ void TestPowerCapAction() {
         "power: no battery (inert) -> no action");
 }
 
+void TestCrashRestart() {
+  using k6wp::CrashRestartAdvance;
+  using k6wp::CrashRestartAllowed;
+  using k6wp::CrashRestartState;
+
+  CrashRestartState s;
+  s = CrashRestartAdvance(s, 1000, 3, 600000);
+  Check(s.count == 1 && s.window_start_ms == 1000,
+        "crash-restart: first restart opens window at count 1");
+  Check(CrashRestartAllowed(s, 3), "crash-restart: count 1 within budget 3");
+
+  s = CrashRestartAdvance(s, 2000, 3, 600000);
+  Check(s.count == 2, "crash-restart: second restart increments to 2");
+  Check(CrashRestartAllowed(s, 3), "crash-restart: count 2 within budget 3");
+  s = CrashRestartAdvance(s, 3000, 3, 600000);
+  Check(s.count == 3, "crash-restart: third restart increments to 3");
+  Check(CrashRestartAllowed(s, 3), "crash-restart: count 3 within budget 3");
+
+  s = CrashRestartAdvance(s, 4000, 3, 600000);
+  Check(s.count == 4, "crash-restart: fourth restart increments to 4");
+  Check(!CrashRestartAllowed(s, 3),
+        "crash-restart: count 4 over budget 3 -> refused");
+
+  s = CrashRestartAdvance(s, 1000 + 600000, 3, 600000);
+  Check(s.count == 1 && s.window_start_ms == 1000 + 600000,
+        "crash-restart: window expiry opens fresh window at count 1");
+  Check(CrashRestartAllowed(s, 3), "crash-restart: fresh window allowed");
+
+  s = CrashRestartAdvance(s, 5000, 3, 600000);
+  s = CrashRestartAdvance(s, 5000 + 600000, 3, 600000);
+  Check(s.count == 1 && s.window_start_ms == 5000 + 600000,
+        "crash-restart: exactly-at-boundary resets window");
+
+  s = CrashRestartAdvance(s, 7000, 3, 600000);
+  s = CrashRestartAdvance(s, 7000 + 600000 - 1, 3, 600000);
+  Check(s.count == 2, "crash-restart: just-before-boundary still counts");
+
+  s = CrashRestartAdvance(s, 8000, 3, 600000);
+  s = CrashRestartAdvance(s, 100, 3, 600000);
+  Check(s.count == 1 && s.window_start_ms == 100,
+        "crash-restart: backwards clock opens fresh window");
+
+  s = CrashRestartAdvance(s, 9000, 0, 600000);
+  Check(!CrashRestartAllowed(s, 0),
+        "crash-restart: max_restarts 0 refuses first restart");
+
+  s = CrashRestartAdvance(s, 10000, 3, 0);
+  s = CrashRestartAdvance(s, 11000, 3, 0);
+  Check(s.count == 1, "crash-restart: zero window never accumulates");
+}
+
 }  // namespace
 
 int main() {
@@ -321,6 +373,7 @@ int main() {
   TestSimulator();
   TestDisplaysSecondFileWatch();
   TestPowerCapAction();
+  TestCrashRestart();
 
   std::printf(g_failures == 0 ? "RESULT: ALL ENGINE-UNIT CHECKS PASSED\n"
                               : "RESULT: %d CHECK(S) FAILED\n",

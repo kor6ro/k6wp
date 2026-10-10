@@ -14,11 +14,15 @@
 
 #include <shellapi.h>
 
+#include <algorithm>
 #include <cwchar>
+#include <filesystem>
+#include <fstream>
 #include <string>
 #include <vector>
 
 #include "crash_dump_prune.hpp"
+#include "crash_restart_guard.hpp"
 #include "engine_app.hpp"
 #include "log_file.hpp"
 #include "monitor_util.hpp"
@@ -126,6 +130,52 @@ LONG WINAPI CrashDumpHandler(EXCEPTION_POINTERS* exception_info) {
   return EXCEPTION_CONTINUE_SEARCH;
 }
 
+// --- Crash-restart backoff (L-01) -------------------------------------------
+// EngineApp::Init registers RegisterApplicationRestart(L"--restarted"), so
+// Windows Error Reporting relaunches the engine after ANY unhandled exception.
+// Without a budget a reproducible crash (a bad video decoded at every logon)
+// crash-loops forever. Only a "--restarted" relaunch counts; the state file is
+// a single "count|tick" line (tick = GetTickCount64, which survives a process
+// restart but resets on reboot — a reboot then opens a fresh window, which is
+// correct). CrashRestartAdvance/CrashRestartAllowed are the unit-tested pure
+// rules; this TU owns only the file I/O. All file errors are non-fatal.
+constexpr int kMaxAutoRestarts = 3;
+constexpr long long kAutoRestartWindowMs = 10 * 60 * 1000;  // 10 min
+
+std::filesystem::path CrashRestartStateFilePath() {
+  wchar_t local_app_data[MAX_PATH] = {};
+  const DWORD len =
+      GetEnvironmentVariableW(L"LOCALAPPDATA", local_app_data, MAX_PATH);
+  if (len == 0 || len >= MAX_PATH) return {};
+  return std::filesystem::path(local_app_data) / L"K6WP" / L"crash_restart.txt";
+}
+
+k6wp::CrashRestartState LoadCrashRestartState() {
+  k6wp::CrashRestartState state;
+  const std::filesystem::path path = CrashRestartStateFilePath();
+  if (path.empty()) return state;
+  std::ifstream in(path, std::ios::binary);
+  if (!in) return state;
+  long long count = 0;
+  long long tick = 0;
+  char sep = 0;
+  if (in >> count >> sep >> tick && sep == '|' && count >= 0) {
+    state.count = static_cast<int>(count);
+    state.window_start_ms = tick;
+  }
+  return state;  // corrupt/missing -> default {0,0} -> fresh window
+}
+
+void SaveCrashRestartState(const k6wp::CrashRestartState& state) {
+  const std::filesystem::path path = CrashRestartStateFilePath();
+  if (path.empty()) return;
+  std::error_code ec;
+  std::filesystem::create_directories(path.parent_path(), ec);
+  std::ofstream out(path, std::ios::binary | std::ios::trunc);
+  if (!out) return;  // best-effort: a stale count only tightens the budget
+  out << state.count << '|' << state.window_start_ms << '\n';
+}
+
 }  // namespace
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
@@ -187,6 +237,26 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   argv.reserve(utf8_args.size());
   for (auto& s : utf8_args) {
     argv.push_back(s.data());
+  }
+  // L-01: a WER relaunch passes --restarted; only then does the restart count
+  // against the backoff budget. Over budget → log, flush, and exit WITHOUT
+  // booting the engine (the previous crash would just repeat).
+  const bool engine_restarted =
+      std::find(utf8_args.begin(), utf8_args.end(),
+                std::string("--restarted")) != utf8_args.end();
+  if (engine_restarted) {
+    const k6wp::CrashRestartState advanced = k6wp::CrashRestartAdvance(
+        LoadCrashRestartState(), static_cast<long long>(GetTickCount64()),
+        kMaxAutoRestarts, kAutoRestartWindowMs);
+    if (!k6wp::CrashRestartAllowed(advanced, kMaxAutoRestarts)) {
+      k6wp::AppendEngineLogLine(
+          "crash-restart: giving up after repeated crashes in 10 min "
+          "(run K6WP manually)",
+          true);
+      k6wp::FlushEngineLog();
+      return 0;
+    }
+    SaveCrashRestartState(advanced);
   }
   k6wp::EngineApp app;
   if (!app.Init(static_cast<int>(argv.size()), argv.data())) {

@@ -2,6 +2,8 @@
 add_executable(engine
   src/main.cpp
   src/crash_dump_prune.cpp
+  src/crash_restart_guard.cpp  # L-01: crash-restart backoff (pure rules + file clear)
+  src/device_lost_watch.cpp    # E-04: DXGI adapter-removed watch
   src/engine_app.cpp
   src/cli_options.cpp
   src/cpu_affinity.cpp
@@ -139,6 +141,10 @@ add_executable(engine_units_test
   src/test_simulator.cpp
   src/config_watch.cpp
   src/log_file.cpp
+  # L-01: CrashRestartAdvance/CrashRestartAllowed are pure and unit-tested
+  # here; crash_restart_guard.cpp carries no mpv/engine_app deps (kernel32
+  # only, so no extra link libraries).
+  src/crash_restart_guard.cpp
   # H3 (1.3.0-beta.2): DecidePowerCapAction (battery static/cap24 split) is
   # pure and unit-tested here; power.cpp carries no mpv/engine_app deps.
   src/power.cpp
