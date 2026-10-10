@@ -100,6 +100,13 @@ Sources of truth: `docs/dev-contracts.md` (IPC, config schema, contract tests),
   `packaging/known-limitations.md`. `planning.md` / `repomix.md` are local
   scratch (gitignored) — do not rely on them in PRs.
 
+### Static analysis
+
+`.clang-tidy` at the repo root is a manual clang-tidy profile (`bugprone-*`,
+`performance-*`, a couple of `modernize` checks; naming checks stay off) — not
+wired into CI. Run it on first-party sources only so vendored/attic code is
+skipped: `clang-tidy -p build\verify-x engine\src\foo.cpp -- -std=c++17`.
+
 ## PR expectations
 
 - One focused change per PR; describe what/why, not just what.

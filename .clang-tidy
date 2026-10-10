@@ -1,0 +1,16 @@
+---
+# Repo-wide clang-tidy config for maintainers. NOT wired into CI (keeps CI green);
+# run it by hand on the first-party trees only (engine/ studio/ shared/ compressor/
+# launcher/) so vendor/, attic/, build/ and .qt/ are never analysed. From the repo
+# root, against a configured build tree:
+#   clang-tidy -p build\verify-x engine\src\foo.cpp -- -std=c++17
+Checks: >
+  -*,
+  bugprone-*,
+  cppcoreguidelines-pro-type-static-cast-downcast,
+  modernize-use-nullptr,
+  modernize-use-override,
+  performance-*,
+  -readability-identifier-naming
+HeaderFilterRegex: ''
+FormatStyle: none
