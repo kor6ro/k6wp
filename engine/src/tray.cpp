@@ -74,7 +74,7 @@ bool AppendQuickSwitchSubmenu(HMENU menu, const std::vector<std::string>& recent
   // Attach last, releasing `quick` if the attach fails, so the handle is owned
   // by `menu` or destroyed - never orphaned.
   if (AppendMenuW(menu, MF_STRING | MF_POPUP, reinterpret_cast<UINT_PTR>(quick),
-                  L"Quick-switch") == FALSE) {
+                  L"Pindah &cepat") == FALSE) {
     DestroyMenu(quick);
     return false;
   }
@@ -230,23 +230,25 @@ void TrayIcon::OnTrayNotify(void* hwnd, std::size_t w_param, long l_param) {
       Log("tray: CreatePopupMenu failed (error %lu)", GetLastError());
       return;
     }
-    AppendMenuW(menu, MF_STRING, kTrayCmdOpenStudio, L"Open &K6WP");
+    // Engine tray strings are Indonesian source language (no translation
+    // infra in the resident engine by design; see docs).
+    AppendMenuW(menu, MF_STRING, kTrayCmdOpenStudio, L"&Buka K6WP");
     // Task 21: separate Pause / Resume entries (spec lists both). The live
     // paused state drives the gray-state; each entry only fires when it
     // would change state (guarded in OnMenuCommand via is_paused).
     AppendMenuW(menu, MF_STRING | (cb_paused ? MF_GRAYED : 0), kTrayCmdPause,
-                L"&Pause");
+                L"&Jeda");
     AppendMenuW(menu, MF_STRING | (cb_paused ? 0 : MF_GRAYED), kTrayCmdResume,
-                L"&Resume");
+                L"&Lanjut");
     // Next Wallpaper cycles the MRU list; grayed when there is nothing to
     // cycle (no recent videos yet).
     AppendMenuW(menu, MF_STRING | (recent.empty() ? MF_GRAYED : 0),
-                kTrayCmdNextWallpaper, L"Next &Wallpaper");
+                kTrayCmdNextWallpaper, L"Wallpaper &berikutnya");
 
     AppendQuickSwitchSubmenu(menu, recent);
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(menu, MF_STRING, kTrayCmdSupport, L"Support the &developer");
-    AppendMenuW(menu, MF_STRING, kTrayCmdExit, L"E&xit");
+    AppendMenuW(menu, MF_STRING, kTrayCmdSupport, L"&Dukung pengembang");
+    AppendMenuW(menu, MF_STRING, kTrayCmdExit, L"&Keluar");
 
     POINT pt{};
     GetCursorPos(&pt);
@@ -385,8 +387,8 @@ void TrayIcon::PrepareIconLocked(void* nid_void, unsigned extra_flags) {
   if (icon_owned_) DestroyIcon(static_cast<HICON>(icon_));  // replace old owned
   icon_ = nid->hIcon;
   icon_owned_ = owned;
-  const wchar_t* tip = error_ ? L"K6WP Engine - Injection failed (headless)"
-                     : paused_ ? L"K6WP Engine - Paused" : L"K6WP Engine";
+  const wchar_t* tip = error_ ? L"K6WP Engine - Wallpaper tidak tampil"
+                     : paused_ ? L"K6WP Engine - Dijeda" : L"K6WP Engine";
   wcsncpy_s(nid->szTip, tip, _TRUNCATE);
 }
 
