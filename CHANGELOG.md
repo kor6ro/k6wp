@@ -7,6 +7,100 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0-beta.3] - 2026-10-10
+
+Second audit-remediation release. All findings from the 1.3.0-beta.2 audit
+follow-up landed on `fix/1.3.0-beta.3-audit`, verified by a green
+`ctest --preset msvc-dev` (33/33 suites, no MSVC warnings). No behavior
+contract changed: IPC wire format, config schema (v5), displays.json schema
+(v1) and playlist schema (v1) are untouched.
+
+### Fixed
+
+- **An OS wallpaper change during a session is no longer clobbered on exit
+  (audit E-01).** `OsWallpaperGuard::Save()` snapshotted the wallpaper once at
+  boot; `WM_SETTINGCHANGE (SPI_SETDESKWALLPAPER)` only re-anchored the live
+  surface, so quitting after the user picked a new wallpaper in Windows
+  Settings restored the stale path over their change. The snapshot now
+  re-saves whenever the OS reports a different desktop wallpaper (the engine
+  never writes the desktop wallpaper itself, so any change is external).
+- **Re-anchoring no longer leaks shell WorkerW windows (audit E-02).** Both
+  the 24H2 and the classic Strategy-B attach passes sent the shell `0x052C`
+  "spawn WorkerW" message on every pass (Init, display change, TaskbarCreated,
+  resume) and then bound to the *oldest* empty Progman-child WorkerW — the
+  freshly spawned one was never used or destroyed. `ResolveSharedHost` now
+  reuses an existing empty WorkerW and only spawns when none exists.
+- **The hwdec fallback chain re-arms after hardware decoding recovers
+  (audit E-03).** `hwdec_stage_` advanced one link per fallback but never
+  reset when `hwdec-current` reported a working decoder again, so one
+  transient "no" reading (e.g. after a device loss) permanently consumed the
+  chain and a later loss left the wallpaper black. A healthy hwdec reading
+  now resets the chain; the write-only `hwdec_fallback_attempted_` atomic
+  was removed.
+- **Real device-lost recovery (audit E-04).** `OnDeviceLost()` was reachable
+  only from the test simulator. A new `DeviceLostWatch` registers
+  `IDXGIFactory7::RegisterAdaptersChangedEvent` (verified against the
+  installed SDK; degrades to a logged no-op on older OS) and joins the engine
+  loop wait; `RecreateDevice()` now rebuilds the live desktop surface
+  (re-resolve host, re-attach slots, re-apply boot assignments) instead of
+  only re-issuing `loadfile`.
+- **`get_state` no longer hits the disk on every poll (audit E-06).** The IPC
+  worker read `displays.json` through `LoadDisplays()` on every Studio poll;
+  it now reads a mutex-guarded snapshot maintained by the main loop at every
+  assignment change point.
+- **The hwdec-change handler snapshots the renderer through
+  `AcquireRenderer()` (audit E-07).** `kMpvHwdecChangeMessage` dereferenced
+  the `renderer_` member directly, violating the documented worker-visible
+  state discipline (benign today, a race waiting for a future writer).
+- **Span-mode re-anchor uses the freshly measured virtual-screen origin
+  (audit E-08).** `Reanchor()` passed the stored `slot.info.x/y` instead of
+  the just-measured geometry, so a shifted virtual screen after sleep/resume
+  re-placed the span window at the old origin.
+
+### Added
+
+- **Crash-restart backoff for the WER auto-restart (audit L-01).** Pure
+  `CrashRestartAdvance`/`CrashRestartAllowed` state machine
+  (`engine/src/crash_restart_guard.{hpp,cpp}`) backed by a small counter file
+  at `%LOCALAPPDATA%\K6WP\crash_restart.txt`: after 3 automatic restarts
+  inside a 10-minute window the engine gives up with an engine.log line
+  instead of crash-looping at every logon; 300 s of clean uptime clears the
+  counter. Covered by new checks in `engine_units_test`.
+- **`.clang-tidy` configuration (audit C-04).** Maintainer static-analysis
+  config (bugprone/performance/modernize/readability subset) at the repo
+  root; not wired into CI. Documented in `CONTRIBUTING.md`.
+
+### Changed
+
+- **Engine tray is Indonesian and jargon-free (audit E-05).** Menu entries
+  ("Buka K6WP", "Jeda", "Lanjut", "Wallpaper berikutnya", "Pindah cepat",
+  "Dukung pengembang", "Keluar") and tooltips now match the 1.3.0 Studio
+  de-jargon direction; the error tooltip says "Wallpaper tidak tampil"
+  instead of leaking "headless".
+- **CI hardening (audit C-01/C-02/C-03).** Actions pinned to commit SHAs
+  (`actions/checkout`, `jurplel/install-qt-action`,
+  `actions/upload-artifact`), an explicit least-privilege
+  `permissions: contents: read` block, and a version-pinned Chocolatey NSIS
+  install.
+- **Studio i18n completion (audit S-01).** The remaining user-visible strings
+  in `StatusBar.qml` and the C++ bridges (`StudioBridge`, `CompressBridge`,
+  `SettingsBridge`, `PlaylistBridge`, `LibraryGridModel`, `CacheDirPolicy`,
+  `CompressError`) are now inside `qsTr`/`tr`/`QCoreApplication::translate`
+  with a matching literal context, and `studio/i18n/studio_en.ts` carries
+  the new messages. Diagnostics-only log lines stay untranslated on purpose.
+
+### Docs
+
+- README "Key protocols" corrected: the IPC pipe is per-session
+  (`\\.\pipe\k6wp-engine-<session_id>`), the config schema is v5 (audit
+  E-09).
+- `docs/dev-contracts.md` documents the ConfigWatcher second-file limitation:
+  `displays.json` is watched only when it lives in the same directory as the
+  active config (no poll fallback otherwise) (audit E-10).
+- `docs/manual-test.md` gained manual verification steps for E-01..E-05 and
+  L-01 (wallpaper change survival, WorkerW census across re-anchors, hwdec
+  re-arm, adapter-removed log line, crash-restart give-up).
+
 ## [1.3.0-beta.2] - 2026-10-10
 
 Audit-remediation release. Six fixes landed on `fix/1.3.0-beta.2-audit`,
