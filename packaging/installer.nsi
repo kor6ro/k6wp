@@ -36,7 +36,7 @@
 ; FIRST (K6WP.exe --stop — the uninstaller's scoped helper) and snapshots a
 ; per-file pre-existence census, so re-running the installer over a live
 ; engine does not fail on a locked exe, and RollbackPartial deletes only the
-; files THIS run created (H2, 1.3.0-beta.2: a failed upgrade leaves the
+; files THIS run created (audit fix H2: a failed upgrade leaves the
 ; previous installation intact).
 ;
 ; Uninstall (Section "Uninstall"): stops engine/studio/K6WP via
@@ -89,7 +89,7 @@ RequestExecutionLevel user
 !define BACKUP_SUBKEY "Software\K6WP\WallpaperBackup"
 
 ; ---------------------------------------------------------------------------
-; H2 (1.3.0-beta.2): upgrade-safe install.
+; H2 (audit remediation): upgrade-safe install.
 ;
 ; Two defects fixed here:
 ;   1. Install over a RUNNING engine failed at the first locked exe and then
@@ -127,25 +127,16 @@ Var /GLOBAL PreExistNetinfoDir
 Var /GLOBAL PreExistTlsDir
 
 ; Records 1 (exists) / 0 (absent) for one $INSTDIR-relative file or dir.
+; NOTE: the delete/rollback side below uses explicit Delete and RMDir
+; lines with literal targets (see RollbackPartial) because
+; packaging/make_zip.ps1's ship-set assert greps every RMDir /r target
+; under $INSTDIR in this script — a macro parameter would resolve to a
+; placeholder name, not a staged directory, and fail the release gate.
 !macro K6WP_PREFLAG_SET _var _rel
   ${If} ${FileExists} "$INSTDIR\${_rel}"
     StrCpy ${_var} 1
   ${Else}
     StrCpy ${_var} 0
-  ${EndIf}
-!macroend
-
-; Deletes one staged file ONLY when this run created it (flag 0).
-!macro K6WP_PREFLAG_DELETE_FILE _var _rel
-  ${If} ${_var} == 0
-    Delete "$INSTDIR\${_rel}"
-  ${EndIf}
-!macroend
-
-; RMDir /r one staged tree ONLY when this run created it (flag 0).
-!macro K6WP_PREFLAG_DELETE_DIR _var _rel
-  ${If} ${_var} == 0
-    RMDir /r "$INSTDIR\${_rel}"
   ${EndIf}
 !macroend
 ; ---------------------------------------------------------------------------
@@ -381,7 +372,7 @@ SectionEnd
   !insertmacro MUI_DESCRIPTION_TEXT ${SEC_AUTO} "Launch ${APP_NAME} engine silently at logon via HKCU Run (no UAC). Uncheck to skip."
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
 
-; Rollback helper (H2, 1.3.0-beta.2): delete exactly the files THIS run
+; Rollback helper (audit fix H2): delete exactly the files THIS run
 ; created — the pre-install census (K6WP_PREFLAG_SET) decides per file, so
 ; the previous installation's files are never touched. A failed upgrade
 ; therefore leaves the old version installed (and uninstallable) instead of
@@ -397,29 +388,78 @@ Function RollbackPartial
   IfSilent rb_skip_msg 0
   MessageBox MB_ICONSTOP "${APP_NAME} setup failed while copying files. Rolling back the partial install."
 rb_skip_msg:
-  !insertmacro K6WP_PREFLAG_DELETE_FILE $PreExistK6WP "K6WP.exe"
-  !insertmacro K6WP_PREFLAG_DELETE_FILE $PreExistEngine "engine.exe"
-  !insertmacro K6WP_PREFLAG_DELETE_FILE $PreExistStudio "studio.exe"
-  !insertmacro K6WP_PREFLAG_DELETE_FILE $PreExistCompressor "compressor.exe"
-  !insertmacro K6WP_PREFLAG_DELETE_FILE $PreExistMonitorDump "monitor_dump.exe"
-  !insertmacro K6WP_PREFLAG_DELETE_FILE $PreExistFfmpeg "ffmpeg.exe"
-  !insertmacro K6WP_PREFLAG_DELETE_FILE $PreExistFfprobe "ffprobe.exe"
-  !insertmacro K6WP_PREFLAG_DELETE_FILE $PreExistLibmpv "libmpv-2.dll"
-  !insertmacro K6WP_PREFLAG_DELETE_FILE $PreExistVcruntime "vcruntime140.dll"
-  !insertmacro K6WP_PREFLAG_DELETE_FILE $PreExistVcruntime1 "vcruntime140_1.dll"
-  !insertmacro K6WP_PREFLAG_DELETE_FILE $PreExistMsvcp "msvcp140.dll"
-  !insertmacro K6WP_PREFLAG_DELETE_FILE $PreExistConfigEx "config.json.example"
-  !insertmacro K6WP_PREFLAG_DELETE_FILE $PreExistPlaylistEx "playlist.json.example"
-  !insertmacro K6WP_PREFLAG_DELETE_FILE $PreExistUninstallBat "uninstall.bat"
-  !insertmacro K6WP_PREFLAG_DELETE_FILE $PreExistLicense "LICENSE"
-  !insertmacro K6WP_PREFLAG_DELETE_DIR $PreExistLicensesDir "LICENSES"
-  !insertmacro K6WP_PREFLAG_DELETE_DIR $PreExistPlatformsDir "platforms"
-  !insertmacro K6WP_PREFLAG_DELETE_DIR $PreExistImageformatsDir "imageformats"
-  !insertmacro K6WP_PREFLAG_DELETE_DIR $PreExistStylesDir "styles"
-  !insertmacro K6WP_PREFLAG_DELETE_DIR $PreExistIconenginesDir "iconengines"
-  !insertmacro K6WP_PREFLAG_DELETE_DIR $PreExistQmlDir "qml"
-  !insertmacro K6WP_PREFLAG_DELETE_DIR $PreExistNetinfoDir "networkinformation"
-  !insertmacro K6WP_PREFLAG_DELETE_DIR $PreExistTlsDir "tls"
+  ; Explicit Delete and RMDir lines with literal targets on purpose: the
+  ; make_zip ship-set assert parses these lines, so no macro may generate
+  ; them (see the NOTE next to K6WP_PREFLAG_SET above).
+  ${If} $PreExistK6WP == 0
+    Delete "$INSTDIR\K6WP.exe"
+  ${EndIf}
+  ${If} $PreExistEngine == 0
+    Delete "$INSTDIR\engine.exe"
+  ${EndIf}
+  ${If} $PreExistStudio == 0
+    Delete "$INSTDIR\studio.exe"
+  ${EndIf}
+  ${If} $PreExistCompressor == 0
+    Delete "$INSTDIR\compressor.exe"
+  ${EndIf}
+  ${If} $PreExistMonitorDump == 0
+    Delete "$INSTDIR\monitor_dump.exe"
+  ${EndIf}
+  ${If} $PreExistFfmpeg == 0
+    Delete "$INSTDIR\ffmpeg.exe"
+  ${EndIf}
+  ${If} $PreExistFfprobe == 0
+    Delete "$INSTDIR\ffprobe.exe"
+  ${EndIf}
+  ${If} $PreExistLibmpv == 0
+    Delete "$INSTDIR\libmpv-2.dll"
+  ${EndIf}
+  ${If} $PreExistVcruntime == 0
+    Delete "$INSTDIR\vcruntime140.dll"
+  ${EndIf}
+  ${If} $PreExistVcruntime1 == 0
+    Delete "$INSTDIR\vcruntime140_1.dll"
+  ${EndIf}
+  ${If} $PreExistMsvcp == 0
+    Delete "$INSTDIR\msvcp140.dll"
+  ${EndIf}
+  ${If} $PreExistConfigEx == 0
+    Delete "$INSTDIR\config.json.example"
+  ${EndIf}
+  ${If} $PreExistPlaylistEx == 0
+    Delete "$INSTDIR\playlist.json.example"
+  ${EndIf}
+  ${If} $PreExistUninstallBat == 0
+    Delete "$INSTDIR\uninstall.bat"
+  ${EndIf}
+  ${If} $PreExistLicense == 0
+    Delete "$INSTDIR\LICENSE"
+  ${EndIf}
+  ${If} $PreExistLicensesDir == 0
+    RMDir /r "$INSTDIR\LICENSES"
+  ${EndIf}
+  ${If} $PreExistPlatformsDir == 0
+    RMDir /r "$INSTDIR\platforms"
+  ${EndIf}
+  ${If} $PreExistImageformatsDir == 0
+    RMDir /r "$INSTDIR\imageformats"
+  ${EndIf}
+  ${If} $PreExistStylesDir == 0
+    RMDir /r "$INSTDIR\styles"
+  ${EndIf}
+  ${If} $PreExistIconenginesDir == 0
+    RMDir /r "$INSTDIR\iconengines"
+  ${EndIf}
+  ${If} $PreExistQmlDir == 0
+    RMDir /r "$INSTDIR\qml"
+  ${EndIf}
+  ${If} $PreExistNetinfoDir == 0
+    RMDir /r "$INSTDIR\networkinformation"
+  ${EndIf}
+  ${If} $PreExistTlsDir == 0
+    RMDir /r "$INSTDIR\tls"
+  ${EndIf}
   Delete "$INSTDIR\.k6wp_write_test"
   RMDir "$INSTDIR"  ; only succeeds when the dir is empty
 FunctionEnd
