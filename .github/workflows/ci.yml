@@ -5,6 +5,10 @@ on:
     branches: [main, master]
   pull_request:
 
+# Least privilege: the job only needs to read the repo and upload an artifact.
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -15,7 +19,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # The vendored third-party binaries are not tracked: together they are
       # ~311 MB and libmpv-2.dll alone exceeds GitHub's 100 MB per-file push
@@ -36,7 +40,7 @@ jobs:
           Write-Host "License guard OK ($($notices.Count) notice files)."
 
       - name: Install Qt 6.8.3 (msvc2022_64)
-        uses: jurplel/install-qt-action@v4
+        uses: jurplel/install-qt-action@a9c63c7c123f3069cff414e7e482d95dfa9d8125 # v4.4.1
         with:
           version: "6.8.3"
           arch: "win64_msvc2022_64"
@@ -93,7 +97,8 @@ jobs:
       - name: Compile installer (NSIS)
         shell: pwsh
         run: |
-          choco install nsis -y --no-progress | Out-Null
+          # Pin NSIS: 3.13.0 is the current stable (upstream NSIS 3.13, 2026-09-27); avoids pulling a future newest blindly.
+          choco install nsis --version 3.13.0 -y --no-progress | Out-Null
           $makensis = Join-Path ${env:ProgramFiles(x86)} "NSIS\makensis.exe"
           if (-not (Test-Path -LiteralPath $makensis)) { Write-Error "makensis not found"; exit 1 }
           & $makensis "packaging\installer.nsi"
@@ -102,7 +107,7 @@ jobs:
           Write-Host "NSIS installer compiled OK."
 
       - name: Upload portable ZIP
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: K6WP-portable
           path: dist/K6WP-portable-*.zip
