@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.1-alpha] - 2026-10-10
+
+Honest reset: the software is still buggy, so the `v1.2.0-beta` through
+`v1.3.0-beta.3` tags and their GitHub Releases were withdrawn and versioning
+restarts at `0.0.1-alpha` (tag `v0.0.1-alpha`). No code change in this entry:
+`K6WP_VERSION` is now `"0.0.1-alpha"` (numeric spots `0.0.1.0`), `main` takes
+`fix/1.3.0-beta.3-audit` with newest-code-wins, and the old `1.x-beta`
+sections below are kept as history of the withdrawn line.
+
 ## [1.3.0-beta.3] - 2026-10-10
 
 Second audit-remediation release. All findings from the 1.3.0-beta.2 audit

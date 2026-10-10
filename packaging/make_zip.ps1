@@ -88,6 +88,10 @@ Log "K6WP portable ZIP build, version $Version"
 #      / app.manifest.in). Catching drift at release time, no codegen pipeline.
 function Normalize-Version3([string]$v) {
   # "1.0.0.0" / "1,0,0,0" -> "1.0.0" (first 3 components).
+  # Prerelease suffixes ("-alpha", "-beta.1", "+build") are stripped so the
+  # honest-alpha reset (K6WP_VERSION "0.0.1-alpha", numeric spots "0.0.1.0")
+  # still asserts as one version.
+  $v = ($v -replace '[-+].*$', '')
   $parts = ($v -replace ',', '.').Split('.')
   if ($parts.Count -lt 3) { return $null }
   return ($parts[0..2] -join '.')

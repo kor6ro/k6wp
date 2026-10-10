@@ -1,20 +1,22 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(k6wp VERSION 1.3.0 LANGUAGES CXX)
+project(k6wp VERSION 0.0.1 LANGUAGES CXX)
 
 # Version used across the project (engine / studio / compressor).
-set(K6WP_VERSION "1.3.0")
+# Honest alpha: the 1.x-beta tags were withdrawn (still buggy), restart at 0.0.1-alpha.
+set(K6WP_VERSION "0.0.1-alpha")
 
 # --- Single-source version (todo 8 / MED-14) ---------------------------------
 # K6WP_VERSION is canonical. configure_file() stamps it into
 # build/<cfg>/generated/version.h (C/C++/RC consumers), packaging/version.nsh
 # (NSIS installer) and engine/app.manifest (in-place, XML). Every consumer
 # references these generated files — no hand-synced version literals anywhere.
-string(REPLACE "." ";" K6WP_VERSION_PARTS "${K6WP_VERSION}")
+string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.[0-9]+" K6WP_VERSION_NUM "${K6WP_VERSION}")
+string(REPLACE "." ";" K6WP_VERSION_PARTS "${K6WP_VERSION_NUM}")
 list(GET K6WP_VERSION_PARTS 0 K6WP_VERSION_MAJOR)
 list(GET K6WP_VERSION_PARTS 1 K6WP_VERSION_MINOR)
 list(GET K6WP_VERSION_PARTS 2 K6WP_VERSION_PATCH)
-set(K6WP_VERSION_4 "${K6WP_VERSION}.0")
+set(K6WP_VERSION_4 "${K6WP_VERSION_NUM}.0")
 
 set(K6WP_GENERATED_DIR "${CMAKE_BINARY_DIR}/generated")
 configure_file(version.h.in "${K6WP_GENERATED_DIR}/version.h" @ONLY)
