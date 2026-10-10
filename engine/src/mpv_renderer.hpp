@@ -167,10 +167,6 @@ class MpvRenderer {
   mutable std::mutex event_mutex_;
   std::atomic<bool> hwdec_active_{false};
   bool initialized_ = false;
-  // Set by the fallback path, cleared when hwdec goes active. Touched from
-  // both the event thread and the main thread — atomic, first-writer-wins
-  // via exchange (a duplicate set is idempotent and harmless).
-  std::atomic<bool> hwdec_fallback_attempted_{false};
   // M3 (1.3.0-beta.2): hwdec fallback chain position, guarded by mutex_:
   // 0 = d3d11va requested at Create, 1 = dxva2 requested, 2 = software
   // requested. A one-shot dxva2 attempt (the old exchange guard) left the

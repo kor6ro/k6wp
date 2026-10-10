@@ -736,13 +736,33 @@ SharedHost ResolveSharedHost(InjectMode mode, LogFn log) {
     // (our surface above the wallpaper layer, below the icons). Without one,
     // fall back to a layered child of Progman directly below DefView.
     branch = "24H2 path";
-    const SpawnWorkerWResult spawn = SpawnWorkerWViaProgman(d.progman, log);
-    if (spawn.workerw) {
-      target = spawn.workerw;
+    // Reuse BEFORE spawn: 0x052C spawns a fresh WorkerW on every attach pass,
+    // but FindWorkerWStrategyB returns the OLDEST empty Progman child, so the
+    // new window would never be picked nor destroyed - one leaked shell
+    // WorkerW per Reanchor/OnDisplayChange. An already-empty Progman child is
+    // exactly the wallpaper WorkerW we want.
+    HWND existing = nullptr;
+    for (HWND w : d.progman_worker_ws) {
+      if (GetWindow(w, GW_CHILD) == nullptr) {
+        existing = w;
+        break;
+      }
+    }
+    if (existing) {
+      target = existing;
       insert_after = d.def_view;
       layered = true;
-      LogShared(log, "desktop-inject: 24H2 path -> wallpaper WorkerW 0x%p (Progman child)",
-                spawn.workerw);
+      LogShared(log, "desktop-inject: 24H2 path -> existing wallpaper WorkerW 0x%p (Progman child, reused)",
+                existing);
+    } else {
+      const SpawnWorkerWResult spawn = SpawnWorkerWViaProgman(d.progman, log);
+      if (spawn.workerw) {
+        target = spawn.workerw;
+        insert_after = d.def_view;
+        layered = true;
+        LogShared(log, "desktop-inject: 24H2 path -> wallpaper WorkerW 0x%p (Progman child)",
+                  spawn.workerw);
+      }
     }
     if (!target) {
       target = d.progman;
@@ -763,15 +783,30 @@ SharedHost ResolveSharedHost(InjectMode mode, LogFn log) {
       LogShared(log, "desktop-inject: Strategy A -> WorkerW 0x%p (hosts DefView)", a);
     } else {
       // Try to spawn a WorkerW via 0x052C (Strategy B).
-      const SpawnWorkerWResult spawn = SpawnWorkerWViaProgman(d.progman, log);
-      if (spawn.workerw) {
-        target = spawn.workerw;
+      // Reuse BEFORE spawn: the pre-pass enumeration is side-effect-free
+      // (empty Progman children, Progman z-order siblings, spanning sweep),
+      // so a still-empty WorkerW left by an earlier pass is adopted instead
+      // of asking the shell to spawn another one that Strategy B would then
+      // skip (it returns the OLDEST empty candidate -> the fresh window
+      // leaked once per attach pass).
+      HWND reused = FindWorkerWStrategyB(d, log);
+      if (reused) {
+        target = reused;
         insert_after = d.def_view;
         layered = true;
-        LogShared(log, "desktop-inject: Strategy B -> empty WorkerW 0x%p", spawn.workerw);
-      } else if (!spawn.sent) {
-        LogShared(log, "desktop-inject: 0x052C SendMessageTimeoutW timeout/failed (error %lu), falling back to Progman",
-                  GetLastError());
+        LogShared(log, "desktop-inject: Strategy B -> reused empty WorkerW 0x%p",
+                  reused);
+      } else {
+        const SpawnWorkerWResult spawn = SpawnWorkerWViaProgman(d.progman, log);
+        if (spawn.workerw) {
+          target = spawn.workerw;
+          insert_after = d.def_view;
+          layered = true;
+          LogShared(log, "desktop-inject: Strategy B -> empty WorkerW 0x%p", spawn.workerw);
+        } else if (!spawn.sent) {
+          LogShared(log, "desktop-inject: 0x052C SendMessageTimeoutW timeout/failed (error %lu), falling back to Progman",
+                    GetLastError());
+        }
       }
       if (!target) {
         target = d.progman;

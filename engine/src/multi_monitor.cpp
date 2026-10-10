@@ -802,8 +802,13 @@ void MultiMonitor::Reanchor() {
       } else if (it->second.injector) {
         const SpanGeometry g = GetSpanGeometry();
         ResolveHostForPass();
-        ReattachSpanLocked(it->second, it->second.info.x, it->second.info.y,
+        // Fresh origin wins: after sleep/resume or an Explorer restart the
+        // virtual-screen origin may have shifted, so re-attach at the freshly
+        // measured g.x/g.y instead of the stored slot origin.
+        ReattachSpanLocked(it->second, g.x, g.y,
                            g.width, g.height, /*reassert=*/true);
+        it->second.info.x = g.x;
+        it->second.info.y = g.y;
       }
       attached_host_rect_ = shared_host_.client_rect;
       initialized_ = !slots_.empty();

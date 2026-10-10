@@ -485,7 +485,6 @@ void MpvRenderer::HandleEvent(mpv_event* ev) {
             reinterpret_cast<mpv_event_log_message*>(ev->data);
         if (lm->text && std::strstr(lm->text, "hardware decoding")) {
           hwdec_active_.store(true, std::memory_order_relaxed);
-          hwdec_fallback_attempted_.store(false, std::memory_order_relaxed);
           if (last_hwdec_logged_.empty()) {
             last_hwdec_logged_ = "d3d11va(log)";
             LogImportant("mpv: hwdec active (log: hardware decoding)");
@@ -600,7 +599,9 @@ bool MpvRenderer::ApplyHwdecValue(const std::string& cur) {
   // (event thread inline path + main-thread OnHwdecPropertyChange).
   if (cur != "no") {
     hwdec_active_.store(true, std::memory_order_relaxed);
-    hwdec_fallback_attempted_.store(false, std::memory_order_relaxed);
+    // a healthy hwdec reading means the whole chain is available again — otherwise
+    // a transient 'no' (device lost) would permanently consume the fallback links
+    hwdec_stage_ = 0;
   } else {
     hwdec_active_.store(false, std::memory_order_relaxed);
     if (cur != last_hwdec_logged_) {
@@ -671,7 +672,6 @@ void MpvRenderer::CheckEofWatchdog() {
 }
 
 void MpvRenderer::TryFallbackHwdec() {
-  hwdec_fallback_attempted_.store(true, std::memory_order_acq_rel);
   std::lock_guard<std::mutex> lock(mutex_);
   if (!mpv_) return;
 
