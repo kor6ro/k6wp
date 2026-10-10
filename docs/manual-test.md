@@ -156,3 +156,29 @@ claimed result.
     video and click a sub-tab: the collision refusal appears and
     `displays.json` stays unchanged. Clearing the arm before selecting a
     sub-tab must also leave the assignment untouched.
+
+## 1.3.0-beta.3 engine fixes
+
+Verify the engine-hardening fixes in 1.3.0-beta.3. Items marked optional are
+best-effort on the matching hardware.
+
+1. E-01 — an OS wallpaper change is not clobbered on exit. Set OS wallpaper A,
+   start the engine, change the OS wallpaper to B (Windows Settings →
+   Personalization → Background), then quit K6WP from the tray menu. The
+   wallpaper must stay B: the engine saved A at start, so a stale restore would
+   wrongly bring A back.
+2. E-02 — re-anchoring does not leak WorkerW windows (needs 24H2). On a 24H2
+   machine, count WorkerW-class windows (Spy++ or `tools\verify_wallpaper.ps1`
+   if it dumps windows) before and after ~10 re-anchors (lock/unlock the
+   session, or toggle Duplicate/Extend). The count must not grow.
+3. E-03 — hwdec fallback re-arms after recovery (needs a hwdec-capable
+   machine). Note the `hwdec-current=` lines in `engine.log`; force a transient
+   failure (or start the engine with `--simulate-device-lost-after-ms`) and let
+   playback recover. The next decode failure must still fall back: the
+   `falling back to` chain lines must appear again, not just once at boot.
+4. E-04 — device-lost watch armed (optional). If a TDR simulation is possible,
+   or on a DXGI 1.6-capable machine, confirm `engine.log` shows the boot line
+   `device-lost: adapter-removed watch armed`.
+5. L-01 — crash-restart give-up (optional). Force repeated crashes and confirm
+   `engine.log` shows the crash-restart give-up line once the restart budget is
+   exhausted.
