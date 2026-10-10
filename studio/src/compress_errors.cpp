@@ -7,17 +7,20 @@ namespace k6wp {
 QString FriendlyCompressError(const QString& technical) {
   const QString t = technical.toLower();
   if (t.contains(QStringLiteral("cancelled"))) {
-    return QStringLiteral("Kompresi dibatalkan.");
+    return QCoreApplication::translate("k6wp::CompressError",
+                                       "Kompresi dibatalkan.");
   }
   if (t.contains(QStringLiteral("longer than 10 minutes")) ||
       t.contains(QStringLiteral("force-long"))) {
-    return QStringLiteral(
+    return QCoreApplication::translate(
+        "k6wp::CompressError",
         "Video lebih dari 10 menit. Izinkan video panjang lalu coba lagi, "
         "atau pilih video yang lebih pendek.");
   }
   if (t.contains(QStringLiteral("failed to read duration")) ||
       t.contains(QStringLiteral("corrupt"))) {
-    return QStringLiteral(
+    return QCoreApplication::translate(
+        "k6wp::CompressError",
         "Tidak bisa membaca video ini (file rusak atau format tak dikenal).");
   }
   if (t.contains(QStringLiteral("ffmpeg"))) {
@@ -30,7 +33,8 @@ QString FriendlyCompressError(const QString& technical) {
     }
     if (t.contains(QStringLiteral("failed")) ||
         t.contains(QStringLiteral("gagal"))) {
-      return QStringLiteral("Gagal menjalankan ffmpeg. Coba lagi.");
+      return QCoreApplication::translate(
+          "k6wp::CompressError", "Gagal menjalankan ffmpeg. Coba lagi.");
     }
   }
   if (t.contains(QStringLiteral("compressor"))) {
@@ -59,15 +63,20 @@ QString FriendlyCompressError(const QString& technical) {
       (t.contains(QStringLiteral("not found")) ||
        t.contains(QStringLiteral("not exist")) ||
        t.contains(QStringLiteral("tidak ditemukan")))) {
-    return QStringLiteral("File input tidak ditemukan.");
+    return QCoreApplication::translate("k6wp::CompressError",
+                                       "File input tidak ditemukan.");
   }
   if (t.contains(QStringLiteral("crf must be in range"))) {
-    return QStringLiteral("Kualitas CRF harus antara 16 sampai 28.");
+    return QCoreApplication::translate(
+        "k6wp::CompressError", "Kualitas CRF harus antara 16 sampai 28.");
   }
   if (t.isEmpty()) {
-    return QStringLiteral("Kompresi gagal tanpa keterangan.");
+    return QCoreApplication::translate("k6wp::CompressError",
+                                       "Kompresi gagal tanpa keterangan.");
   }
-  return QStringLiteral("Kompresi gagal. Lihat log untuk detail teknis.");
+  return QCoreApplication::translate(
+      "k6wp::CompressError",
+      "Kompresi gagal. Lihat log untuk detail teknis.");
 }
 
 }  // namespace k6wp

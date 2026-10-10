@@ -88,8 +88,8 @@ CompressBridge::CompressBridge(QObject* parent) : QObject(parent) {
                                  "missing: %2")
                       .arg(meta.job_id)
                       .arg(out));
-              status_text_ = QStringLiteral(
-                  "Kompres lapor OK tetapi hasilnya hilang: %1").arg(out);
+              status_text_ =
+                  tr("Kompres lapor OK tetapi hasilnya hilang: %1").arg(out);
               detail_text_ = status_text_;
               emit statusTextChanged();
               emit progressChanged();
@@ -134,13 +134,13 @@ CompressBridge::CompressBridge(QObject* parent) : QObject(parent) {
               }
             }
             if (info.skip_optimal) {
-              status_text_ = QStringLiteral(
+              status_text_ = tr(
                   "Sudah optimal (H.264 tanpa audio, resolusi/fps sesuai) — "
                   "disalin, bukan dikompres");
               detail_text_ = status_text_;
             } else if (info.cache_hit) {
-              status_text_ = QStringLiteral(
-                  "Hasil instan dari cache (setting sama sudah pernah)");
+              status_text_ =
+                  tr("Hasil instan dari cache (setting sama sudah pernah)");
               detail_text_ = status_text_;
             } else {
               status_text_ =

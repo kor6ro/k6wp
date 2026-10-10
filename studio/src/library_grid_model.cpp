@@ -268,7 +268,7 @@ void LibraryGridModel::reload() {
     // Q_INVOKABLE into the QML engine, which cannot catch C++ exceptions.
     items.clear();
     loaded = false;
-    SetLastError(QStringLiteral("Perpustakaan rusak: %1")
+    SetLastError(tr("Perpustakaan rusak: %1")
                      .arg(QString::fromUtf8(e.what())));
   }
   if (loaded && library_.RecoveredFromBackup()) {
@@ -278,7 +278,7 @@ void LibraryGridModel::reload() {
     AppendLog(QStringLiteral(
         "Daftar video dipulihkan dari cadangan .bak; perubahan terakhir "
         "mungkin tidak ada."));
-    SetLastError(QStringLiteral(
+    SetLastError(tr(
         "Daftar video korup dan dipulihkan dari cadangan. Video yang "
         "diimpor terakhir mungkin tidak terdaftar."));
   }
@@ -292,18 +292,18 @@ void LibraryGridModel::reload() {
   if (loaded) {
     SetLastError(QString());
   }
-  SetStatusText(items_.empty()
-                    ? QStringLiteral("Perpustakaan kosong — impor video lewat "
-                                     "Berkas > Impor atau seret & letakkan")
-                    : QStringLiteral("Perpustakaan disegarkan (%1 entri)")
-                          .arg(items_.size()));
+  SetStatusText(
+      items_.empty()
+          ? tr("Perpustakaan kosong — impor video lewat Berkas > Impor atau "
+               "seret & letakkan")
+          : tr("Perpustakaan disegarkan (%1 entri)").arg(items_.size()));
 }
 
 int LibraryGridModel::pickAndImport() {
   const QStringList picked = QFileDialog::getOpenFileNames(
-      nullptr, QStringLiteral("Impor Video"), QString(),
-      QStringLiteral("Video (*.mp4 *.webm *.avi *.mkv *.mov *.wmv);"
-                     "Semua File (*)"));
+      nullptr, tr("Impor Video"), QString(),
+      tr("Video (*.mp4 *.webm *.avi *.mkv *.mov *.wmv);"
+         "Semua File (*)"));
   if (picked.isEmpty()) {
     return 0;
   }
@@ -353,7 +353,7 @@ int LibraryGridModel::importPaths(const QStringList& paths) {
   }
   if (!failed.isEmpty()) {
     AppendLog(QStringLiteral("Impor gagal untuk: %1").arg(failed.join("; ")));
-    SetLastError(QStringLiteral("Impor gagal untuk %1 file").arg(failed.size()));
+    SetLastError(tr("Impor gagal untuk %1 file").arg(failed.size()));
   }
   if (skipped > 0) {
     AppendLog(QStringLiteral("File non-video diabaikan: %1").arg(skipped));
@@ -361,7 +361,7 @@ int LibraryGridModel::importPaths(const QStringList& paths) {
   reload();
   if (added > 0) {
     AppendLog(QStringLiteral("Diimpor %1 video").arg(added));
-    SetStatusText(QStringLiteral("Diimpor %1 video").arg(added));
+    SetStatusText(tr("Diimpor %1 video").arg(added));
   }
   // Started after reload() so the rows are already on screen when the worker
   // finishes, and the placeholder is the normal "metadata pending" state.
@@ -481,7 +481,7 @@ bool LibraryGridModel::removeAt(int row, bool moveToTrash) {
       // delete: the metadata is gone but the file is still on disk.
       AppendLog(QStringLiteral("Entri dipertahankan. %1")
                     .arg(QString::fromStdString(error)));
-      SetLastError(QStringLiteral("Entri dipertahankan. %1")
+      SetLastError(tr("Entri dipertahankan. %1")
                        .arg(QString::fromStdString(error)));
     }
     AppendLog(QStringLiteral("Library: removed %1")

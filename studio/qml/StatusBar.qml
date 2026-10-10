@@ -78,7 +78,7 @@ Pane {
         if (name.length > 0)
             return Studio.statusTitle + " • " + name
         if (idle)
-            return Studio.statusTitle + " — pilih video untuk mulai"
+            return Studio.statusTitle + " — " + qsTr("pilih video untuk mulai")
         return Studio.statusTitle
     }
 

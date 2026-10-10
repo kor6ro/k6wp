@@ -1,5 +1,7 @@
 #include "cache_dir_policy.hpp"
 
+#include <QCoreApplication>
+
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -175,25 +177,29 @@ bool CacheDirIsClearable(const std::filesystem::path& configured,
                          QString* refusal) {
   std::error_code ec;
   if (!std::filesystem::is_directory(configured, ec) || ec) {
-    *refusal = QStringLiteral("Cache ditolak: %1 bukan folder.").arg(
-        QString::fromStdWString(configured.wstring()));
+    *refusal = QCoreApplication::translate(
+                   "k6wp::CacheDirPolicy", "Cache ditolak: %1 bukan folder.")
+                   .arg(QString::fromStdWString(configured.wstring()));
     return false;
   }
   if (IsVolumeRoot(configured)) {
-    *refusal = QStringLiteral(
+    *refusal = QCoreApplication::translate(
+                   "k6wp::CacheDirPolicy",
                    "Cache ditolak: %1 adalah akar drive, bukan folder cache.")
                    .arg(QString::fromStdWString(configured.wstring()));
     return false;
   }
   std::filesystem::path target;
   if (!ResolveTarget(configured, &target)) {
-    *refusal = QStringLiteral(
+    *refusal = QCoreApplication::translate(
+                   "k6wp::CacheDirPolicy",
                    "Cache ditolak: %1 tidak bisa dipastikan lokasinya.")
                    .arg(QString::fromStdWString(configured.wstring()));
     return false;
   }
   if (IsVolumeRoot(target)) {
-    *refusal = QStringLiteral(
+    *refusal = QCoreApplication::translate(
+                   "k6wp::CacheDirPolicy",
                    "Cache ditolak: %1 menunjuk ke akar drive.")
                    .arg(DescribePath(configured, target));
     return false;
@@ -202,8 +208,10 @@ bool CacheDirIsClearable(const std::filesystem::path& configured,
     if (IsSamePath(protected_dir, configured) ||
         IsSamePath(protected_dir, target)) {
       *refusal =
-          QStringLiteral("Cache ditolak: %1 bukan folder cache K6WP (data "
-                         "pengguna, bukan cache).")
+          QCoreApplication::translate(
+              "k6wp::CacheDirPolicy",
+              "Cache ditolak: %1 bukan folder cache K6WP (data pengguna, "
+              "bukan cache).")
               .arg(DescribePath(configured, target));
       return false;
     }
@@ -213,8 +221,10 @@ bool CacheDirIsClearable(const std::filesystem::path& configured,
       if (IsSamePath(data_root / leaf, target) ||
           IsUnder(target, data_root / leaf)) {
         *refusal =
-            QStringLiteral("Cache ditolak: %1 bukan cache (berisi hasil "
-                           "kompres dan thumbnail).")
+            QCoreApplication::translate(
+                "k6wp::CacheDirPolicy",
+                "Cache ditolak: %1 bukan cache (berisi hasil kompres dan "
+                "thumbnail).")
                 .arg(DescribePath(configured, target));
         return false;
       }
@@ -227,7 +237,8 @@ bool CacheDirIsClearable(const std::filesystem::path& configured,
   if (HoldsNoRegularFile(target)) {
     return true;
   }
-  *refusal = QStringLiteral(
+  *refusal = QCoreApplication::translate(
+                 "k6wp::CacheDirPolicy",
                  "Cache ditolak: %1 belum ditandai sebagai cache K6WP. Pilih "
                  "ulang folder itu lewat tombol picker, atau kosongkan "
                  "isinya dulu.")

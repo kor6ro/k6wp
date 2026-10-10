@@ -1,6 +1,7 @@
 #include "playlist_bridge.hpp"
 #include "bridge_diagnostics.hpp"
 
+#include <QCoreApplication>
 #include <QFileDialog>
 #include <QVariantMap>
 
@@ -28,7 +29,9 @@ QString LabelFor(const std::wstring& path, bool exists) {
   if (name.isEmpty()) {
     name = QString::fromStdWString(path);
   }
-  return exists ? name : QStringLiteral("%1 (hilang)").arg(name);
+  return exists ? name
+                : QCoreApplication::translate("PlaylistBridge", "%1 (hilang)")
+                      .arg(name);
 }
 
 }  // namespace
@@ -121,9 +124,9 @@ void PlaylistBridge::setShuffle(bool on) {
 
 int PlaylistBridge::pickAndAdd() {
   const QStringList picked = QFileDialog::getOpenFileNames(
-      nullptr, QStringLiteral("Tambah ke Daftar Putar"), QString(),
-      QStringLiteral("Video (*.mp4 *.webm *.avi *.mkv *.mov *.wmv);"
-                     "Semua File (*)"));
+      nullptr, tr("Tambah ke Daftar Putar"), QString(),
+      tr("Video (*.mp4 *.webm *.avi *.mkv *.mov *.wmv);"
+         "Semua File (*)"));
   if (picked.isEmpty()) {
     return 0;
   }
@@ -233,9 +236,10 @@ bool PlaylistBridge::syncOrderFromLibrary() {
   // >500-entry guard: reject BEFORE touching cfg_ or the file, so a
   // 501-entry library cannot truncate or rewrite playlist.json.
   if (order.size() > kPlaylistMaxEntries) {
-    SetLastError(QStringLiteral("Daftar putar melebihi batas %1 entri (dapat %2)")
-                     .arg(static_cast<qulonglong>(kPlaylistMaxEntries))
-                     .arg(order.size()));
+    SetLastError(
+        tr("Daftar putar melebihi batas %1 entri (dapat %2)")
+            .arg(static_cast<qulonglong>(kPlaylistMaxEntries))
+            .arg(order.size()));
     return false;
   }
 

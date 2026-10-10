@@ -205,19 +205,22 @@ QString StatusTitleFor(BridgeStatusKind kind, const QString& detail,
     case BridgeStatusKind::kDegraded:
       // Degraded still paints the wallpaper as active in the detail line
       // ("tapi tak tampil"), so the title agrees with the engine being alive.
-      return video_active ? QStringLiteral("Wallpaper aktif")
-                          : QStringLiteral("Tidak aktif");
+      return video_active
+                 ? QCoreApplication::translate("StudioBridge", "Wallpaper aktif")
+                 : QCoreApplication::translate("StudioBridge", "Tidak aktif");
     case BridgeStatusKind::kPaused:
-      return QStringLiteral("Dijeda");
+      return QCoreApplication::translate("StudioBridge", "Dijeda");
     case BridgeStatusKind::kNotRunning:
     case BridgeStatusKind::kDisconnected:
-      return QStringLiteral("Tidak aktif");
+      return QCoreApplication::translate("StudioBridge", "Tidak aktif");
     case BridgeStatusKind::kCount:
     default:
       // Unknown kind (a future EngineStatusView::Kind): never invent a
       // label - hand the raw detail through so nothing user-visible is
       // lost; empty detail falls back to the idle label.
-      return detail.isEmpty() ? QStringLiteral("Tidak aktif") : detail;
+      return detail.isEmpty()
+                 ? QCoreApplication::translate("StudioBridge", "Tidak aktif")
+                 : detail;
   }
 }
 
@@ -472,10 +475,9 @@ void StudioBridge::AppendLog(const QString& line) {
 void StudioBridge::pickVideo() {
   // Same filter the Widgets dialogs used (wallpaper_tab_widget / import_dialog).
   const QString path = QFileDialog::getOpenFileName(
-      nullptr, QStringLiteral("Pilih Video"),
-      QString(),
-      QStringLiteral("Video (*.mp4 *.webm *.avi *.mkv *.mov *.wmv);;"
-                     "Semua File (*)"));
+      nullptr, tr("Pilih Video"), QString(),
+      tr("Video (*.mp4 *.webm *.avi *.mkv *.mov *.wmv);;"
+         "Semua File (*)"));
   if (path.isEmpty()) {
     return;  // cancelled: leave the selection untouched
   }
@@ -813,7 +815,7 @@ void StudioBridge::setQuickBattery(bool enabled) {
 
 void StudioBridge::startEngine() {
   if (busy_) {
-    SetLastError(QStringLiteral("Engine sibuk — tunggu proses berjalan"));
+    SetLastError(tr("Engine sibuk — tunggu proses berjalan"));
     return;
   }
   busy_ = true;
@@ -869,15 +871,15 @@ qint64 StudioBridge::compressFirstOfferMb(const QString& path) const {
 
 void StudioBridge::applyWallpaper(const QString& path) {
   if (path.isEmpty()) {
-    SetLastError(QStringLiteral("Belum Ada yang Dipilih"));
+    SetLastError(tr("Belum Ada yang Dipilih"));
     return;
   }
   if (!QFileInfo::exists(path)) {
-    SetLastError(QStringLiteral("Video tidak ditemukan"));
+    SetLastError(tr("Video tidak ditemukan"));
     return;
   }
   if (busy_) {
-    SetLastError(QStringLiteral("Engine sibuk — tunggu proses berjalan"));
+    SetLastError(tr("Engine sibuk — tunggu proses berjalan"));
     return;
   }
 

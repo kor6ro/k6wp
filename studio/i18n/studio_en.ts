@@ -444,6 +444,14 @@
     </message>
 </context>
 <context>
+    <name>PlaylistBridge</name>
+    <message>
+        <location filename="../src/playlist_bridge.cpp" line="+33"/>
+        <source>%1 (hilang)</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>PreviewHole</name>
     <message>
         <location filename="../qml/PreviewHole.qml" line="+34"/>
@@ -1050,7 +1058,12 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+1"/>
+        <location line="-179"/>
+        <source>pilih video untuk mulai</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+180"/>
         <source>Jedakan wallpaper sementara</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1071,6 +1084,23 @@
         <location line="+43"/>
         <source>Mode duplikat terdeteksi (%1). Penugasan video per layar dinonaktifkan sampai tampilan Windows diubah ke mode Perluas.</source>
         <translation>Duplicate mode detected (%1). Per-monitor video assignment is disabled until the Windows display is changed to Extend mode.</translation>
+    </message>
+    <message>
+        <location line="+55"/>
+        <source>Wallpaper aktif</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <location line="+5"/>
+        <location line="+7"/>
+        <source>Tidak aktif</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-10"/>
+        <source>Dijeda</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -1350,6 +1380,44 @@
     </message>
 </context>
 <context>
+    <name>k6wp::CacheDirPolicy</name>
+    <message>
+        <location filename="../src/cache_dir_policy.cpp" line="+180"/>
+        <source>Cache ditolak: %1 bukan folder.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>Cache ditolak: %1 adalah akar drive, bukan folder cache.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>Cache ditolak: %1 tidak bisa dipastikan lokasinya.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>Cache ditolak: %1 menunjuk ke akar drive.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+10"/>
+        <source>Cache ditolak: %1 bukan folder cache K6WP (data pengguna, bukan cache).</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+13"/>
+        <source>Cache ditolak: %1 bukan cache (berisi hasil kompres dan thumbnail).</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+16"/>
+        <source>Cache ditolak: %1 belum ditandai sebagai cache K6WP. Pilih ulang folder itu lewat tombol picker, atau kosongkan isinya dulu.</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>k6wp::CompressBridge</name>
     <message>
         <location filename="../src/compress_bridge.cpp" line="+32"/>
@@ -1378,7 +1446,22 @@
         <translation>Compression failed: %1</translation>
     </message>
     <message>
-        <location line="+72"/>
+        <location line="+17"/>
+        <source>Kompres lapor OK tetapi hasilnya hilang: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+45"/>
+        <source>Sudah optimal (H.264 tanpa audio, resolusi/fps sesuai) — disalin, bukan dikompres</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>Hasil instan dari cache (setting sama sudah pernah)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
         <source>Selesai: %1 (%2)</source>
         <translation>Done: %1 (%2)</translation>
     </message>
@@ -1441,12 +1524,32 @@
 <context>
     <name>k6wp::CompressError</name>
     <message>
-        <location filename="../src/compress_errors.cpp" line="+26"/>
+        <location filename="../src/compress_errors.cpp" line="+10"/>
+        <source>Kompresi dibatalkan.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>Video lebih dari 10 menit. Izinkan video panjang lalu coba lagi, atau pilih video yang lebih pendek.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>Tidak bisa membaca video ini (file rusak atau format tak dikenal).</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+7"/>
         <source>ffmpeg tidak ditemukan di folder aplikasi. Ekstrak ulang atau pasang ulang K6WP.</source>
         <translation>ffmpeg was not found in the app folder. Re-extract or reinstall K6WP.</translation>
     </message>
     <message>
-        <location line="+13"/>
+        <location line="+7"/>
+        <source>Gagal menjalankan ffmpeg. Coba lagi.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+7"/>
         <source>Kompresor tidak ditemukan di folder aplikasi. Ekstrak ulang atau pasang ulang K6WP.</source>
         <translation>Compressor not found in the app folder. Re-extract or reinstall K6WP.</translation>
     </message>
@@ -1459,6 +1562,92 @@
         <location line="+5"/>
         <source>Kompresor berhenti tidak normal. Coba lagi atau cek log untuk detail teknis.</source>
         <translation>The compressor stopped unexpectedly. Try again or check the log for technical details.</translation>
+    </message>
+    <message>
+        <location line="+10"/>
+        <source>File input tidak ditemukan.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Kualitas CRF harus antara 16 sampai 28.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Kompresi gagal tanpa keterangan.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Kompresi gagal. Lihat log untuk detail teknis.</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>k6wp::LibraryGridModel</name>
+    <message>
+        <location filename="../src/library_grid_model.cpp" line="+271"/>
+        <source>Perpustakaan rusak: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+10"/>
+        <source>Daftar video korup dan dipulihkan dari cadangan. Video yang diimpor terakhir mungkin tidak terdaftar.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+16"/>
+        <source>Perpustakaan kosong — impor video lewat Berkas &gt; Impor atau seret &amp; letakkan</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Perpustakaan disegarkan (%1 entri)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>Impor Video</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Video (*.mp4 *.webm *.avi *.mkv *.mov *.wmv);Semua File (*)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+51"/>
+        <source>Impor gagal untuk %1 file</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>Diimpor %1 video</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+120"/>
+        <source>Entri dipertahankan. %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>k6wp::PlaylistBridge</name>
+    <message>
+        <location filename="../src/playlist_bridge.cpp" line="+94"/>
+        <source>Tambah ke Daftar Putar</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Video (*.mp4 *.webm *.avi *.mkv *.mov *.wmv);Semua File (*)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+112"/>
+        <source>Daftar putar melebihi batas %1 entri (dapat %2)</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -1520,7 +1709,24 @@
 <context>
     <name>k6wp::SettingsBridge</name>
     <message>
-        <location filename="../src/settings_bridge.cpp" line="+218"/>
+        <location filename="../src/settings_bridge.cpp" line="+140"/>
+        <source>Pengaturan studio rusak, kembali ke bawaan: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+34"/>
+        <location line="+25"/>
+        <source>Gagal menyimpan pengaturan studio: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-16"/>
+        <source>Gagal menyimpan konfigurasi:
+%1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+35"/>
         <source>Folder output tidak boleh kosong.</source>
         <translation>Output folder must not be empty.</translation>
     </message>
@@ -1540,7 +1746,12 @@
         <translation>Unknown resolution mode.</translation>
     </message>
     <message>
-        <location line="+65"/>
+        <location line="+10"/>
+        <source>Gagal menyimpan mulai otomatis: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+55"/>
         <source>Sumber daftar putar tidak dikenal.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1599,11 +1810,31 @@
         <source>Tinggi resolusi tidak boleh negatif.</source>
         <translation>Resolution height must not be negative.</translation>
     </message>
+    <message>
+        <location line="+11"/>
+        <source>Pilih Folder Output</source>
+        <translation type="unfinished">Choose Output Folder</translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>Pilih Folder Cache</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+10"/>
+        <source>Folder cache tidak bisa ditandai, jadi tidak akan bisa dibersihkan: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+59"/>
+        <source>Sebagian cache gagal dihapus: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
 </context>
 <context>
     <name>k6wp::StudioBridge</name>
     <message>
-        <location filename="../src/studio_bridge.cpp" line="+252"/>
+        <location filename="../src/studio_bridge.cpp" line="+197"/>
         <location line="+11"/>
         <source>(belum ada video aktif)</source>
         <translation>(no active video yet)</translation>
@@ -1651,7 +1882,17 @@
         <translation>Disconnected - try again</translation>
     </message>
     <message>
-        <location line="+105"/>
+        <location line="+48"/>
+        <source>Pilih Video</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Video (*.mp4 *.webm *.avi *.mkv *.mov *.wmv);;Semua File (*)</source>
+        <translation type="unfinished">Video (*.mp4 *.webm *.avi *.mkv *.mov *.wmv);;All Files (*)</translation>
+    </message>
+    <message>
+        <location line="+55"/>
         <source>Semua layar</source>
         <translation>All screens</translation>
     </message>
@@ -1729,7 +1970,23 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+300"/>
+        <location line="+85"/>
+        <location line="+64"/>
+        <source>Engine sibuk — tunggu proses berjalan</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-8"/>
+        <source>Belum Ada yang Dipilih</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Video tidak ditemukan</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+155"/>
         <source>Engine paused (IPC)</source>
         <translation>Engine paused (IPC)</translation>
     </message>

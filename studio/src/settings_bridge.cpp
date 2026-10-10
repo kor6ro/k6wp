@@ -137,7 +137,7 @@ void SettingsBridge::reload() {
     // studio_settings.json.bak; fall back to defaults and say so.
     studio_ = DefaultStudioSettings();
     loaded = false;
-    SetLastError(QStringLiteral("Pengaturan studio rusak, kembali ke bawaan: %1")
+    SetLastError(tr("Pengaturan studio rusak, kembali ke bawaan: %1")
                      .arg(QString::fromUtf8(e.what())));
   }
   try {
@@ -171,7 +171,7 @@ void SettingsBridge::apply() {
     SaveStudioSettings(settings_path_, studio_);
     AppendLog(QStringLiteral("Pengaturan studio tersimpan"));
   } catch (const ConfigError& e) {
-    error = QStringLiteral("Gagal menyimpan pengaturan studio: %1")
+    error = tr("Gagal menyimpan pengaturan studio: %1")
                 .arg(QString::fromUtf8(e.what()));
   }
   try {
@@ -180,7 +180,7 @@ void SettingsBridge::apply() {
       AppendLog(QStringLiteral("Pengaturan engine tersimpan"));
     }
   } catch (const ConfigError& e) {
-    const QString msg = QStringLiteral("Gagal menyimpan konfigurasi:\n%1")
+    const QString msg = tr("Gagal menyimpan konfigurasi:\n%1")
                             .arg(QString::fromUtf8(e.what()));
     error = error.isEmpty() ? msg : error + QLatin1String("\n") + msg;
   }
@@ -196,7 +196,7 @@ void SettingsBridge::PersistStudioSettingsNow() {
   try {
     SaveStudioSettings(settings_path_, studio_);
   } catch (const ConfigError& e) {
-    SetLastError(QStringLiteral("Gagal menyimpan pengaturan studio: %1")
+    SetLastError(tr("Gagal menyimpan pengaturan studio: %1")
                      .arg(QString::fromUtf8(e.what())));
   }
 }
@@ -254,7 +254,7 @@ void SettingsBridge::setDefaultResolutionMode(const QString& mode) {
 void SettingsBridge::setStartWithWindows(bool on) {
   std::string err;
   if (!SetAutostart(on, &err)) {
-    SetLastError(QStringLiteral("Gagal menyimpan mulai otomatis: %1")
+    SetLastError(tr("Gagal menyimpan mulai otomatis: %1")
                      .arg(QString::fromStdString(err)));
   } else {
     AppendLog(QStringLiteral("Mulai otomatis %1")
@@ -463,7 +463,7 @@ void SettingsBridge::setResolutionH(int value) {
 
 void SettingsBridge::pickCompressOutputDir() {
   const QString dir = QFileDialog::getExistingDirectory(
-      nullptr, QStringLiteral("Pilih Folder Output"),
+      nullptr, tr("Pilih Folder Output"),
       QString::fromStdWString(studio_.compress_output_dir));
   if (!dir.isEmpty()) {
     setCompressOutputDir(dir);
@@ -472,7 +472,7 @@ void SettingsBridge::pickCompressOutputDir() {
 
 void SettingsBridge::pickCacheDir() {
   const QString dir = QFileDialog::getExistingDirectory(
-      nullptr, QStringLiteral("Pilih Folder Cache"),
+      nullptr, tr("Pilih Folder Cache"),
       QString::fromStdWString(studio_.cache_dir));
   if (dir.isEmpty()) {
     return;
@@ -482,8 +482,8 @@ void SettingsBridge::pickCacheDir() {
   // writes. Without it, a mistyped path in the field is one click away from
   // deleting itself.
   if (!MarkCacheDirOptedIn(std::filesystem::path(dir.toStdWString()))) {
-    SetLastError(QStringLiteral("Folder cache tidak bisa ditandai, jadi tidak "
-                                "akan bisa dibersihkan: %1")
+    SetLastError(tr("Folder cache tidak bisa ditandai, jadi tidak "
+                    "akan bisa dibersihkan: %1")
                      .arg(dir));
   }
   setCacheDir(dir);
@@ -541,7 +541,7 @@ int SettingsBridge::clearCache() {
     // Both channels: lastError is what the QML banner shows, the log line is
     // what a QA screenshot has. Logging "cache dibersihkan" after a partial
     // sweep is how a user learns their cache is only half-cleared.
-    SetLastError(QStringLiteral("Sebagian cache gagal dihapus: %1").arg(failed));
+    SetLastError(tr("Sebagian cache gagal dihapus: %1").arg(failed));
     return removed;
   }
   // A clean sweep supersedes the refusal an earlier attempt reported, the same
