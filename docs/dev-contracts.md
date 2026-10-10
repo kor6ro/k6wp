@@ -328,6 +328,13 @@ doc — when in doubt, read the code.
   equal the live `applied_displays_` map, and a corrupt file (or a throwing
   callback) keeps the last-good map with no slot teardown and no crash, while
   a later valid write recovers.
+- Same-directory watch limitation: `WatchSecondFile` reuses the SAME directory
+  handle as `config.json`, so `displays.json` is only watched when it lives in
+  the same directory as the active `--config` path. When it does not, the
+  watcher logs a warning and skips registration — there is NO poll fallback for
+  the second file by design, so out-of-dir assignments never live-reload;
+  restart with a same-dir config, or move the file beside the active config,
+  to regain it (`engine/src/config_watch.cpp:141-147`).
 - Scope: the store is per-user (`%LOCALAPPDATA%`), while every command that
   mutates it arrives on the per-session pipe (§1), so an engine only ever
   applies assignments to the live monitors of the session it serves and the

@@ -247,11 +247,12 @@ Condensed from `repomix.md` Part 1 (full dump) — contracts in
   (`--engine --silent` for autostart).
 - `packaging/` — `make_zip.ps1` + `installer.nsi` (kept in sync by build asserts).
 
-Key protocols: IPC NDJSON v1 over `\\.\pipe\k6wp-engine` (current-user-only ACL,
-2 s ack deadline, 1 retry on pipe-drop); config v2 with `.bak` backup on
-migration or corrupt input; canonical silent flags `--minimized` (engine) /
-`--engine --silent` (launcher). Details: `docs/dev-contracts.md`,
-`docs/dev-test-flags.md`.
+Key protocols: IPC NDJSON v1 over the per-session pipe
+`\\.\pipe\k6wp-engine-<session_id>` (each Terminal Services session gets an
+isolated engine singleton; current-user-only ACL, 2 s ack deadline, 1 retry on
+pipe-drop); config v5 with `.bak` backup on migration or corrupt input;
+canonical silent flags `--minimized` (engine) / `--engine --silent` (launcher).
+Details: `docs/dev-contracts.md`, `docs/dev-test-flags.md`.
 
 ## Privacy
 
