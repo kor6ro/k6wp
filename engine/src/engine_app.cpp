@@ -17,6 +17,7 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
+#include <cwchar>
 #include <filesystem>
 #include <mutex>
 #include <optional>
@@ -442,6 +443,15 @@ bool EngineApp::Init(int argc, char** argv) {
   // so a headless LoadLoop here would decode the same file twice (~500MB on
   // 4K). Still AFTER tray/IPC are up (Todo 9: surface logging needs them).
   InitWallpaperSurface(boot_video);
+  // E-04: arm the DXGI adapter-removed watch now that the live surface exists;
+  // its event joins the Run-loop wait array below. Start() never throws and
+  // leaves the watch inactive on any COM failure, so a missing dxgi/older OS
+  // only loses TDR auto-detection — the engine boots and runs unchanged.
+  if (device_lost_watch_.Start()) {
+    Log("device-lost: adapter-removed watch armed");
+  } else {
+    Log("device-lost: adapter-removed watch unavailable (engine keeps running without it)");
+  }
   if (boot_autoplay) {
     headless_owns_decode_.store(
         !wallpaper_surface_live_.load(std::memory_order_acquire),
@@ -554,6 +564,11 @@ void EngineApp::InitWallpaperSurface(const std::string& video_utf8) {
       multi_monitor_.ApplyBootAssignments(boot_displays,
                                           config_watcher_.GetConfig().fit_mode);
   applied_displays_ = boot_displays;
+  // E-06: publish the worker-safe get_state snapshot at the same moment.
+  {
+    std::lock_guard<std::mutex> lock(displays_mutex_);
+    displays_snapshot_ = boot_displays;
+  }
   Log("display: boot assignments applied=%d retained=%d missing=%d",
       boot_stats.applied, boot_stats.retained, boot_stats.skipped_missing);
   UpdateTrayErrorStatus();
@@ -697,6 +712,13 @@ int EngineApp::Run() {
                                 std::chrono::steady_clock::now() - start)
                                 .count();
 
+    // L-01: a clean run >= 300 s clears the crash-restart backoff file, so a
+    // later crash gets a fresh budget. Fires once per process.
+    if (!healthy_uptime_noted_ && elapsed_ms >= 300000) {
+      healthy_uptime_noted_ = true;
+      NoteHealthyUptime();
+    }
+
     const TestSimulator::Fired fired = sim_.Tick(elapsed_ms);
     if (fired.device_lost) {
       Log("test: --simulate-device-lost-after-ms=%d reached, firing OnDeviceLost()",
@@ -800,17 +822,47 @@ int EngineApp::Run() {
     // P2.1 (Todo 2): the config dir-watch completion event JOINS the wait
     // array (extended, not polled) so a config.json write wakes the loop via
     // the EVENT path (event=rdevchange, ≈ debounce, well under 500 ms).
-    HANDLE wait_handles[1] = {};
+    // E-04: the DXGI adapter-removed event joins the config dir-watch event
+    // (config at index 0, device at index 1 in production). Indices are
+    // tracked explicitly so the wait result stays correct even if the config
+    // event is ever absent.
+    HANDLE wait_handles[2] = {};
     DWORD wait_count = 0;
+    DWORD cfg_index = 0;
+    DWORD device_index = 0;
+    bool cfg_watchable = false;
+    bool device_watchable = false;
     if (void* cfg_event = config_watcher_.EventHandle()) {
-      wait_handles[0] = static_cast<HANDLE>(cfg_event);
-      wait_count = 1;
+      cfg_index = wait_count;
+      wait_handles[wait_count++] = static_cast<HANDLE>(cfg_event);
+      cfg_watchable = true;
+    }
+    if (device_lost_watch_.active()) {
+      if (void* dev_event = device_lost_watch_.EventHandle()) {
+        device_index = wait_count;
+        wait_handles[wait_count++] = static_cast<HANDLE>(dev_event);
+        device_watchable = true;
+      }
     }
     const DWORD wait_result = MsgWaitForMultipleObjects(
         wait_count, wait_count > 0 ? wait_handles : nullptr, FALSE,
         ComputeWaitTimeoutMs(), QS_ALLINPUT);
-    if (wait_count > 0 && wait_result == WAIT_OBJECT_0) {
-      config_watcher_.OnDirectoryEvent();
+    if (wait_result >= WAIT_OBJECT_0 &&
+        wait_result < WAIT_OBJECT_0 + wait_count) {
+      const DWORD signaled = wait_result - WAIT_OBJECT_0;
+      if (cfg_watchable && signaled == cfg_index) {
+        config_watcher_.OnDirectoryEvent();
+      } else if (device_watchable && signaled == device_index) {
+        LogImportant("device-lost: DXGI adapter-removed event");
+        // The existing device-lost path (OnDeviceLost -> flag -> RecreateDevice
+        // at the top of the next loop iteration) is reused verbatim.
+        OnDeviceLost();
+        if (void* dev_event = device_lost_watch_.EventHandle()) {
+          // Manual-reset: clear it so the event is re-armed for the NEXT
+          // adapter change instead of keeping the wait permanently hot.
+          ResetEvent(static_cast<HANDLE>(dev_event));
+        }
+      }
     }
   }
 
@@ -1158,6 +1210,11 @@ bool EngineApp::HandleSetDisplayVideo(const std::string& payload_json) {
     // Row 16: record the live map BEFORE the save so the watcher's echo of
     // this write compares equal and skips a redundant re-convergence.
     applied_displays_ = cfg;
+    // E-06: refresh the worker-safe get_state snapshot in lockstep.
+    {
+      std::lock_guard<std::mutex> lock(displays_mutex_);
+      displays_snapshot_ = cfg;
+    }
     try {
       k6wp::SaveDisplays(displays_path, cfg);
     } catch (const k6wp::ConfigError& e) {
@@ -1184,6 +1241,11 @@ bool EngineApp::HandleSetDisplayVideo(const std::string& payload_json) {
   // Row 16: same echo suppression as the clear path (live map recorded before
   // the save; the watcher's notification then compares equal and no-ops).
   applied_displays_ = cfg;
+  // E-06: refresh the worker-safe get_state snapshot in lockstep.
+  {
+    std::lock_guard<std::mutex> lock(displays_mutex_);
+    displays_snapshot_ = cfg;
+  }
   try {
     k6wp::SaveDisplays(displays_path, cfg);
   } catch (const k6wp::ConfigError& e) {
@@ -1271,10 +1333,22 @@ void EngineApp::OnDisplaysFileChanged() {
     }
   }
   applied_displays_ = fresh;
+  // E-06: refresh the worker-safe get_state snapshot in lockstep.
+  {
+    std::lock_guard<std::mutex> lock(displays_mutex_);
+    displays_snapshot_ = fresh;
+  }
   Log("display: reload applied (%d slot(s), %d skipped)", applied, skipped);
 }
 
 void EngineApp::RecreateDevice() {
+  // E-04 (audit remediation): a real GPU TDR / adapter removal kills the D3D11
+  // device behind every live decoder. The old body only re-issued loadfile,
+  // which cannot recover a dead swap chain / VO — the wallpaper stayed black.
+  // Rebuild the surface (or the headless renderer) so the VO and its device are
+  // recreated, then reload the current video. Everything is wrapped in a
+  // try/catch: a destruction failure during teardown must never unwind the
+  // message loop.
   std::string video;
   {
     std::lock_guard<std::mutex> lock(video_mutex_);
@@ -1286,17 +1360,54 @@ void EngineApp::RecreateDevice() {
     return;
   }
   LogImportant("device-lost: RecreateDevice() begin reload '%s'", video.c_str());
-  bool ok = false;
-  if (wallpaper_surface_live_.load(std::memory_order_acquire)) {
-    ok = multi_monitor_.LoadLoopAll(video, true);
-  } else if (renderer_) {
-    ok = renderer_->LoadLoop(video, true);
-  }
-  LogImportant("device-lost: RecreateDevice() end reload ok=%d", ok ? 1 : 0);
-  if (ok) {
+  try {
+    if (wallpaper_surface_live_.load(std::memory_order_acquire)) {
+      // Full surface rebuild: ShutdownWallpaperSurface() tears down every slot
+      // renderer + injector (their devices died with the adapter) and
+      // InitWallpaperSurface() re-resolves the desktop host, re-attaches the
+      // slots, re-applies the boot assignments and reloads the video.
+      LogImportant("device-lost: rebuilding live surface for '%s'", video.c_str());
+      ShutdownWallpaperSurface();
+      InitWallpaperSurface(video);
+      LogImportant("device-lost: live surface rebuilt (live=%d)",
+                   wallpaper_surface_live_.load(std::memory_order_acquire) ? 1 : 0);
+    } else {
+      // Headless rebuild, mirroring VerifyHeadlessPin()'s teardown → Create →
+      // LoadLoop → re-Pause sequence. Held under renderer_mutex_ so a
+      // concurrent worker copy (get_state / pause) never observes a half-torn
+      // renderer.
+      LogImportant("device-lost: recreating headless renderer for '%s'", video.c_str());
+      const bool was_paused = UiPaused();
+      bool recreated = false;
+      {
+        std::lock_guard<std::mutex> lock(renderer_mutex_);
+        renderer_.reset();
+        renderer_ = std::make_shared<MpvRenderer>();
+        if (!renderer_->Create(message_hwnd_)) {
+          Log("warning: device-lost: headless renderer recreate failed");
+        } else {
+          renderer_->SetMessageWindow(message_hwnd_);
+          if (!renderer_->LoadLoop(video, true)) {
+            Log("warning: device-lost: headless reload refused '%s'", video.c_str());
+          }
+          if (was_paused) renderer_->Pause();
+          recreated = true;
+        }
+      }
+      LogImportant("device-lost: headless renderer recreated ok=%d", recreated ? 1 : 0);
+    }
+    headless_owns_decode_.store(
+        !wallpaper_surface_live_.load(std::memory_order_acquire),
+        std::memory_order_release);
     playlist_.Arm();  // restart the playlist interval after the forced reload
-    ArmPinVerify();  // P3L.3: re-verify pin after the forced reload
+    ArmPinVerify();   // P3L.3: re-verify pin after the forced reload
+  } catch (const std::exception& e) {
+    LogImportant("device-lost: RecreateDevice() failed: %s (engine keeps running)",
+                 e.what());
+  } catch (...) {
+    LogImportant("device-lost: RecreateDevice() failed (unknown), engine keeps running");
   }
+  LogImportant("device-lost: RecreateDevice() end");
 }
 
 void EngineApp::OnTrayTogglePause() {
@@ -1356,19 +1467,25 @@ std::string EngineApp::BuildStateJson() const {
   const char* wallpaper_mode_str = WallpaperModeToString(wallpaper_mode_copy);
   const std::shared_ptr<MpvRenderer> renderer_snapshot = AcquireRenderer();
   // Row 15: additive display fields, computed before the initializer so the
-  // object below stays a flat append-only list. Assignments come from
-  // displays.json (LoadDisplays best-effort; missing/corrupt -> empty map).
-  // Coverage reads row 4's verdict chain per live slot
-  // (MultiMonitor::Slot::coverage_reason via SlotCoverageReason) — same
-  // best-effort diagnostic class as the slot census above.
+  // object below stays a flat append-only list. E-06: assignments now come
+  // from the in-memory display_snapshot_ (published by the main loop wherever
+  // applied_displays_ is assigned) instead of re-reading + re-parsing
+  // displays.json on EVERY get_state poll — the old path did synchronous disk
+  // I/O per poll and raced the main loop's own writes. Coverage still reads
+  // row 4's verdict chain per live slot (MultiMonitor::Slot::coverage_reason
+  // via SlotCoverageReason) — same best-effort diagnostic class.
   nlohmann::json display_assignments = nlohmann::json::object();
   try {
-    const k6wp::DisplaysConfig displays_cfg =
-        k6wp::LoadDisplays(k6wp::DefaultDisplaysPath());
+    // Copy under the mutex, then release before building JSON (the main loop
+    // only blocks for the assignment-map copy).
+    k6wp::DisplaysConfig displays_cfg;
+    {
+      std::lock_guard<std::mutex> lock(displays_mutex_);
+      displays_cfg = displays_snapshot_;
+    }
     for (const auto& [key, a] : displays_cfg.assignments) {
       display_assignments[NarrowUtf8(key)] = NarrowUtf8(a.path);
     }
-  } catch (const k6wp::ConfigError&) {
   } catch (const std::exception&) {
   }
   nlohmann::json display_coverage = nlohmann::json::object();
@@ -1525,6 +1642,22 @@ LRESULT EngineApp::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
       if (wParam == static_cast<WPARAM>(SPI_SETDESKWALLPAPER)) {
         Log("window: WM_SETTINGCHANGE (wallpaper changed), re-anchoring live surface");
         if (wallpaper_surface_live_.load(std::memory_order_acquire)) multi_monitor_.Reanchor();
+        // E-01 (audit remediation): the engine never writes the desktop
+        // wallpaper itself (the lockscreen sync writes HKLM policy + a jpg),
+        // so any SPI_SETDESKWALLPAPER here is an EXTERNAL change (Windows
+        // Settings, slideshow). The boot snapshot would then be stale and
+        // OsWallpaperGuard::Restore() on exit would clobber the user's new
+        // wallpaper. Refresh the snapshot (and the tray "valid" flag) only
+        // when the live wallpaper actually differs from what we captured.
+        wchar_t current[MAX_PATH] = {};
+        if (SystemParametersInfoW(SPI_GETDESKWALLPAPER, MAX_PATH, current, 0)) {
+          if (os_wallpaper_.saved().empty() ||
+              _wcsicmp(current, os_wallpaper_.saved().c_str()) != 0) {
+            os_wallpaper_.Save();
+            Log("wallpaper: external change detected, snapshot refreshed ('%ls')",
+                os_wallpaper_.saved().c_str());
+          }
+        }
         UpdateTrayErrorStatus();
       }
       return 0;
@@ -1638,7 +1771,13 @@ LRESULT EngineApp::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
     case kMpvHwdecChangeMessage:
       // P2.4 (Todo 7): headless event thread observed hwdec-current /
       // vo-configured — run the moved fallback logic on this loop thread.
-      if (renderer_) renderer_->OnHwdecPropertyChange();
+      // E-07: AcquireRenderer() takes renderer_mutex_ for the copy, so this
+      // read can never race the headless rebuild in RecreateDevice (which
+      // resets renderer_ under the same mutex). The old bare `renderer_`
+      // read was an unsynchronized shared_ptr copy.
+      if (std::shared_ptr<MpvRenderer> r = AcquireRenderer()) {
+        r->OnHwdecPropertyChange();
+      }
       return 0;
     case OcclusionWatch::RearmMessageId():
       // P2.5 (Todo 9): mask-zero re-arm posted by OnPauseMaskChanged
@@ -1662,6 +1801,15 @@ void EngineApp::RequestShutdown() {
   running_.store(false, std::memory_order_release);
   Log("shutdown: requested, posting WM_QUIT");
   PostQuitMessage(0);
+}
+
+void EngineApp::NoteHealthyUptime() {
+  // L-01: reached 300 s of clean uptime — the run is not a crash loop, so
+  // reset the crash-restart backoff file. Uses the file helper (GetTickCount64
+  // based) rather than any in-process state because the counter must survive
+  // the WER relaunch.
+  k6wp::ClearCrashRestartFile();
+  Log("crash-restart: healthy uptime reached, backoff counter cleared");
 }
 
 bool EngineApp::RegisterWindowClass() {

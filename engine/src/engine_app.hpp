@@ -18,6 +18,8 @@
 
 #include "cli_options.hpp"
 #include "config_watch.hpp"
+#include "crash_restart_guard.hpp"
+#include "device_lost_watch.hpp"
 #include "displays_schema.hpp"
 #include "fullscreen_watch.hpp"
 #include "ipc_server.hpp"
@@ -144,6 +146,9 @@ class EngineApp {
   bool RegisterWindowClass();
   bool CreateMessageWindow();
   void RequestShutdown();
+  // L-01: called once from Run() after ~300 s of clean uptime; clears the
+  // crash-restart backoff file (a later crash then gets a fresh budget).
+  void NoteHealthyUptime();
   // CRIT-2 ack contract ("diterima" vs "selesai", LOW-15): the IPC worker
   // thread NEVER executes these — it only validates the payload
   // (ipc_marshal.hpp) and queues it via IpcCommandMarshal, which
@@ -234,6 +239,9 @@ class EngineApp {
   // main loop (Run/RequestShutdown). Plain bool was a data race.
   std::atomic<bool> running_{false};
   bool shutdown_done_ = false;
+  // L-01: one-shot latch so the healthy-uptime reset fires once per process
+  // (Run loop thread only).
+  bool healthy_uptime_noted_ = false;
   int init_exit_code_ = 2;
   std::atomic<bool> device_lost_{false};
   // Config file watcher (Todo 11): started in Init() from CliOptions
@@ -246,6 +254,14 @@ class EngineApp {
   // OnDisplaysFileChanged and by HandleSetDisplayVideo after its live apply;
   // read/written on the main loop thread only.
   DisplaysConfig applied_displays_;
+  // E-06: worker-safe copy of applied_displays_ for get_state. Studio polls
+  // get_state on the IPC worker thread and the old BuildStateJson re-read +
+  // re-parsed displays.json on EVERY poll; this snapshot (refreshed by the
+  // main loop wherever applied_displays_ is assigned, under displays_mutex_)
+  // lets the worker read the assignment map in memory instead. Guarded by
+  // displays_mutex_ (main loop writes, IPC worker copies).
+  mutable std::mutex displays_mutex_;
+  DisplaysConfig displays_snapshot_;
   // Fullscreen auto-pause (Todo 34): started in Init(), polled in Run(),
   // stopped in Shutdown(). Win32-free header, value member is safe.
   FullscreenWatch fullscreen_watch_;
@@ -288,6 +304,11 @@ class EngineApp {
   OcclusionWatch occlusion_watch_;
   // Todo 15: OS wallpaper captured at Init, restored at Shutdown.
   OsWallpaperGuard os_wallpaper_{&EngineApp::Log};
+  // E-04: DXGI adapter-removed watch. Armed in Init after the live surface is
+  // up; its event joins the Run-loop wait array so a real GPU TDR / adapter
+  // removal fires the existing OnDeviceLost() path instead of leaving a black
+  // wallpaper. Inactive (harmless) when dxgi/IDXGIFactory7 are unavailable.
+  DeviceLostWatch device_lost_watch_{&EngineApp::Log};
   // Build the live surface (MultiMonitor::Init PerMonitor) + feed it the
   // current video/fit when available. Never fatal: attach failure degrades
   // to headless renderers slot-by-slot inside MultiMonitor.
