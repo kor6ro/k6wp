@@ -2,8 +2,7 @@
 // RAII mpv renderer — renders video via libmpv into an HWND with hardware
 // decode fallback chain (d3d11va → dxva2 → software), infinite loop, no audio.
 //
-// Pattern validated by the mpv_hwdec spike (Todo 4, archived at
-// attic/spikes/mpv_hwdec.cpp).
+// Pattern validated by the mpv_hwdec spike (Todo 4).
 
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
