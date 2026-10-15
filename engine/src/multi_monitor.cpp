@@ -9,10 +9,16 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
+#include <unordered_map>
 
 #include "multi_monitor.hpp"
+#include "topology_snapshot.hpp"
+#include "topology_diff.hpp"
+#include "lock_order.hpp"
 
 namespace k6wp {
 
@@ -277,7 +283,7 @@ void MultiMonitor::SetActiveMonitor(int id) {
   if (id == active_monitor_.load(std::memory_order_acquire)) {
     return;
   }
-  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
+  k6wp::lock_order::RecursiveSlotsGuard guard(slots_mutex_);
   active_monitor_.store(id, std::memory_order_release);
   if (mode_ == MultiMonitorMode::Span) {
     if (!span_filter_logged_) {
@@ -331,7 +337,7 @@ void MultiMonitor::ApplyActiveFilter(const std::vector<MonitorInfo>& desired) {
 }
 
 bool MultiMonitor::Init(MultiMonitorMode mode) {
-  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
+  k6wp::lock_order::RecursiveSlotsGuard guard(slots_mutex_);
   ClearSlots();
   mode_ = mode;
   if (mode_ == MultiMonitorMode::Span) {
@@ -357,7 +363,7 @@ bool MultiMonitor::Init(MultiMonitorMode mode) {
 }
 
 void MultiMonitor::Shutdown() {
-  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
+  k6wp::lock_order::RecursiveSlotsGuard guard(slots_mutex_);
   ClearSlots();
 }
 
@@ -366,7 +372,7 @@ void MultiMonitor::OnDisplayChange() {
   // attach failures degrade to fewer live slots, never an exception.
   // H1: the lock is taken before the try so an early exception cannot leave
   // the map half-walked; lock_guard unlocks on unwind.
-  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
+  k6wp::lock_order::RecursiveSlotsGuard guard(slots_mutex_);
   try {
     if (mode_ == MultiMonitorMode::Span) {
       const auto it = slots_.find(kSpanSlotId);
@@ -451,7 +457,7 @@ void MultiMonitor::OnDisplayChange() {
 }
 
 bool MultiMonitor::LoadLoopAll(const std::string& path, bool force) {
-  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
+  k6wp::lock_order::RecursiveSlotsGuard guard(slots_mutex_);
   bool any = false;
   for (auto& kv : slots_) {
     if (kv.second.renderer && kv.second.renderer->LoadLoop(path, force)) {
@@ -463,7 +469,7 @@ bool MultiMonitor::LoadLoopAll(const std::string& path, bool force) {
 }
 
 bool MultiMonitor::HasAssignment(const std::string& device) const {
-  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
+  k6wp::lock_order::RecursiveSlotsGuard guard(slots_mutex_);
   const std::wstring key = WidenDeviceKey(device);
   if (key.empty()) return false;
   for (const auto& kv : slots_) {
@@ -475,7 +481,7 @@ bool MultiMonitor::HasAssignment(const std::string& device) const {
 bool MultiMonitor::LoadLoopSlot(const std::string& device,
                                 const std::string& path,
                                 const std::string& fit_mode) {
-  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
+  k6wp::lock_order::RecursiveSlotsGuard guard(slots_mutex_);
   const std::wstring key = WidenDeviceKey(device);
   if (key.empty() || path.empty()) return false;
   for (auto& kv : slots_) {
@@ -497,7 +503,7 @@ bool MultiMonitor::LoadLoopSlot(const std::string& device,
 
 BootAssignmentStats MultiMonitor::ApplyBootAssignments(
     const DisplaysConfig& cfg, const std::string& fit_mode) {
-  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
+  k6wp::lock_order::RecursiveSlotsGuard guard(slots_mutex_);
   BootAssignmentStats stats;
   for (const auto& [key, assignment] : cfg.assignments) {
     if (key.empty() || assignment.path.empty()) continue;
@@ -649,7 +655,7 @@ void MultiMonitor::ReapplyRetainedLocked() {
 }
 
 int MultiMonitor::VerifyPinAndRevert() {
-  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
+  k6wp::lock_order::RecursiveSlotsGuard guard(slots_mutex_);
   // PATCH A: revert = full renderer recreate WITHOUT pin + reload +
   // re-verify (never a runtime property swap). Per-slot, never throws:
   // allocation/Create failures keep the old (pinned) renderer instead of
@@ -693,7 +699,7 @@ int MultiMonitor::VerifyPinAndRevert() {
 }
 
 void MultiMonitor::ApplyFitModeAll(const std::string& fit_mode) {
-  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
+  k6wp::lock_order::RecursiveSlotsGuard guard(slots_mutex_);
   for (auto& kv : slots_) {
     if (!kv.second.renderer) continue;
     double aspect = 0.0;
@@ -706,14 +712,14 @@ void MultiMonitor::ApplyFitModeAll(const std::string& fit_mode) {
 }
 
 void MultiMonitor::ApplyFpsCapAll(int fps) {
-  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
+  k6wp::lock_order::RecursiveSlotsGuard guard(slots_mutex_);
   for (auto& kv : slots_) {
     if (kv.second.renderer) kv.second.renderer->SetFpsCap(fps);
   }
 }
 
 void MultiMonitor::PauseAll() {
-  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
+  k6wp::lock_order::RecursiveSlotsGuard guard(slots_mutex_);
   global_paused_.store(true, std::memory_order_relaxed);
   for (auto& kv : slots_) {
     if (kv.second.renderer) kv.second.renderer->Pause();
@@ -721,7 +727,7 @@ void MultiMonitor::PauseAll() {
 }
 
 void MultiMonitor::ResumeAll() {
-  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
+  k6wp::lock_order::RecursiveSlotsGuard guard(slots_mutex_);
   global_paused_.store(false, std::memory_order_relaxed);
   for (auto& kv : slots_) {
     if (!kv.second.renderer) continue;
@@ -755,7 +761,7 @@ const MultiMonitor::Slot* MultiMonitor::SlotAt(size_t idx) const {
 }
 
 void MultiMonitor::PauseSlot(size_t idx, bool pause) {
-  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
+  k6wp::lock_order::RecursiveSlotsGuard guard(slots_mutex_);
   Slot* slot = SlotAt(idx);
   if (slot == nullptr) {
     return;
@@ -778,7 +784,7 @@ void MultiMonitor::PauseSlot(size_t idx, bool pause) {
 }
 
 bool MultiMonitor::IsSlotPaused(size_t idx) const {
-  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
+  k6wp::lock_order::RecursiveSlotsGuard guard(slots_mutex_);
   const Slot* slot = SlotAt(idx);
   if (slot == nullptr) {
     return global_paused_.load(std::memory_order_relaxed);
@@ -788,7 +794,7 @@ bool MultiMonitor::IsSlotPaused(size_t idx) const {
 }
 
 void MultiMonitor::Reanchor() {
-  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
+  k6wp::lock_order::RecursiveSlotsGuard guard(slots_mutex_);
   try {
     if (mode_ == MultiMonitorMode::Span) {
       // Span mode: a single slot keyed by kSpanSlotId. Explorer restart /
@@ -850,12 +856,12 @@ void MultiMonitor::Reanchor() {
 }
 
 size_t MultiMonitor::slot_count() const {
-  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
+  k6wp::lock_order::RecursiveSlotsGuard guard(slots_mutex_);
   return slots_.size();
 }
 
 bool MultiMonitor::has_headless_slots() const {
-  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
+  k6wp::lock_order::RecursiveSlotsGuard guard(slots_mutex_);
   for (const auto& kv : slots_) {
     if (kv.second.injector && kv.second.injector->injected_hwnd() == nullptr) {
       return true;
@@ -865,7 +871,7 @@ bool MultiMonitor::has_headless_slots() const {
 }
 
 int MultiMonitor::headless_slot_count() const {
-  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
+  k6wp::lock_order::RecursiveSlotsGuard guard(slots_mutex_);
   int n = 0;
   for (const auto& kv : slots_) {
     if (kv.second.injector && kv.second.injector->injected_hwnd() == nullptr) {
@@ -876,14 +882,14 @@ int MultiMonitor::headless_slot_count() const {
 }
 
 std::string MultiMonitor::SlotCoverageReason(int monitor_id) const {
-  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
+  k6wp::lock_order::RecursiveSlotsGuard guard(slots_mutex_);
   const auto it = slots_.find(monitor_id);
   if (it == slots_.end()) return {};
   return it->second.coverage_reason;
 }
 
 std::vector<SlotSnapshot> MultiMonitor::SnapshotSlots() const {
-  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
+  k6wp::lock_order::RecursiveSlotsGuard guard(slots_mutex_);
   std::vector<SlotSnapshot> out;
   out.reserve(slots_.size());
   for (const auto& kv : slots_) {
@@ -898,7 +904,7 @@ std::vector<SlotSnapshot> MultiMonitor::SnapshotSlots() const {
 }
 
 std::vector<int> MultiMonitor::monitor_ids() const {
-  std::lock_guard<std::recursive_mutex> lock(slots_mutex_);
+  k6wp::lock_order::RecursiveSlotsGuard guard(slots_mutex_);
   std::vector<int> ids;
   ids.reserve(slots_.size());
   for (const auto& kv : slots_) {
@@ -908,5 +914,140 @@ std::vector<int> MultiMonitor::monitor_ids() const {
 }
 
 MultiMonitorMode MultiMonitor::mode() const { return mode_; }
+
+
+// P3: free function TopologyDivergesFromMonitors (�R12.1)
+// Returns true when any monitor's geometry/scale/orientation/primary differs.
+// Key matching: stable_key if non-empty, else gdi_name.
+bool TopologyDivergesFromMonitors(const TopologySnapshot& snap,
+                                   const std::vector<MonitorInfo>& live) {
+  // Build a key->MonitorInfo map from live
+  std::unordered_map<std::string, const MonitorInfo*> live_by_key;
+  live_by_key.reserve(live.size());
+  for (const auto& mi : live) {
+    std::string key = mi.stable_key.empty() ? NarrowUtf8(mi.device_name) : mi.stable_key;
+    live_by_key.emplace(key, &mi);
+  }
+  // Compare each snapshot monitor against live
+  for (const auto& sm : snap.monitors) {
+    auto it = live_by_key.find(sm.stable_key.empty() ? sm.gdi_name : sm.stable_key);
+    if (it == live_by_key.end()) return true;  // snapshot monitor not in live
+    const MonitorInfo* lm = it->second;
+    if (sm.x != lm->x || sm.y != lm->y || sm.width != lm->width ||
+        sm.height != lm->height || sm.scale_pct != lm->scale_pct ||
+        sm.orientation != lm->orientation || sm.is_primary != lm->is_primary) {
+      return true;
+    }
+  }
+  // Check live monitors not in snapshot
+  std::unordered_map<std::string, bool> seen;
+  for (const auto& sm : snap.monitors) {
+    std::string key = sm.stable_key.empty() ? sm.gdi_name : sm.stable_key;
+    seen[key] = true;
+  }
+  for (const auto& mi : live) {
+    std::string key = mi.stable_key.empty() ? NarrowUtf8(mi.device_name) : mi.stable_key;
+    if (!seen.count(key)) return true;
+  }
+  return false;
+}
+
+TopologySnapshot SnapshotTopology() {
+  std::vector<MonitorInfo> raw = ListMonitors();
+  std::sort(raw.begin(), raw.end(), [](const MonitorInfo& a, const MonitorInfo& b) {
+    if (a.is_primary != b.is_primary) return a.is_primary > b.is_primary;
+    return a.stable_key < b.stable_key;
+  });
+  std::vector<TopologyMonitor> monitors;
+  monitors.reserve(raw.size());
+  for (const auto& mi : raw) {
+    TopologyMonitor tm;
+    tm.stable_key = mi.stable_key;
+    tm.gdi_name = NarrowUtf8(mi.device_name);
+    tm.x = mi.x; tm.y = mi.y;
+    tm.width = mi.width; tm.height = mi.height;
+    tm.scale_pct = mi.scale_pct; tm.orientation = mi.orientation;
+    tm.is_primary = mi.is_primary; tm.degraded = mi.identity_degraded;
+    monitors.push_back(std::move(tm));
+  }
+  TopologySnapshot snap;
+  snap.monitors = std::move(monitors);
+  SpanGeometry g = MultiMonitor::GetSpanGeometry();
+  snap.virtual_x = g.x; snap.virtual_y = g.y;
+  snap.virtual_width = g.width; snap.virtual_height = g.height;
+  // FNV-1a 64 hash over canonical serialization
+  std::string buf;
+  for (const auto& m : snap.monitors) {
+    buf += m.stable_key; buf += ",";
+    buf += m.gdi_name; buf += ",";
+    char tmp[64];
+    std::snprintf(tmp, sizeof(tmp), "%d,%d,%d,%d,%d,%d,%d",
+                  m.x, m.y, m.width, m.height, m.scale_pct, m.orientation,
+                  m.is_primary ? 1 : 0);
+    buf += tmp;
+  }
+  char vis[64];
+  std::snprintf(vis, sizeof(vis), "%d,%d,%d,%d",
+                snap.virtual_x, snap.virtual_y, snap.virtual_width, snap.virtual_height);
+  buf += vis;
+  uint64_t h = 0xcbf29ce484222325ULL;
+  for (char c : buf) {
+    h ^= static_cast<uint64_t>(c);
+    h *= 0x100000001b3ULL;
+  }
+  char out[17];
+  std::snprintf(out, sizeof(out), "%016llx",
+                static_cast<unsigned long long>(h));
+  snap.hash_snapshot = out;
+  return snap;
+}
+
+std::vector<MonitorInfo> MultiMonitor::LiveMonitorInfos() const {
+  k6wp::lock_order::RecursiveSlotsGuard guard(slots_mutex_);
+  std::vector<MonitorInfo> out;
+  out.reserve(slots_.size());
+  for (const auto& kv : slots_) out.push_back(kv.second.info);
+  return out;
+}
+
+MultiMonitor::CoverageCensus MultiMonitor::VerifyCoverage() const {
+  k6wp::lock_order::RecursiveSlotsGuard guard(slots_mutex_);
+  CoverageCensus census;
+  census.total = static_cast<int>(slots_.size());
+  int covered = 0;
+  std::vector<std::string> degraded_keys;
+  for (const auto& kv : slots_) {
+    const auto& slot = kv.second;
+    if (slot.coverage_reason == "placement: covered") ++covered;
+    if (slot.info.identity_degraded) {
+      degraded_keys.push_back(slot.info.stable_key.empty()
+                                  ? NarrowUtf8(slot.info.device_name)
+                                  : slot.info.stable_key);
+    }
+  }
+  census.covered = covered;
+  census.degraded_keys = std::move(degraded_keys);
+  return census;
+}
+
+MultiMonitor::TopologyApplyResult MultiMonitor::ApplyTopology(
+    const TopologySnapshot&, const TopologyDiff&) {
+  // Shadow mode: read-only no-op. Never mutates slots_, never writes
+  // displays.json (B14). Returns zero counts.
+  return {};
+}
+
+std::string MultiMonitor::SharedHostBranch() const {
+  if (shared_host_.client_rect.right <= shared_host_.client_rect.left ||
+      shared_host_.client_rect.bottom <= shared_host_.client_rect.top) {
+    return "(none)";
+  }
+  char buf[256];
+  std::snprintf(buf, sizeof(buf), "%dx%d@%d+%d",
+                shared_host_.client_rect.right - shared_host_.client_rect.left,
+                shared_host_.client_rect.bottom - shared_host_.client_rect.top,
+                shared_host_.client_rect.left, shared_host_.client_rect.top);
+  return std::string(buf);
+}
 
 }  // namespace k6wp

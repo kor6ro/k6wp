@@ -383,4 +383,34 @@ add_executable(topology_property_test
 target_include_directories(topology_property_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 add_test(NAME topology_property_test COMMAND topology_property_test)
 
+# reconcile_shadow_test (display resilience P3, Fase 5): SnapshotTopology
+# mapping/order/hash determinism, diff integration, divergence yes/no,
+# coverage census covered/degraded, zero slot mutation, SharedHostBranch,
+# ApplyTopology counts. Link model: multi_monitor.cpp + desktop_placement.cpp +
+# topology_diff.cpp against TU-level stubs (no desktop_inject.cpp, no
+# mpv_renderer.cpp, no mpv.lib). user32: GetSystemMetrics in
+# MultiMonitor::GetSpanGeometry. k6wp_shared: displays_schema.
+add_executable(reconcile_shadow_test
+  ../tests/reconcile_shadow_test.cpp
+  src/multi_monitor.cpp
+  src/desktop_placement.cpp
+  src/topology_diff.cpp
+)
+target_link_libraries(reconcile_shadow_test PRIVATE user32 k6wp_shared)
+target_include_directories(reconcile_shadow_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_SOURCE_DIR}/shared
+)
+add_test(NAME reconcile_shadow_test COMMAND reconcile_shadow_test)
+
+# lock_order_test (display resilience P3, Fase 5): depth bookkeeping,
+# recursion, leaf-leaf allowed. Header-only test; include engine/src.
+# Violation-abort is NOT testable in-process (would crash the test binary);
+# smoke-run of engine --exit-after-ms covers it instead.
+add_executable(lock_order_test
+  ../tests/lock_order_test.cpp
+)
+target_include_directories(lock_order_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+add_test(NAME lock_order_test COMMAND lock_order_test)
+
 endif()

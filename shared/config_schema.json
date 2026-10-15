@@ -84,6 +84,12 @@
       "enum": ["auto", "integrated", "discrete"],
       "default": "auto",
       "description": "GPU adapter preference for video decode/render on hybrid systems (mpv d3d11-adapter pin). auto = prefer the integrated GPU; integrated/discrete force that adapter when present."
+    },
+    "reconcile_mode": {
+      "type": "string",
+      "enum": ["legacy", "shadow", "on"],
+      "default": "legacy",
+      "description": "Display-resilience reconcile engine mode. legacy = today's behavior (no reconcile pass); shadow = compute snapshot + diff each debounce burst and report only (no slot mutation, never writes displays.json); on = cut over to live reconcile (P4)."
     }
   }
 }

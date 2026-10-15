@@ -48,6 +48,12 @@ struct WallpaperConfig {
   std::string battery_mode = "cap24";  // cap24 | static (DC policy, master-gated by battery_saver)
   std::string cpu_affinity = "auto";   // auto | all (P3L: E-core pin on hybrid when auto)
   std::string gpu_adapter = "auto";  // auto | integrated | discrete (P3L: iGPU pin on hybrid when auto)
+  // Display resilience P3 (§R3.1): reconcile engine mode. "legacy" = today's
+  // behavior (no reconcile); "shadow" = compute snapshot+diff each pass and
+  // report only (no slot mutation); "on" = cut over (P4). Additive default
+  // "legacy": a config lacking the key loads clean with NO .bak and NO version
+  // bump (NeedsMigration deliberately omits it — see the PR artifacts).
+  std::string reconcile_mode = "legacy";  // legacy | shadow | on
 };
 
 // Loads, migrates and validates the config at `path`.

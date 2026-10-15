@@ -529,6 +529,75 @@ int main() {
           "display: round-trip exists flag intact");
   }
 
+  // Display resilience P3: reconcile status parsing (additive).
+  // (i)  Absent "reconcile" object -> defaults: empty strings, retries 0,
+  //      no degraded keys (old-engine compat).
+  // (ii) Present object with all fields -> parsed correctly.
+  // (iii) Wrong-typed fields -> fall back to defaults, never throws.
+  {
+    nlohmann::json absent_raw;
+    absent_raw["state"] = {{"pid", 1ULL}, {"video", "C:/v.mp4"}};
+    const k6wp::EngineState absent_s = k6wp::ParseEngineState(absent_raw);
+    Check(absent_s.reconcile_mode.empty(),
+          "state: reconcile absent -> mode empty");
+    Check(absent_s.reconcile_last_trigger.empty(),
+          "state: reconcile absent -> last_trigger empty");
+    Check(absent_s.reconcile_last_verdict.empty(),
+          "state: reconcile absent -> last_verdict empty");
+    Check(absent_s.reconcile_retries == 0,
+          "state: reconcile absent -> retries 0");
+    Check(absent_s.reconcile_degraded_keys.empty(),
+          "state: reconcile absent -> degraded_keys empty");
+
+    nlohmann::json present_raw;
+    present_raw["state"] = {
+        {"pid", 2ULL},
+        {"reconcile",
+         {{"mode", "shadow"},
+          {"last_trigger", "display-change"},
+          {"last_verdict", "covered"},
+          {"retries", 0},
+          {"degraded_keys",
+           {"key-a", "key-b"}}}}};
+    const k6wp::EngineState present_s = k6wp::ParseEngineState(present_raw);
+    Check(present_s.reconcile_mode == "shadow",
+          "state: reconcile present -> mode=shadow");
+    Check(present_s.reconcile_last_trigger == "display-change",
+          "state: reconcile present -> last_trigger=display-change");
+    Check(present_s.reconcile_last_verdict == "covered",
+          "state: reconcile present -> last_verdict=covered");
+    Check(present_s.reconcile_retries == 0,
+          "state: reconcile present -> retries 0");
+    Check(present_s.reconcile_degraded_keys.size() == 2,
+          "state: reconcile present -> degraded_keys size 2");
+    Check(present_s.reconcile_degraded_keys[0] == "key-a",
+          "state: reconcile present -> degraded_keys[0]=key-a");
+    Check(present_s.reconcile_degraded_keys[1] == "key-b",
+          "state: reconcile present -> degraded_keys[1]=key-b");
+
+    nlohmann::json wrong_raw;
+    wrong_raw["state"] = {
+        {"pid", 3ULL},
+        {"reconcile",
+         {{"mode", 42},                       // wrong type -> default ""
+          {"last_trigger", "setting-change"},  // valid
+          {"last_verdict", nullptr},           // wrong type -> default ""
+          {"retries", "not-a-number"},         // wrong type -> default 0
+          {"degraded_keys", "not-an-array"}}}  // wrong type -> default empty
+    };
+    const k6wp::EngineState wrong_s = k6wp::ParseEngineState(wrong_raw);
+    Check(wrong_s.reconcile_mode.empty(),
+          "state: reconcile wrong-type mode -> default empty");
+    Check(wrong_s.reconcile_last_trigger == "setting-change",
+          "state: reconcile valid last_trigger parsed");
+    Check(wrong_s.reconcile_last_verdict.empty(),
+          "state: reconcile wrong-type verdict -> default empty");
+    Check(wrong_s.reconcile_retries == 0,
+          "state: reconcile wrong-type retries -> default 0");
+    Check(wrong_s.reconcile_degraded_keys.empty(),
+          "state: reconcile wrong-type degraded_keys -> default empty");
+  }
+
   // Row 17: boot-time assignment convergence over the real MultiMonitor
   // (link-level stubs above). Mirrors the production boot sequence:
   // Init -> LoadLoopAll(default) -> ApplyBootAssignments(displays.json).

@@ -28,6 +28,20 @@ inline constexpr std::uintptr_t kWorkingSetTrimTimerId = 0x4B365751u;
 // so the paused zero-wakeup claim holds.
 inline constexpr std::uintptr_t kOcclusionPokeTimerId = 0x4B365752u;
 
+// P3 (display resilience): reconcile burst debounce timer ('K6WP'+3). Armed by
+// ArmReconcile on every display-change / setting-change / taskbar-created /
+// displays.json-convergence trigger, re-armed (coalesced) while a burst is in
+// flight, and killed when it fires (~500 ms quiet period) so RunReconcilePass
+// runs once per burst — never periodic.
+inline constexpr std::uintptr_t kReconcileDebounceTimerId = 0x4B365753u;
+
+// P3 (display resilience): reconcile retry timer ('K6WP'+4). Registered with a
+// pairwise-distinct assert so a future retry arm can never alias another timer.
+// In P3 (shadow) it is added to the registry but NOT armed: the shadow pass runs
+// once per debounce burst with retries=0 (design §R7.2 retry schedule lands in
+// P4). The WM_TIMER handler is a kill-only no-op.
+inline constexpr std::uintptr_t kReconcileRetryTimerId = 0x4B365754u;
+
 // Pairwise-distinct guarantee: an accidental duplicate timer ID fails the
 // build instead of silently aliasing two timers on the same hidden window.
 static_assert(kDebounceTimerId != kWorkingSetTrimTimerId,
@@ -35,6 +49,20 @@ static_assert(kDebounceTimerId != kWorkingSetTrimTimerId,
 static_assert(kDebounceTimerId != kOcclusionPokeTimerId,
               "engine timer IDs must be pairwise distinct");
 static_assert(kWorkingSetTrimTimerId != kOcclusionPokeTimerId,
+              "engine timer IDs must be pairwise distinct");
+static_assert(kDebounceTimerId != kReconcileDebounceTimerId,
+              "engine timer IDs must be pairwise distinct");
+static_assert(kDebounceTimerId != kReconcileRetryTimerId,
+              "engine timer IDs must be pairwise distinct");
+static_assert(kWorkingSetTrimTimerId != kReconcileDebounceTimerId,
+              "engine timer IDs must be pairwise distinct");
+static_assert(kWorkingSetTrimTimerId != kReconcileRetryTimerId,
+              "engine timer IDs must be pairwise distinct");
+static_assert(kOcclusionPokeTimerId != kReconcileDebounceTimerId,
+              "engine timer IDs must be pairwise distinct");
+static_assert(kOcclusionPokeTimerId != kReconcileRetryTimerId,
+              "engine timer IDs must be pairwise distinct");
+static_assert(kReconcileDebounceTimerId != kReconcileRetryTimerId,
               "engine timer IDs must be pairwise distinct");
 
 }  // namespace k6wp

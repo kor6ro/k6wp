@@ -27,6 +27,8 @@
 #include "ipc_marshal.hpp"  // DisplayVideoCommand — row 33 command gate
 #include "monitor_util.hpp"
 #include "mpv_renderer.hpp"
+#include "topology_snapshot.hpp"
+#include "topology_diff.hpp"
 
 namespace k6wp {
 
@@ -300,6 +302,37 @@ class MultiMonitor {
   // calls this; pass nullptr to restore the live metrics.
   static void SetSpanGeometryOverride(const SpanGeometry* g);
 
+  // Live monitor-Info side (used by VerifyCoverage, ApplyTopology, SharedHostBranch):
+  // §R12.1 returns current std::vector<MonitorInfo> for integration.
+  std::vector<MonitorInfo> LiveMonitorInfos() const;
+
+  // P3 (§R5 / §R12.1): a census of coverage status:
+  //  total = number of monitors reported by ListMonitors (including degraded)
+  //  covered = those where coverage_reason == "placement: covered"
+  //  degraded_keys = stable_key or gdi_name (degraded=true) for identity-ambiguity
+  struct CoverageCensus {
+    int total = 0;
+    int covered = 0;
+    std::vector<std::string> degraded_keys;
+  };
+  CoverageCensus VerifyCoverage() const;
+
+  // P3 shadow semantics: applies a TopologySnapshot+TopologyDiff and returns
+  // per-slot counts; in shadow mode (P3) this is a read-only no-op (never
+  // mutates slots_); always logs when called via OnDisplaysFileChanged.
+  struct TopologyApplyResult {
+    int added = 0;
+    int removed = 0;
+    int reattached = 0;
+  };
+  TopologyApplyResult ApplyTopology(const TopologySnapshot& snap,
+                                     const TopologyDiff& diff);
+
+  // P3 (§R12.1): shared host branch derived from ConfigReplInfo
+  // (Resolver::ResolveSharedHost). Empty string returns "(none)"; column
+  // separators "\n" are part of the report.
+  std::string SharedHostBranch() const;
+
  private:
   // MpvRenderer holds a std::mutex (non-movable), so both RAII members are
   // held via unique_ptr — no raw new/delete anywhere.
@@ -422,5 +455,16 @@ class MultiMonitor {
   Slot* SlotAt(size_t idx);
   const Slot* SlotAt(size_t idx) const;
 };
+
+// P3 free function: snapshot topology from ListMonitors + GetSpanGeometry.
+// Unique order: primary-first, then stable_key, then gdi_name.
+// FNV-1a 64 hash of canonical serialization -> hash_snapshot.
+TopologySnapshot SnapshotTopology();
+
+// Free function: compare a TopologySnapshot against live MonitorInfo set.
+// Returns true when any monitor's geometry/scale/orientation/primary differs.
+// Key matching: stable_key if non-empty, else gdi_name.
+bool TopologyDivergesFromMonitors(const TopologySnapshot& snap,
+                                   const std::vector<MonitorInfo>& live);
 
 }  // namespace k6wp
