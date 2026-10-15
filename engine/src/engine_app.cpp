@@ -1237,7 +1237,17 @@ bool EngineApp::HandleSetDisplayVideo(const std::string& payload_json) {
   k6wp::MonitorAssignment assignment;
   assignment.path = WidenUtf8(cmd.path);
   assignment.exists = std::filesystem::exists(std::filesystem::u8path(cmd.path));
-  cfg.assignments[WidenUtf8(cmd.device)] = assignment;
+  // P2a §R4.4: persist the tiered stable_key for this monitor through the
+  // existing single writer (never during a reconcile pass). An unknown device
+  // or an unenriched monitor leaves it empty (legacy shape).
+  const std::wstring device_key = WidenUtf8(cmd.device);
+  for (const auto& mi : k6wp::ListMonitors()) {
+    if (mi.device_name == device_key) {
+      assignment.key_stable = WidenUtf8(mi.stable_key);
+      break;
+    }
+  }
+  cfg.assignments[device_key] = assignment;
   // Row 16: same echo suppression as the clear path (live map recorded before
   // the save; the watcher's notification then compares equal and no-ops).
   applied_displays_ = cfg;

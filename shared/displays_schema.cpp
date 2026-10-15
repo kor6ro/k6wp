@@ -46,12 +46,27 @@ nlohmann::json DisplaysToJson(const DisplaysConfig& cfg) {
     nlohmann::json value;
     value["path"] = std::filesystem::path(a.path).u8string();
     value["exists"] = a.exists;
+    // P2a §R4.4: emitted only when set, so a legacy entry keeps its exact
+    // {path,exists} shape (byte-identical round-trip).
+    if (!a.key_stable.empty()) {
+      value["key_stable"] =
+          std::filesystem::path(a.key_stable).u8string();
+    }
     assignments[std::filesystem::path(key).u8string()] = std::move(value);
   }
   nlohmann::json j;
   j["version"] = cfg.version;
   j["assignments"] = std::move(assignments);
   j["displays"] = cfg.displays;
+  // Appended after displays so a legacy file (no aliases) is unchanged.
+  if (!cfg.key_aliases.empty()) {
+    nlohmann::json aliases = nlohmann::json::object();
+    for (const auto& [gdi, sk] : cfg.key_aliases) {
+      aliases[std::filesystem::path(gdi).u8string()] =
+          std::filesystem::path(sk).u8string();
+    }
+    j["key_aliases"] = std::move(aliases);
+  }
   return j;
 }
 
@@ -153,6 +168,15 @@ DisplaysConfig MigrateDisplays(const nlohmann::json& raw) {
         a.path = std::filesystem::u8path(it.value().at("path").get<std::string>())
                      .wstring();
         a.exists = it.value().value("exists", false);
+        // P2a §R4.4: optional additive key_stable; wrong type -> empty
+        // (never a throw, so a legacy/hand-edited file still loads).
+        if (it.value().contains("key_stable") &&
+            it.value().at("key_stable").is_string()) {
+          a.key_stable =
+              std::filesystem::u8path(
+                  it.value().at("key_stable").get<std::string>())
+                  .wstring();
+        }
         cfg.assignments[std::filesystem::u8path(it.key()).wstring()] =
             std::move(a);
       }
@@ -162,6 +186,17 @@ DisplaysConfig MigrateDisplays(const nlohmann::json& raw) {
         throw ConfigError("displays must be an array");
       }
       cfg.displays = raw.at("displays");
+    }
+    // P2a §R4.4: optional top-level alias map (GDI name -> stable_key).
+    // Additive + lenient: a missing or wrong-typed value is simply ignored
+    // (never a throw), so legacy writers stay compatible.
+    if (raw.contains("key_aliases") && raw.at("key_aliases").is_object()) {
+      const auto& aliases = raw.at("key_aliases");
+      for (auto it = aliases.begin(); it != aliases.end(); ++it) {
+        if (!it.value().is_string()) continue;
+        cfg.key_aliases[std::filesystem::u8path(it.key()).wstring()] =
+            std::filesystem::u8path(it.value().get<std::string>()).wstring();
+      }
     }
   } catch (const ConfigError&) {
     throw;
