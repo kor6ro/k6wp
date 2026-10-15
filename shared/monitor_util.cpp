@@ -6,9 +6,7 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <cstdint>
 #include <map>
-#include <tuple>
 #include <utility>
 
 namespace k6wp {
@@ -219,23 +217,35 @@ struct CcdEntry {
 };
 
 // Tier 1 gather: QDC_ONLY_ACTIVE_PATHS -> per-path target/source names.
-// Best-effort; returns empty on any failure (never throws).
+// Best-effort; returns empty on any failure (never throws). A bounded retry
+// absorbs the GetDisplayConfigBufferSizes/QueryDisplayConfig race
+// (ERROR_INSUFFICIENT_BUFFER) when the topology changes between the two calls.
 std::vector<CcdEntry> QueryCcdMonitors() {
   std::vector<CcdEntry> out;
-  UINT32 path_count = 0;
-  UINT32 mode_count = 0;
-  if (::GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &path_count,
-                                    &mode_count) != ERROR_SUCCESS) {
-    return out;
+  std::vector<DISPLAYCONFIG_PATH_INFO> paths;
+  std::vector<DISPLAYCONFIG_MODE_INFO> modes;
+  bool queried = false;
+  for (int attempt = 0; attempt < 3 && !queried; ++attempt) {
+    UINT32 path_count = 0;
+    UINT32 mode_count = 0;
+    if (::GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &path_count,
+                                      &mode_count) != ERROR_SUCCESS) {
+      return out;
+    }
+    paths.assign(path_count, DISPLAYCONFIG_PATH_INFO{});
+    modes.assign(mode_count, DISPLAYCONFIG_MODE_INFO{});
+    const LONG r = ::QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &path_count,
+                                        paths.data(), &mode_count, modes.data(),
+                                        nullptr);
+    if (r == ERROR_SUCCESS) {
+      paths.resize(path_count);
+      queried = true;
+    } else if (r != ERROR_INSUFFICIENT_BUFFER) {
+      return out;
+    }
   }
-  std::vector<DISPLAYCONFIG_PATH_INFO> paths(path_count);
-  std::vector<DISPLAYCONFIG_MODE_INFO> modes(mode_count);
-  if (::QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &path_count, paths.data(),
-                           &mode_count, modes.data(), nullptr) !=
-      ERROR_SUCCESS) {
-    return out;
-  }
-  paths.resize(path_count);
+  if (!queried) return out;
+
   for (const auto& p : paths) {
     DISPLAYCONFIG_TARGET_DEVICE_NAME tn{};
     tn.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME;
