@@ -293,4 +293,62 @@ target_include_directories(display_assignment_test PRIVATE
   ${CMAKE_SOURCE_DIR}/studio/src
 )
 add_test(NAME display_assignment_test COMMAND display_assignment_test)
+
+# reconcile_golden_test (display resilience P0, Fase 4): characterization
+# GOLDEN tests for the CURRENT MultiMonitor placement/reconcile behaviour on
+# the `placement:` log surface (24H2 WorkerW-child-of-Progman / layered,
+# classic WorkerW layout with a negative-origin secondary, Span mode). These
+# stay GREEN on today's code and lock the observable behaviour the upcoming
+# Reconcile pipeline must preserve. Same link model as
+# multi_monitor_factory_test (row 6): src/multi_monitor.cpp +
+# src/desktop_placement.cpp against TU-level DesktopInjector / MpvRenderer /
+# ListMonitors stubs, so the binary never links desktop_inject.cpp,
+# mpv_renderer.cpp or mpv.lib - target_link_libraries below must never grow an
+# mpv entry. k6wp_shared: displays_schema (DetectKeyCollision). user32:
+# GetSystemMetrics in MultiMonitor::GetSpanGeometry.
+add_executable(reconcile_golden_test
+  ../tests/reconcile_golden_test.cpp
+  src/multi_monitor.cpp
+  src/desktop_placement.cpp
+)
+target_link_libraries(reconcile_golden_test PRIVATE user32 k6wp_shared)
+target_include_directories(reconcile_golden_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_SOURCE_DIR}/shared
+)
+add_test(NAME reconcile_golden_test COMMAND reconcile_golden_test)
+
+# reconcile_red_test (display resilience P0, Fase 4): one LABELED red test
+# per legacy bug B1..B4 (prompt v5.1 §5.1a). Each selects one scenario that
+# FAILS at its intended assertion on the legacy code and is registered with
+# WILL_FAIL TRUE so CTest inverts that failure into a pass and the trunk stays
+# green. Run the binary directly with the selector to see the exact intended
+# failure. Same link model as reconcile_golden_test (no mpv, no
+# desktop_inject.cpp).
+add_executable(reconcile_red_test
+  ../tests/reconcile_red_test.cpp
+  src/multi_monitor.cpp
+  src/desktop_placement.cpp
+)
+target_link_libraries(reconcile_red_test PRIVATE user32 k6wp_shared)
+target_include_directories(reconcile_red_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_SOURCE_DIR}/shared
+)
+add_test(NAME red-B1-swap-rect
+         COMMAND reconcile_red_test red-B1-swap-rect)
+add_test(NAME red-B2-unplug-reindex
+         COMMAND reconcile_red_test red-B2-unplug-reindex)
+add_test(NAME red-B3-secondary-key-change
+         COMMAND reconcile_red_test red-B3-secondary-key-change)
+add_test(NAME red-B4-replug-rebind
+         COMMAND reconcile_red_test red-B4-replug-rebind)
+set_tests_properties(
+  red-B1-swap-rect
+  red-B2-unplug-reindex
+  red-B3-secondary-key-change
+  red-B4-replug-rebind
+  PROPERTIES WILL_FAIL TRUE
+)
+
 endif()
