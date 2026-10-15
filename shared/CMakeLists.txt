@@ -93,4 +93,12 @@ add_executable(monitor_util_test ../tests/monitor_util_test.cpp)
 target_link_libraries(monitor_util_test PRIVATE k6wp_shared)
 target_include_directories(monitor_util_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 add_test(NAME monitor_util_test COMMAND monitor_util_test)
+
+# stable_key_test - P2a tiered monitor identity (AssignedIdentity /
+# AssignStableKeys pure seam): tier precedence ccd->edid->gdi, uniqueness,
+# and the degraded/ambiguous fallback. Headless (no CCD/registry).
+add_executable(stable_key_test ../tests/stable_key_test.cpp)
+target_link_libraries(stable_key_test PRIVATE k6wp_shared)
+target_include_directories(stable_key_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+add_test(NAME stable_key_test COMMAND stable_key_test)
 endif()

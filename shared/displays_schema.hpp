@@ -22,6 +22,10 @@
 //     },
 //     "displays": [ /* display-only metadata; the engine ignores it */ ]
 //   }
+// P2a adds two OPTIONAL, additive fields (§R4.4): a per-assignment
+// "key_stable" (tiered ccd/edid/gdi identity) emitted only when non-empty,
+// and a top-level "key_aliases" {gdi_name: stable_key} map emitted only when
+// non-empty. A legacy file carrying neither round-trips byte-for-byte.
 // `assignments` is keyed by the GDI device name (MONITORINFOEXW.szDevice,
 // e.g. \\.\DISPLAY1). `displays` is a top-level array Studio may write for
 // display-only metadata; the engine never reads it, and it survives the
@@ -58,6 +62,10 @@ struct MonitorAssignment {
   std::wstring path;  // UTF-8 on disk, wide in memory (Win32-friendly)
   bool exists = false;  // Studio-side existence hint at write time; the
                         // engine re-checks the filesystem at apply time.
+  // P2a §R4.4: tiered stable identity (e.g. L"ccd:...", L"edid:...:1a2b").
+  // Empty = legacy entry (key_stable is not emitted on disk when empty, so a
+  // legacy file round-trips byte-for-byte).
+  std::wstring key_stable;
 };
 
 // On-disk per-monitor assignment store. All fields have sensible defaults so
@@ -72,6 +80,12 @@ struct DisplaysConfig {
   // friendly names, ...). The engine IGNORES this array; it is preserved as
   // raw JSON so a Studio reader/writer never loses it.
   nlohmann::json displays = nlohmann::json::array();
+  // P2a §R4.4: additive legacy-key alias map (GDI device name -> tiered
+  // stable_key). Optional; only emitted when non-empty, so legacy files are
+  // untouched. The engine never writes this during a reconcile pass (the
+  // key_stable/key_aliases fields are populated only on the migration +
+  // HandleSetDisplayVideo writer paths — the one-writer rule).
+  std::map<std::wstring, std::wstring> key_aliases;
 };
 
 // --- I/O (ConfigError from config_schema.hpp) -----------------------------
@@ -91,7 +105,8 @@ void SaveDisplays(const std::filesystem::path& path, const DisplaysConfig& cfg);
 
 // Struct -> on-disk JSON mapping (single definition site, shared by
 // SaveDisplays and tests). `version` is always the current schema version.
-// Top-level keys are exactly: version, assignments, displays.
+// Top-level keys: version, assignments, displays (plus the optional,
+// additive `key_aliases` when non-empty — legacy files stay unchanged).
 nlohmann::json DisplaysToJson(const DisplaysConfig& cfg);
 
 // Rejects (throws ConfigError) values outside the accepted ranges:

@@ -448,6 +448,72 @@ int main() {
           "17. nested load works");
   }
 
+  // 18. P2a key_stable: emitted only when set; parses back losslessly.
+  {
+    k6wp::DisplaysConfig cfg;
+    k6wp::MonitorAssignment a;
+    a.path = L"C:\\Videos\\a.mp4";
+    a.exists = true;
+    a.key_stable = L"edid:DEL:4098:1a2b";
+    cfg.assignments[L"\\\\.\\DISPLAY1"] = a;
+    const nlohmann::json j = k6wp::DisplaysToJson(cfg);
+    Check(j.at("assignments").at("\\\\.\\DISPLAY1").contains("key_stable"),
+          "18. key_stable emitted when set");
+    Check(j.at("assignments").at("\\\\.\\DISPLAY1").at("key_stable") ==
+              "edid:DEL:4098:1a2b",
+          "18. key_stable value utf-8");
+    const auto back = k6wp::MigrateDisplays(j);
+    Check(back.assignments.at(L"\\\\.\\DISPLAY1").key_stable ==
+              L"edid:DEL:4098:1a2b",
+          "18. key_stable round-trips through MigrateDisplays");
+  }
+
+  // 19. P2a key_aliases: top-level map emitted only when non-empty; a
+  //     wrong-typed alias value is ignored (never a throw).
+  {
+    k6wp::DisplaysConfig cfg;
+    cfg.assignments[L"\\\\.\\DISPLAY1"] = {L"C:\\v\\a.mp4", true};
+    const nlohmann::json before = k6wp::DisplaysToJson(cfg);
+    Check(!before.contains("key_aliases"), "19. key_aliases absent when empty");
+
+    cfg.key_aliases[L"\\\\.\\DISPLAY1"] = L"ccd:\\\\?\\display#aaa#1";
+    const nlohmann::json j = k6wp::DisplaysToJson(cfg);
+    Check(j.contains("key_aliases") && j.at("key_aliases").is_object(),
+          "19. key_aliases emitted when set");
+    const auto back = k6wp::MigrateDisplays(j);
+    Check(back.key_aliases.at(L"\\\\.\\DISPLAY1") ==
+              L"ccd:\\\\?\\display#aaa#1",
+          "19. key_aliases round-trips");
+
+    const auto lenient = k6wp::MigrateDisplays(nlohmann::json::parse(
+        R"({"version":1,"assignments":{},"displays":[],)"
+        R"("key_aliases":{"\\\\.\\DISPLAY1":7}})"));
+    Check(lenient.key_aliases.empty(), "19. non-string alias ignored");
+  }
+
+  // 20. P2a lossless: a legacy file (no key_stable/key_aliases) round-trips
+  //     byte-for-byte and keeps the exact {path,exists} assignment shape.
+  {
+    const auto p1 = dir / "t20_a.json";
+    const auto p2 = dir / "t20_b.json";
+    k6wp::DisplaysConfig legacy;
+    legacy.assignments[L"\\\\.\\DISPLAY1"] = {L"C:\\Videos\\one.mp4", true};
+    legacy.assignments[L"\\\\.\\DISPLAY2"] = {L"C:\\Videos\\two.webm", false};
+    legacy.displays = nlohmann::json::array({{{"name", "primary"}}});
+    k6wp::SaveDisplays(p1, legacy);
+    const auto back = k6wp::LoadDisplays(p1);
+    Check(back.key_aliases.empty(), "20. load of legacy: no aliases");
+    Check(back.assignments.at(L"\\\\.\\DISPLAY1").key_stable.empty(),
+          "20. load of legacy: key_stable empty");
+    k6wp::SaveDisplays(p2, back);
+    Check(ReadText(p1) == ReadText(p2),
+          "20. legacy file round-trips byte-identical");
+    const auto j = nlohmann::json::parse(ReadText(p2));
+    Check(j.size() == 3, "20. legacy file has exactly 3 top-level keys");
+    Check(j.at("assignments").at("\\\\.\\DISPLAY1").size() == 2,
+          "20. legacy assignment keeps path+exists only");
+  }
+
   std::cout << "\n" << g_checks << " checks, " << g_failures << " failures\n";
   return g_failures == 0 ? 0 : 1;
 }
