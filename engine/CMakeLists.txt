@@ -18,6 +18,8 @@ add_executable(engine
   src/working_set_trim.cpp
   src/desktop_inject.cpp
   src/desktop_placement.cpp
+  src/topology_diff.cpp  # P1: pure topology diff (windows.h-free)
+  src/retry_schedule.cpp  # P1: pure retry schedule (windows.h-free, time=param)
   src/bench_hook.cpp
   src/mpv_renderer.cpp
   src/config_watch.cpp
@@ -350,5 +352,35 @@ set_tests_properties(
   red-B4-replug-rebind
   PROPERTIES WILL_FAIL TRUE
 )
+
+# topology_diff_test / retry_schedule_test / topology_property_test
+# (display resilience P1, Fase 5): unit tests for the two pure-core modules and
+# the seeded property suite. All three compile ONLY engine/src/topology_diff.cpp
+# and/or engine/src/retry_schedule.cpp (std/STL only, windows.h-free), so no
+# user32 / k6wp_shared / mpv link deps. The header include path is engine/src.
+# The header include path is engine/src. These ran as red tests (WILL_FAIL TRUE
+# + label red-P1) in the red commit; the green commit implements the core so
+# they now pass on their own assertions.
+add_executable(topology_diff_test
+  ../tests/topology_diff_test.cpp
+  src/topology_diff.cpp
+)
+target_include_directories(topology_diff_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+add_test(NAME topology_diff_test COMMAND topology_diff_test)
+
+add_executable(retry_schedule_test
+  ../tests/retry_schedule_test.cpp
+  src/retry_schedule.cpp
+)
+target_include_directories(retry_schedule_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+add_test(NAME retry_schedule_test COMMAND retry_schedule_test)
+
+add_executable(topology_property_test
+  ../tests/topology_property_test.cpp
+  src/topology_diff.cpp
+  src/retry_schedule.cpp
+)
+target_include_directories(topology_property_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+add_test(NAME topology_property_test COMMAND topology_property_test)
 
 endif()
