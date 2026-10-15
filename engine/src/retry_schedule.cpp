@@ -6,17 +6,20 @@
 
 namespace k6wp {
 
-// RED (P1 red commit): behavior intentionally unimplemented so the P1 tests
-// fail on their intended assertions. Implemented for real in the green commit.
-
-bool retry_schedule_due(long long /*now_ms*/, const RetryClock& /*c*/) {
-  return false;
+bool retry_schedule_due(long long now_ms, const RetryClock& c) {
+  if (c.attempts_done < 0 || c.attempts_done >= kRetryCount) return false;
+  return (now_ms - c.first_pass_ms) >= kRetryOffsetsMs[c.attempts_done];
 }
 
-long long retry_next_delay_ms(long long /*now_ms*/, const RetryClock& /*c*/) {
-  return -1;
+long long retry_next_delay_ms(long long now_ms, const RetryClock& c) {
+  if (c.attempts_done < 0 || c.attempts_done >= kRetryCount) return -1;
+  const long long elapsed = now_ms - c.first_pass_ms;
+  const long long delay = kRetryOffsetsMs[c.attempts_done] - elapsed;
+  return delay > 0 ? delay : 0;
 }
 
-bool retry_schedule_exhausted(const RetryClock& /*c*/) { return true; }
+bool retry_schedule_exhausted(const RetryClock& c) {
+  return c.attempts_done >= kRetryCount;
+}
 
 }  // namespace k6wp

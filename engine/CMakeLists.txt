@@ -358,8 +358,9 @@ set_tests_properties(
 # the seeded property suite. All three compile ONLY engine/src/topology_diff.cpp
 # and/or engine/src/retry_schedule.cpp (std/STL only, windows.h-free), so no
 # user32 / k6wp_shared / mpv link deps. The header include path is engine/src.
-# These are the P1 red tests: registered WILL_FAIL TRUE + label red-P1 so the
-# trunk ctest stays green until the green commit implements the core.
+# The header include path is engine/src. These ran as red tests (WILL_FAIL TRUE
+# + label red-P1) in the red commit; the green commit implements the core so
+# they now pass on their own assertions.
 add_executable(topology_diff_test
   ../tests/topology_diff_test.cpp
   src/topology_diff.cpp
@@ -381,12 +382,5 @@ add_executable(topology_property_test
 )
 target_include_directories(topology_property_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 add_test(NAME topology_property_test COMMAND topology_property_test)
-
-set_tests_properties(
-  topology_diff_test
-  retry_schedule_test
-  topology_property_test
-  PROPERTIES WILL_FAIL TRUE LABELS "red-P1"
-)
 
 endif()
