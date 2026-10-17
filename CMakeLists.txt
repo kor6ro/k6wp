@@ -4,7 +4,7 @@ project(k6wp VERSION 0.0.1 LANGUAGES CXX)
 
 # Version used across the project (engine / studio / compressor).
 # Honest alpha: the 1.x-beta tags were withdrawn (still buggy), restart at 0.0.1-alpha.
-set(K6WP_VERSION "0.0.1-alpha")
+set(K6WP_VERSION "0.0.1-alpha.2")
 
 # --- Single-source version (todo 8 / MED-14) ---------------------------------
 # K6WP_VERSION is canonical. configure_file() stamps it into

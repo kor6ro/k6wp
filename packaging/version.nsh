@@ -2,5 +2,5 @@
 ; K6WP_VERSION (root CMakeLists.txt) via configure_file(). Do not edit —
 ; change K6WP_VERSION in the root CMakeLists.txt and reconfigure.
 ; Consumed by packaging/installer.nsi (!include "version.nsh").
-!define K6WP_VERSION_STR "0.0.1-alpha"
+!define K6WP_VERSION_STR "0.0.1-alpha.2"
 !define K6WP_VERSION_STR_4 "0.0.1.0"
