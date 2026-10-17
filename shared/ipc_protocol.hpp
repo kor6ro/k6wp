@@ -4,6 +4,7 @@
 #include <map>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 #include "thirdparty/json.hpp"
 
@@ -110,6 +111,16 @@ struct EngineState {
   bool playlist_enabled = false;
   int playlist_size = 0;
   int playlist_index = -1;
+  // Display resilience P3, additive: reconcile status snapshot (engine
+  // BuildStateJson emits a "reconcile" object). Absent object (engines older
+  // than P3) -> mode empty / trigger empty / verdict empty / retries 0 / no
+  // degraded keys; wrong-type present values also fall back to those
+  // defaults. Parsing never throws.
+  std::string reconcile_mode;
+  std::string reconcile_last_trigger;
+  std::string reconcile_last_verdict;
+  int reconcile_retries = 0;
+  std::vector<std::string> reconcile_degraded_keys;
 };
 EngineState ParseEngineState(const nlohmann::json& raw);
 

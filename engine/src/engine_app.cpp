@@ -7,6 +7,9 @@
 #include "lockscreen.hpp"
 #include "log_file.hpp"
 #include "thirdparty/json.hpp"
+#include "lock_order.hpp"
+#include "topology_snapshot.hpp"
+#include "topology_diff.hpp"
 
 #include <shellapi.h>
 #include <tlhelp32.h>
@@ -18,6 +21,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cwchar>
+#include <cstdlib>
 #include <filesystem>
 #include <mutex>
 #include <optional>
@@ -216,6 +220,15 @@ bool EngineApp::Init(int argc, char** argv) {
         cfg.monitor_id);
     // Todo 40: a battery_saver/fps_cap flip applies on the next Update.
     if (power_saver_) power_saver_->Update();
+    // P3L reconcile_mode callback (additive default):
+    // env K6WP_RECONCILE_MODE wins; config reconcile_mode only if not env-locked.
+    if (!reconcile_env_locked_ && cfg.reconcile_mode != reconcile_status_.mode) {
+      reconcile_status_.mode = cfg.reconcile_mode;
+      reconcile_status_.last_trigger = "";
+      reconcile_status_.last_verdict = "";
+      reconcile_status_.retries = 0;
+      Log("reconcile: mode changed to %s (config, not env-locked)", cfg.reconcile_mode.c_str());
+    }
     ApplyFitMode(cfg.fit_mode);
     // P3L: affinity/adapter apply at boot only (process mask / VO init).
     // A live flip logs restart-required instead of half-applying.
@@ -228,6 +241,21 @@ bool EngineApp::Init(int argc, char** argv) {
           applied_adapter_mode_.c_str(), cfg.gpu_adapter.c_str());
     }
   });
+  // P3: reconcile mode read at Init - env K6WP_RECONCILE_MODE wins; config
+  // reconcile_mode only if not env-locked. Unknown -> legacy + log.
+  {
+    const char* env_mode = std::getenv("K6WP_RECONCILE_MODE");
+    if (env_mode != nullptr && env_mode[0] != 0) {
+      std::string em(env_mode);
+      if (em == "legacy" || em == "shadow" || em == "on") {
+        reconcile_status_.mode = em;
+        reconcile_env_locked_ = true;
+        Log("reconcile: mode=%s (env K6WP_RECONCILE_MODE, locked)", em.c_str());
+      } else {
+        Log("reconcile: unknown K6WP_RECONCILE_MODE %s, falling back to legacy", em.c_str());
+      }
+    }
+  }
 
   // Row 16: displays.json is watched through the SAME directory handle and
   // debounce timer as config.json (one handle, one timer, two callbacks; no
@@ -277,7 +305,7 @@ bool EngineApp::Init(int argc, char** argv) {
     renderer_->SetMessageWindow(message_hwnd_);
   }
   {
-    std::lock_guard<std::mutex> lock(video_mutex_);
+    k6wp::lock_order::LeafGuard video_guard(video_mutex_);
     current_video_utf8_ = std::filesystem::path(options_.video_path).u8string();
   }
 
@@ -390,7 +418,7 @@ bool EngineApp::Init(int argc, char** argv) {
   tray_cb.on_toggle_pause = [this]() { OnTrayTogglePause(); };
   tray_cb.on_quick_switch = [this](std::size_t idx) { OnTrayQuickSwitch(idx); };
   tray_cb.get_current = [this]() {
-    std::lock_guard<std::mutex> lock(video_mutex_);
+    k6wp::lock_order::LeafGuard video_guard(video_mutex_);
     return current_video_utf8_;
   };
   tray_cb.on_next = [this](std::size_t idx) {
@@ -421,12 +449,12 @@ bool EngineApp::Init(int argc, char** argv) {
   }
   std::string boot_video;
   {
-    std::lock_guard<std::mutex> lock(video_mutex_);
+    k6wp::lock_order::LeafGuard video_guard(video_mutex_);
     // Seed video path from config if --video was not provided (boot-seed fix).
     // config_watcher_.Start() loads synchronously, so GetConfig() is valid here.
     // CRIT-1: the IPC worker is already up (get_state snapshots options_),
     // so this post-Start access takes options_mutex_ like every other.
-    std::lock_guard<std::mutex> opts_lock(options_mutex_);
+    k6wp::lock_order::LeafGuard options_guard(options_mutex_);
     if (options_.video_path.empty()) {
       options_.video_path = config_watcher_.GetConfig().video_path;
     }
@@ -481,14 +509,14 @@ bool EngineApp::Init(int argc, char** argv) {
   // detector with the boot pause state.
   playlist_.SetHooks(
       [this]() {
-        std::lock_guard<std::mutex> lock(options_mutex_);
+        k6wp::lock_order::LeafGuard options_guard(options_mutex_);
         if (!options_.config_path.empty()) {
           return PlaylistPathForConfig(std::filesystem::path(options_.config_path));
         }
         return DefaultPlaylistPath();
       },
       [this]() {
-        std::lock_guard<std::mutex> lock(video_mutex_);
+        k6wp::lock_order::LeafGuard video_guard(video_mutex_);
         return current_video_utf8_;
       },
       [this](const std::string& p) {
@@ -513,7 +541,7 @@ void EngineApp::InitWallpaperSurface(const std::string& video_utf8) {
   // CRIT-1: snapshot under options_mutex_ (post-Start: the worker is up).
   WallpaperMode wallpaper_mode_snapshot = WallpaperMode::kAuto;
   {
-    std::lock_guard<std::mutex> lock(options_mutex_);
+    k6wp::lock_order::LeafGuard options_guard(options_mutex_);
     wallpaper_mode_snapshot = options_.wallpaper_mode;
   }
   InjectMode inject_mode = InjectMode::kAuto;  switch (wallpaper_mode_snapshot) {
@@ -566,7 +594,7 @@ void EngineApp::InitWallpaperSurface(const std::string& video_utf8) {
   applied_displays_ = boot_displays;
   // E-06: publish the worker-safe get_state snapshot at the same moment.
   {
-    std::lock_guard<std::mutex> lock(displays_mutex_);
+    k6wp::lock_order::LeafGuard displays_guard(displays_mutex_);
     displays_snapshot_ = boot_displays;
   }
   Log("display: boot assignments applied=%d retained=%d missing=%d",
@@ -589,14 +617,14 @@ void EngineApp::ShutdownWallpaperSurface() {
 }
 
 std::shared_ptr<MpvRenderer> EngineApp::AcquireRenderer() const {
-  std::lock_guard<std::mutex> lock(renderer_mutex_);
+  k6wp::lock_order::LeafGuard renderer_guard(renderer_mutex_);
   return renderer_;
 }
 
 void EngineApp::StopHeadlessRenderer() {
   std::shared_ptr<MpvRenderer> doomed;
   {
-    std::lock_guard<std::mutex> lock(renderer_mutex_);
+    k6wp::lock_order::LeafGuard renderer_guard(renderer_mutex_);
     doomed = std::move(renderer_);
     renderer_.reset();
   }
@@ -655,12 +683,12 @@ bool EngineApp::VerifyHeadlessPin() {
   // Create without pin → LoadLoop → re-verify next pass (PATCH A).
   std::string video;
   {
-    std::lock_guard<std::mutex> lock(video_mutex_);
+    k6wp::lock_order::LeafGuard video_guard(video_mutex_);
     video = current_video_utf8_;
   }
   // Hold renderer_mutex_ across the checks + recreate so a concurrent worker
   // copy (get_state / pause) can never observe a half-torn renderer.
-  std::lock_guard<std::mutex> renderer_lock(renderer_mutex_);
+  k6wp::lock_order::LeafGuard renderer_guard(renderer_mutex_);
   if (!renderer_ ||
       !headless_owns_decode_.load(std::memory_order_acquire))
     return false;
@@ -982,6 +1010,7 @@ void EngineApp::OnDisplayChange(int width, int height) {
       width, height);
   if (wallpaper_surface_live_.load(std::memory_order_acquire))
     multi_monitor_.OnDisplayChange();
+  ArmReconcile("display-change");
   UpdateTrayErrorStatus();
 }
 
@@ -1007,7 +1036,7 @@ void EngineApp::ApplyPendingSetMonitor() {
 }
 
 std::filesystem::path EngineApp::ResolvedConfigPath() const {
-  std::lock_guard<std::mutex> lock(options_mutex_);
+  k6wp::lock_order::LeafGuard options_guard(options_mutex_);
   if (!options_.config_path.empty()) {
     return std::filesystem::path(options_.config_path);
   }
@@ -1048,14 +1077,14 @@ bool EngineApp::HandleSetVideo(const std::string& payload_json, bool rotation) {
   // wake. Pause/resume IPC paths drain via ApplyPauseState's Pause/Resume.
   if (renderer_) renderer_->Wakeup();
   {
-    std::lock_guard<std::mutex> lock(video_mutex_);
+    k6wp::lock_order::LeafGuard video_guard(video_mutex_);
     current_video_utf8_ = utf8_path;
   }
   {
     // CRIT-1: options_ lives under options_mutex_ (get_state reads it from
     // the IPC worker thread). Snapshot discipline: copy under the lock,
     // use outside — never hold it across renderer calls or config I/O.
-    std::lock_guard<std::mutex> lock(options_mutex_);
+    k6wp::lock_order::LeafGuard options_guard(options_mutex_);
     options_.video_path = fs_path.wstring();
   }
 
@@ -1119,7 +1148,7 @@ bool EngineApp::HandleSetMonitor(const std::string& payload_json) {
   if (wallpaper_surface_live_.load(std::memory_order_acquire)) {
     std::string video;
     {
-      std::lock_guard<std::mutex> lock(video_mutex_);
+      k6wp::lock_order::LeafGuard video_guard(video_mutex_);
       video = current_video_utf8_;
     }
     if (!video.empty()) {
@@ -1193,7 +1222,7 @@ bool EngineApp::HandleSetDisplayVideo(const std::string& payload_json) {
 
   std::string current;
   {
-    std::lock_guard<std::mutex> lock(video_mutex_);
+    k6wp::lock_order::LeafGuard video_guard(video_mutex_);
     current = current_video_utf8_;
   }
   const std::string fit_mode = config_watcher_.GetConfig().fit_mode;
@@ -1212,7 +1241,7 @@ bool EngineApp::HandleSetDisplayVideo(const std::string& payload_json) {
     applied_displays_ = cfg;
     // E-06: refresh the worker-safe get_state snapshot in lockstep.
     {
-      std::lock_guard<std::mutex> lock(displays_mutex_);
+      k6wp::lock_order::LeafGuard displays_guard(displays_mutex_);
       displays_snapshot_ = cfg;
     }
     try {
@@ -1237,13 +1266,23 @@ bool EngineApp::HandleSetDisplayVideo(const std::string& payload_json) {
   k6wp::MonitorAssignment assignment;
   assignment.path = WidenUtf8(cmd.path);
   assignment.exists = std::filesystem::exists(std::filesystem::u8path(cmd.path));
-  cfg.assignments[WidenUtf8(cmd.device)] = assignment;
+  // P2a §R4.4: persist the tiered stable_key for this monitor through the
+  // existing single writer (never during a reconcile pass). An unknown device
+  // or an unenriched monitor leaves it empty (legacy shape).
+  const std::wstring device_key = WidenUtf8(cmd.device);
+  for (const auto& mi : k6wp::ListMonitors()) {
+    if (mi.device_name == device_key) {
+      assignment.key_stable = WidenUtf8(mi.stable_key);
+      break;
+    }
+  }
+  cfg.assignments[device_key] = assignment;
   // Row 16: same echo suppression as the clear path (live map recorded before
   // the save; the watcher's notification then compares equal and no-ops).
   applied_displays_ = cfg;
   // E-06: refresh the worker-safe get_state snapshot in lockstep.
   {
-    std::lock_guard<std::mutex> lock(displays_mutex_);
+    k6wp::lock_order::LeafGuard displays_guard(displays_mutex_);
     displays_snapshot_ = cfg;
   }
   try {
@@ -1279,6 +1318,9 @@ void EngineApp::OnDisplaysFileChanged() {
   k6wp::MultiMonitor::DropCollidingAssignments(
       fresh, k6wp::ListMonitors(), &EngineApp::Log);
 
+  // P3: trigger the reconcile pass on the end of displays.json convergence.
+  ArmReconcile("displays.json");
+
   // Self-write echo: HandleSetDisplayVideo's SaveDisplays fires the same
   // notification; when the file's assignment map equals what is already live
   // in memory, skip convergence (no redundant reload). `displays` metadata
@@ -1293,7 +1335,7 @@ void EngineApp::OnDisplaysFileChanged() {
   const std::string fit_mode = config_watcher_.GetConfig().fit_mode;
   std::string default_video;
   {
-    std::lock_guard<std::mutex> lock(video_mutex_);
+    k6wp::lock_order::LeafGuard video_guard(video_mutex_);
     default_video = current_video_utf8_;
   }
 
@@ -1335,7 +1377,7 @@ void EngineApp::OnDisplaysFileChanged() {
   applied_displays_ = fresh;
   // E-06: refresh the worker-safe get_state snapshot in lockstep.
   {
-    std::lock_guard<std::mutex> lock(displays_mutex_);
+    k6wp::lock_order::LeafGuard displays_guard(displays_mutex_);
     displays_snapshot_ = fresh;
   }
   Log("display: reload applied (%d slot(s), %d skipped)", applied, skipped);
@@ -1351,7 +1393,7 @@ void EngineApp::RecreateDevice() {
   // message loop.
   std::string video;
   {
-    std::lock_guard<std::mutex> lock(video_mutex_);
+    k6wp::lock_order::LeafGuard video_guard(video_mutex_);
     video = current_video_utf8_;
   }
   if (video.empty()) {
@@ -1380,7 +1422,7 @@ void EngineApp::RecreateDevice() {
       const bool was_paused = UiPaused();
       bool recreated = false;
       {
-        std::lock_guard<std::mutex> lock(renderer_mutex_);
+        k6wp::lock_order::LeafGuard renderer_guard(renderer_mutex_);
         renderer_.reset();
         renderer_ = std::make_shared<MpvRenderer>();
         if (!renderer_->Create(message_hwnd_)) {
@@ -1440,7 +1482,7 @@ void EngineApp::OnTrayQuickSwitch(std::size_t idx) {
 std::string EngineApp::BuildStateJson() const {
   std::string video_utf8;
   {
-    std::lock_guard<std::mutex> lock(video_mutex_);
+    k6wp::lock_order::LeafGuard video_guard(video_mutex_);
     video_utf8 = current_video_utf8_;
   }
   // Step 3.3: report the resolved config path (empty --config means the
@@ -1453,7 +1495,7 @@ std::string EngineApp::BuildStateJson() const {
   WallpaperMode wallpaper_mode_copy = WallpaperMode::kAuto;
   int reverts_copy = 0;
   try {
-    std::lock_guard<std::mutex> lock(options_mutex_);
+    k6wp::lock_order::LeafGuard options_guard(options_mutex_);
     config_utf8 = options_.config_path.empty()
                       ? DefaultConfigPath().u8string()
                       : std::filesystem::path(options_.config_path).u8string();
@@ -1480,7 +1522,7 @@ std::string EngineApp::BuildStateJson() const {
     // only blocks for the assignment-map copy).
     k6wp::DisplaysConfig displays_cfg;
     {
-      std::lock_guard<std::mutex> lock(displays_mutex_);
+      k6wp::lock_order::LeafGuard displays_guard(displays_mutex_);
       displays_cfg = displays_snapshot_;
     }
     for (const auto& [key, a] : displays_cfg.assignments) {
@@ -1537,6 +1579,19 @@ std::string EngineApp::BuildStateJson() const {
       {"playlist_enabled", playlist_.get_enabled()},
       {"playlist_size", playlist_.get_size()},
       {"playlist_index", playlist_.get_index()},
+      // P3, additive only: reconcile status snapshot. Old clients ignore it.
+      {"reconcile", [this]{
+        nlohmann::json j = nlohmann::json::object();
+        std::lock_guard<std::mutex> lock(reconcile_mutex_);
+        j["mode"] = reconcile_status_.mode;
+        j["last_trigger"] = reconcile_status_.last_trigger;
+        j["last_verdict"] = reconcile_status_.last_verdict;
+        j["retries"] = reconcile_status_.retries;
+        nlohmann::json dk = nlohmann::json::array();
+        for (const auto& k : reconcile_status_.degraded_keys) dk.push_back(k);
+        j["degraded_keys"] = dk;
+        return j;
+      }()},
       // Row 15, additive only (APPEND — never reorder existing keys):
       // display_capability is the feature-detect Studio reads (1 = the two
       // maps below are meaningful; old engines never emit these keys and
@@ -1546,6 +1601,107 @@ std::string EngineApp::BuildStateJson() const {
       {"display_coverage", display_coverage},
   };
   return state.dump();
+}
+
+// Display resilience P3: ArmReconcile - burst-coalesce reconcile trigger.
+// No-op in legacy mode. Arms the debounce timer (500 ms) so RunReconcilePass
+// runs once per burst of triggers.
+void EngineApp::ArmReconcile(const char* trigger) {
+  if (reconcile_status_.mode == "legacy") return;
+  if (trigger == nullptr) trigger = "manual";
+  std::lock_guard<std::mutex> lock(reconcile_mutex_);
+  reconcile_trigger_ = trigger;
+  reconcile_first_event_ms_ = std::chrono::steady_clock::now();
+  if (reconcile_arm_active_) {
+    // True debounce: reset the quiet period on every burst trigger so the
+    // pass fires ~500 ms after the LAST trigger, not the first.
+    KillTimer(message_hwnd_, kReconcileDebounceTimerId);
+    SetTimer(message_hwnd_, kReconcileDebounceTimerId, 500, nullptr);
+    Log("reconcile: re-armed debounce (trigger=%s, mode=%s)", trigger,
+        reconcile_status_.mode.c_str());
+    return;
+  }
+  reconcile_arm_active_ = true;
+  KillTimer(message_hwnd_, kReconcileDebounceTimerId);
+  SetTimer(message_hwnd_, kReconcileDebounceTimerId, 500, nullptr);
+  Log("reconcile: armed debounce (trigger=%s, mode=%s)", trigger,
+      reconcile_status_.mode.c_str());
+}
+
+// Display resilience P3: RunReconcilePass - one shadow pass.
+// Reads current topology, computes diff vs last snapshot, compares vs live
+// slot coverage, reports verdict. Never mutates slots, never writes
+// displays.json (B14). retries stays 0 in shadow mode.
+void EngineApp::RunReconcilePass() {
+  std::lock_guard<std::mutex> lock(reconcile_mutex_);
+  reconcile_arm_active_ = false;
+  // Populate last_trigger before clearing (it would otherwise be empty).
+  reconcile_status_.last_trigger = reconcile_trigger_;
+  reconcile_trigger_.clear();
+  if (reconcile_status_.mode == "legacy") return;
+
+  TopologySnapshot snap = SnapshotTopology();
+  last_reconcile_snapshot_ = snap;
+
+  TopologyDiff diff;
+  bool divergent = false;
+  if (!last_reconcile_snapshot_.monitors.empty()) {
+    diff = diff_topology(last_reconcile_snapshot_, snap);
+    // Compare snapshot vs live slot MonitorInfo set for divergence.
+    auto live = multi_monitor_.LiveMonitorInfos();
+    divergent = TopologyDivergesFromMonitors(snap, live);
+  }
+
+  MultiMonitor::CoverageCensus census = multi_monitor_.VerifyCoverage();
+  const bool total_gt_zero = census.total > 0;
+  const bool covered_all = total_gt_zero && census.covered == census.total;
+  reconcile_status_.last_verdict =
+      covered_all ? "covered" : "degraded";
+  reconcile_status_.degraded_keys = census.degraded_keys;
+  reconcile_status_.retries = 0;  // P3 shadow: retries never armed
+
+  Log("reconcile: pass verdict=%s total=%d covered=%d degraded_keys=%zu "
+      "trigger=%s",
+      reconcile_status_.last_verdict.c_str(), census.total, census.covered,
+      census.degraded_keys.size(),
+      reconcile_status_.last_trigger.empty() ? "(none)" : reconcile_status_.last_trigger.c_str());
+
+  std::string summary = ReconcileDiffSummary(diff);
+  if (!summary.empty()) {
+    Log("reconcile: diff %s", summary.c_str());
+  }
+}
+
+// Display resilience P3: ReconcileDiffSummary - render TopologyDiff as
+// summary tokens: +,-,move,resize,dpi,orient,primary ("none" if empty).
+std::string EngineApp::ReconcileDiffSummary(const TopologyDiff& diff) const {
+  std::string out;
+  auto tok = [&](const char* name, const std::vector<std::string>& keys) {
+    if (!keys.empty()) {
+      if (!out.empty()) out += " ";
+      out += name;
+      out += ":";
+      for (size_t i = 0; i < keys.size(); ++i) {
+        if (i != 0) out += ",";
+        out += keys[i];
+      }
+    }
+  };
+  tok("+", diff.added_keys);
+  tok("-", diff.removed_keys);
+  tok("move", diff.moved_keys);
+  tok("resize", diff.resized_keys);
+  tok("dpi", diff.dpi_keys);
+  tok("orient", diff.orientation_keys);
+  if (diff.primary_changed) {
+    if (!out.empty()) out += " ";
+    out += "primary";
+  }
+  if (diff.hash_changed) {
+    if (!out.empty()) out += " ";
+    out += "hash";
+  }
+  return out.empty() ? "none" : out;
 }
 
 void EngineApp::HandlePowerBroadcast(WPARAM wParam, LPARAM lParam) {
@@ -1618,6 +1774,8 @@ LRESULT EngineApp::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
   if (taskbar_created != 0 && msg == taskbar_created) {
     Log("window: TaskbarCreated received, re-adding tray icon");
     tray_.OnTaskbarCreated();
+    // P3: arm reconcile with taskbar-created trigger
+    ArmReconcile("taskbar-created");
     // Explorer restart also recreates Progman/WorkerW: re-anchor the live
     // injected windows onto the fresh desktop targets.
     if (wallpaper_surface_live_.load(std::memory_order_acquire)) multi_monitor_.Reanchor();
@@ -1642,6 +1800,8 @@ LRESULT EngineApp::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
       if (wParam == static_cast<WPARAM>(SPI_SETDESKWALLPAPER)) {
         Log("window: WM_SETTINGCHANGE (wallpaper changed), re-anchoring live surface");
         if (wallpaper_surface_live_.load(std::memory_order_acquire)) multi_monitor_.Reanchor();
+        // P3: arm reconcile with setting-change trigger
+        ArmReconcile("setting-change");
         // E-01 (audit remediation): the engine never writes the desktop
         // wallpaper itself (the lockscreen sync writes HKLM policy + a jpg),
         // so any SPI_SETDESKWALLPAPER here is an EXTERNAL change (Windows
@@ -1741,6 +1901,17 @@ LRESULT EngineApp::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
       if (wParam == static_cast<WPARAM>(kOcclusionPokeTimerId)) {
         KillTimer(hwnd, kOcclusionPokeTimerId);
         occlusion_poke_.OnTimer();
+        return 0;
+      }
+      // P3: reconcile debounce timer (kill + RunReconcilePass).
+      if (wParam == static_cast<WPARAM>(kReconcileDebounceTimerId)) {
+        KillTimer(hwnd, kReconcileDebounceTimerId);
+        RunReconcilePass();
+        return 0;
+      }
+      // P3: reconcile retry timer (kill-only no-op).
+      if (wParam == static_cast<WPARAM>(kReconcileRetryTimerId)) {
+        KillTimer(hwnd, kReconcileRetryTimerId);
         return 0;
       }
       return DefWindowProcW(hwnd, msg, wParam, lParam);

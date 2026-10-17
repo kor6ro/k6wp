@@ -18,6 +18,8 @@ add_executable(engine
   src/working_set_trim.cpp
   src/desktop_inject.cpp
   src/desktop_placement.cpp
+  src/topology_diff.cpp  # P1: pure topology diff (windows.h-free)
+  src/retry_schedule.cpp  # P1: pure retry schedule (windows.h-free, time=param)
   src/bench_hook.cpp
   src/mpv_renderer.cpp
   src/config_watch.cpp
@@ -293,4 +295,122 @@ target_include_directories(display_assignment_test PRIVATE
   ${CMAKE_SOURCE_DIR}/studio/src
 )
 add_test(NAME display_assignment_test COMMAND display_assignment_test)
+
+# reconcile_golden_test (display resilience P0, Fase 4): characterization
+# GOLDEN tests for the CURRENT MultiMonitor placement/reconcile behaviour on
+# the `placement:` log surface (24H2 WorkerW-child-of-Progman / layered,
+# classic WorkerW layout with a negative-origin secondary, Span mode). These
+# stay GREEN on today's code and lock the observable behaviour the upcoming
+# Reconcile pipeline must preserve. Same link model as
+# multi_monitor_factory_test (row 6): src/multi_monitor.cpp +
+# src/desktop_placement.cpp against TU-level DesktopInjector / MpvRenderer /
+# ListMonitors stubs, so the binary never links desktop_inject.cpp,
+# mpv_renderer.cpp or mpv.lib - target_link_libraries below must never grow an
+# mpv entry. k6wp_shared: displays_schema (DetectKeyCollision). user32:
+# GetSystemMetrics in MultiMonitor::GetSpanGeometry.
+add_executable(reconcile_golden_test
+  ../tests/reconcile_golden_test.cpp
+  src/multi_monitor.cpp
+  src/desktop_placement.cpp
+)
+target_link_libraries(reconcile_golden_test PRIVATE user32 k6wp_shared)
+target_include_directories(reconcile_golden_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_SOURCE_DIR}/shared
+)
+add_test(NAME reconcile_golden_test COMMAND reconcile_golden_test)
+
+# reconcile_red_test (display resilience P0, Fase 4): one LABELED red test
+# per legacy bug B1..B4 (prompt v5.1 §5.1a). Each selects one scenario that
+# FAILS at its intended assertion on the legacy code and is registered with
+# WILL_FAIL TRUE so CTest inverts that failure into a pass and the trunk stays
+# green. Run the binary directly with the selector to see the exact intended
+# failure. Same link model as reconcile_golden_test (no mpv, no
+# desktop_inject.cpp).
+add_executable(reconcile_red_test
+  ../tests/reconcile_red_test.cpp
+  src/multi_monitor.cpp
+  src/desktop_placement.cpp
+)
+target_link_libraries(reconcile_red_test PRIVATE user32 k6wp_shared)
+target_include_directories(reconcile_red_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_SOURCE_DIR}/shared
+)
+add_test(NAME red-B1-swap-rect
+         COMMAND reconcile_red_test red-B1-swap-rect)
+add_test(NAME red-B2-unplug-reindex
+         COMMAND reconcile_red_test red-B2-unplug-reindex)
+add_test(NAME red-B3-secondary-key-change
+         COMMAND reconcile_red_test red-B3-secondary-key-change)
+add_test(NAME red-B4-replug-rebind
+         COMMAND reconcile_red_test red-B4-replug-rebind)
+set_tests_properties(
+  red-B1-swap-rect
+  red-B2-unplug-reindex
+  red-B3-secondary-key-change
+  red-B4-replug-rebind
+  PROPERTIES WILL_FAIL TRUE
+)
+
+# topology_diff_test / retry_schedule_test / topology_property_test
+# (display resilience P1, Fase 5): unit tests for the two pure-core modules and
+# the seeded property suite. All three compile ONLY engine/src/topology_diff.cpp
+# and/or engine/src/retry_schedule.cpp (std/STL only, windows.h-free), so no
+# user32 / k6wp_shared / mpv link deps. The header include path is engine/src.
+# The header include path is engine/src. These ran as red tests (WILL_FAIL TRUE
+# + label red-P1) in the red commit; the green commit implements the core so
+# they now pass on their own assertions.
+add_executable(topology_diff_test
+  ../tests/topology_diff_test.cpp
+  src/topology_diff.cpp
+)
+target_include_directories(topology_diff_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+add_test(NAME topology_diff_test COMMAND topology_diff_test)
+
+add_executable(retry_schedule_test
+  ../tests/retry_schedule_test.cpp
+  src/retry_schedule.cpp
+)
+target_include_directories(retry_schedule_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+add_test(NAME retry_schedule_test COMMAND retry_schedule_test)
+
+add_executable(topology_property_test
+  ../tests/topology_property_test.cpp
+  src/topology_diff.cpp
+  src/retry_schedule.cpp
+)
+target_include_directories(topology_property_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+add_test(NAME topology_property_test COMMAND topology_property_test)
+
+# reconcile_shadow_test (display resilience P3, Fase 5): SnapshotTopology
+# mapping/order/hash determinism, diff integration, divergence yes/no,
+# coverage census covered/degraded, zero slot mutation, SharedHostBranch,
+# ApplyTopology counts. Link model: multi_monitor.cpp + desktop_placement.cpp +
+# topology_diff.cpp against TU-level stubs (no desktop_inject.cpp, no
+# mpv_renderer.cpp, no mpv.lib). user32: GetSystemMetrics in
+# MultiMonitor::GetSpanGeometry. k6wp_shared: displays_schema.
+add_executable(reconcile_shadow_test
+  ../tests/reconcile_shadow_test.cpp
+  src/multi_monitor.cpp
+  src/desktop_placement.cpp
+  src/topology_diff.cpp
+)
+target_link_libraries(reconcile_shadow_test PRIVATE user32 k6wp_shared)
+target_include_directories(reconcile_shadow_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_SOURCE_DIR}/shared
+)
+add_test(NAME reconcile_shadow_test COMMAND reconcile_shadow_test)
+
+# lock_order_test (display resilience P3, Fase 5): depth bookkeeping,
+# recursion, leaf-leaf allowed. Header-only test; include engine/src.
+# Violation-abort is NOT testable in-process (would crash the test binary);
+# smoke-run of engine --exit-after-ms covers it instead.
+add_executable(lock_order_test
+  ../tests/lock_order_test.cpp
+)
+target_include_directories(lock_order_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+add_test(NAME lock_order_test COMMAND lock_order_test)
+
 endif()

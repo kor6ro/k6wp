@@ -267,6 +267,35 @@ EngineState ParseEngineState(const nlohmann::json& raw) {
         pi != state.end() && pi->is_number_integer()) {
       s.playlist_index = pi->get<int>();
     }
+    // Display resilience P3, additive: reconcile status. Absent object or
+    // wrong-typed fields default safely (empty strings / 0 / no keys);
+    // parsing never throws out of here.
+    if (auto r = state.find("reconcile");
+        r != state.end() && r->is_object()) {
+      if (auto m = r->find("mode"); m != r->end() && m->is_string()) {
+        s.reconcile_mode = m->get<std::string>();
+      }
+      if (auto t = r->find("last_trigger");
+          t != r->end() && t->is_string()) {
+        s.reconcile_last_trigger = t->get<std::string>();
+      }
+      if (auto v = r->find("last_verdict");
+          v != r->end() && v->is_string()) {
+        s.reconcile_last_verdict = v->get<std::string>();
+      }
+      if (auto rt = r->find("retries");
+          rt != r->end() && rt->is_number_integer()) {
+        s.reconcile_retries = rt->get<int>();
+      }
+      if (auto d = r->find("degraded_keys");
+          d != r->end() && d->is_array()) {
+        for (auto it = d->begin(); it != d->end(); ++it) {
+          if (it->is_string()) {
+            s.reconcile_degraded_keys.push_back(it->get<std::string>());
+          }
+        }
+      }
+    }
   } catch (const std::exception&) {
   }
   return s;

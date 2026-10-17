@@ -94,6 +94,7 @@ nlohmann::json ConfigToJson(const WallpaperConfig& cfg) {
   j["battery_mode"] = cfg.battery_mode;
   j["cpu_affinity"] = cfg.cpu_affinity;
   j["gpu_adapter"] = cfg.gpu_adapter;
+  j["reconcile_mode"] = cfg.reconcile_mode;
   return j;
 }
 
@@ -220,6 +221,10 @@ void ValidateConfig(WallpaperConfig& cfg) {
       cfg.gpu_adapter != "discrete") {
     throw ConfigError("unknown gpu_adapter: " + cfg.gpu_adapter);
   }
+  if (cfg.reconcile_mode != "legacy" && cfg.reconcile_mode != "shadow" &&
+      cfg.reconcile_mode != "on") {
+    throw ConfigError("unknown reconcile_mode: " + cfg.reconcile_mode);
+  }
 }
 
 WallpaperConfig MigrateConfig(const nlohmann::json& raw) {
@@ -257,6 +262,11 @@ WallpaperConfig MigrateConfig(const nlohmann::json& raw) {
     cfg.battery_mode = raw.value("battery_mode", "cap24");
     cfg.cpu_affinity = raw.value("cpu_affinity", "auto");
     cfg.gpu_adapter = raw.value("gpu_adapter", "auto");
+    // Display resilience P3 (§R3.1): additive field. Deliberately NOT listed in
+    // NeedsMigration, so a v5 file without the key loads clean (no .bak, no
+    // rewrite) and simply defaults to "legacy". Unknown strings pass through
+    // and are rejected by ValidateConfig (ConfigError + .bak + keep-last-valid).
+    cfg.reconcile_mode = raw.value("reconcile_mode", "legacy");
   } catch (const ConfigError&) {
     throw;
   } catch (const nlohmann::json::exception& e) {

@@ -101,10 +101,6 @@ Item {
     // would be unreachable.
     property var openAbout: function () {}
 
-    // Settings/logs are produced by three different backends, so all three
-    // are merged into the one log view.
-    property var allLog: Studio.log.concat(Compress.log, Settings.log)
-
     // Tampilan quick choice for the current config value. "cover" is the
     // schema default alias of "fill" (both scale to cover the screen), so
     // both land on "Penuh"; center / anything else means a raw value set in
@@ -160,9 +156,22 @@ Item {
         id: settingButton
         property string glyph: ""
         implicitHeight: 40
+        // Task 33 (fb2): the Material style reserves 6px top/bottom INSETS for
+        // its ripple/elevation band, which shrink the visible surface to
+        // 40 - 6 - 6 = 28px even when the padding is zero (padding moves the
+        // content, insets crop the background). Zeroing the insets restores
+        // the intended 40px surface so the top/bottom spacing reads equal.
+        topInset: 0
+        bottomInset: 0
         focusPolicy: Qt.StrongFocus
         leftPadding: Theme.space2
         rightPadding: Theme.space2
+        // Task 33: zero vertical padding keeps the 40px content box centred
+        // (Material's verticalPadding otherwise squeezed the RowLayout into a
+        // 12px band and the label read low). The contentItem's AlignVCenter
+        // owns the centring for BOTH the glyph and the label.
+        topPadding: 0
+        bottomPadding: 0
         Accessible.name: text
         Keys.onReturnPressed: {
             settingButton.clicked()
@@ -175,8 +184,20 @@ Item {
         contentItem: RowLayout {
             spacing: Theme.space1
 
+            // Task 33 (fb2): line-box centering biases a label without
+            // descenders ~1px low (the font's ascent head-room exceeds its
+            // descent gap, so "Tentang K6WP Studio" reads lower than the
+            // optical centre of the 40px surface). Lift the whole glyph+label
+            // group by the measured pixel; the icon stays ink-aligned with
+            // the label because both move together.
+            transform: Translate { y: -1 }
+
+            // Left spacer centres the glyph+label group inside the button.
+            Item { Layout.fillWidth: true }
+
             Text {
                 visible: settingButton.glyph.length > 0
+                Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
                 text: settingButton.glyph
                 font.family: Theme.glyphFont
                 font.pixelSize: Theme.fontM
@@ -186,22 +207,26 @@ Item {
             }
 
             Text {
-                Layout.fillWidth: true
                 text: settingButton.text
                 font.pixelSize: Theme.fontM
                 color: settingButton.enabled ? Theme.text : Theme.text2
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
                 elide: Text.ElideRight
+                Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
             }
+
+            // Right spacer mirrors the left spacer so the group stays centred.
+            Item { Layout.fillWidth: true }
         }
         background: Rectangle {
             radius: Theme.radiusS
             color: settingButton.down ? Theme.pressedSurface
                    : (settingButton.hovered || settingButton.activeFocus
                       ? Theme.surface2 : Theme.surface)
-            border.width: settingButton.activeFocus ? 2 : 0
-            border.color: Theme.focusRing
+            border.width: settingButton.activeFocus ? 2 : (settingButton.primary ? 0 : 1)
+            border.color: settingButton.primary ? Theme.accentText
+                         : (settingButton.activeFocus ? Theme.focusRing : Theme.border)
             opacity: settingButton.enabled ? 1.0 : 0.6
         }
     }
@@ -262,6 +287,17 @@ Item {
             objectName: settingsGroup.objectName + "Header"
             Layout.fillWidth: true
             implicitHeight: 40
+            // Task 33 (fb2): same zero-inset rule as SettingButton - the
+            // Material insets cropped the collapsible header's surface to
+            // 28px, which is what read as "top spacing taller than bottom"
+            // on the minimised (collapsed) groups.
+            topInset: 0
+            bottomInset: 0
+            // Task 33: same zero-padding rule as SettingButton - a fixed
+            // 40px Button with a Layout contentItem otherwise top-anchors
+            // its chevron + title inside the padded band.
+            topPadding: 0
+            bottomPadding: 0
             focusPolicy: Qt.StrongFocus
             text: settingsGroup.title
             Accessible.role: Accessible.Button
@@ -301,6 +337,11 @@ Item {
                     Layout.alignment: Qt.AlignVCenter
                     text: settingsGroup.title
                     Accessible.ignored: true
+                    // Task 33 (fb2): the chevron glyph measures at the exact
+                    // row centre, but the title's cap band rides ~1px low
+                    // (line-box bias, same as SettingButton). Lift only the
+                    // title so both read centred.
+                    transform: Translate { y: -1 }
                 }
 
                 Item {
@@ -1372,11 +1413,11 @@ Item {
                     text: Settings.lastError
                 }
 
-                LogPanel {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 160
-                    text: settingsPage.allLog.join("\n")
-                }
+                // Feedback round: the inline log block was removed. LogPanel
+                // renders its own "Info teknis" heading and the same
+                // Studio.log the button above opens (which adds the friendly
+                // status + "Salin untuk dukungan"), so the section showed
+                // "Info teknis" twice.
             }
         }
     }

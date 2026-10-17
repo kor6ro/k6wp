@@ -221,6 +221,26 @@ int main() {
           "11. live formatter emits \"virtual_screen\"");
   }
 
+  // 12. P2a additive stable_key: MonitorInfo carries the field (default ""),
+  // and the formatter emits it AFTER scale_pct (additive, never a rename).
+  {
+    k6wp::MonitorInfo m;
+    Check(m.stable_key.empty(), "12. MonitorInfo::stable_key defaults empty");
+    Check(!m.identity_degraded, "12. identity_degraded defaults false");
+
+    auto monitors = MakeTwoMonitorFixture();
+    monitors[0].stable_key = "ccd:\\\\?\\display#aaa#1";
+    const k6wp::VirtualScreenGeometry vs{0, 0, 3840, 1920};
+    const std::string out = k6wp::FormatMonitorsJson(monitors, vs);
+    Check(Contains(out, "\"stable_key\":"), "12. formatter emits stable_key");
+    // The fixture's primary carries scale_pct 100; assert the additive field
+    // immediately follows scale_pct in the serialized entry.
+    Check(Contains(out, "\"scale_pct\":100,\"stable_key\""),
+          "12. stable_key follows scale_pct (additive)");
+    Check(Contains(out, "\"stable_key\":\"ccd:\\\\\\\\?\\\\display#aaa#1\""),
+          "12. stable_key backslashes JSON-escaped");
+  }
+
   std::cout << "\n" << g_checks << " checks, " << g_failures << " failures\n";
   return g_failures == 0 ? 0 : 1;
 }

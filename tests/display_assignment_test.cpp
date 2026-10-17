@@ -1049,6 +1049,49 @@ int main() {
           "f: old-engine payload keeps pid/video (additive-only contract)");
   }
 
+  // =====================================================================
+  // Case (g): P3/B14 read-only reconcile — SnapshotTopology + ApplyTopology
+  // (default-constructed TopologyDiff) + VerifyCoverage must NOT mutate
+  // slots or write displays.json. topology_diff.cpp is NOT linked in this
+  // target, so diff_topology is NOT called here.
+  // =====================================================================
+  {
+    const auto dir = ScenarioDir("b14");
+    const auto displays_file = dir / "displays.json";
+    const std::string before_reload = ReadBytes(displays_file);
+    MmReset();
+    g_mm_monitors.push_back(
+        MmMakeMonitor(0, L"\\\\.\\DISPLAY1", 0, 0, 1920, 1080));
+    k6wp::MultiMonitor mm(MmQuietLog);
+    mm.SetHeadlessHost(kMmHeadlessHost);
+    Check(mm.Init(k6wp::MultiMonitorMode::PerMonitor),
+          "b14: Init attaches the live monitor");
+    const size_t slot_count_before = mm.slot_count();
+
+    // Read-only snapshot
+    k6wp::TopologySnapshot snap = k6wp::SnapshotTopology();
+    Check(snap.monitors.size() == 1,
+          "b14: SnapshotTopology returns 1 monitor");
+
+    // VerifyCoverage read-only
+    k6wp::MultiMonitor::CoverageCensus census = mm.VerifyCoverage();
+    Check(census.total >= 1, "b14: VerifyCoverage total >= 1");
+
+    // ApplyTopology with default-constructed diff: shadow no-op, zero counts
+    k6wp::TopologyDiff empty_diff{};
+    k6wp::MultiMonitor::TopologyApplyResult r = mm.ApplyTopology(snap, empty_diff);
+    Check(r.added == 0 && r.removed == 0 && r.reattached == 0,
+          "b14: ApplyTopology shadow no-op -> zero counts");
+    Check(mm.slot_count() == slot_count_before,
+          "b14: slot_count unchanged after ApplyTopology (no mutation)");
+
+    // displays.json byte-identical (never written by shadow pass)
+    Check(ReadBytes(displays_file) == before_reload,
+          "b14: displays.json byte-identical after shadow pass (B14)");
+
+    mm.Shutdown();
+  }
+
   std::printf("checks=%d failures=%d\n", g_checks, g_failures);
   std::printf(g_failures == 0 ? "RESULT: ALL DISPLAY-ASSIGNMENT CHECKS PASSED\n"
                               : "RESULT: %d CHECK(S) FAILED\n",

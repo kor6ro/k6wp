@@ -346,10 +346,17 @@ Item {
                     }
 
                     Label {
-                        Layout.fillWidth: true
                         visible: monitorTabRepeater.count === 0
                         opacity: 0.7
                         text: qsTr("Tidak ada layar terdeteksi")
+                    }
+
+                    // Feedback round: at the end of the strip the clear
+                    // action read like a third sub-tab. This flexible spacer
+                    // moves it to the far end, so the two scope marks and the
+                    // destructive action never form one peer group.
+                    Item {
+                        Layout.fillWidth: true
                     }
 
                     // The Hapus path: drop the selected
@@ -422,6 +429,11 @@ Item {
             // -----------------------------------------------------
             ColumnLayout {
                 Layout.fillWidth: true
+                // Qt 6.8: a nested layout's implicit maximum width is derived
+                // from its contents, which capped this column at the content
+                // width (~832px) and handed every spare pixel to the rail.
+                // Lifting the cap lets the left column take the rest.
+                Layout.maximumWidth: Number.POSITIVE_INFINITY
                 Layout.fillHeight: true
                 spacing: 8
 
@@ -509,6 +521,11 @@ Item {
             ColumnLayout {
                 Layout.preferredWidth: 340
                 Layout.minimumWidth: 300
+                Layout.maximumWidth: 340
+                // Nested layouts default to fillWidth: true (Qt 6.8), so this
+                // rail absorbed all spare width; pin it to the 340px design
+                // width so the left column gets the rest.
+                Layout.fillWidth: false
                 Layout.fillHeight: true
                 spacing: 8
 
@@ -569,6 +586,10 @@ Item {
         modal: true
         anchors.centerIn: Overlay.overlay
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        // Pin the popup-local Material theme to the app Theme: attached
+        // Material properties do not inherit across the popup boundary.
+        Material.theme: Theme.dark ? Material.Dark : Material.Light
+        Material.accent: Theme.accent
         onOpened: {
             wallpaperPage.dialogOpened()
             confirmAllCancel.forceActiveFocus()

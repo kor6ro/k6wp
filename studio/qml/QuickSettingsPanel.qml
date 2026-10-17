@@ -1,11 +1,17 @@
-// Tampilan quick panel: the Wallpaper right-rail pane with the fit / monitor
-// choices only (brief B-WIREFRAME(a): Beranda shows the 3 icon "Isi layar"
-// options; every other setting is defined once in SettingsPage.qml).
+// Tampilan quick panel: the Wallpaper right-rail pane with the fit choices
+// only (brief B-WIREFRAME(a): Beranda shows the 3 icon "Isi layar" options;
+// every other setting is defined once in SettingsPage.qml).
 //
 // Plan todo 15 (GAP-4): the old quick-settings pane duplicated the
 // autostart / battery-saver / fit settings that also lived in Pengaturan.
 // The duplication is gone - this pane keeps just the Tampilan choices, the
 // definitions (and the raw values) live in SettingsPage.qml.
+//
+// Feedback round: the rail "Layar:" combo was removed as well. The monitor
+// target already has exactly two user-facing homes - the Beranda "Layar:"
+// tab strip (scope) and the "Pasang ke" row (per-install target) - plus the
+// raw default combo in Pengaturan > Tampilan. A third list-style selector in
+// the rail was pure redundancy.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
@@ -42,16 +48,6 @@ Pane {
             fitPasRadio.checked = sel === "fit"
         if (fitIsiRadio)
             fitIsiRadio.checked = sel === "stretch"
-        if (monitorCombo) {
-            let mi = 0
-            for (let i = 0; i < Studio.monitorChoices.length; ++i) {
-                if (Studio.monitorChoices[i].id === Studio.quickMonitor) {
-                    mi = i
-                    break
-                }
-            }
-            monitorCombo.currentIndex = mi
-        }
     }
 
     Connections {
@@ -67,11 +63,6 @@ Pane {
     function setQuickFitChoice(mode) {
         Studio.setQuickFit(mode)
         Settings.setFitMode(mode)
-    }
-
-    function setQuickMonitorChoice(id) {
-        Studio.setQuickMonitor(id)
-        Settings.setMonitorId(id)
     }
 
     Layout.fillWidth: true
@@ -154,28 +145,5 @@ Pane {
             }
         }
 
-        Label {
-            text: qsTr("Layar:")
-            color: Theme.text
-        }
-
-        ComboBox {
-            id: monitorCombo
-            Layout.fillWidth: true
-            Layout.maximumWidth: controlWidth
-            model: Studio.monitorChoices
-            textRole: "text"
-            valueRole: "id"
-            currentIndex: {
-                for (let i = 0; i < Studio.monitorChoices.length; ++i) {
-                    if (Studio.monitorChoices[i].id === Studio.quickMonitor)
-                        return i
-                }
-                return 0
-            }
-            onActivated: quickSettingsPanel.setQuickMonitorChoice(
-                             Studio.monitorChoices[index].id)
-            Accessible.name: qsTr("Layar")
-        }
     }
 }

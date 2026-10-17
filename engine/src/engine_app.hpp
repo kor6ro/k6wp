@@ -14,7 +14,9 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <vector>
 
 #include "cli_options.hpp"
 #include "config_watch.hpp"
@@ -28,6 +30,9 @@
 #include "cpu_affinity.hpp"
 #include "lockscreen_glue.hpp"
 #include "occlusion_poke_scheduler.hpp"
+#include "lock_order.hpp"
+#include "topology_snapshot.hpp"
+#include "topology_diff.hpp"
 #include "occlusion_watch.hpp"
 #include "os_wallpaper.hpp"
 #include "pin_verify_schedule.hpp"
@@ -376,10 +381,33 @@ class EngineApp {
   // written by the main-thread set_video/boot executors, read by the
   // verify pass (main) and get_state-adjacent paths.
   std::atomic<bool> headless_owns_decode_{false};
+  // Display resilience P3 (§R3 / §R10): reconcile state. All accesses
+  // under reconcile_mutex_; env-lock takes precedence over config; shadow
+  // pass never writes displays.json (B14). Default mode = legacy.
+  struct ReconcileStatus {
+    std::string mode = "legacy";        // legacy | shadow | on
+    std::string last_trigger;           // "manual" | event token
+    std::string last_verdict = "";      // "covered" | "degraded" | ""
+    int retries = 0;                    // retry timer (P3 = 0, never armed)
+    std::vector<std::string> degraded_keys;
+  };
+  ReconcileStatus reconcile_status_;
+  mutable std::mutex reconcile_mutex_;
+  bool reconcile_env_locked_ = false;
+  TopologySnapshot last_reconcile_snapshot_;
+  bool reconcile_arm_active_ = false;
+  std::chrono::steady_clock::time_point reconcile_first_event_ms_{};
+  std::string reconcile_trigger_;
+  // P3 (design §R9.4 deviation): lock-order guard comments documented.
+
   // CRIT-2 worker->main handoff; one slot each (last write wins, idempotent).
   IpcCommandMarshal ipc_marshal_{&EngineApp::Log};
   // Serializes the get_state payload (raw JSON object text).
   std::string BuildStateJson() const;
+  // Display resilience P3: reconcile orchestration.
+  void ArmReconcile(const char* trigger);  // burst debounce
+  void RunReconcilePass();                 // one shadow pass
+  std::string ReconcileDiffSummary(const TopologyDiff& diff) const;
   // --- Tray menu actions (Todo 35, all run on the UI thread via WndProc) ----
   void OnTrayTogglePause();                 // Pause/Resume item + dbl-click
   void OnTrayQuickSwitch(std::size_t idx);  // quick-switch submenu index
