@@ -155,9 +155,11 @@ Pane {
         contentItem: RowLayout {
             spacing: Theme.space1
 
+            Item { Layout.fillWidth: true }
+
             Text {
                 visible: railButton.glyph.length > 0
-                Layout.alignment: Qt.AlignVCenter
+                Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
                 text: railButton.glyph
                 font.family: Theme.glyphFont
                 font.pixelSize: Theme.fontM
@@ -169,8 +171,7 @@ Pane {
             }
 
             Text {
-                Layout.fillWidth: true
-                Layout.alignment: Qt.AlignVCenter
+                Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
                 text: railButton.text
                 font.pixelSize: Theme.fontM
                 color: Theme.text
@@ -178,14 +179,16 @@ Pane {
                 verticalAlignment: Text.AlignVCenter
                 elide: Text.ElideRight
             }
+
+            Item { Layout.fillWidth: true }
         }
         background: Rectangle {
             radius: Theme.radiusS
             color: railButton.down ? Theme.pressedSurface
                    : (railButton.hovered || railButton.activeFocus
                       ? Theme.surface2 : Theme.surface)
-            border.width: railButton.activeFocus ? 2 : 0
-            border.color: Theme.focusRing
+            border.width: railButton.activeFocus ? 2 : 1
+            border.color: railButton.activeFocus ? Theme.focusRing : Theme.border
         }
     }
 
@@ -391,6 +394,10 @@ Pane {
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         // Task 32: tighter than the Material 24 default.
         padding: Theme.space3
+        // Pin the popup-local Material theme to the app Theme: attached
+        // Material properties do not inherit across the popup boundary.
+        Material.theme: Theme.dark ? Material.Dark : Material.Light
+        Material.accent: Theme.accent
         onOpened: {
             statusBar.dialogOpened()
             collectionCancelButton.forceActiveFocus()
@@ -449,6 +456,10 @@ Pane {
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         // Task 32: tighter than the Material 24 default.
         padding: Theme.space3
+        // Pin the popup-local Material theme to the app Theme: attached
+        // Material properties do not inherit across the popup boundary.
+        Material.theme: Theme.dark ? Material.Dark : Material.Light
+        Material.accent: Theme.accent
         onOpened: {
             statusBar.dialogOpened()
             trashCancelButton.forceActiveFocus()

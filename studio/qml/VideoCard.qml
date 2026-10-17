@@ -215,9 +215,12 @@ Item {
         contentItem: RowLayout {
             spacing: Theme.space1
 
+            // Left spacer centres the glyph+label group inside the button.
+            Item { Layout.fillWidth: true }
+
             Text {
                 visible: cardButton.glyph.length > 0
-                Layout.alignment: Qt.AlignVCenter
+                Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
                 text: cardButton.glyph
                 font.family: Theme.glyphFont
                 font.pixelSize: Theme.fontM
@@ -227,8 +230,6 @@ Item {
             }
 
             Text {
-                Layout.fillWidth: true
-                Layout.alignment: Qt.AlignVCenter
                 text: cardButton.text
                 font.pixelSize: Theme.fontM
                 font.weight: cardButton.primary ? Theme.fontWeightSemibold
@@ -237,7 +238,11 @@ Item {
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
                 elide: Text.ElideRight
+                Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
             }
+
+            // Right spacer mirrors the left spacer so the group stays centred.
+            Item { Layout.fillWidth: true }
         }
         background: Rectangle {
             radius: Theme.radiusS
@@ -247,9 +252,9 @@ Item {
                    : (cardButton.down ? Theme.pressedSurface
                       : (cardButton.hovered || cardButton.activeFocus
                          ? Theme.surface2 : Theme.surface))
-            border.width: cardButton.activeFocus ? 2 : 0
+            border.width: cardButton.activeFocus ? 2 : (cardButton.primary ? 0 : 1)
             border.color: cardButton.primary ? Theme.accentText
-                                             : Theme.focusRing
+                       : (cardButton.activeFocus ? Theme.focusRing : Theme.border)
         }
     }
 
@@ -742,6 +747,10 @@ Item {
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         // Task 32: tighter than the Material 24 default.
         padding: Theme.space3
+        // Pin the popup-local Material theme to the app Theme: attached
+        // Material properties do not inherit across the popup boundary.
+        Material.theme: Theme.dark ? Material.Dark : Material.Light
+        Material.accent: Theme.accent
         onOpened: {
             videoCard.dialogOpened()
             collectionCancelButton.forceActiveFocus()
@@ -800,6 +809,10 @@ Item {
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         // Task 32: tighter than the Material 24 default.
         padding: Theme.space3
+        // Pin the popup-local Material theme to the app Theme: attached
+        // Material properties do not inherit across the popup boundary.
+        Material.theme: Theme.dark ? Material.Dark : Material.Light
+        Material.accent: Theme.accent
         onOpened: {
             videoCard.dialogOpened()
             trashCancelButton.forceActiveFocus()
@@ -858,6 +871,10 @@ Item {
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         // Task 32: tighter than the Material 24 default.
         padding: Theme.space3
+        // Pin the popup-local Material theme to the app Theme: attached
+        // Material properties do not inherit across the popup boundary.
+        Material.theme: Theme.dark ? Material.Dark : Material.Light
+        Material.accent: Theme.accent
         onOpened: videoCard.dialogOpened()
         onClosed: videoCard.dialogClosed()
 

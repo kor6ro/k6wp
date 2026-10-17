@@ -117,9 +117,12 @@ Item {
         contentItem: RowLayout {
             spacing: Theme.space1
 
+            // Left spacer centres the glyph+label group inside the button.
+            Item { Layout.fillWidth: true }
+
             Text {
                 visible: dialogActionButton.glyph.length > 0
-                Layout.alignment: Qt.AlignVCenter
+                Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
                 text: dialogActionButton.glyph
                 font.family: Theme.glyphFont
                 font.pixelSize: Theme.fontM
@@ -130,17 +133,21 @@ Item {
             }
 
             Text {
-                Layout.fillWidth: true
-                Layout.alignment: Qt.AlignVCenter
                 text: dialogActionButton.text
                 font.pixelSize: Theme.fontM
-                font.weight: dialogActionButton.primary ? Theme.fontWeightSemibold
-                                                        : Theme.fontWeightRegular
-                color: dialogActionButton.primary ? Theme.accentText : Theme.text
+                font.weight: dialogActionButton.primary
+                             ? Theme.fontWeightSemibold
+                             : Theme.fontWeightRegular
+                color: dialogActionButton.primary ? Theme.accentText
+                                                  : Theme.text
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
                 elide: Text.ElideRight
+                Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
             }
+
+            // Right spacer mirrors the left spacer so the group stays centred.
+            Item { Layout.fillWidth: true }
         }
         background: Rectangle {
             radius: Theme.radiusS
@@ -151,9 +158,9 @@ Item {
                       : (dialogActionButton.hovered
                          || dialogActionButton.activeFocus
                          ? Theme.surface2 : Theme.surface))
-            border.width: dialogActionButton.activeFocus ? 2 : 0
+            border.width: dialogActionButton.activeFocus ? 2 : (dialogActionButton.primary ? 0 : 1)
             border.color: dialogActionButton.primary ? Theme.accentText
-                                                     : Theme.focusRing
+                         : (dialogActionButton.activeFocus ? Theme.focusRing : Theme.border)
         }
     }
 
@@ -577,9 +584,29 @@ Item {
         Material.theme: Theme.dark ? Material.Dark : Material.Light
         Material.accent: Theme.accent
         background: DialogSurface {}
-        header: DialogTitle {
-            glyph: Theme.glyph.info
-            titleText: aboutDialog.title
+        header: RowLayout {
+            Layout.fillWidth: true
+            spacing: Theme.space2
+
+            DialogTitle {
+                glyph: Theme.glyph.info
+                titleText: aboutDialog.title
+                Layout.fillWidth: true
+            }
+
+            DialogActionButton {
+                id: aboutCloseButton
+                objectName: "aboutClose"
+                text: ""
+                glyph: Theme.glyph.close
+                implicitHeight: 32
+                implicitWidth: 32
+                topPadding: 0
+                bottomPadding: 0
+                leftPadding: 0
+                rightPadding: 0
+                onClicked: aboutDialog.close()
+            }
         }
 
         onOpened: {
@@ -664,13 +691,6 @@ Item {
             spacing: Theme.space2
             Item {
                 Layout.fillWidth: true
-            }
-            DialogActionButton {
-                id: aboutCloseButton
-                objectName: "aboutClose"
-                text: qsTr("Tutup")
-                glyph: Theme.glyph.close
-                onClicked: aboutDialog.close()
             }
         }
     }

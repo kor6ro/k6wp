@@ -63,6 +63,13 @@ Popup {
     focus: true
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
+    // Pin the popup-local Material theme to the app Theme: attached Material
+    // properties do not inherit across the popup boundary, so the radio
+    // labels below rendered with the Light default (black ink on our dark
+    // token background). Same fix as AppDialogs/CacheDialog.
+    Material.theme: Theme.dark ? Material.Dark : Material.Light
+    Material.accent: Theme.accent
+
     background: Rectangle {
         radius: Theme.radiusM
         color: Theme.bg
@@ -166,11 +173,22 @@ Popup {
                 focusPolicy: Qt.StrongFocus
                 implicitHeight: 40
                 Accessible.name: text
+                // Explicit token ink, independent of Material.foreground:
+                // the label can never regress to the light-theme black.
+                contentItem: Text {
+                    leftPadding: targetRadio.indicator.width + targetRadio.spacing
+                    text: targetRadio.text
+                    font: targetRadio.font
+                    color: Theme.text
+                    verticalAlignment: Text.AlignVCenter
+                    elide: Text.ElideRight
+                }
                 // onToggled, not onClicked: Enter/Space activation takes the
                 // same path as a mouse click. The key guard keeps the
                 // binding-driven check from re-emitting.
                 onToggled: {
                     if (checked && String(modelData.key) !== assignPopup.target) {
+                        assignPopup.target = String(modelData.key)
                         assignPopup.targetChosen(String(modelData.key))
                         assignPopup.close()
                     }

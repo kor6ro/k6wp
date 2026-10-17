@@ -55,7 +55,7 @@
 <context>
     <name>AppDialogs</name>
     <message>
-        <location filename="../qml/AppDialogs.qml" line="+214"/>
+        <location filename="../qml/AppDialogs.qml" line="+221"/>
         <source>Info teknis</source>
         <translation type="unfinished"></translation>
     </message>
@@ -91,12 +91,11 @@
     </message>
     <message>
         <location line="+20"/>
-        <location line="+323"/>
         <source>Tutup</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-303"/>
+        <location line="+20"/>
         <source>Video panjang</source>
         <translation type="unfinished"></translation>
     </message>
@@ -141,7 +140,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+32"/>
+        <location line="+52"/>
         <source>License: GPL-2.0-or-later</source>
         <translation type="unfinished">License: GPL-2.0-or-later</translation>
     </message>
@@ -152,12 +151,12 @@
     </message>
     <message>
         <location line="+10"/>
-        <location line="+96"/>
+        <location line="+89"/>
         <source>Versi baru tersedia %1.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-81"/>
+        <location line="-74"/>
         <source>Cek pembaruan</source>
         <translation type="unfinished"></translation>
     </message>
@@ -172,7 +171,7 @@
         <translation type="unfinished">Project page</translation>
     </message>
     <message>
-        <location line="+32"/>
+        <location line="+25"/>
         <source>Pembaruan</source>
         <translation type="unfinished">Updates</translation>
     </message>
@@ -195,7 +194,7 @@
         <translation type="unfinished">All screens</translation>
     </message>
     <message>
-        <location line="+96"/>
+        <location line="+103"/>
         <source>Pasang ke</source>
         <translation type="unfinished"></translation>
     </message>
@@ -462,7 +461,7 @@
 <context>
     <name>QuickSettingsPanel</name>
     <message>
-        <location filename="../qml/QuickSettingsPanel.qml" line="+102"/>
+        <location filename="../qml/QuickSettingsPanel.qml" line="+93"/>
         <source>Tampilan</source>
         <translation type="unfinished">Display</translation>
     </message>
@@ -490,20 +489,14 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+29"/>
-        <source>Layar</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="-20"/>
         <source>Layar:</source>
-        <translation type="unfinished">Screen:</translation>
+        <translation type="obsolete">Screen:</translation>
     </message>
 </context>
 <context>
     <name>SettingsPage</name>
     <message>
-        <location filename="../qml/SettingsPage.qml" line="+599"/>
+        <location filename="../qml/SettingsPage.qml" line="+640"/>
         <source>Bahasa antarmuka:</source>
         <translation type="unfinished">Interface language:</translation>
     </message>
@@ -528,7 +521,7 @@
         <translation type="unfinished">Fill screen:</translation>
     </message>
     <message>
-        <location line="-436"/>
+        <location line="-441"/>
         <source>Bagian dibuka. Aktifkan untuk menutup.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -538,7 +531,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+317"/>
+        <location line="+322"/>
         <source>Umum</source>
         <translation type="unfinished"></translation>
     </message>
@@ -976,7 +969,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+138"/>
+        <location line="+141"/>
         <source>Aktifkan lagi</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1012,12 +1005,12 @@
     </message>
     <message>
         <location line="+77"/>
-        <location line="+54"/>
+        <location line="+58"/>
         <source>Hapus dari koleksi</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-48"/>
+        <location line="-52"/>
         <source>Hapus file ke Recycle Bin</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1027,23 +1020,23 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+20"/>
+        <location line="+24"/>
         <source>File aslinya tetap ada.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+27"/>
-        <location line="+58"/>
+        <location line="+62"/>
         <source>Batal</source>
         <translation type="unfinished">Cancel</translation>
     </message>
     <message>
-        <location line="-47"/>
+        <location line="-51"/>
         <source>Hapus file ke Recycle Bin?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+20"/>
+        <location line="+24"/>
         <source>File akan hilang dari komputermu.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1053,17 +1046,17 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-223"/>
+        <location line="-231"/>
         <source>Lanjutkan wallpaper yang sedang dijeda</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-179"/>
+        <location line="-182"/>
         <source>pilih video untuk mulai</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+180"/>
+        <location line="+183"/>
         <source>Jedakan wallpaper sementara</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1115,37 +1108,37 @@
     <name>VideoCard</name>
     <message>
         <location filename="../qml/VideoCard.qml" line="+136"/>
-        <location line="+338"/>
-        <location line="+381"/>
+        <location line="+343"/>
+        <location line="+389"/>
         <source>File tidak ketemu</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-718"/>
+        <location line="-731"/>
         <source>Menyiapkan</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+1"/>
-        <location line="+348"/>
+        <location line="+353"/>
         <source>Tidak bisa dipakai</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-347"/>
-        <location line="+326"/>
+        <location line="-352"/>
+        <location line="+331"/>
         <source>Dipakai</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-325"/>
-        <location line="+355"/>
+        <location line="-330"/>
+        <location line="+360"/>
         <source>Perlu disiapkan</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-348"/>
-        <location line="+310"/>
+        <location line="-353"/>
+        <location line="+315"/>
         <source>Terpilih</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1198,13 +1191,13 @@
     </message>
     <message>
         <location line="+11"/>
-        <location line="+51"/>
-        <location line="+117"/>
+        <location line="+55"/>
+        <location line="+125"/>
         <source>Hapus dari koleksi</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-163"/>
+        <location line="-175"/>
         <source>Hapus file ke Recycle Bin</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1214,23 +1207,23 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+20"/>
+        <location line="+24"/>
         <source>File aslinya tetap ada.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+27"/>
-        <location line="+58"/>
+        <location line="+62"/>
         <source>Batal</source>
         <translation type="unfinished">Cancel</translation>
     </message>
     <message>
-        <location line="-47"/>
+        <location line="-51"/>
         <source>Hapus file ke Recycle Bin?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+20"/>
+        <location line="+24"/>
         <source>File akan hilang dari komputermu.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1240,7 +1233,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+38"/>
+        <location line="+42"/>
         <source>%1 tidak ketemu (mungkin dipindah).</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1278,12 +1271,12 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+189"/>
+        <location line="+188"/>
         <source>Tidak ada layar terdeteksi</source>
         <translation type="unfinished">No screens detected</translation>
     </message>
     <message>
-        <location line="+10"/>
+        <location line="+18"/>
         <source>Hapus penugasan</source>
         <translation type="unfinished">Remove assignment</translation>
     </message>
@@ -1293,7 +1286,7 @@
         <translation type="unfinished">Remove the video assignment for the selected screen</translation>
     </message>
     <message>
-        <location line="+70"/>
+        <location line="+75"/>
         <source>Pratinjau:</source>
         <translation type="unfinished">Preview:</translation>
     </message>
@@ -1308,12 +1301,12 @@
         <translation type="unfinished">scope: all screens</translation>
     </message>
     <message>
-        <location line="+121"/>
+        <location line="+126"/>
         <source>Pasang ke semua layar?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+18"/>
+        <location line="+22"/>
         <source>Video khusus di %1 akan ikut diganti.</source>
         <translation type="unfinished"></translation>
     </message>
