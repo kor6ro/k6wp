@@ -589,6 +589,20 @@ void* DesktopInjector::injected_hwnd() const {
   return it == g_mm_inj.end() ? nullptr : it->second.hwnd;
 }
 
+// Bug B: the deferred teardown releases the surface instead of destroying it
+// under a live mpv VO. The stub hands the handle over and forgets it.
+void* DesktopInjector::ReleaseSurface() {
+  const auto it = g_mm_inj.find(this);
+  if (it == g_mm_inj.end()) return nullptr;
+  void* hwnd = it->second.hwnd;
+  it->second.hwnd = nullptr;
+  return hwnd;
+}
+
+bool DesktopInjector::IsSurfaceAlive() const {
+  return injected_hwnd() != nullptr;
+}
+
 void DesktopInjector::ReassertFrameless() {}
 
 std::string DesktopInjector::last_coverage_reason() const {

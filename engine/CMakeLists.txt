@@ -20,6 +20,8 @@ add_executable(engine
   src/desktop_placement.cpp
   src/topology_diff.cpp  # P1: pure topology diff (windows.h-free)
   src/retry_schedule.cpp  # P1: pure retry schedule (windows.h-free, time=param)
+  src/reconcile_policy.cpp  # Bug B: pure reconcile policy (windows.h-free)
+  src/renderer_graveyard.cpp  # Bug B: deferred renderer/window teardown
   src/bench_hook.cpp
   src/mpv_renderer.cpp
   src/config_watch.cpp
@@ -171,6 +173,12 @@ add_executable(engine_state_test
   src/ipc_command_marshal.cpp
   src/ipc_marshal.cpp
   src/multi_monitor.cpp
+  # Bug B: the deferred teardown the slot map hands its renderers to. The
+  # graveyard is mpv-free (it only destroys the MpvRenderer OBJECT, whose
+  # destructor the test TU stubs), so no mpv link dependency is added.
+  src/renderer_graveyard.cpp
+  # Bug B: the pure identity/reconcile policy the slot map matches on.
+  src/reconcile_policy.cpp
 )
 target_link_libraries(engine_state_test PRIVATE k6wp_shared user32)
 target_include_directories(engine_state_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -204,6 +212,8 @@ add_executable(multi_monitor_factory_test
   ../tests/multi_monitor_factory_test.cpp
   src/multi_monitor.cpp
   src/desktop_placement.cpp
+  src/renderer_graveyard.cpp
+  src/reconcile_policy.cpp
 )
 target_link_libraries(multi_monitor_factory_test PRIVATE user32 k6wp_shared)
 target_include_directories(multi_monitor_factory_test PRIVATE
@@ -261,6 +271,8 @@ add_executable(multi_monitor_placement_test
   ../tests/multi_monitor_placement_test.cpp
   src/multi_monitor.cpp
   src/desktop_placement.cpp
+  src/renderer_graveyard.cpp
+  src/reconcile_policy.cpp
 )
 target_link_libraries(multi_monitor_placement_test PRIVATE user32 k6wp_shared)
 target_include_directories(multi_monitor_placement_test PRIVATE
@@ -288,6 +300,8 @@ add_executable(display_assignment_test
   ../studio/src/ipc_client.cpp
   src/ipc_marshal.cpp
   src/multi_monitor.cpp
+  src/renderer_graveyard.cpp
+  src/reconcile_policy.cpp
 )
 target_link_libraries(display_assignment_test PRIVATE k6wp_shared user32)
 target_include_directories(display_assignment_test PRIVATE
@@ -312,6 +326,8 @@ add_executable(reconcile_golden_test
   ../tests/reconcile_golden_test.cpp
   src/multi_monitor.cpp
   src/desktop_placement.cpp
+  src/renderer_graveyard.cpp
+  src/reconcile_policy.cpp
 )
 target_link_libraries(reconcile_golden_test PRIVATE user32 k6wp_shared)
 target_include_directories(reconcile_golden_test PRIVATE
@@ -320,17 +336,20 @@ target_include_directories(reconcile_golden_test PRIVATE
 )
 add_test(NAME reconcile_golden_test COMMAND reconcile_golden_test)
 
-# reconcile_red_test (display resilience P0, Fase 4): one LABELED red test
-# per legacy bug B1..B4 (prompt v5.1 §5.1a). Each selects one scenario that
-# FAILS at its intended assertion on the legacy code and is registered with
-# WILL_FAIL TRUE so CTest inverts that failure into a pass and the trunk stays
-# green. Run the binary directly with the selector to see the exact intended
-# failure. Same link model as reconcile_golden_test (no mpv, no
+# reconcile_red_test (display resilience P0, Fase 4): one scenario per legacy
+# bug B1..B4 (prompt v5.1 §5.1a). These started as LABELED RED tests (one
+# failing assertion each on the legacy code, registered with WILL_FAIL TRUE so
+# the trunk stayed green). The Bug B fix (stable monitor identity for the slot
+# map + the retained assignment on unplug) makes all four pass, so they are
+# now GREEN REGRESSION tests: the WILL_FAIL property is GONE and a failure is
+# a real regression. Same link model as reconcile_golden_test (no mpv, no
 # desktop_inject.cpp).
 add_executable(reconcile_red_test
   ../tests/reconcile_red_test.cpp
   src/multi_monitor.cpp
   src/desktop_placement.cpp
+  src/renderer_graveyard.cpp
+  src/reconcile_policy.cpp
 )
 target_link_libraries(reconcile_red_test PRIVATE user32 k6wp_shared)
 target_include_directories(reconcile_red_test PRIVATE
@@ -345,13 +364,6 @@ add_test(NAME red-B3-secondary-key-change
          COMMAND reconcile_red_test red-B3-secondary-key-change)
 add_test(NAME red-B4-replug-rebind
          COMMAND reconcile_red_test red-B4-replug-rebind)
-set_tests_properties(
-  red-B1-swap-rect
-  red-B2-unplug-reindex
-  red-B3-secondary-key-change
-  red-B4-replug-rebind
-  PROPERTIES WILL_FAIL TRUE
-)
 
 # topology_diff_test / retry_schedule_test / topology_property_test
 # (display resilience P1, Fase 5): unit tests for the two pure-core modules and
@@ -375,6 +387,20 @@ add_executable(retry_schedule_test
 target_include_directories(retry_schedule_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 add_test(NAME retry_schedule_test COMMAND retry_schedule_test)
 
+# reconcile_policy_test (Bug B): the pure decision core of the debounced
+# topology door - trigger -> action, the stable monitor identity a slot is
+# bound to, and the "has the enumeration settled" comparison. The module is
+# windows.h-free and free of engine state, so the suite is fully headless.
+add_executable(reconcile_policy_test
+  ../tests/reconcile_policy_test.cpp
+  src/reconcile_policy.cpp
+)
+target_include_directories(reconcile_policy_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_SOURCE_DIR}/shared
+)
+add_test(NAME reconcile_policy_test COMMAND reconcile_policy_test)
+
 add_executable(topology_property_test
   ../tests/topology_property_test.cpp
   src/topology_diff.cpp
@@ -395,6 +421,8 @@ add_executable(reconcile_shadow_test
   src/multi_monitor.cpp
   src/desktop_placement.cpp
   src/topology_diff.cpp
+  src/renderer_graveyard.cpp
+  src/reconcile_policy.cpp
 )
 target_link_libraries(reconcile_shadow_test PRIVATE user32 k6wp_shared)
 target_include_directories(reconcile_shadow_test PRIVATE

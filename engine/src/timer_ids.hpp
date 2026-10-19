@@ -42,6 +42,17 @@ inline constexpr std::uintptr_t kReconcileDebounceTimerId = 0x4B365753u;
 // P4). The WM_TIMER handler is a kill-only no-op.
 inline constexpr std::uintptr_t kReconcileRetryTimerId = 0x4B365754u;
 
+// Bug B: the TOPOLOGY reconcile debounce timer ('K6WP'+5). Armed by
+// EngineApp::ArmTopologyReconcile for EVERY event that can change the
+// monitor set or the desktop surface (WM_DISPLAYCHANGE, resume, unlock,
+// TaskbarCreated, SPI_SETDESKWALLPAPER, monitor-on, device-lost) and
+// re-armed (coalesced) while a burst is in flight, so the slot work runs
+// once per burst - and OUTSIDE the WM_DISPLAYCHANGE handler stack, which
+// the system delivers with SendMessage (a slow handler froze the whole
+// display-change broadcast). Killed when it fires: never periodic, so the
+// paused zero-wakeup claim holds.
+inline constexpr std::uintptr_t kTopologyReconcileTimerId = 0x4B365755u;
+
 // Pairwise-distinct guarantee: an accidental duplicate timer ID fails the
 // build instead of silently aliasing two timers on the same hidden window.
 static_assert(kDebounceTimerId != kWorkingSetTrimTimerId,
@@ -63,6 +74,16 @@ static_assert(kOcclusionPokeTimerId != kReconcileDebounceTimerId,
 static_assert(kOcclusionPokeTimerId != kReconcileRetryTimerId,
               "engine timer IDs must be pairwise distinct");
 static_assert(kReconcileDebounceTimerId != kReconcileRetryTimerId,
+              "engine timer IDs must be pairwise distinct");
+static_assert(kDebounceTimerId != kTopologyReconcileTimerId,
+              "engine timer IDs must be pairwise distinct");
+static_assert(kWorkingSetTrimTimerId != kTopologyReconcileTimerId,
+              "engine timer IDs must be pairwise distinct");
+static_assert(kOcclusionPokeTimerId != kTopologyReconcileTimerId,
+              "engine timer IDs must be pairwise distinct");
+static_assert(kReconcileDebounceTimerId != kTopologyReconcileTimerId,
+              "engine timer IDs must be pairwise distinct");
+static_assert(kReconcileRetryTimerId != kTopologyReconcileTimerId,
               "engine timer IDs must be pairwise distinct");
 
 }  // namespace k6wp

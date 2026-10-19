@@ -408,6 +408,40 @@ class EngineApp {
   void ArmReconcile(const char* trigger);  // burst debounce
   void RunReconcilePass();                 // one shadow pass
   std::string ReconcileDiffSummary(const TopologyDiff& diff) const;
+
+  // --- Bug B: the debounced topology door -----------------------------------
+  //
+  // Every event that can change the monitor set or the desktop surface goes
+  // through ONE debounced door instead of doing the work inside the message
+  // handler:
+  //
+  //   WM_DISPLAYCHANGE / resume / unlock / TaskbarCreated / SETTINGCHANGE /
+  //   monitor-on / device-lost  ->  ArmTopologyReconcile(trigger)
+  //                                 -> (400 ms quiet period, re-armed per
+  //                                    burst) -> RunTopologyReconcile()
+  //
+  // WHY: WM_DISPLAYCHANGE is delivered with SendMessage by the system, so a
+  // handler that enumerates monitors, tears down slots (mpv teardown) and
+  // re-attaches blocks the whole display-change broadcast - the observed
+  // "the tray icon is there but nothing responds" freeze when a monitor is
+  // unplugged. The handler now only logs and arms a timer; every slot
+  // change happens in the timer callback, outside the WM_DISPLAYCHANGE
+  // stack.
+  //
+  // The re-anchor triggers (resume / unlock / Explorer restart) first wait
+  // until two consecutive monitor enumerations AGREE: right after a wake the
+  // enumeration can still be moving, and converging on a half-reported
+  // topology tears down slots that are about to come back.
+  void ArmTopologyReconcile(const char* trigger);
+  void RunTopologyReconcile();
+  // The trigger of the burst currently in flight ("" = none).
+  std::string topology_reconcile_trigger_;
+  // True while a debounce burst is in flight.
+  bool topology_reconcile_armed_ = false;
+  // The topology signature seen by the previous pass; used to tell whether
+  // the enumeration has settled (two consecutive equal signatures).
+  std::string topology_signature_prev_;
+  bool topology_signature_valid_ = false;
   // --- Tray menu actions (Todo 35, all run on the UI thread via WndProc) ----
   void OnTrayTogglePause();                 // Pause/Resume item + dbl-click
   void OnTrayQuickSwitch(std::size_t idx);  // quick-switch submenu index

@@ -262,9 +262,13 @@ class MultiMonitor {
   void PauseSlot(size_t idx, bool pause);
   bool IsSlotPaused(size_t idx) const;
 
-  // Forced re-attach of every live slot (Explorer restart / power-resume:
-  // geometry may be unchanged but the desktop windows are gone). Keeps the
-  // renderer instances (no video reload — SetHWND re-points them).
+  // Re-anchor every live slot after a desktop-level event (Explorer restart,
+  // power resume, wallpaper change). A slot whose injected surface is still
+  // alive and unchanged is left untouched: destroying/recreating it would
+  // also destroy mpv's VO window and end the stream (observed as
+  // `end-file reason=quit`), which is exactly the resume-black-screen bug.
+  // Only a real re-attach (surface gone/moved) re-points the renderer and
+  // force-reloads the slot's current video.
   void Reanchor();
 
   size_t slot_count() const;
@@ -345,6 +349,19 @@ class MultiMonitor {
     // (DesktopInjector::last_coverage_reason, copied in AttachSlot).
     // Rows 15/19 map it to the get_state display_coverage field.
     std::string coverage_reason;
+    // Stable identity of the monitor this slot is bound to (see
+    // reconcile_policy.hpp: SlotIdentityKey). The slot FOLLOWS the monitor:
+    // when a monitor is unplugged the position indices of the others shift,
+    // and matching slots by position handed monitor A's renderer to
+    // monitor B. The identity is what binds a slot to its monitor; the map
+    // key stays the monitor's current position id (the user-facing id).
+    std::string identity;
+    // UTF-8 path most recently loaded on THIS slot (LoadLoopAll /
+    // LoadLoopSlot / retained-assignment re-apply). A real re-anchor
+    // destroys the mpv VO window and ends the stream, so the slot needs its
+    // own path to force-reload exactly what it was playing. Empty = no video
+    // loaded yet.
+    std::string video_path;
     Slot() = default;
     Slot(const Slot&) = delete;
     Slot& operator=(const Slot&) = delete;
@@ -352,7 +369,9 @@ class MultiMonitor {
         : info(std::move(other.info)),
           injector(std::move(other.injector)),
           renderer(std::move(other.renderer)),
-          coverage_reason(std::move(other.coverage_reason)) {
+          coverage_reason(std::move(other.coverage_reason)),
+          identity(std::move(other.identity)),
+          video_path(std::move(other.video_path)) {
       paused.store(other.paused.load(std::memory_order_relaxed),
                    std::memory_order_relaxed);
     }
@@ -362,6 +381,8 @@ class MultiMonitor {
         injector = std::move(other.injector);
         renderer = std::move(other.renderer);
         coverage_reason = std::move(other.coverage_reason);
+        identity = std::move(other.identity);
+        video_path = std::move(other.video_path);
         paused.store(other.paused.load(std::memory_order_relaxed),
                      std::memory_order_relaxed);
       }
@@ -387,12 +408,49 @@ class MultiMonitor {
   // re-attaches (ApplyActiveFilter, the span paths); every slot then receives
   // the SAME host via SetSharedHost instead of spawning its own.
   void ResolveHostForPass();
+  // Record the resolved host placement as the baseline for the next
+  // host-moved comparison. No-op when resolution failed (null host): the
+  // zeroed rect must not masquerade as a host move on the next pass.
+  void RememberHostPlacement();
   // Shared span re-anchor for OnDisplayChange (reassert=false) and Reanchor
   // (reassert=true): primary-resolution size fallback + hidden-host attach
   // fallback. `slot.injector` must be non-null. No logging here so the
   // callers' distinct lines stay put. Structural slot changes are
   // main-thread-only, so no lock is taken despite the name.
   void ReattachSpanLocked(Slot& slot, int x, int y, int w, int h, bool reassert);
+  // Power/Explorer resilience: after a destroy/recreate of the slot surface,
+  // mpv has already ended the file (its VO window is gone). Re-issue the
+  // slot's own video with force=true (same-path short-circuit would leave a
+  // dead player) and re-assert the slot's pause state. No-op when the slot
+  // has no loaded video. Caller holds slots_mutex_.
+  void ReloadSlotVideoLocked(Slot& slot);
+  // DEFERRED TEARDOWN (Bug B). Hands the slot's mpv handle and its injected
+  // surface to the renderer graveyard: the blocking mpv_terminate_destroy()
+  // runs on the graveyard worker (the message-loop thread must never wait
+  // for it) and the surface is destroyed on the message-loop thread once
+  // the handle is really gone. The slot is left without a renderer; its
+  // injector is kept so it can attach a fresh surface.
+  void ReleaseSlotMediaLocked(Slot& slot);
+  // Full teardown of a slot whose monitor is gone: deferred media release
+  // plus the injector.
+  void DestroySlotLocked(Slot& slot);
+  // Re-places a survivor that must be re-attached (geometry changed, host
+  // moved, or the surface died with the desktop): the old surface and mpv
+  // handle go to the graveyard, a NEW surface is attached and a NEW renderer
+  // is created for it. Recreating the renderer is preferred over SetHWND on
+  // a live VO: the old VO was rendering into a window that is about to
+  // disappear, and re-pointing it in place is exactly the cross-thread
+  // destroy hazard this path exists to avoid. `reassert` re-applies the
+  // sticky frameless style after a successful attach (Reanchor); a display
+  // change passes false. Returns true when the slot has a live renderer
+  // afterwards.
+  bool ReplaceSlotSurfaceLocked(Slot& slot, int x, int y, int w, int h,
+                                bool reassert);
+  // Finds the slot bound to `mi`'s stable identity (see reconcile_policy.hpp
+  // SlotIdentityKey). Returns slots_.end() when the monitor has no slot.
+  std::map<int, Slot>::iterator FindSlotByIdentityLocked(const MonitorInfo& mi);
+  std::map<int, Slot>::const_iterator FindSlotByIdentityLocked(
+      const MonitorInfo& mi) const;
   // Diff the live slots against DesiredMonitors(): tear down the unwanted,
   // attach the missing. Shared by Init/OnDisplayChange/Reanchor/SetActive.
   void ApplyActiveFilter(const std::vector<MonitorInfo>& desired);

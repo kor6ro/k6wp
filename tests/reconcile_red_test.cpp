@@ -1,10 +1,15 @@
 // reconcile_red_test.cpp - Engine Display Resilience, P0/Fase 4.
 //
-// LABELED RED tests: one failing characterization test per legacy bug
-// B1..B4 (prompt v5.1 §5.1a). Each test is a self-contained scenario that
-// encodes the POST-FIX contract; on the CURRENT (legacy) MultiMonitor it
-// FAILS at exactly ONE intended assertion and passes every precondition,
-// so the failure is a precise bug report rather than a setup/crash error.
+// ORIGINALLY LABELED RED tests: one failing characterization test per legacy
+// bug B1..B4 (prompt v5.1 §5.1a). Each test is a self-contained scenario
+// that encodes the POST-FIX contract; on the legacy MultiMonitor it FAILED
+// at exactly ONE intended assertion.
+//
+// THEY ARE GREEN NOW. The Bug B fix (stable monitor identity for the slot
+// map, see engine/src/reconcile_policy.hpp) makes the slot follow the
+// MONITOR instead of the position index, and the teardown now retains the
+// per-monitor assignment so a re-plugged monitor gets it back. The four
+// scenarios are kept as REGRESSION tests: they must keep passing.
 //
 //   red-B1-swap-rect          positions swapped AND primary moves ->
 //                             the sorted id<->device mapping permutes; a
@@ -20,27 +25,25 @@
 //
 // ROOT CAUSE (validated against the legacy source): ListMonitors()
 // (shared/monitor_util.cpp:188-197) sorts primary-first then by device name
-// and sets id = sorted index; MultiMonitor keys slots_ by that id
-// (multi_monitor.cpp). OnDisplayChange matches survivors by id and refreshes
-// their info, but never reloads the renderer, so when the id<->device
-// mapping shifts the wrong renderer/video survives. LoadLoopSlot re-applies
-// an assignment only by device name on the slot that currently carries it.
-//
-// These tests are registered with CTest property WILL_FAIL TRUE (engine/
-// CMakeLists.txt): run directly they exit non-zero at the intended
-// assertion; CTest inverts that into a pass so the trunk stays green.
+// and sets id = sorted index; MultiMonitor keyed slots_ by that id
+// (multi_monitor.cpp). OnDisplayChange matched survivors by id and refreshed
+// their info, but never re-bound the renderer, so when the id<->device
+// mapping shifted the wrong renderer/video survived.
 //
 // LINK MODEL (identical to tests/reconcile_golden_test.cpp /
 // multi_monitor_factory_test.cpp): only engine/src/multi_monitor.cpp +
-// src/desktop_placement.cpp are compiled from the engine. DesktopInjector /
+// src/desktop_placement.cpp + src/reconcile_policy.cpp +
+// src/renderer_graveyard.cpp are compiled from the engine. DesktopInjector /
 // MpvRenderer / ListMonitors / GetPrimaryMonitor / ResolveSharedHost are
 // recording stubs in this TU, so the binary never links desktop_inject.cpp,
 // mpv_renderer.cpp or mpv.lib.
 //
 // No external test framework: plain Check() counter; exit 0 = pass,
-// exit 1 = at least one intended failure.
+// exit 1 = at least one failure.
 #include <cstdint>
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <map>
 #include <memory>
@@ -157,6 +160,35 @@ void TwoMonitors() {
 const char* const kA = "A.mp4";
 const char* const kB = "B.mp4";
 
+// The assignment re-apply checks that the path EXISTS on disk (a missing
+// file must never be re-applied), so the fixtures are real files in a
+// throwaway temp directory.
+std::filesystem::path g_fixture_dir;
+
+void MakeFixtureFiles() {
+  if (!g_fixture_dir.empty()) return;
+  std::error_code ec;
+  g_fixture_dir =
+      std::filesystem::temp_directory_path(ec) / "k6wp-reconcile-fixture";
+  std::filesystem::create_directories(g_fixture_dir, ec);
+  for (const char* name : {kA, kB}) {
+    std::ofstream out(g_fixture_dir / name, std::ios::binary);
+    out << "fixture";
+  }
+}
+
+std::string FixturePath(const char* name) {
+  MakeFixtureFiles();
+  return (g_fixture_dir / name).string();
+}
+
+void CleanupFixtureFiles() {
+  if (g_fixture_dir.empty()) return;
+  std::error_code ec;
+  std::filesystem::remove_all(g_fixture_dir, ec);
+  g_fixture_dir.clear();
+}
+
 }  // namespace (recording state + harness)
 
 // ---- link-level stubs: DesktopInjector (desktop_inject.cpp NOT linked) ----
@@ -190,6 +222,20 @@ void* DesktopInjector::injected_hwnd() const {
   return it == g_inj.end() ? nullptr : it->second.hwnd;
 }
 
+// Bug B: the deferred teardown releases the surface instead of destroying it
+// under a live mpv VO. The stub hands the handle over and forgets it.
+void* DesktopInjector::ReleaseSurface() {
+  const auto it = g_inj.find(this);
+  if (it == g_inj.end()) return nullptr;
+  void* hwnd = it->second.hwnd;
+  it->second.hwnd = nullptr;
+  return hwnd;
+}
+
+bool DesktopInjector::IsSurfaceAlive() const {
+  return injected_hwnd() != nullptr;
+}
+
 void DesktopInjector::ReassertFrameless() {}
 
 std::string DesktopInjector::last_coverage_reason() const {
@@ -205,7 +251,11 @@ SharedHost ResolveSharedHost(InjectMode /*mode*/, LogFn /*log*/) {
 
 MpvRenderer::MpvRenderer() {}
 
-MpvRenderer::~MpvRenderer() { g_path.erase(this); }
+// Bug B: the renderer teardown runs on the RENDERER GRAVEYARD worker, so
+// this destructor must not mutate the shared recording map (it would race
+// with the test thread reading it). The entry of a dead renderer is
+// harmless: the lookups are keyed by the LIVE renderer's pointer.
+MpvRenderer::~MpvRenderer() {}
 
 bool MpvRenderer::Create(void* /*hwnd*/) { return true; }
 
@@ -249,17 +299,19 @@ MonitorInfo GetPrimaryMonitor() noexcept {
 void TestRedB1SwapRect() {
   ResetStubs();
   TwoMonitors();
+  const std::string path_a = FixturePath(kA);
+  const std::string path_b = FixturePath(kB);
   MultiMonitor mm(&QuietLog, MakeFactory());
   mm.SetHeadlessHost(kHeadlessHost);
   Check(mm.Init(MultiMonitorMode::PerMonitor),
         "red-B1: Init attaches both monitors");
   Check(mm.slot_count() == 2, "red-B1: slot_count()==2 before the swap");
-  Check(mm.LoadLoopSlot("\\\\.\\DISPLAY1", kA, ""),
+  Check(mm.LoadLoopSlot("\\\\.\\DISPLAY1", path_a, ""),
         "red-B1: DISPLAY1 accepts A.mp4");
-  Check(mm.LoadLoopSlot("\\\\.\\DISPLAY2", kB, ""),
+  Check(mm.LoadLoopSlot("\\\\.\\DISPLAY2", path_b, ""),
         "red-B1: DISPLAY2 accepts B.mp4");
-  Check(LoadedPathForDevice(mm, L"\\\\.\\DISPLAY1") == kA &&
-            LoadedPathForDevice(mm, L"\\\\.\\DISPLAY2") == kB,
+  Check(LoadedPathForDevice(mm, L"\\\\.\\DISPLAY1") == path_a &&
+            LoadedPathForDevice(mm, L"\\\\.\\DISPLAY2") == path_b,
         "red-B1: precondition - each device carries its own video");
 
   // Swap the physical positions and move primary to DISPLAY2.
@@ -270,8 +322,8 @@ void TestRedB1SwapRect() {
   mm.OnDisplayChange();
   Check(mm.slot_count() == 2, "red-B1: slot_count()==2 after the swap");
 
-  Check(LoadedPathForDevice(mm, L"\\\\.\\DISPLAY1") == kA &&
-            LoadedPathForDevice(mm, L"\\\\.\\DISPLAY2") == kB,
+  Check(LoadedPathForDevice(mm, L"\\\\.\\DISPLAY1") == path_a &&
+            LoadedPathForDevice(mm, L"\\\\.\\DISPLAY2") == path_b,
         "red-B1-swap-rect: each device keeps its own assignment across a "
         "position/primary swap (assignment must follow the GDI device, not "
         "the slot index)");
@@ -286,15 +338,17 @@ void TestRedB1SwapRect() {
 void TestRedB2UnplugReindex() {
   ResetStubs();
   TwoMonitors();
+  const std::string path_a = FixturePath(kA);
+  const std::string path_b = FixturePath(kB);
   MultiMonitor mm(&QuietLog, MakeFactory());
   mm.SetHeadlessHost(kHeadlessHost);
   Check(mm.Init(MultiMonitorMode::PerMonitor),
         "red-B2: Init attaches both monitors");
-  Check(mm.LoadLoopSlot("\\\\.\\DISPLAY1", kA, ""),
+  Check(mm.LoadLoopSlot("\\\\.\\DISPLAY1", path_a, ""),
         "red-B2: DISPLAY1 accepts A.mp4");
-  Check(mm.LoadLoopSlot("\\\\.\\DISPLAY2", kB, ""),
+  Check(mm.LoadLoopSlot("\\\\.\\DISPLAY2", path_b, ""),
         "red-B2: DISPLAY2 accepts B.mp4");
-  Check(LoadedPathForDevice(mm, L"\\\\.\\DISPLAY2") == kB,
+  Check(LoadedPathForDevice(mm, L"\\\\.\\DISPLAY2") == path_b,
         "red-B2: precondition - DISPLAY2 carries B.mp4");
 
   // Unplug the primary: DISPLAY2 survives and becomes id0 (primary-first
@@ -308,7 +362,7 @@ void TestRedB2UnplugReindex() {
   Check(mm.HasAssignment("\\\\.\\DISPLAY2"),
         "red-B2: DISPLAY2 still has a live slot");
 
-  Check(LoadedPathForDevice(mm, L"\\\\.\\DISPLAY2") == kB,
+  Check(LoadedPathForDevice(mm, L"\\\\.\\DISPLAY2") == path_b,
         "red-B2-unplug-reindex: the surviving monitor keeps its own video "
         "after the primary is unplugged and ids shift (id is not device "
         "identity)");
@@ -323,15 +377,17 @@ void TestRedB2UnplugReindex() {
 void TestRedB3SecondaryKeyChange() {
   ResetStubs();
   TwoMonitors();
+  const std::string path_a = FixturePath(kA);
+  const std::string path_b = FixturePath(kB);
   MultiMonitor mm(&QuietLog, MakeFactory());
   mm.SetHeadlessHost(kHeadlessHost);
   Check(mm.Init(MultiMonitorMode::PerMonitor),
         "red-B3: Init attaches both monitors");
-  Check(mm.LoadLoopSlot("\\\\.\\DISPLAY1", kA, ""),
+  Check(mm.LoadLoopSlot("\\\\.\\DISPLAY1", path_a, ""),
         "red-B3: DISPLAY1 accepts A.mp4");
-  Check(mm.LoadLoopSlot("\\\\.\\DISPLAY2", kB, ""),
+  Check(mm.LoadLoopSlot("\\\\.\\DISPLAY2", path_b, ""),
         "red-B3: DISPLAY2 accepts B.mp4");
-  Check(LoadedPathForDevice(mm, L"\\\\.\\DISPLAY2") == kB,
+  Check(LoadedPathForDevice(mm, L"\\\\.\\DISPLAY2") == path_b,
         "red-B3: precondition - DISPLAY2 carries B.mp4");
 
   // Same rect, same id, different GDI device: DISPLAY3 replaces DISPLAY2.
@@ -343,10 +399,10 @@ void TestRedB3SecondaryKeyChange() {
   Check(mm.slot_count() == 2, "red-B3: slot_count()==2 after the change");
   Check(mm.HasAssignment("\\\\.\\DISPLAY3"),
         "red-B3: DISPLAY3 has a live slot at the old id");
-  Check(LoadedPathForDevice(mm, L"\\\\.\\DISPLAY1") == kA,
+  Check(LoadedPathForDevice(mm, L"\\\\.\\DISPLAY1") == path_a,
         "red-B3: the untouched primary keeps A.mp4");
 
-  Check(LoadedPathForDevice(mm, L"\\\\.\\DISPLAY3") != kB,
+  Check(LoadedPathForDevice(mm, L"\\\\.\\DISPLAY3") != path_b,
         "red-B3-secondary-key-change: a newly arrived device does not inherit "
         "the replaced device's assignment on the same slot id");
   mm.Shutdown();
@@ -360,15 +416,17 @@ void TestRedB3SecondaryKeyChange() {
 void TestRedB4ReplugRebind() {
   ResetStubs();
   TwoMonitors();
+  const std::string path_a = FixturePath(kA);
+  const std::string path_b = FixturePath(kB);
   MultiMonitor mm(&QuietLog, MakeFactory());
   mm.SetHeadlessHost(kHeadlessHost);
   Check(mm.Init(MultiMonitorMode::PerMonitor),
         "red-B4: Init attaches both monitors");
-  Check(mm.LoadLoopSlot("\\\\.\\DISPLAY1", kA, ""),
+  Check(mm.LoadLoopSlot("\\\\.\\DISPLAY1", path_a, ""),
         "red-B4: DISPLAY1 accepts A.mp4");
-  Check(mm.LoadLoopSlot("\\\\.\\DISPLAY2", kB, ""),
+  Check(mm.LoadLoopSlot("\\\\.\\DISPLAY2", path_b, ""),
         "red-B4: DISPLAY2 accepts B.mp4");
-  Check(LoadedPathForDevice(mm, L"\\\\.\\DISPLAY2") == kB,
+  Check(LoadedPathForDevice(mm, L"\\\\.\\DISPLAY2") == path_b,
         "red-B4: precondition - DISPLAY2 carries B.mp4");
 
   // Unplug DISPLAY2.
@@ -377,7 +435,7 @@ void TestRedB4ReplugRebind() {
   };
   mm.OnDisplayChange();
   Check(mm.slot_count() == 1, "red-B4: slot_count()==1 after unplugging DISPLAY2");
-  Check(LoadedPathForDevice(mm, L"\\\\.\\DISPLAY1") == kA,
+  Check(LoadedPathForDevice(mm, L"\\\\.\\DISPLAY1") == path_a,
         "red-B4: the primary keeps A.mp4 while alone");
 
   // Replug DISPLAY2 at the same rect.
@@ -387,7 +445,7 @@ void TestRedB4ReplugRebind() {
   Check(mm.HasAssignment("\\\\.\\DISPLAY2"),
         "red-B4: DISPLAY2 has a live slot after replug");
 
-  Check(LoadedPathForDevice(mm, L"\\\\.\\DISPLAY2") == kB,
+  Check(LoadedPathForDevice(mm, L"\\\\.\\DISPLAY2") == path_b,
         "red-B4-replug-rebind: a re-plugged monitor gets its assignment "
         "re-applied to the fresh renderer");
   mm.Shutdown();
@@ -411,5 +469,6 @@ int main(int argc, char** argv) {
   }
   std::cout << k6wp::g_checks << " checks, " << k6wp::g_failures
             << " failures\n";
+  k6wp::CleanupFixtureFiles();
   return k6wp::g_failures == 0 ? 0 : 1;
 }

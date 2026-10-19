@@ -59,6 +59,13 @@ MpvRenderer::~MpvRenderer() {
   // held — the event thread briefly takes mutex_ for watchdog/fallback
   // commands), and ONLY after the join destroy the mpv instance under
   // mutex_. Joining while holding mutex_ would deadlock.
+  //
+  // The blocking mpv_terminate_destroy() below waits for the mpv VO thread,
+  // which can be stuck inside Present() on a display that was just unplugged
+  // - with no timeout. That is why the engine does NOT destroy slot
+  // renderers on the message-loop thread: the renderer graveyard
+  // (renderer_graveyard.hpp) takes ownership of the object and runs this
+  // destructor on its own worker thread.
   StopEventThread();
   std::lock_guard<std::mutex> lock(mutex_);
   if (mpv_) {

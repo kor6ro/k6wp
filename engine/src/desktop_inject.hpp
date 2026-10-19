@@ -126,6 +126,32 @@ class DesktopInjector {
   // owns it and will destroy it in Detach()/destructor.
   void* injected_hwnd() const;
 
+  // Hands the injected window over to the CALLER without destroying it and
+  // stops tracking it (injected_hwnd() returns nullptr afterwards).
+  //
+  // WHY: the surface must OUTLIVE the mpv handle that renders into it.
+  // Destroying a window while mpv's VO thread still presents into it is the
+  // cross-thread destroy deadlock (Bug B). The engine therefore releases
+  // the surface, hands it to the renderer graveyard together with the mpv
+  // handle, and destroys it on the message-loop thread once the handle is
+  // really gone.
+  //
+  // The window is unparented from the desktop host and hidden first, so it
+  // cannot be seen while the teardown is in flight.
+  //
+  // Returns nullptr when nothing was attached. Never throws.
+  void* ReleaseSurface();
+
+  // Power-resume guard: true when the injected window still exists, is
+  // visible, and is still parented into a desktop host (Progman/WorkerW).
+  // The resolved host may legitimately differ between passes (e.g. resume
+  // resolves Progman while the live surface is already on a WorkerW), so
+  // liveness is checked against the window's real parent, not a handle
+  // argument. Reanchor uses this to skip the destroy/recreate cycle when
+  // the desktop survived sleep — recreating the surface destroys mpv's VO
+  // window and ends playback (`end-file reason=quit`).
+  bool IsSurfaceAlive() const;
+
   // Re-assert the frameless wallpaper surface style on the live injected
   // window (WS_POPUP|WS_CLIPCHILDREN, no frame bits; ex TOOLWINDOW|NOACTIVATE
   // + LAYERED, no APPWINDOW). Called from Reanchor paths after Attach so

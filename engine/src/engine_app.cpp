@@ -10,6 +10,8 @@
 #include "lock_order.hpp"
 #include "topology_snapshot.hpp"
 #include "topology_diff.hpp"
+#include "reconcile_policy.hpp"
+#include "renderer_graveyard.hpp"
 
 #include <shellapi.h>
 #include <tlhelp32.h>
@@ -1006,12 +1008,114 @@ void EngineApp::OnDeviceLost() {
 }
 
 void EngineApp::OnDisplayChange(int width, int height) {
-  Log("display: OnDisplayChange(%dx%d) - re-enumerating live slots",
+  // Bug B: the handler no longer touches a slot. WM_DISPLAYCHANGE is
+  // delivered with SendMessage by the system, so any slow work here blocks
+  // the whole display-change broadcast for the session - the observed
+  // freeze when a monitor is unplugged. The work now runs in the debounced
+  // door (ArmTopologyReconcile -> RunTopologyReconcile), outside this
+  // stack.
+  Log("display: OnDisplayChange(%dx%d) - arming the topology reconcile",
       width, height);
-  if (wallpaper_surface_live_.load(std::memory_order_acquire))
-    multi_monitor_.OnDisplayChange();
+  ArmTopologyReconcile("display-change");
+}
+
+void EngineApp::ArmTopologyReconcile(const char* trigger) {
+  if (trigger == nullptr) trigger = "manual";
+  topology_reconcile_trigger_ = trigger;
+  topology_reconcile_armed_ = true;
+  // Every new burst needs its own "the enumeration has settled" proof, so
+  // the previous signature is forgotten here.
+  topology_signature_valid_ = false;
+  // True debounce: reset the quiet period on every burst trigger so the
+  // work runs ~400 ms after the LAST trigger, not the first.
+  KillTimer(message_hwnd_, kTopologyReconcileTimerId);
+  SetTimer(message_hwnd_, kTopologyReconcileTimerId, 400, nullptr);
+  Log("display: topology reconcile armed (trigger=%s)", trigger);
+}
+
+void EngineApp::RunTopologyReconcile() {
+  KillTimer(message_hwnd_, kTopologyReconcileTimerId);
+  const std::string trigger =
+      topology_reconcile_trigger_.empty() ? std::string("manual")
+                                          : topology_reconcile_trigger_;
+  topology_reconcile_trigger_.clear();
+  topology_reconcile_armed_ = false;
+
+  const ReconcileAction action = DecideReconcileAction(trigger);
+  if (action == ReconcileAction::kNone) {
+    Log("display: topology reconcile pass skipped (trigger=%s, action=none)",
+        trigger.c_str());
+    return;
+  }
+
+  // Resume / unlock / Explorer restart: wait until the monitor enumeration
+  // has settled. Right after a wake the enumeration can still be moving
+  // (a dock reports fewer monitors for a moment), and converging on a
+  // half-reported topology tears down slots that are about to come back.
+  if (ReconcileActionNeedsStableTopology(action)) {
+    const std::vector<MonitorInfo> live = ListMonitors();
+    const std::string signature = TopologySignature(live);
+    if (!topology_signature_valid_ || signature != topology_signature_prev_) {
+      topology_signature_prev_ = signature;
+      topology_signature_valid_ = true;
+      Log("display: topology still moving (trigger=%s), waiting for a stable "
+          "enumeration",
+          trigger.c_str());
+      ArmTopologyReconcile(trigger.c_str());
+      return;
+    }
+  }
+
+  Log("display: topology reconcile pass (trigger=%s, action=%s)",
+      trigger.c_str(), ReconcileActionName(action));
+
+  const bool was_live = wallpaper_surface_live_.load(std::memory_order_acquire);
+  if (action == ReconcileAction::kConvergeSlots) {
+    if (was_live) {
+      multi_monitor_.OnDisplayChange();
+    }
+  } else {
+    // Re-anchor: keep the surfaces that are still alive (and their
+    // streams), re-create the ones that died with the desktop.
+    multi_monitor_.Reanchor();
+  }
+
+  // Bug B / C4: the live flag must follow the slot census. When the last
+  // monitor disappeared the flag used to stay true, so set_video kept
+  // routing to the (now empty) slot set, the headless renderer never took
+  // over the decode, and the tray/pause fan-out used the wrong topology.
+  const bool live = multi_monitor_.slot_count() > 0;
+  wallpaper_surface_live_.store(live, std::memory_order_release);
+  if (was_live != live) {
+    Log("display: live surface changed (was=%s, now=%s, slots=%llu)",
+        was_live ? "yes" : "no", live ? "yes" : "no",
+        static_cast<unsigned long long>(multi_monitor_.slot_count()));
+  }
+  headless_owns_decode_.store(!live, std::memory_order_release);
+  if (!live && was_live) {
+    // The last visible surface is gone: hand the decode to the headless
+    // renderer so the wallpaper keeps playing (and set_video keeps
+    // working) while no monitor slot exists.
+    std::string video;
+    {
+      k6wp::lock_order::LeafGuard video_guard(video_mutex_);
+      video = current_video_utf8_;
+    }
+    if (!video.empty() && renderer_ && !renderer_->LoadLoop(video)) {
+      Log("warning: headless renderer could not take over '%s' after the last "
+          "monitor disappeared",
+          video.c_str());
+    }
+  }
+
+  // The shadow reconcile pass is a separate, opt-in observation layer
+  // (K6WP_RECONCILE_MODE=shadow); it must not gate the legacy behaviour.
   ArmReconcile("display-change");
   UpdateTrayErrorStatus();
+  // The graveyard owns the teardown of the renderers that were released
+  // above; the windows they rendered into are destroyed here, on the
+  // message-loop thread, once the renderers are really gone.
+  RendererGraveyard::Drain();
 }
 
 void EngineApp::ApplyPendingSetVideo() {
@@ -1633,36 +1737,45 @@ void EngineApp::ArmReconcile(const char* trigger) {
 // slot coverage, reports verdict. Never mutates slots, never writes
 // displays.json (B14). retries stays 0 in shadow mode.
 void EngineApp::RunReconcilePass() {
-  std::lock_guard<std::mutex> lock(reconcile_mutex_);
-  reconcile_arm_active_ = false;
-  // Populate last_trigger before clearing (it would otherwise be empty).
-  reconcile_status_.last_trigger = reconcile_trigger_;
-  reconcile_trigger_.clear();
-  if (reconcile_status_.mode == "legacy") return;
-
-  TopologySnapshot snap = SnapshotTopology();
-  last_reconcile_snapshot_ = snap;
-
   TopologyDiff diff;
-  bool divergent = false;
-  if (!last_reconcile_snapshot_.monitors.empty()) {
-    diff = diff_topology(last_reconcile_snapshot_, snap);
-    // Compare snapshot vs live slot MonitorInfo set for divergence.
-    auto live = multi_monitor_.LiveMonitorInfos();
-    divergent = TopologyDivergesFromMonitors(snap, live);
+  {
+    std::lock_guard<std::mutex> lock(reconcile_mutex_);
+    reconcile_arm_active_ = false;
+    // Populate last_trigger before clearing (it would otherwise be empty).
+    reconcile_status_.last_trigger = reconcile_trigger_;
+    reconcile_trigger_.clear();
+    if (reconcile_status_.mode == "legacy") return;
+
+    const TopologySnapshot snap = SnapshotTopology();
+    // BUG FIX (C3): the diff must be computed against the PREVIOUS snapshot.
+    // The old code overwrote last_reconcile_snapshot_ with the current
+    // snapshot BEFORE calling diff_topology, so the diff was always empty
+    // ("none") and the shadow pass could never report a topology change.
+    const bool had_previous = !last_reconcile_snapshot_.monitors.empty();
+    if (had_previous) {
+      diff = diff_topology(last_reconcile_snapshot_, snap);
+    }
+    // Only now does the snapshot become the new baseline.
+    last_reconcile_snapshot_ = snap;
   }
 
+  // The coverage census takes MultiMonitor's slots lock. It must NOT run
+  // while reconcile_mutex_ is held: that would nest a slots lock inside a
+  // leaf-style lock, the exact shape lock_order.hpp forbids (see also the
+  // recorded deviation in that header).
   MultiMonitor::CoverageCensus census = multi_monitor_.VerifyCoverage();
   const bool total_gt_zero = census.total > 0;
   const bool covered_all = total_gt_zero && census.covered == census.total;
-  reconcile_status_.last_verdict =
-      covered_all ? "covered" : "degraded";
-  reconcile_status_.degraded_keys = census.degraded_keys;
-  reconcile_status_.retries = 0;  // P3 shadow: retries never armed
+  {
+    std::lock_guard<std::mutex> lock(reconcile_mutex_);
+    reconcile_status_.last_verdict = covered_all ? "covered" : "degraded";
+    reconcile_status_.degraded_keys = census.degraded_keys;
+    reconcile_status_.retries = 0;  // P3 shadow: retries never armed
+  }
 
   Log("reconcile: pass verdict=%s total=%d covered=%d degraded_keys=%zu "
       "trigger=%s",
-      reconcile_status_.last_verdict.c_str(), census.total, census.covered,
+      covered_all ? "covered" : "degraded", census.total, census.covered,
       census.degraded_keys.size(),
       reconcile_status_.last_trigger.empty() ? "(none)" : reconcile_status_.last_trigger.c_str());
 
@@ -1714,8 +1827,12 @@ void EngineApp::HandlePowerBroadcast(WPARAM wParam, LPARAM lParam) {
       Log("power: PBT_APMRESUMEAUTOMATIC received");
       OnResume();
       // Sleep may have recreated the desktop windows: re-anchor the
-      // live surface onto the current targets.
-      if (wallpaper_surface_live_.load(std::memory_order_acquire)) multi_monitor_.Reanchor();
+      // live surface onto the current targets. Bug B: through the
+      // debounced door, and the door waits until two consecutive monitor
+      // enumerations agree - right after a wake the enumeration can still
+      // be moving, and converging on a half-reported topology tears down
+      // slots that are about to come back.
+      ArmTopologyReconcile("resume");
       UpdateTrayErrorStatus();
       return;
     case PBT_APMPOWERSTATUSCHANGE:
@@ -1749,6 +1866,12 @@ void EngineApp::HandlePowerBroadcast(WPARAM wParam, LPARAM lParam) {
         case 1:
           LogImportant("power: monitor on (Data=1), resuming decode");
           SetPauseOwner(kPauseScreenOff, false);
+          // Bug B: the re-anchor goes through the debounced door.
+          ArmTopologyReconcile("monitor-on");
+          // Re-extract the lockscreen frame onto the live surface after the
+          // screen comes back on (e.g. monitor off/on, wake), so the lockscreen
+          // stays static/current instead of stale or missing.
+          if (!current_video_utf8_.empty()) MaybeTriggerLockscreenSync(current_video_utf8_, &EngineApp::Log);
           break;
         case 2:
           Log("power: monitor dimmed (Data=2, ignored)");
@@ -1777,8 +1900,10 @@ LRESULT EngineApp::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
     // P3: arm reconcile with taskbar-created trigger
     ArmReconcile("taskbar-created");
     // Explorer restart also recreates Progman/WorkerW: re-anchor the live
-    // injected windows onto the fresh desktop targets.
-    if (wallpaper_surface_live_.load(std::memory_order_acquire)) multi_monitor_.Reanchor();
+    // injected windows onto the fresh desktop targets. Bug B: through the
+    // debounced door, so the message handler stays fast and the re-anchor
+    // waits for a settled monitor enumeration.
+    ArmTopologyReconcile("taskbar-created");
     UpdateTrayErrorStatus();
     return 0;
   }
@@ -1798,8 +1923,10 @@ LRESULT EngineApp::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
       // slots like TaskbarCreated/display-change do. All other setting
       // changes are ignored so unrelated tweaks never flicker the surface.
       if (wParam == static_cast<WPARAM>(SPI_SETDESKWALLPAPER)) {
-        Log("window: WM_SETTINGCHANGE (wallpaper changed), re-anchoring live surface");
-        if (wallpaper_surface_live_.load(std::memory_order_acquire)) multi_monitor_.Reanchor();
+        Log("window: WM_SETTINGCHANGE (wallpaper changed), arming re-anchor");
+        // Bug B: through the debounced door (the re-anchor waits for a
+        // settled monitor enumeration).
+        ArmTopologyReconcile("setting-change");
         // P3: arm reconcile with setting-change trigger
         ArmReconcile("setting-change");
         // E-01 (audit remediation): the engine never writes the desktop
@@ -1838,6 +1965,9 @@ LRESULT EngineApp::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
         case WTS_SESSION_UNLOCK:
           LogImportant("session: WTS_SESSION_UNLOCK received, resuming decode");
           SetPauseOwner(kPauseSessionLock, false);
+          // Bug B: the re-anchor goes through the debounced door (and waits
+          // for a settled monitor enumeration before touching a slot).
+          ArmTopologyReconcile("session-unlock");
           return 0;
         default:
           return 0;
@@ -1912,6 +2042,14 @@ LRESULT EngineApp::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
       // P3: reconcile retry timer (kill-only no-op).
       if (wParam == static_cast<WPARAM>(kReconcileRetryTimerId)) {
         KillTimer(hwnd, kReconcileRetryTimerId);
+        return 0;
+      }
+      // Bug B: the topology reconcile debounce (kill + RunTopologyReconcile).
+      // This is where the slot work finally happens - outside the
+      // WM_DISPLAYCHANGE handler stack.
+      if (wParam == static_cast<WPARAM>(kTopologyReconcileTimerId)) {
+        KillTimer(hwnd, kTopologyReconcileTimerId);
+        RunTopologyReconcile();
         return 0;
       }
       return DefWindowProcW(hwnd, msg, wParam, lParam);

@@ -237,6 +237,20 @@ void* DesktopInjector::injected_hwnd() const {
   return it == g_inj.end() ? nullptr : it->second.hwnd;
 }
 
+// Bug B: the deferred teardown releases the surface instead of destroying it
+// under a live mpv VO. The stub hands the handle over and forgets it.
+void* DesktopInjector::ReleaseSurface() {
+  const auto it = g_inj.find(this);
+  if (it == g_inj.end()) return nullptr;
+  void* hwnd = it->second.hwnd;
+  it->second.hwnd = nullptr;
+  return hwnd;
+}
+
+bool DesktopInjector::IsSurfaceAlive() const {
+  return injected_hwnd() != nullptr;
+}
+
 void DesktopInjector::ReassertFrameless() {}
 
 std::string DesktopInjector::last_coverage_reason() const {
@@ -270,8 +284,10 @@ MpvRenderer::MpvRenderer() {
 }
 
 MpvRenderer::~MpvRenderer() {
+  // Bug B: the renderer teardown runs on the RENDERER GRAVEYARD worker, so
+  // this destructor must not mutate the shared recording map (it would race
+  // with the test thread reading it).
   ++g_ren_dtors;
-  g_ren.erase(this);
 }
 
 bool MpvRenderer::Create(void* hwnd) {

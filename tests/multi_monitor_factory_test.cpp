@@ -28,6 +28,7 @@
 #include <vector>
 
 #include "multi_monitor.hpp"
+#include "renderer_graveyard.hpp"
 
 namespace k6wp {
 
@@ -54,6 +55,14 @@ struct InjState {
   int detach_calls = 0;
   int reassert_calls = 0;
   int on_display_change_calls = 0;
+  // Bug B: how often the surface was RELEASED for deferred destruction
+  // (hidden now, destroyed later by the graveyard once the mpv renderer is
+  // gone). A release replaces the old destroy-under-a-live-VO teardown.
+  int release_calls = 0;
+  // Per-injector surface liveness (test-only mirror of IsWindow+parent check).
+  // Attach flips it true, Detach false; the surface-loss fixture clears it
+  // for BOTH injectors so Reanchor re-attaches each slot independently.
+  bool surface_alive = true;
   // Row 11: per-instance last Attach rect + last OnDisplayChange args, so a
   // host-rect-only scenario can tell WHICH slot re-placed and with what
   // monitor rect (the global g_attach_rects has no injector identity).
@@ -74,6 +83,7 @@ struct RenState {
   int pause_calls = 0;
   int resume_calls = 0;
   int load_loop_calls = 0;
+  int load_loop_force_calls = 0;
   int set_fit_calls = 0;
 };
 
@@ -88,8 +98,19 @@ std::vector<Rect4> g_attach_rects;  // Attach() args in call order
 std::vector<void*> g_create_hwnds;  // MpvRenderer::Create hwnds in call order
 std::vector<MonitorInfo> g_monitors;
 bool g_attach_ok = true;
+// Power-resume simulation: false = the OS/Explorer destroyed the injected
+// surface even though the stub still reports its HWND. IsSurfaceAlive() must
+// report false so Reanchor takes the real detach/attach + reload path.
+bool g_surface_alive = true;
 int g_inj_ctors = 0, g_inj_dtors = 0;
 int g_ren_ctors = 0, g_ren_dtors = 0;
+// Bug B: cumulative renderer counters. The renderer teardown runs on the
+// graveyard worker and the per-renderer map can lose entries to address
+// reuse, so the assertions that span a teardown use these totals.
+std::atomic<int> g_load_calls{0};
+std::atomic<int> g_load_force_calls{0};
+std::atomic<int> g_pause_calls{0};
+std::atomic<int> g_set_hwnd_calls{0};
 int g_factory_injectors = 0, g_factory_renderers = 0;
 // Row 7: what the link-level ResolveSharedHost stub returns for the whole
 // attach pass (real ResolveSharedHost lives in desktop_inject.cpp, NOT
@@ -141,6 +162,9 @@ SharedHost MakeMovedHost() {
 }
 
 void ResetStubs() {
+  // Bug B: a graveyard worker may still be tearing a renderer down from the
+  // PREVIOUS test. Drain it first so the recording state is quiescent.
+  RendererGraveyard::WaitIdle(5000);
   g_inj.clear();
   g_ren.clear();
   g_events.clear();
@@ -149,8 +173,13 @@ void ResetStubs() {
   g_logs.clear();
   g_reported_child_queue.clear();
   g_attach_ok = true;
+  g_surface_alive = true;
   g_inj_ctors = g_inj_dtors = 0;
   g_ren_ctors = g_ren_dtors = 0;
+  g_load_calls.store(0, std::memory_order_relaxed);
+  g_load_force_calls.store(0, std::memory_order_relaxed);
+  g_pause_calls.store(0, std::memory_order_relaxed);
+  g_set_hwnd_calls.store(0, std::memory_order_relaxed);
   g_factory_injectors = g_factory_renderers = 0;
   g_resolve_result = MakeStubSharedHost();
   g_resolve_calls = 0;
@@ -285,12 +314,14 @@ bool DesktopInjector::Attach(int x, int y, int width, int height) {
     }
   }
   s.hwnd = base_ok ? NextStubHwnd() : nullptr;
+  s.surface_alive = base_ok;
   return base_ok;
 }
 
 void DesktopInjector::Detach() {
   InjState& s = g_inj[this];
   s.hwnd = nullptr;
+  s.surface_alive = false;
   ++s.detach_calls;
   g_events.push_back("detach");
 }
@@ -305,6 +336,29 @@ void DesktopInjector::OnDisplayChange(int x, int y, int width, int height) {
 void* DesktopInjector::injected_hwnd() const {
   const auto it = g_inj.find(this);
   return it == g_inj.end() ? nullptr : it->second.hwnd;
+}
+
+// Bug B: the deferred teardown releases the surface instead of destroying it
+// under a live mpv VO. The stub hands the handle over and forgets it.
+void* DesktopInjector::ReleaseSurface() {
+  const auto it = g_inj.find(this);
+  if (it == g_inj.end()) return nullptr;
+  void* hwnd = it->second.hwnd;
+  it->second.hwnd = nullptr;
+  it->second.surface_alive = false;
+  ++it->second.release_calls;
+  return hwnd;
+}
+
+bool DesktopInjector::IsSurfaceAlive() const {
+  const auto it = g_inj.find(this);
+  if (it == g_inj.end() || it->second.hwnd == nullptr) return false;
+  if (!it->second.surface_alive) return false;
+  // g_surface_alive models the OS/Explorer destroying the injected child
+  // behind our back: the stub still reports its HWND, but the surface is
+  // gone. The global gate is the "the OS took it away" switch; the
+  // per-injector flag is the "Attach/Detach" switch. Both must hold.
+  return g_surface_alive;
 }
 
 void DesktopInjector::ReassertFrameless() {
@@ -350,9 +404,13 @@ MpvRenderer::MpvRenderer() {
 }
 
 MpvRenderer::~MpvRenderer() {
+  // Bug B: the renderer teardown runs on the RENDERER GRAVEYARD worker
+  // (the blocking mpv_terminate_destroy must never run on the message-loop
+  // thread), so this destructor must NOT touch the shared recording state -
+  // a map mutation here would race with the test thread reading it. The
+  // counter is the only thing this destructor may touch; WaitIdle() before
+  // every assertion provides the ordering.
   ++g_ren_dtors;
-  g_events.push_back("ren-dtor");
-  g_ren.erase(this);
 }
 
 bool MpvRenderer::Create(void* hwnd) {
@@ -368,6 +426,7 @@ void MpvRenderer::SetHWND(void* hwnd) {
   RenState& s = g_ren[this];
   s.create_hwnd = hwnd;
   ++s.set_hwnd_calls;
+  g_set_hwnd_calls.fetch_add(1, std::memory_order_relaxed);
   g_events.push_back("set-hwnd");
 }
 
@@ -381,8 +440,14 @@ bool MpvRenderer::pin_active() const {
   return it != g_ren.end() && !it->second.adapter_pin.empty();
 }
 
-bool MpvRenderer::LoadLoop(const std::string& /*path*/, bool /*force*/) {
+bool MpvRenderer::LoadLoop(const std::string& /*path*/, bool force) {
   ++g_ren[this].load_loop_calls;
+  if (force) ++g_ren[this].load_loop_force_calls;
+  // Cumulative counters (Bug B): the per-renderer census is unreliable
+  // once a renderer has been handed to the graveyard (its address can be
+  // reused), so the totals that matter are counted globally.
+  g_load_calls.fetch_add(1, std::memory_order_relaxed);
+  if (force) g_load_force_calls.fetch_add(1, std::memory_order_relaxed);
   g_events.push_back("load-loop");
   return true;
 }
@@ -394,6 +459,7 @@ void MpvRenderer::SetFitMode(const std::string& /*fit_mode*/,
 
 void MpvRenderer::Pause() {
   ++g_ren[this].pause_calls;
+  g_pause_calls.fetch_add(1, std::memory_order_relaxed);
   g_events.push_back("pause");
 }
 
@@ -548,6 +614,11 @@ void TestHappyInjectedFactory() {
 
   mm.Shutdown();
   Check(mm.slot_count() == 0, "happy: Shutdown clears all slots");
+  // Bug B: the renderers are torn down on the GRAVEYARD worker (the
+  // blocking mpv_terminate_destroy must never run on the message-loop
+  // thread), so the destruction is asynchronous: wait for the worker
+  // before asserting the destructor counts.
+  Check(RendererGraveyard::WaitIdle(5000), "happy: graveyard drained");
   Check(g_inj_dtors == 2 && g_ren_dtors == 2,
         "happy: Shutdown destroyed both stub pairs");
 }
@@ -590,6 +661,7 @@ void TestDefaultFactoryProductionShape() {
     Check(!mm.has_headless_slots() && mm.headless_slot_count() == 0,
           "default: no headless slots on the success path");
   }
+  Check(RendererGraveyard::WaitIdle(5000), "default: graveyard drained");
   Check(g_inj_dtors == 2 && g_ren_dtors == 2,
         "default: RAII teardown destroyed both stub pairs");
 }
@@ -815,17 +887,22 @@ void TestHostMoveTriggersReattach() {
 
   Check(mm.slot_count() == 2, "hostmove: OnDisplayChange keeps both slots");
   bool reattached = g_inj.size() == 2;
+  int attach_total = 0;
+  int release_total = 0;
   int odc_total = 0;
   for (const auto& kv : g_inj) {
-    reattached = reattached && kv.second.on_display_change_calls == 1;
+    reattached = reattached && kv.second.attach_calls == 2 &&
+                 kv.second.release_calls == 1 &&
+                 kv.second.on_display_change_calls == 0;
+    attach_total += kv.second.attach_calls;
+    release_total += kv.second.release_calls;
     odc_total += kv.second.on_display_change_calls;
   }
   Check(reattached,
-        "hostmove: host-rect-only change re-invoked OnDisplayChange on BOTH "
-        "injectors (regression: pre-row-11 code skips when the monitor rect "
-        "is unchanged)");
-  Check(odc_total == 2,
-        "hostmove: exactly one re-attach per survivor (no storm, no skip)");
+        "hostmove: host-rect-only change re-placed BOTH survivors (old surface "
+        "released, new surface attached)");
+  Check(attach_total == 4 && release_total == 2 && odc_total == 0,
+        "hostmove: exactly one re-place per survivor (no storm, no skip)");
   Check(mm.slots().count(0) == 1 && mm.slots().count(1) == 1,
         "hostmove: both monitor slots still live (survivors, not re-created)");
   bool shared_new = g_inj.size() == 2;
@@ -844,14 +921,21 @@ void TestHostMoveTriggersReattach() {
   Check(shared_new,
         "hostmove: injectors received the refreshed shared host (client_rect "
         "B) before re-attach");
-  bool odc_path = g_inj.size() == 2;
+  // Bug B: the re-place RELEASES the old surface (hidden now, destroyed
+  // later once the mpv renderer is gone) and attaches a fresh one. It must
+  // NOT destroy the window under a live mpv VO (the cross-thread destroy
+  // deadlock) and must not go through injector->OnDisplayChange (which
+  // destroys the window).
+  bool safe_path = g_inj.size() == 2;
   for (const auto& kv : g_inj) {
-    odc_path = odc_path && kv.second.attach_calls == 1 &&
-               kv.second.on_display_change_calls == 1;
+    safe_path = safe_path && kv.second.attach_calls == 2 &&
+                kv.second.release_calls == 1 &&
+                kv.second.detach_calls == 0 &&
+                kv.second.on_display_change_calls == 0;
   }
-  Check(odc_path,
-        "hostmove: re-place went through injector->OnDisplayChange "
-        "(attach_calls stays 1, not Detach+Attach)");
+  Check(safe_path,
+        "hostmove: re-place released the old surface and attached a new one "
+        "(no DestroyWindow under a live VO)");
   mm.Shutdown();
   Check(mm.slot_count() == 0, "hostmove: Shutdown clears all slots");
 }
@@ -879,16 +963,15 @@ void TestMonitorOnlyReattachUnchanged() {
   }
   Check(mon0 != nullptr && mon1 != nullptr,
         "mononly: both injectors identified by their Init attach rect");
-  Check(mon0 != nullptr && mon0->on_display_change_calls == 1 &&
-            mon0->odc_x == 0 && mon0->odc_y == 0 && mon0->odc_w == 1920 &&
-            mon0->odc_h == 1440,
-        "mononly: monitor 0 got OnDisplayChange with the NEW rect (0,0,1920x1440)");
-  Check(mon1 != nullptr && mon1->on_display_change_calls == 0,
+  Check(mon0 != nullptr && mon0->attach_calls == 2 && mon0->att_h == 1440 &&
+            mon0->release_calls == 1,
+        "mononly: monitor 0 got a NEW Attach with the NEW rect (0,0,1920x1440)");
+  Check(mon1 != nullptr && mon1->attach_calls == 1 &&
+            mon1->release_calls == 0,
         "mononly: monitor 1 (unchanged rect) got NO re-attach");
-  Check(mon0 != nullptr && mon0->attach_calls == 1 && mon1 != nullptr &&
-            mon1->attach_calls == 1,
-        "mononly: monitor-only path kept attach_calls==1 "
-        "(OnDisplayChange, not Detach+Attach)");
+  Check(mon0 != nullptr && mon0->on_display_change_calls == 0 &&
+            mon1 != nullptr && mon1->on_display_change_calls == 0,
+        "mononly: re-place never destroys the window under a live mpv VO");
   g_monitors[0].height = 1080;
   mm.Shutdown();
 }
@@ -939,11 +1022,12 @@ void TestSpanHostMoveReattaches() {
 
   Check(mm.slot_count() == 1, "spanhost: span slot survives");
   Check(inj != nullptr && inj->attach_calls == 2,
-        "spanhost: host-move re-attached via Detach+Attach (attach_calls==2)");
+        "spanhost: host-move re-attached with a new surface (attach_calls==2)");
   Check(inj != nullptr && inj->on_display_change_calls == 0,
         "spanhost: span re-attach did NOT go through injector->OnDisplayChange");
-  Check(inj != nullptr && inj->detach_calls >= 1,
-        "spanhost: Detach ran before the re-Attach");
+  Check(inj != nullptr && inj->release_calls == 1 && inj->detach_calls == 0,
+        "spanhost: the old surface was RELEASED before the re-Attach (never "
+        "destroyed under a live mpv VO)");
   Check(inj != nullptr && inj->shared_set &&
             inj->shared.client_rect.left == 5 &&
             inj->shared.client_rect.right == 1925,
@@ -1001,6 +1085,166 @@ void TestSpanNonPositiveGeometryPrimaryFallback() {
   mm.Shutdown();
 }
 
+// Power-resume regression (1.3.0-beta.4): Reanchor on an intact desktop must
+// not touch the injected surface or reload the stream. The old code always
+// Detach()+Attach(), which destroyed mpv's VO window
+// (`mpv: end-file reason=quit`) and left the wallpaper black/frozen after
+// wake even though the engine and slots were alive.
+void TestReanchorNoOpKeepsLiveSurface() {
+  ResetStubs();
+  MultiMonitor mm(&QuietLog, MakeRecordingFactory());
+  mm.SetHeadlessHost(kHeadlessHost);
+  Check(mm.Init(MultiMonitorMode::PerMonitor),
+        "resume-noop: Init(PerMonitor) returns true");
+  Check(mm.LoadLoopAll("C:\\wallpapers\\loop.mp4"),
+        "resume-noop: baseline LoadLoopAll accepted by both slots");
+
+  int base_attach = 0;
+  int base_loads = 0;
+  for (const auto& kv : g_inj) base_attach += kv.second.attach_calls;
+  for (const auto& kv : g_ren) base_loads += kv.second.load_loop_calls;
+  Check(base_attach == 2 && base_loads == 2,
+        "resume-noop: baseline 2 Attach + 2 LoadLoop calls");
+
+  mm.Reanchor();
+
+  int attach = 0, detach = 0, odc = 0, reassert = 0;
+  for (const auto& kv : g_inj) {
+    attach += kv.second.attach_calls;
+    detach += kv.second.detach_calls;
+    odc += kv.second.on_display_change_calls;
+    reassert += kv.second.reassert_calls;
+  }
+  int loads = 0, forced = 0, set_hwnd = 0;
+  for (const auto& kv : g_ren) {
+    loads += kv.second.load_loop_calls;
+    forced += kv.second.load_loop_force_calls;
+    set_hwnd += kv.second.set_hwnd_calls;
+  }
+  Check(mm.slot_count() == 2, "resume-noop: both slots survive Reanchor");
+  Check(attach == 2, "resume-noop: no extra Attach (surface untouched)");
+  Check(detach == 0, "resume-noop: no Detach (mpv VO window preserved)");
+  Check(odc == 0, "resume-noop: no OnDisplayChange re-place");
+  Check(reassert == 0, "resume-noop: no style re-assert needed");
+  Check(set_hwnd == 0, "resume-noop: renderer HWND not re-pointed");
+  Check(loads == 2 && forced == 0,
+        "resume-noop: stream not reloaded (decode keeps running)");
+  mm.Shutdown();
+}
+
+// Counterpart: if the surface really died (Explorer restart / wake with the
+// desktop recreated), Reanchor must detach+attach AND force-reload the slot's
+// own video, preserving the global pause state.
+void TestReanchorAfterSurfaceLossReloadsVideo() {
+  ResetStubs();
+  MultiMonitor mm(&QuietLog, MakeRecordingFactory());
+  mm.SetHeadlessHost(kHeadlessHost);
+  Check(mm.Init(MultiMonitorMode::PerMonitor),
+        "resume-reload: Init(PerMonitor) returns true");
+  Check(mm.LoadLoopAll("C:\\wallpapers\\loop.mp4"),
+        "resume-reload: baseline LoadLoopAll accepted");
+  mm.PauseAll();  // global pause must survive the re-anchor
+
+  // Simulate OS/Explorer destroying both injected surfaces during sleep.
+  for (auto& kv : g_inj) kv.second.surface_alive = false;
+  mm.Reanchor();
+  // The two OLD renderers were handed to the graveyard (their teardown is
+  // asynchronous by design). Wait for the worker so the renderer census
+  // below is deterministic: only the two NEW renderers are live.
+  Check(RendererGraveyard::WaitIdle(5000), "resume-reload: graveyard drained");
+
+  int attach = 0, detach = 0, release = 0;
+  for (const auto& kv : g_inj) {
+    attach += kv.second.attach_calls;
+    detach += kv.second.detach_calls;
+    release += kv.second.release_calls;
+  }
+  Check(attach == 4 && release == 2 && detach == 0,
+        "resume-reload: real re-place ran once per slot (old surface "
+        "released, new surface attached)");
+  Check(g_set_hwnd_calls.load(std::memory_order_relaxed) == 0,
+        "resume-reload: a NEW renderer was created for the new surface (the "
+        "old VO is never re-pointed in place)");
+  Check(g_load_calls.load(std::memory_order_relaxed) == 4 &&
+            g_load_force_calls.load(std::memory_order_relaxed) == 2,
+        "resume-reload: each NEW renderer force-reloaded its own video");
+  Check(g_pause_calls.load(std::memory_order_relaxed) == 4,
+        "resume-reload: pause re-asserted after reload (2 PauseAll + 2)");
+  Check(g_surface_alive, "resume-reload: Attach produced a live surface");
+  mm.ResumeAll();
+  mm.Shutdown();
+}
+
+// A host-rect move must still re-place even when the surface is alive: the
+// child is positioned in host-client coordinates, so keeping it would leave
+// the wallpaper offset by the host delta.
+void TestReanchorHostMoveReloadsVideo() {
+  ResetStubs();
+  MultiMonitor mm(&QuietLog, MakeRecordingFactory());
+  mm.SetHeadlessHost(kHeadlessHost);
+  Check(mm.Init(MultiMonitorMode::PerMonitor),
+        "resume-hostmove: Init(PerMonitor) returns true");
+  Check(mm.LoadLoopAll("C:\\wallpapers\\loop.mp4"),
+        "resume-hostmove: baseline LoadLoopAll accepted");
+
+  g_resolve_result = MakeMovedHost();
+  mm.Reanchor();
+
+  int attach = 0, detach = 0, release = 0;
+  for (const auto& kv : g_inj) {
+    attach += kv.second.attach_calls;
+    detach += kv.second.detach_calls;
+    release += kv.second.release_calls;
+  }
+  int forced = g_load_force_calls.load(std::memory_order_relaxed);
+  Check(attach == 4 && release == 2 && detach == 0,
+        "resume-hostmove: host-rect change re-places both slots");
+  Check(forced == 2,
+        "resume-hostmove: stream reloaded after the host move");
+  mm.Shutdown();
+}
+
+// Span mode has its own Reanchor branch: same no-op guarantee, same
+// force-reload after a real surface loss.
+void TestSpanReanchorKeepsAndReloads() {
+  ResetStubs();
+  static SpanGeometry fake{0, 0, 1920, 1080};
+  MultiMonitor::SetSpanGeometryOverride(&fake);
+  MultiMonitor mm(&QuietLog, MakeRecordingFactory());
+  mm.SetHeadlessHost(kHeadlessHost);
+  Check(mm.Init(MultiMonitorMode::Span), "span-resume: Init(Span) returns true");
+  Check(mm.LoadLoopAll("C:\\wallpapers\\span.mp4"),
+        "span-resume: baseline LoadLoopAll accepted");
+
+  mm.Reanchor();
+  const InjState* inj = nullptr;
+  const RenState* ren = nullptr;
+  for (const auto& kv : g_inj) inj = &kv.second;
+  for (const auto& kv : g_ren) ren = &kv.second;
+  Check(inj != nullptr && inj->attach_calls == 1 && inj->detach_calls == 0,
+        "span-resume: intact surface is not detached/recreated");
+  Check(ren != nullptr && ren->load_loop_calls == 1 &&
+            ren->load_loop_force_calls == 0,
+        "span-resume: intact stream is not reloaded");
+
+  g_surface_alive = false;
+  mm.Reanchor();
+  // The OLD renderer went to the graveyard: wait for the worker so the
+  // census below sees only the NEW one.
+  Check(RendererGraveyard::WaitIdle(5000), "span-resume: graveyard drained");
+  Check(inj != nullptr && inj->attach_calls == 2 && inj->release_calls == 1 &&
+            inj->detach_calls == 0,
+        "span-resume: lost surface is re-placed (old one released, not "
+        "destroyed under a live VO)");
+  // The re-place created a NEW renderer (the old one was handed to the
+  // graveyard), so the live renderer is the fresh one and it re-loaded the
+  // span video.
+  Check(g_load_force_calls.load(std::memory_order_relaxed) == 1,
+        "span-resume: lost surface force-reloads the span video");
+  MultiMonitor::SetSpanGeometryOverride(nullptr);
+  mm.Shutdown();
+}
+
 }  // namespace k6wp
 
 int main(int argc, char** argv) {
@@ -1035,6 +1279,18 @@ int main(int argc, char** argv) {
   }
   if (sel == "all" || sel == "spanfail") {
     k6wp::TestSpanNonPositiveGeometryPrimaryFallback();
+  }
+  if (sel == "all" || sel == "resume-noop") {
+    k6wp::TestReanchorNoOpKeepsLiveSurface();
+  }
+  if (sel == "all" || sel == "resume-reload") {
+    k6wp::TestReanchorAfterSurfaceLossReloadsVideo();
+  }
+  if (sel == "all" || sel == "resume-hostmove") {
+    k6wp::TestReanchorHostMoveReloadsVideo();
+  }
+  if (sel == "all" || sel == "span-resume") {
+    k6wp::TestSpanReanchorKeepsAndReloads();
   }
   std::cout << k6wp::g_checks << " checks, " << k6wp::g_failures
             << " failures\n";

@@ -922,6 +922,34 @@ void* DesktopInjector::injected_hwnd() const {
   return impl_ ? impl_->injected : nullptr;
 }
 
+void* DesktopInjector::ReleaseSurface() {
+  if (!impl_ || !impl_->injected) return nullptr;
+  HWND wnd = impl_->injected;
+  impl_->injected = nullptr;
+  impl_->layered_path = false;
+  // Unparent from the desktop host and hide: the surface must not stay
+  // visible while the mpv VO is still tearing down, but it must remain a
+  // VALID window for that VO until the mpv handle is gone.
+  SetParent(wnd, nullptr);
+  ShowWindow(wnd, SW_HIDE);
+  return static_cast<void*>(wnd);
+}
+
+bool DesktopInjector::IsSurfaceAlive() const {
+  if (!impl_ || !impl_->injected) return false;
+  const HWND wnd = impl_->injected;
+  if (!IsWindow(wnd) || !IsWindowVisible(wnd)) return false;
+  // The surface keeps WS_POPUP after SetParent (EnforceFramelessStyle), so
+  // GetParent() returns the OWNER (null) for it. GetAncestor(GA_PARENT)
+  // deliberately ignores the owner and returns the real desktop host —
+  // verified with a popup+SetParent probe. Parent class is the liveness
+  // contract: Progman/WorkerW survive a normal sleep; an Explorer restart
+  // destroys the parent and the injected child with it.
+  const HWND parent = GetAncestor(wnd, GA_PARENT);
+  if (parent == nullptr || parent == wnd) return false;
+  return IsClass(parent, kProgmanClass) || IsClass(parent, kWorkerWClass);
+}
+
 void DesktopInjector::ReassertFrameless() {
   if (!impl_ || !impl_->injected) return;
   // Re-anchor enforcement: Explorer recreations must never leave a

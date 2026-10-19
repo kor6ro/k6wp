@@ -19,6 +19,8 @@
 #include "topology_snapshot.hpp"
 #include "topology_diff.hpp"
 #include "lock_order.hpp"
+#include "reconcile_policy.hpp"
+#include "renderer_graveyard.hpp"
 
 namespace k6wp {
 
@@ -153,8 +155,14 @@ void MultiMonitor::SetSpanGeometryOverride(const SpanGeometry* g) {
 }
 
 void MultiMonitor::ClearSlots() {
-  // unique_ptr dtors do the teardown: ~DesktopInjector Detaches the child
-  // window, ~MpvRenderer destroys the mpv instance (mutex-serialized).
+  // DEFERRED TEARDOWN (Bug B): the mpv handles and the injected surfaces go
+  // to the renderer graveyard instead of being destroyed inline. The old
+  // code let ~MpvRenderer run mpv_terminate_destroy() on the message-loop
+  // thread, which waits for the mpv VO thread - unboundedly, when the VO is
+  // stuck on a display that just disappeared. That was the freeze.
+  for (auto& kv : slots_) {
+    DestroySlotLocked(kv.second);
+  }
   slots_.clear();
   initialized_ = false;
 }
@@ -166,9 +174,21 @@ void MultiMonitor::ResolveHostForPass() {
   shared_host_ = ResolveSharedHost(inject_mode_, log_);
 }
 
+void MultiMonitor::RememberHostPlacement() {
+  // A failed resolution yields a null host and a zeroed rect; keeping the
+  // last known placement prevents a later successful pass from seeing a
+  // spurious move and destroying a live surface.
+  if (shared_host_.host != nullptr) {
+    attached_host_rect_ = shared_host_.client_rect;
+  }
+}
+
 bool MultiMonitor::AttachSlot(const MonitorInfo& mi) {
   Slot slot;
   slot.info = mi;
+  // The slot is bound to the MONITOR, not to a position: the identity is
+  // what survives a topology change (see reconcile_policy.hpp).
+  slot.identity = SlotIdentityKey(mi);
   slot.injector = factory_.make_injector(log_);
   slot.injector->SetInjectMode(inject_mode_);
   // Row 7: pass the pass's resolved host down before Attach - Attach itself
@@ -254,17 +274,139 @@ void MultiMonitor::ReattachSpanLocked(Slot& slot, int x, int y, int w, int h,
     h = primary.height;
   }
   // Row 7: the span re-anchor reuses the pass's shared host too (its caller
-  // resolved it before reaching this funnel).
-  slot.injector->SetSharedHost(shared_host_);
-  slot.injector->Detach();
-  if (slot.injector->Attach(x, y, w, h) && slot.renderer) {
-    if (reassert) {
-      slot.injector->ReassertFrameless();
-    }
-    slot.renderer->SetHWND(slot.injector->injected_hwnd());
-  } else if (slot.renderer) {
-    slot.renderer->SetHWND(headless_host_);
+  // resolved it before reaching this funnel) - ReplaceSlotSurfaceLocked
+  // installs it on the injector before the fresh Attach.
+  //
+  // The old surface is RELEASED (hidden, destroyed later by the graveyard
+  // once the mpv handle is gone) instead of being destroyed under a live
+  // VO: DestroyWindow on a window a foreign thread still renders into is
+  // the cross-thread destroy deadlock this path exists to avoid.
+  ReplaceSlotSurfaceLocked(slot, x, y, w, h, reassert);
+}
+
+void MultiMonitor::ReloadSlotVideoLocked(Slot& slot) {
+  if (!slot.renderer || slot.video_path.empty()) return;
+  // force=true: LoadLoop's same-path guard would otherwise treat this as a
+  // no-op, but the player has no file after its VO window was destroyed.
+  if (!slot.renderer->LoadLoop(slot.video_path, /*force=*/true)) {
+    char buf[320];
+    std::snprintf(buf, sizeof(buf),
+                  "multi_monitor: post-reattach reload failed: %s",
+                  slot.video_path.c_str());
+    LogLine(log_, buf);
+    return;
   }
+  if (global_paused_.load(std::memory_order_relaxed) ||
+      slot.paused.load(std::memory_order_relaxed)) {
+    slot.renderer->Pause();
+  }
+}
+
+void MultiMonitor::ReleaseSlotMediaLocked(Slot& slot) {
+  // The renderer and the injected surface are handed to the graveyard
+  // TOGETHER: the renderer is destroyed on the graveyard worker (the
+  // blocking mpv_terminate_destroy must never run on the message-loop
+  // thread) and the surface is destroyed on the message-loop thread once
+  // the renderer is really gone. Destroying the surface while the VO still
+  // renders into it is the cross-thread destroy deadlock this path exists
+  // to avoid.
+  //
+  // The surface is RELEASED (hidden, unparented) right away so the old
+  // wallpaper cannot stay visible while the teardown is in flight.
+  void* surface = nullptr;
+  if (slot.injector) {
+    surface = slot.injector->ReleaseSurface();
+  }
+  if (slot.renderer) {
+    std::unique_ptr<MpvRenderer> doomed = std::move(slot.renderer);
+    if (!RendererGraveyard::Submit(std::move(doomed), surface, log_)) {
+      // The graveyard refused the work (the worker thread could not be
+      // created). Destroying the renderer here would block the message-loop
+      // thread - the very thing this path avoids - so the renderer is
+      // leaked on purpose and the failure is logged loudly. A leaked mpv
+      // instance is far better than a frozen engine.
+      char buf[224];
+      std::snprintf(buf, sizeof(buf),
+                    "multi_monitor: CRITICAL - graveyard unavailable, leaked "
+                    "one renderer (teardown not blocking the loop)");
+      LogLine(log_, buf);
+    }
+  } else if (surface != nullptr) {
+    // No renderer: the window can go straight to the graveyard.
+    RendererGraveyard::Submit(nullptr, surface, log_);
+  }
+}
+
+void MultiMonitor::DestroySlotLocked(Slot& slot) {
+  ReleaseSlotMediaLocked(slot);
+  slot.injector.reset();
+}
+
+std::map<int, MultiMonitor::Slot>::iterator MultiMonitor::FindSlotByIdentityLocked(
+    const MonitorInfo& mi) {
+  const std::string key = SlotIdentityKey(mi);
+  for (auto it = slots_.begin(); it != slots_.end(); ++it) {
+    if (it->second.identity == key) return it;
+  }
+  return slots_.end();
+}
+
+std::map<int, MultiMonitor::Slot>::const_iterator
+MultiMonitor::FindSlotByIdentityLocked(const MonitorInfo& mi) const {
+  const std::string key = SlotIdentityKey(mi);
+  for (auto it = slots_.begin(); it != slots_.end(); ++it) {
+    if (it->second.identity == key) return it;
+  }
+  return slots_.end();
+}
+
+bool MultiMonitor::ReplaceSlotSurfaceLocked(Slot& slot, int x, int y, int w,
+                                            int h, bool reassert) {
+  // 1. The old surface and the old mpv handle go to the graveyard. The VO
+  //    keeps rendering into the old (now hidden) surface until its handle is
+  //    really destroyed - the window is never yanked from under it.
+  ReleaseSlotMediaLocked(slot);
+  if (!slot.injector) return false;
+  // 2. A fresh surface for the new geometry.
+  slot.injector->SetSharedHost(shared_host_);
+  const bool attached = slot.injector->Attach(x, y, w, h);
+  if (!attached) {
+    char buf[160];
+    std::snprintf(buf, sizeof(buf),
+                  "multi_monitor: re-attach failed for monitor %d (%dx%d), "
+                  "headless renderer fallback",
+                  slot.info.id, w, h);
+    LogLine(log_, buf);
+    // The slot keeps its injector; the renderer points at the hidden host.
+  }
+  if (reassert) {
+    slot.injector->ReassertFrameless();
+  }
+  void* hwnd = slot.injector->injected_hwnd();
+  if (hwnd == nullptr) {
+    // Re-attach failed (Progman missing / SetParent error): point the
+    // renderer at the hidden host so mpv never spawns its own framed
+    // window (plan Must-NOT-Have).
+    hwnd = headless_host_;
+  }
+  // 3. A NEW renderer for the new surface. Re-pointing the old VO with
+  //    SetHWND would restart a VO that is still attached to the old
+  //    window; recreating it is the stable choice.
+  auto fresh = factory_.make_renderer();
+  if (!adapter_pin_.empty()) fresh->SetAdapterPin(adapter_pin_);
+  if (!fresh->Create(hwnd)) {
+    char buf[160];
+    std::snprintf(buf, sizeof(buf),
+                  "multi_monitor: MpvRenderer::Create failed for monitor %d "
+                  "after re-attach",
+                  slot.info.id);
+    LogLine(log_, buf);
+    return false;
+  }
+  slot.renderer = std::move(fresh);
+  // 4. The new renderer has no file: re-issue the slot's own video.
+  ReloadSlotVideoLocked(slot);
+  return true;
 }
 
 void MultiMonitor::SetHeadlessHost(void* hwnd) { headless_host_ = hwnd; }
@@ -298,6 +440,7 @@ void MultiMonitor::SetActiveMonitor(int id) {
   }
   if (initialized_ || filter_armed_) {
     ApplyActiveFilter(FilterMonitors(active_monitor_.load(std::memory_order_acquire)));
+    ReapplyRetainedLocked();
   }
 }
 
@@ -310,26 +453,61 @@ void MultiMonitor::ApplyActiveFilter(const std::vector<MonitorInfo>& desired) {
   // every newcomer AttachSlot, and (when this is Init/OnDisplayChange/Reanchor
   // converging the set) the survivors re-attached by the caller.
   ResolveHostForPass();
-  // Tear down slots outside the desired set (vanished monitor or filtered
-  // out by the active target).
+  // Tear down slots whose monitor vanished (or that were filtered out by the
+  // active target). The match is by STABLE IDENTITY, not by position index:
+  // unplugging a middle monitor renumbers the others, and the old
+  // position-index match tore down the WRONG slot (and kept a renderer that
+  // belonged to another monitor).
   for (auto it = slots_.begin(); it != slots_.end();) {
-    const bool wanted = std::any_of(
-        desired.begin(), desired.end(),
-        [&](const MonitorInfo& mi) { return mi.id == it->first; });
+    const std::string& identity = it->second.identity;
+    const bool wanted =
+        std::any_of(desired.begin(), desired.end(),
+                    [&](const MonitorInfo& mi) {
+                      return SlotIdentityKey(mi) == identity;
+                    });
     if (!wanted) {
-      char buf[128];
+      char buf[160];
       std::snprintf(buf, sizeof(buf),
-                    "multi_monitor: slot %d out of target set, tearing down",
-                    it->first);
+                    "multi_monitor: slot %d (%s) out of target set, tearing down",
+                    it->first, identity.c_str());
       LogLine(log_, buf);
+      // Keep the slot's video so a RE-PLUGGED monitor gets its assignment
+      // back: the retained map is re-applied by ReapplyRetainedLocked as
+      // soon as the device returns. Without this an unplug/replug cycle
+      // silently dropped the per-monitor assignment forever.
+      if (!it->second.video_path.empty() &&
+          !it->second.info.device_name.empty()) {
+        retained_assignments_[it->second.info.device_name] =
+            WidenDeviceKey(it->second.video_path);
+      }
+      DestroySlotLocked(it->second);
       it = slots_.erase(it);
     } else {
       ++it;
     }
   }
+  // Re-key the survivors: the map key is the monitor's CURRENT position id
+  // (the user-facing id), while the slot's identity is what binds it to its
+  // monitor. A survivor whose id changed (primary switch, middle monitor
+  // unplugged) is moved to its new key - the SLOT follows the MONITOR.
+  {
+    std::map<int, Slot> rebuilt;
+    for (auto& kv : slots_) {
+      int new_key = kv.first;
+      for (const MonitorInfo& mi : desired) {
+        if (SlotIdentityKey(mi) == kv.second.identity) {
+          new_key = mi.id;
+          break;
+        }
+      }
+      Slot moved = std::move(kv.second);
+      rebuilt.emplace(new_key, std::move(moved));
+    }
+    slots_.swap(rebuilt);
+  }
   // Attach the missing desired slots.
   for (const MonitorInfo& mi : desired) {
-    if (slots_.find(mi.id) == slots_.end()) {
+    if (FindSlotByIdentityLocked(mi) == slots_.end()) {
       AttachSlot(mi);
     }
   }
@@ -349,13 +527,13 @@ bool MultiMonitor::Init(MultiMonitorMode mode) {
     if (AttachSpanSlot()) {
       initialized_ = true;
     }
-    attached_host_rect_ = shared_host_.client_rect;
+    RememberHostPlacement();
     filter_armed_ = true;
     return initialized_;
   }
   ApplyActiveFilter(FilterMonitors(active_monitor_.load(std::memory_order_acquire)));
   filter_armed_ = true;
-  attached_host_rect_ = shared_host_.client_rect;
+  RememberHostPlacement();
   if (!initialized_) {
     LogLine(log_, "multi_monitor: Init found no monitors, engine keeps running");
   }
@@ -378,7 +556,7 @@ void MultiMonitor::OnDisplayChange() {
       const auto it = slots_.find(kSpanSlotId);
       if (it == slots_.end()) {
         AttachSpanSlot();
-        attached_host_rect_ = shared_host_.client_rect;
+        RememberHostPlacement();
         return;
       }
       // Row 11: resolve the host BEFORE the change checks - the host-rect
@@ -391,13 +569,16 @@ void MultiMonitor::OnDisplayChange() {
           !(slot.info.x == g.x && slot.info.y == g.y &&
             slot.info.width == g.width && slot.info.height == g.height);
       const bool host_moved =
+          shared_host_.host != nullptr &&
           !SamePlacementRect(shared_host_.client_rect, attached_host_rect_);
-      if (!geometry_changed && !host_moved) {
-        return;  // Geometry and host unchanged — nothing to do.
+      const bool surface_alive =
+          !slot.injector || slot.injector->IsSurfaceAlive();
+      if (!geometry_changed && !host_moved && surface_alive) {
+        return;  // Geometry, host and surface unchanged — keep the stream.
       }
       // Re-attach the injector at the current span size against the
-      // refreshed host, keep the renderer instance (no video reload needed —
-      // SetHWND re-points it).
+      // refreshed host. A real re-attach destroys the old surface and ends
+      // the stream, so ReattachSpanLocked force-reloads the slot's video.
       if (slot.injector) {
         ReattachSpanLocked(slot, g.x, g.y, g.width, g.height, /*reassert=*/false);
       }
@@ -405,7 +586,7 @@ void MultiMonitor::OnDisplayChange() {
       slot.info.y = g.y;
       slot.info.width = g.width;
       slot.info.height = g.height;
-      attached_host_rect_ = shared_host_.client_rect;
+      RememberHostPlacement();
       return;
     }
     const std::vector<MonitorInfo> desired =
@@ -416,40 +597,39 @@ void MultiMonitor::OnDisplayChange() {
     ApplyActiveFilter(desired);
     // Row 11: a host that moved or was recreated (Explorer restart, DPI
     // change) must re-place survivors even when every monitor rect is
-    // unchanged - children are parented to the host client origin.
+    // unchanged - children are parented to the host client origin. A failed
+    // resolution leaves shared_host_.host null; never treat that as a move
+    // or a transient failure would destroy a live surface.
     const bool host_moved =
+        shared_host_.host != nullptr &&
         !SamePlacementRect(shared_host_.client_rect, attached_host_rect_);
-    // 2. Refresh sizes of survivors.
+    // 2. Refresh sizes of survivors. The survivor is found by its STABLE
+    //    IDENTITY, not by position index: after a primary switch or a
+    //    middle monitor being unplugged the position ids shift, and the
+    //    old index match handed monitor A's renderer to monitor B.
     for (const MonitorInfo& mi : desired) {
-      const auto it = slots_.find(mi.id);
+      const auto it = FindSlotByIdentityLocked(mi);
       if (it == slots_.end()) {
         continue;
       }
-      {
-        const bool resized = (it->second.info.width != mi.width ||
-                              it->second.info.height != mi.height ||
-                              it->second.info.x != mi.x ||
-                              it->second.info.y != mi.y);
-        it->second.info = mi;
-        if ((resized || host_moved) && it->second.injector) {
-          it->second.injector->SetSharedHost(shared_host_);
-          it->second.injector->OnDisplayChange(mi.x, mi.y, mi.width, mi.height);
-          if (it->second.renderer) {
-            void* hwnd = it->second.injector->injected_hwnd();
-            if (hwnd == nullptr) {
-              // Re-attach failed (Progman missing / SetParent error): point
-              // the renderer at the hidden host so mpv never spawns its own
-              // framed window (plan Must-NOT-Have). The next display-change
-              // re-anchors.
-              hwnd = headless_host_;
-            }
-            it->second.renderer->SetHWND(hwnd);
-          }
-        }
+      Slot& slot = it->second;
+      const bool resized = (slot.info.width != mi.width ||
+                            slot.info.height != mi.height ||
+                            slot.info.x != mi.x || slot.info.y != mi.y);
+      slot.info = mi;
+      if ((resized || host_moved) && slot.injector) {
+        // The surface is REPLACED (new window + new renderer) instead of
+        // being destroyed under a live VO and re-pointed: the old code's
+        // DesktopInjector::OnDisplayChange destroyed the window while mpv
+        // was still rendering into it, then re-pointed the same VO with
+        // SetHWND. Both halves of that are the cross-thread destroy
+        // hazard. The slot's own video is re-issued afterwards.
+        ReplaceSlotSurfaceLocked(slot, mi.x, mi.y, mi.width, mi.height,
+                                 /*reassert=*/false);
       }
     }
     ReapplyRetainedLocked();
-    attached_host_rect_ = shared_host_.client_rect;
+    RememberHostPlacement();
     initialized_ = !slots_.empty();
   } catch (...) {
     LogLine(log_, "multi_monitor: OnDisplayChange failed, keeping live slots");
@@ -462,6 +642,7 @@ bool MultiMonitor::LoadLoopAll(const std::string& path, bool force) {
   for (auto& kv : slots_) {
     if (kv.second.renderer && kv.second.renderer->LoadLoop(path, force)) {
       any = true;
+      if (!path.empty()) kv.second.video_path = path;
     }
   }
   if (any && !path.empty()) last_video_ = path;
@@ -488,6 +669,7 @@ bool MultiMonitor::LoadLoopSlot(const std::string& device,
     Slot& slot = kv.second;
     if (slot.info.device_name != key) continue;
     if (!slot.renderer || !slot.renderer->LoadLoop(path)) return false;
+    slot.video_path = path;
     if (!fit_mode.empty()) {
       double aspect = 0.0;
       if (slot.info.width > 0 && slot.info.height > 0) {
@@ -643,6 +825,7 @@ void MultiMonitor::ReapplyRetainedLocked() {
     }
     const std::string path_utf8 = NarrowUtf8(path);
     if (slot->renderer->LoadLoop(path_utf8)) {
+      slot->video_path = path_utf8;
       char buf[320];
       std::snprintf(buf, sizeof(buf), "display: applied %s to %s",
                     path_utf8.c_str(), NarrowUtf8(key).c_str());
@@ -683,8 +866,15 @@ int MultiMonitor::VerifyPinAndRevert() {
       LogLine(log_, "gpu-pin: unpinned recreate failed, keeping pinned slot");
       continue;
     }
-    if (!last_video_.empty()) fresh->LoadLoop(last_video_);
+    const std::string& reload =
+        slot.video_path.empty() ? last_video_ : slot.video_path;
+    if (!reload.empty()) fresh->LoadLoop(reload);
     if (prev_paused) fresh->Pause();
+    // The old (pinned) renderer is destroyed on the graveyard worker: its
+    // destructor blocks in mpv_terminate_destroy() and must never run on
+    // the message-loop thread.
+    std::unique_ptr<MpvRenderer> doomed = std::move(slot.renderer);
+    RendererGraveyard::Submit(std::move(doomed), nullptr, log_);
     slot.renderer = std::move(fresh);
     ++reverted;
   }
@@ -798,57 +988,88 @@ void MultiMonitor::Reanchor() {
   try {
     if (mode_ == MultiMonitorMode::Span) {
       // Span mode: a single slot keyed by kSpanSlotId. Explorer restart /
-      // power-resume recreate the desktop windows even when the geometry is
-      // unchanged, so re-attach the span slot at the current virtual-screen
-      // size. Never create per-monitor slots here — that would duplicate the
-      // span window.
+      // power-resume may recreate the desktop windows even when the geometry
+      // is unchanged, but a still-live surface must be kept: recreating it
+      // also destroys mpv's VO window and ends the stream. Never create
+      // per-monitor slots here — that would duplicate the span window.
       const auto it = slots_.find(kSpanSlotId);
       if (it == slots_.end()) {
         AttachSpanSlot();
       } else if (it->second.injector) {
-        const SpanGeometry g = GetSpanGeometry();
         ResolveHostForPass();
-        // Fresh origin wins: after sleep/resume or an Explorer restart the
-        // virtual-screen origin may have shifted, so re-attach at the freshly
-        // measured g.x/g.y instead of the stored slot origin.
-        ReattachSpanLocked(it->second, g.x, g.y,
-                           g.width, g.height, /*reassert=*/true);
-        it->second.info.x = g.x;
-        it->second.info.y = g.y;
+        const SpanGeometry g = GetSpanGeometry();
+        Slot& slot = it->second;
+        const bool geometry_changed =
+            !(slot.info.x == g.x && slot.info.y == g.y &&
+              slot.info.width == g.width && slot.info.height == g.height);
+        const bool host_moved =
+            shared_host_.host != nullptr &&
+            !SamePlacementRect(shared_host_.client_rect, attached_host_rect_);
+        slot.injector->SetSharedHost(shared_host_);
+        if (!geometry_changed && !host_moved &&
+            slot.injector->IsSurfaceAlive()) {
+          // Sleep/resume or wallpaper change with the desktop intact: keep
+          // the live surface and its mpv stream untouched.
+        } else {
+          // Fresh origin wins: re-attach at the freshly measured g.x/g.y
+          // instead of the stored slot origin.
+          ReattachSpanLocked(slot, g.x, g.y, g.width, g.height,
+                             /*reassert=*/true);
+          slot.info.x = g.x;
+          slot.info.y = g.y;
+          slot.info.width = g.width;
+          slot.info.height = g.height;
+        }
       }
-      attached_host_rect_ = shared_host_.client_rect;
+      RememberHostPlacement();
+      ReapplyRetainedLocked();
       initialized_ = !slots_.empty();
       return;
     }
     const std::vector<MonitorInfo> desired =
         FilterMonitors(active_monitor_.load(std::memory_order_acquire));
     // Step 5: converge to the active target first (filtered-out slots torn
-    // down, newcomers attached), then force re-attach of the survivors
-    // (Explorer restart destroys the desktop windows even when geometry is
-    // unchanged). Keeps renderer instances (no video reload — SetHWND
-    // re-points them).
+    // down, newcomers attached), then re-anchor the survivors. A survivor
+    // whose surface is still alive and unchanged keeps its renderer and
+    // stream; only a real re-attach (surface gone, host moved, geometry
+    // changed) destroys the old surface and force-reloads the slot video.
     ApplyActiveFilter(desired);
+    // A failed host resolution leaves shared_host_.host null; treat the
+    // placement as unchanged rather than destroying a live surface.
+    const bool host_moved =
+        shared_host_.host != nullptr &&
+        !SamePlacementRect(shared_host_.client_rect, attached_host_rect_);
     for (const MonitorInfo& mi : desired) {
-      const auto it = slots_.find(mi.id);
+      const auto it = FindSlotByIdentityLocked(mi);
       if (it == slots_.end()) {
         continue;
-      } else if (it->second.injector) {
-        it->second.info = mi;
-        // Row 7: survivors take the pass's shared host too (ApplyActiveFilter
-        // above resolved it for this Reanchor pass).
-        it->second.injector->SetSharedHost(shared_host_);
-        it->second.injector->Detach();
-        if (it->second.injector->Attach(mi.x, mi.y, mi.width, mi.height) &&
-            it->second.renderer) {
-          it->second.injector->ReassertFrameless();
-          it->second.renderer->SetHWND(it->second.injector->injected_hwnd());
-        } else if (it->second.renderer) {
-          // Attach failed: fall back to the hidden host (see span branch).
-          it->second.renderer->SetHWND(headless_host_);
-        }
       }
+      Slot& slot = it->second;
+      if (!slot.injector) {
+        continue;
+      }
+      const bool geometry_changed =
+          slot.info.x != mi.x || slot.info.y != mi.y ||
+          slot.info.width != mi.width || slot.info.height != mi.height;
+      slot.info = mi;
+      // Row 7: survivors take the pass's shared host too (ApplyActiveFilter
+      // above resolved it for this Reanchor pass).
+      slot.injector->SetSharedHost(shared_host_);
+      if (!geometry_changed && !host_moved && slot.injector->IsSurfaceAlive()) {
+        // Power resume: the desktop host AND the injected child survived
+        // sleep. Replacing the surface here would destroy the VO window and
+        // end the stream (`mpv: end-file reason=quit`) — the original
+        // resume bug.
+        continue;
+      }
+      // A real re-attach: the old surface is released (not destroyed under
+      // the live VO), a fresh surface is attached and a fresh renderer is
+      // created for it. The slot's own video is re-issued afterwards.
+      ReplaceSlotSurfaceLocked(slot, mi.x, mi.y, mi.width, mi.height,
+                               /*reassert=*/true);
     }
-    attached_host_rect_ = shared_host_.client_rect;
+    RememberHostPlacement();
+    ReapplyRetainedLocked();
     initialized_ = !slots_.empty();
   } catch (...) {
     LogLine(log_, "multi_monitor: Reanchor failed, keeping live slots");
