@@ -31,6 +31,7 @@
 #include "autostart.hpp"
 #include "cache_dir_policy.hpp"
 #include "config_schema.hpp"
+#include "lockscreen_edition.hpp"
 
 namespace k6wp {
 
@@ -38,6 +39,12 @@ namespace k6wp {
 namespace {
 std::atomic<bool> g_close_to_tray{false};
 std::function<void(bool)> g_close_to_tray_listener;
+
+// How long the Studio waits for `K6WP.exe --elevate-lockscreen` (which
+// self-elevates through UAC and then waits for the human at the prompt). The
+// launcher's own budget for the elevated worker is 2 minutes; the Studio
+// waits a little longer so the launcher can report ITS timeout first.
+constexpr int kLockscreenElevationTimeoutMs = 150000;
 }  // namespace
 
 void SetCloseToTrayEnabled(bool on) {
@@ -274,10 +281,93 @@ void SettingsBridge::setCacheDir(const QString& dir) {
   emit changed();
 }
 
-void SettingsBridge::setLockscreenSync(bool on) {
-  studio_.lockscreen_sync = on;
+void SettingsBridge::setLockscreenOfferShown(bool shown) {
+  if (studio_.lockscreen_offer_shown == shown) return;
+  studio_.lockscreen_offer_shown = shown;
   PersistStudioSettingsNow();
   emit changed();
+}
+
+QString SettingsBridge::lockscreenStatus() const {
+  const LockscreenPolicyStatus status = ReadLockscreenPolicyStatus();
+  const QString edition = QString::fromStdString(status.edition_id);
+  if (status.policy_foreign) {
+    // The launcher refuses to overwrite a policy that points elsewhere
+    // (the user's own wallpaper): say so instead of pretending it works.
+    return tr("Gambar layar kunci diarahkan ke wallpaper lain, jadi K6WP tidak "
+              "mengubahnya.");
+  }
+  if (!status.policy_registered) {
+    if (!studio_.lockscreen_sync) {
+      return tr("Nonaktif.");
+    }
+    return tr("Belum terdaftar di Windows - aktifkan lagi untuk meminta izin "
+              "administrator.");
+  }
+  switch (status.support) {
+    case LockscreenEditionSupport::kSupported:
+      return tr("Aktif - gambar video ikut ke layar kunci.");
+    case LockscreenEditionSupport::kUncertain:
+      return tr("Policy terdaftar, tapi edisi Windows %1 mungkin "
+                "mengabaikannya. Coba kunci layar (Win+L) untuk memastikan.")
+          .arg(edition);
+    case LockscreenEditionSupport::kUnsupported:
+      return tr("Policy terdaftar, tapi edisi Windows %1 tidak mendukung "
+                "gambar layar kunci.")
+          .arg(edition);
+    case LockscreenEditionSupport::kUnknown:
+      break;
+  }
+  return tr("Policy terdaftar. Coba kunci layar (Win+L) untuk memastikan.");
+}
+
+void SettingsBridge::setLockscreenSync(bool on) {
+  // Bug A: the toggle must be HONEST. Turning it on only writes
+  // studio_settings.json; the lock screen actually shows the frame because
+  // Windows is pointed at %PROGRAMDATA%\K6WP\lockscreen.jpg through an HKLM
+  // policy, and only the launcher can write that (it needs administrator
+  // rights). So the toggle now runs `K6WP.exe --elevate-lockscreen on|off`
+  // and only stays ON when the policy really got registered.
+  //
+  // There must never be a state "ON in the settings but no policy": the
+  // engine would keep refreshing a jpg that Windows never shows.
+  const LockscreenElevationResult result =
+      RunLockscreenElevation(on, kLockscreenElevationTimeoutMs);
+  if (!result.ok()) {
+    // The policy state did not change: the toggle keeps the value it had.
+    const QString reason = LockscreenElevationErrorText(result);
+    SetLastError(reason);
+    AppendLog(on ? QStringLiteral("Layar kunci tidak diaktifkan: %1").arg(reason)
+                 : QStringLiteral("Layar kunci tidak dinonaktifkan: %1")
+                       .arg(reason));
+    // Re-emit so the QML checkbox snaps back to the persisted truth.
+    emit changed();
+    return;
+  }
+  studio_.lockscreen_sync = on;
+  PersistStudioSettingsNow();
+  AppendLog(on ? QStringLiteral("Layar kunci aktif (gambar statis)")
+               : QStringLiteral("Layar kunci nonaktif"));
+  emit changed();
+}
+
+QString SettingsBridge::LockscreenElevationErrorText(
+    const LockscreenElevationResult& result) const {
+  switch (ClassifyLockscreenElevation(result)) {
+    case LockscreenElevationFailure::kDeclined:
+      return tr("Jendela administrator dibatalkan, jadi gambar layar kunci tidak "
+                "diaktifkan.");
+    case LockscreenElevationFailure::kTimedOut:
+      return tr("Bantuan administrator tidak selesai tepat waktu, jadi gambar "
+                "layar kunci mungkin belum aktif.");
+    case LockscreenElevationFailure::kSpawnFailed:
+      return tr("Tidak bisa menjalankan K6WP.exe untuk mengatur gambar layar "
+                "kunci.");
+    case LockscreenElevationFailure::kUnknown:
+    case LockscreenElevationFailure::kNone:
+      break;
+  }
+  return tr("Gambar layar kunci tidak dapat diubah.");
 }
 
 void SettingsBridge::setLockscreenOffsetSec(double seconds) {

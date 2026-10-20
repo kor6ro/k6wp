@@ -9,6 +9,8 @@ add_library(k6wp_shared STATIC
   monitor_util.cpp
   autostart.cpp
   lockscreen.cpp
+  lockscreen_bridge.cpp
+  lockscreen_edition.cpp
   ffmpeg_path.cpp
   proc_util.cpp
   sha1.cpp
@@ -101,4 +103,14 @@ add_executable(stable_key_test ../tests/stable_key_test.cpp)
 target_link_libraries(stable_key_test PRIVATE k6wp_shared)
 target_include_directories(stable_key_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 add_test(NAME stable_key_test COMMAND stable_key_test)
+
+# lockscreen_policy_test (Bug A): the three pure decision layers of the
+# lock-screen feature - the trigger policy (which event refreshes, which
+# bypasses the debounce, which waits), the elevation classification (the
+# launcher's exit code -> the reason the Studio shows) and the Windows
+# edition classification (how well the LockScreenImage policy is supported).
+add_executable(lockscreen_policy_test ../tests/lockscreen_policy_test.cpp)
+target_link_libraries(lockscreen_policy_test PRIVATE k6wp_shared)
+target_include_directories(lockscreen_policy_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+add_test(NAME lockscreen_policy_test COMMAND lockscreen_policy_test)
 endif()

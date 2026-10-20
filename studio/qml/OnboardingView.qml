@@ -172,6 +172,12 @@ FocusScope {
         // plus an explicit apply()).
         Settings.setStartWithWindows(startWithWindowsBox.checked)
         Settings.setAutoCompressOnImport(autoCompressBox.checked)
+        // The lock-screen offer: default checked. setLockscreenSync runs the
+        // administrator registration and only leaves the toggle ON when it
+        // really succeeded - a declined prompt simply keeps it off.
+        if (lockscreenOfferBox.checked)
+            Settings.setLockscreenSync(true)
+        Settings.setLockscreenOfferShown(true)
         Settings.apply()
         // Durable first-run marker: creates studio_settings.json, which is
         // what Library.firstRunEligible reads, and clears lastPickedPath so
@@ -388,6 +394,31 @@ FocusScope {
                 focusPolicy: Qt.StrongFocus
                 checked: true
                 text: qsTr("Siapkan video otomatis (bisa diubah di Pengaturan › Lanjutan)")
+                Accessible.name: text
+                Keys.onReturnPressed: {
+                    toggle()
+                    event.accepted = true
+                }
+                Keys.onEnterPressed: {
+                    toggle()
+                    event.accepted = true
+                }
+            }
+
+            // Lock-screen offer (Bug A): shown ONCE, default checked. Turning
+            // it on needs an administrator registration (the launcher writes
+            // the HKLM policy Windows reads the lock screen from), so
+            // Settings.setLockscreenSync asks for it and only leaves the
+            // toggle ON when the registration really succeeded.
+            CheckBox {
+                id: lockscreenOfferBox
+                objectName: "onboardingLockscreenOffer"
+                Layout.fillWidth: true
+                implicitHeight: 40
+                focusPolicy: Qt.StrongFocus
+                visible: !Settings.lockscreenOfferShown
+                checked: true
+                text: qsTr("Aktifkan layar kunci otomatis (gambar statis dari video)")
                 Accessible.name: text
                 Keys.onReturnPressed: {
                     toggle()

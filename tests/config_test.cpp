@@ -409,12 +409,20 @@ int main(int argc, char* argv[]) {
   // 16. Studio defaults match the plan example exactly (crf 22, fps 30,
   // match_monitor, wallpapers dir, start_with_windows false,
   // auto_compress_on_import true). v3 removed keep_original/start_minimized.
-  // NOTE (P3L.1): studio_settings schema stays v3 — the v4→v5 bump is
-  // engine-config only, so every "version == 3" below in scenarios 16, 17,
-  // 21, 25, 26, 29, 30 is correct as-is.
+  // NOTE: the studio_settings schema version is asserted through
+  // k6wp::kStudioSettingsSchemaVersion, so a deliberate bump (v4: the
+  // lock-screen onboarding offer) does not have to touch every scenario.
+  // The v4->v5 bump was engine-config only, so the engine-config version
+  // assertions below stay at 5.
   {
     const k6wp::StudioSettings s = k6wp::DefaultStudioSettings();
-    Check(s.version == 3, "16. version == 3");
+    Check(s.version == k6wp::kStudioSettingsSchemaVersion,
+          "16. version == the current studio schema version");
+    Check(s.lockscreen_offer_shown == false,
+          "16. lockscreen_offer_shown default false (the offer is shown once)");
+    Check(s.lockscreen_sync == false,
+          "16. lockscreen_sync default false (the policy needs an "
+          "administrator registration, so it is never silently ON)");
     Check(s.auto_compress_on_import == true,
           "16. auto_compress_on_import default true");
     Check(s.default_crf == 22, "16. default_crf == 22");
@@ -444,7 +452,8 @@ int main(int argc, char* argv[]) {
       Check(false,
             std::string("17. studio v0 migrates (threw: ") + e.what() + ")");
     }
-    Check(s.version == 3, "17. version == 3");  // studio stays v3 (see 16 note)
+    Check(s.version == k6wp::kStudioSettingsSchemaVersion,
+          "17. version == the current studio schema version");
     Check(s.auto_compress_on_import == true && s.default_crf == 22 &&
               s.default_fps == 30 &&
               s.default_resolution_mode == "match_monitor" &&
@@ -455,8 +464,9 @@ int main(int argc, char* argv[]) {
     Check(ReadText(bak) == original, "17. .bak holds original bytes");
     try {
       const k6wp::StudioSettings s2 = k6wp::LoadStudioSettings(p);
-      Check(s2.version == 3 && s2.default_crf == 22,
-            "17. rewritten v3 stable");  // studio stays v3 (see 16 note)
+      Check(s2.version == k6wp::kStudioSettingsSchemaVersion &&
+                s2.default_crf == 22,
+            "17. rewritten file stable");
     } catch (const std::exception& e) {
       Check(false,
             std::string("17. rewritten v3 stable (threw: ") + e.what() + ")");
@@ -575,7 +585,8 @@ int main(int argc, char* argv[]) {
         {"start_with_windows", false},
     };
     const k6wp::StudioSettings s = k6wp::MigrateStudioSettings(example);
-    Check(s.version == 3, "21. example version == 3");  // studio stays v3 (see 16 note)
+    Check(s.version == k6wp::kStudioSettingsSchemaVersion,
+          "21. example version == the current studio schema version");
     Check(s.auto_compress_on_import == true &&
               s.compress_output_dir ==
                   k6wp::DefaultCompressOutputDir().wstring(),
@@ -671,7 +682,8 @@ int main(int argc, char* argv[]) {
     try {
       const k6wp::StudioSettings s = k6wp::LoadStudioSettings(p);
       Check(true, "25. studio v1 migrates");
-      Check(s.version == 3, "25. version == 3");  // studio stays v3 (see 16 note)
+      Check(s.version == k6wp::kStudioSettingsSchemaVersion,
+            "25. version == the current studio schema version");
       Check(s.compress_advanced_visible == false,
             "25. compress_advanced_visible defaulted false");
     } catch (const std::exception& e) {
@@ -683,8 +695,9 @@ int main(int argc, char* argv[]) {
     Check(ReadText(bak) == original, "25. .bak holds original bytes");
     try {
       const k6wp::StudioSettings s2 = k6wp::LoadStudioSettings(p);
-      Check(s2.version == 3 && s2.compress_advanced_visible == false,
-            "25. rewritten v3 stable");  // studio stays v3 (see 16 note)
+      Check(s2.version == k6wp::kStudioSettingsSchemaVersion &&
+                s2.compress_advanced_visible == false,
+            "25. rewritten file stable");
     } catch (const std::exception& e) {
       Check(false,
             std::string("25. rewritten v3 stable (threw: ") + e.what() + ")");
@@ -716,7 +729,8 @@ int main(int argc, char* argv[]) {
     try {
       const k6wp::StudioSettings s = k6wp::LoadStudioSettings(p);
       Check(true, "26. studio v2 dead-keys migrates");
-      Check(s.version == 3, "26. version == 3");  // studio stays v3 (see 16 note)
+      Check(s.version == k6wp::kStudioSettingsSchemaVersion,
+            "26. version == the current studio schema version");
       Check(s.compress_advanced_visible == true &&
                 s.default_crf == 22 && s.start_with_windows == false,
             "26. surviving fields preserved");
@@ -730,7 +744,8 @@ int main(int argc, char* argv[]) {
     Check(ReadText(bak) == original, "26. .bak holds original bytes");
     try {
       const k6wp::StudioSettings s2 = k6wp::LoadStudioSettings(p);
-      Check(s2.version == 3, "26. rewritten v3 stable");  // studio stays v3 (see 16 note)
+      Check(s2.version == k6wp::kStudioSettingsSchemaVersion,
+            "26. rewritten file stable");
       const std::string rewritten = ReadText(p);
       Check(rewritten.find("keep_original") == std::string::npos &&
                 rewritten.find("start_minimized") == std::string::npos,
@@ -804,8 +819,9 @@ int main(int argc, char* argv[]) {
     Check(ReadText(bak) == original, "30. .bak holds original bytes");
     try {
       const k6wp::StudioSettings s2 = k6wp::LoadStudioSettings(p);
-      Check(s2.version == 3 && s2.check_updates == true,
-            "30. rewritten v3 stable");  // studio stays v3 (see 16 note)
+      Check(s2.version == k6wp::kStudioSettingsSchemaVersion &&
+                s2.check_updates == true,
+            "30. rewritten file stable");
     } catch (const std::exception& e) {
       Check(false,
             std::string("30. rewritten v3 stable (threw: ") + e.what() + ")");

@@ -4,6 +4,7 @@ add_executable(engine
   src/crash_dump_prune.cpp
   src/crash_restart_guard.cpp  # L-01: crash-restart backoff (pure rules + file clear)
   src/device_lost_watch.cpp    # E-04: DXGI adapter-removed watch
+  src/engine_watchdog.cpp      # C1: hang watchdog (heartbeat + restart)
   src/engine_app.cpp
   src/cli_options.cpp
   src/cpu_affinity.cpp

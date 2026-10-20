@@ -23,6 +23,12 @@ target_compile_features(launcher PRIVATE cxx_std_17)
 
 target_include_directories(launcher PRIVATE "${CMAKE_SOURCE_DIR}/packaging")
 
+# The lock-screen exit codes live in shared/lockscreen_exit.hpp (the Studio
+# needs the same numbers to map the launcher's exit code onto the toggle).
+# Header-only include - the launcher still links NO k6wp_shared code, so the
+# "no Qt, no shared lib" proof below stays trivial.
+target_include_directories(launcher PRIVATE "${CMAKE_SOURCE_DIR}/shared")
+
 # Plain Win32 only (user32: mutex/window focus; shell32: CommandLineToArgvW
 # in wWinMain + ShellExecuteW runas; advapi32: registry + named-security-info
 # ACL APIs for --elevate-lockscreen). No k6wp_shared linkage:
@@ -38,6 +44,7 @@ target_link_libraries(launcher PRIVATE user32 shell32 advapi32)
 if(BUILD_TESTING)
 add_executable(lockscreen_backup_test ../tests/lockscreen_backup_test.cpp lockscreen_backup.cpp process_paths.cpp process_stop.cpp cli.cpp lockscreen_policy.cpp lockscreen_sync.cpp)
 target_link_libraries(lockscreen_backup_test PRIVATE user32 shell32 advapi32)
+target_include_directories(lockscreen_backup_test PRIVATE "${CMAKE_SOURCE_DIR}/shared")
 # The test spells CJK/accent paths as literal UTF-8 wide strings; without
 # /utf-8 MSVC decodes the BOM-less source per the system ANSI code page and
 # those literals (but not the \U escapes) come out wrong. Test-target-only
@@ -53,6 +60,7 @@ add_test(NAME lockscreen_backup_test COMMAND lockscreen_backup_test)
 if(BUILD_TESTING)
   add_executable(launcher_stop_test ../tests/launcher_stop_test.cpp lockscreen_backup.cpp process_paths.cpp process_stop.cpp cli.cpp lockscreen_policy.cpp lockscreen_sync.cpp)
   target_link_libraries(launcher_stop_test PRIVATE user32 shell32 advapi32)
+  target_include_directories(launcher_stop_test PRIVATE "${CMAKE_SOURCE_DIR}/shared")
   target_compile_options(launcher_stop_test PRIVATE /utf-8)
   add_test(NAME launcher_stop_test COMMAND launcher_stop_test)
 endif()

@@ -1078,6 +1078,18 @@ Item {
                     onToggled: Settings.setLockscreenSync(checked)
                 }
 
+                // The honest status: whether the policy is really registered
+                // and whether this Windows edition honours it at all.
+                Label {
+                    objectName: "lockscreenStatusLabel"
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    color: Theme.text2
+                    font.pixelSize: Theme.fontS
+                    text: Settings.lockscreenStatus
+                    Accessible.name: text
+                }
+
                 // Raw affinity/GPU only reach the renderer on a fresh engine
                 // start; the action is the glossary §5 recovery phrase (never
                 // "Restart engine").

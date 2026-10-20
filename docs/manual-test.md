@@ -156,6 +156,21 @@ claimed result.
     video and click a sub-tab: the collision refusal appears and
     `displays.json` stays unchanged. Clearing the arm before selecting a
     sub-tab must also leave the assignment untouched.
+28. MANUAL - sleep/resume keeps playback (power-resume regression). With a
+    video playing on every monitor, sleep the PC (Start -> Power -> Sleep or
+    close the lid), wait a few seconds, then wake it. Playback must continue
+    on every monitor within ~2 s with no black/frozen wallpaper and no user
+    action. `engine.log` must show `power: PBT_APMRESUMEAUTOMATIC received`
+    followed by `pause: owner=suspend ... slots=0` and then motion again; it
+    must NOT show `mpv: end-file (reason=quit)` in that resume pass. On an
+    Explorer restart (real re-anchor) the log may show one re-attach followed
+    by `loadfile` — that is the expected recovery path.
+29. MANUAL - lock screen is not overlaid. Press Win+L while a video plays.
+    The Windows lock screen (secure desktop) must be shown normally: no
+    wallpaper video, no K6WP window, no frozen frame on top of it. Unlock and
+    confirm playback resumes (item 13). The injected surface is a
+    Progman/WorkerW child, not a topmost window, so it must never cover the
+    lock UI; this item records the check.
 
 ## 1.3.0-beta.3 engine fixes
 

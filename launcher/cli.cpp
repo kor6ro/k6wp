@@ -31,6 +31,10 @@ void PrintUsage(FILE* out) {
                 L"                       static lockscreen sync: ACLs "
                 L"%PROGRAMDATA%\\K6WP, backs up and sets the HKLM "
                 L"LockScreenImage policy (UAC prompt, static image only)\n"
+                L"  --delay-ms <n>       wait n ms (0..600000) before acting "
+                L"(used by the engine's hang watchdog)\n"
+                L"  --restarted          forwarded to engine.exe so the "
+                L"restart counts against the crash-restart backoff\n"
                 L"  --help, -h           show this help and exit\n"
                 L"Exit codes: 0 ok, 2 bad flag, 3 missing sibling / spawn "
                 L"failure (also: the elevated lockscreen helper failed), 4 the "
@@ -83,6 +87,26 @@ int ParseArgs(int argc, wchar_t** argv, Options& out) {
       out.want_studio = false;
     } else if (arg == L"--elevated") {
       out.elevated_worker = true;
+    } else if (arg == L"--restarted") {
+      // Passthrough marker for the engine: the engine counts a
+      // "--restarted" launch against its crash-restart backoff, so a
+      // watchdog restart cannot become a restart loop.
+      out.engine_extra += L" --restarted";
+    } else if (arg == L"--delay-ms") {
+      if (i + 1 >= argc) {
+        std::fwprintf(stderr, L"K6WP: error: --delay-ms requires a value\n");
+        return kExitBadFlag;
+      }
+      const wchar_t* v = argv[++i];
+      wchar_t* end = nullptr;
+      const long value = wcstol(v, &end, 10);
+      if (end == v || value < 0 || value > 600000) {
+        std::fwprintf(stderr,
+                      L"K6WP: error: --delay-ms expects 0..600000, got %ls\n",
+                      v);
+        return kExitBadFlag;
+      }
+      out.delay_ms = static_cast<int>(value);
     } else if (arg == L"--stop") {
       out.stop = true;
       out.want_studio = false;

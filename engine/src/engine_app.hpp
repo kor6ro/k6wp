@@ -22,6 +22,7 @@
 #include "config_watch.hpp"
 #include "crash_restart_guard.hpp"
 #include "device_lost_watch.hpp"
+#include "engine_watchdog.hpp"
 #include "displays_schema.hpp"
 #include "fullscreen_watch.hpp"
 #include "ipc_server.hpp"
@@ -442,6 +443,15 @@ class EngineApp {
   // the enumeration has settled (two consecutive equal signatures).
   std::string topology_signature_prev_;
   bool topology_signature_valid_ = false;
+  // --- Bug C1: the hang watchdog -------------------------------------------
+  //
+  // The message loop bumps `loop_heartbeat_` on every iteration and sets
+  // `loop_parked_` while it waits INFINITE (the paused engine waits on
+  // purpose - that must not look like a hang). The watchdog thread watches
+  // the counter and restarts a hung engine.
+  std::atomic<unsigned long long> loop_heartbeat_{0};
+  std::atomic<bool> loop_parked_{false};
+  EngineWatchdog watchdog_;
   // --- Tray menu actions (Todo 35, all run on the UI thread via WndProc) ----
   void OnTrayTogglePause();                 // Pause/Resume item + dbl-click
   void OnTrayQuickSwitch(std::size_t idx);  // quick-switch submenu index

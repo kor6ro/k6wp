@@ -417,7 +417,7 @@
 <context>
     <name>OnboardingView</name>
     <message>
-        <location filename="../qml/OnboardingView.qml" line="+305"/>
+        <location filename="../qml/OnboardingView.qml" line="+311"/>
         <source>Pilih video pertamamu</source>
         <translation type="unfinished"></translation>
     </message>
@@ -439,6 +439,11 @@
     <message>
         <location line="+19"/>
         <source>Siapkan video otomatis (bisa diubah di Pengaturan › Lanjutan)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+25"/>
+        <source>Aktifkan layar kunci otomatis (gambar statis dari video)</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -664,7 +669,7 @@
         <translation type="unfinished">Center (original size)</translation>
     </message>
     <message>
-        <location line="+124"/>
+        <location line="+136"/>
         <source>Perubahan inti CPU / GPU berlaku setelah wallpaper dimuat ulang.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -704,7 +709,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-597"/>
+        <location line="-609"/>
         <source>Layar:</source>
         <translation type="unfinished">Screen:</translation>
     </message>
@@ -729,7 +734,7 @@
         <translation type="unfinished">Sync the video frame to the lock screen (still image)</translation>
     </message>
     <message>
-        <location line="+68"/>
+        <location line="+80"/>
         <source>Folder output:</source>
         <translation type="unfinished">Output folder:</translation>
     </message>
@@ -870,7 +875,7 @@
         <translation type="unfinished">Clear cache...</translation>
     </message>
     <message>
-        <location line="-531"/>
+        <location line="-543"/>
         <source>Mode hemat baterai:</source>
         <translation type="unfinished">Battery saver mode:</translation>
     </message>
@@ -901,12 +906,12 @@
     </message>
     <message>
         <location line="+4"/>
-        <location line="+173"/>
+        <location line="+185"/>
         <source>CRF:</source>
         <translation type="unfinished">CRF:</translation>
     </message>
     <message>
-        <location line="-161"/>
+        <location line="-173"/>
         <source>CRF</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1702,7 +1707,7 @@
 <context>
     <name>k6wp::SettingsBridge</name>
     <message>
-        <location filename="../src/settings_bridge.cpp" line="+140"/>
+        <location filename="../src/settings_bridge.cpp" line="+147"/>
         <source>Pengaturan studio rusak, kembali ke bawaan: %1</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1744,7 +1749,62 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+55"/>
+        <location line="+33"/>
+        <source>Gambar layar kunci diarahkan ke wallpaper lain, jadi K6WP tidak mengubahnya.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>Nonaktif.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Belum terdaftar di Windows - aktifkan lagi untuk meminta izin administrator.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>Aktif - gambar video ikut ke layar kunci.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Policy terdaftar, tapi edisi Windows %1 mungkin mengabaikannya. Coba kunci layar (Win+L) untuk memastikan.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Policy terdaftar, tapi edisi Windows %1 tidak mendukung gambar layar kunci.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>Policy terdaftar. Coba kunci layar (Win+L) untuk memastikan.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+37"/>
+        <source>Jendela administrator dibatalkan, jadi gambar layar kunci tidak diaktifkan.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Bantuan administrator tidak selesai tepat waktu, jadi gambar layar kunci mungkin belum aktif.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Tidak bisa menjalankan K6WP.exe untuk mengatur gambar layar kunci.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>Gambar layar kunci tidak dapat diubah.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+32"/>
         <source>Sumber daftar putar tidak dikenal.</source>
         <translation type="unfinished"></translation>
     </message>

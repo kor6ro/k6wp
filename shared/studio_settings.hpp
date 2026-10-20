@@ -9,13 +9,19 @@ namespace k6wp {
 
 // Version of the on-disk studio-settings schema. v0 = legacy/absent
 // (missing fields are defaulted on load); v1 = lockscreen sync fields;
-// v2 = compressor advanced-box visibility; v3 = current (dead controls
-// keep_original/start_minimized removed; old files carrying them migrate
-// by ignoring those keys). The plan-todo-8 UI preferences (closeToTray /
-// playlistSource / performancePreset) are ADDITIVE inside v3: files
-// written before they existed migrate by defaulting them — no version
-// bump, same pattern check_updates followed when it landed.
-inline constexpr int kStudioSettingsSchemaVersion = 3;
+// v2 = compressor advanced-box visibility; v3 = the plan-todo-8 UI
+// preferences (closeToTray / playlistSource / performancePreset, ADDITIVE
+// inside v3: files written before they existed migrate by defaulting them -
+// no version bump, same pattern check_updates followed when it landed).
+// v4 = the lock-screen onboarding offer (lockscreen_offer_shown).
+//
+// v4 CHANGES NOTHING THE USER DECIDED. A v3 file keeps its `lockscreen_sync`
+// value exactly as it was: the lock-screen feature needs an ADMINISTRATOR
+// policy registration (only the launcher can write it), so flipping the flag
+// silently would produce the "ON but no policy" state - the engine would
+// keep refreshing a jpg that Windows never shows. The v4 field only records
+// that the one-time onboarding offer was shown.
+inline constexpr int kStudioSettingsSchemaVersion = 4;
 
 // Studio-side preferences, stored at %LOCALAPPDATA%/K6WP/studio_settings.json.
 // This is deliberately SEPARATE from WallpaperConfig (config.json), which is
@@ -39,6 +45,12 @@ struct StudioSettings {
   // (its only exception to the "Engine never reads this file" rule).
   bool lockscreen_sync = false;
   double lockscreen_offset_sec = 1.0;  // frame seek offset in seconds (>= 0)
+  // v4 (Studio-private): the one-time onboarding offer for the lock screen
+  // has been shown. The offer lives in the first-run wizard ("Aktifkan layar
+  // kunci otomatis", default checked); this flag records that it was shown
+  // so it is never shown again. The ENGINE never reads it (LOW-16: the
+  // Engine reads exactly two fields of this file).
+  bool lockscreen_offer_shown = false;
   // Compressor tab: advanced-box expanded state (session UI only, never
   // affects jobs). v1 files migrate it to false.
   bool compress_advanced_visible = false;

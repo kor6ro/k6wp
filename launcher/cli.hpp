@@ -17,6 +17,11 @@ struct Options {
   bool elevate_lockscreen = false;  // --elevate-lockscreen on|off
   std::wstring elevate_action;      // L"on" or L"off"
   bool elevated_worker = false;     // hidden --elevated (already elevated)
+  // --delay-ms <n>: wait n ms before doing anything. Used by the engine's
+  // hang watchdog: it spawns the launcher with a delay so the new engine
+  // starts AFTER the hung one released the singleton mutex (starting it
+  // while the mutex is still held would make the new instance bail out).
+  int delay_ms = 0;
 };
 
 void PrintUsage(FILE* out);

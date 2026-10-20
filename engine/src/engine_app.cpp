@@ -720,6 +720,9 @@ int EngineApp::Run() {
 
   MSG msg{};
   bool first_iteration = true;
+  // Bug C1: arm the hang watchdog. It watches the heartbeat below and
+  // restarts the engine when the message loop stops responding.
+  watchdog_.Start(&loop_heartbeat_, &loop_parked_);
   while (running_.load(std::memory_order_acquire)) {
     // Bench placeholder (Todo 12): emit Engine:FirstFrame on the first
     // message-loop iteration. Todo 10 moves this to the first real present.
@@ -874,9 +877,19 @@ int EngineApp::Run() {
         device_watchable = true;
       }
     }
+    // Bug C1: the heartbeat tells the watchdog thread that the message loop
+    // is alive. The watchdog is what turns a HANG (the tray icon on screen,
+    // nothing responding) into a dump + a restart; crash_restart_guard only
+    // covers crashes.
+    loop_heartbeat_.fetch_add(1, std::memory_order_release);
+    const DWORD wait_timeout = ComputeWaitTimeoutMs();
+    // While the engine is paused the loop waits INFINITE on purpose (the
+    // zero-wakeup design). The watchdog must not mistake that for a hang.
+    loop_parked_.store(wait_timeout == INFINITE, std::memory_order_release);
     const DWORD wait_result = MsgWaitForMultipleObjects(
         wait_count, wait_count > 0 ? wait_handles : nullptr, FALSE,
-        ComputeWaitTimeoutMs(), QS_ALLINPUT);
+        wait_timeout, QS_ALLINPUT);
+    loop_parked_.store(false, std::memory_order_release);
     if (wait_result >= WAIT_OBJECT_0 &&
         wait_result < WAIT_OBJECT_0 + wait_count) {
       const DWORD signaled = wait_result - WAIT_OBJECT_0;
@@ -903,6 +916,9 @@ int EngineApp::Run() {
 void EngineApp::Shutdown() {
   if (shutdown_done_) return;
   shutdown_done_ = true;
+  // Bug C1: stop the hang watchdog first - it must not fire while the
+  // engine is shutting down on purpose.
+  watchdog_.Stop();
   // P4.1: drop the one-shot trim timer when a shutdown lands inside the
   // 2 s window (KillTimer on a dead/unknown id is a harmless no-op).
   if (message_hwnd_ != nullptr) {
@@ -1214,11 +1230,17 @@ bool EngineApp::HandleSetVideo(const std::string& payload_json, bool rotation) {
   if (!rotation) {
     tray_.PushRecent(utf8_path);  // Todo 35: MRU is for manual picks only
     LogImportant("ipc: set_video live-switched to %s", utf8_path.c_str());
-    MaybeTriggerLockscreenSync(utf8_path, &EngineApp::Log);
+    MaybeTriggerLockscreenSync(utf8_path, LockscreenTrigger::kVideoChanged,
+                                &EngineApp::Log);
   } else {
-    // Rotation is not a user action: no MRU feed, no lock-screen extract, and
-    // Log (not LogImportant) so a short interval cannot flush the log per cycle.
+    // Rotation is not a user action: no MRU feed. The lock screen IS
+    // refreshed though: with a playlist running, the lock screen used to
+    // keep showing the frame of the FIRST video forever. The refresh is
+    // throttled by the shared debounce (one extract per 5 s per file), so a
+    // fast rotation cannot spawn an extract per cycle.
     Log("playlist: rotation live-switched to %s", utf8_path.c_str());
+    MaybeTriggerLockscreenSync(utf8_path, LockscreenTrigger::kRotation,
+                                &EngineApp::Log);
   }
   headless_owns_decode_.store(
       !wallpaper_surface_live_.load(std::memory_order_acquire),
@@ -1821,6 +1843,13 @@ void EngineApp::HandlePowerBroadcast(WPARAM wParam, LPARAM lParam) {
   switch (wParam) {
     case PBT_APMSUSPEND:
       Log("power: PBT_APMSUSPEND received");
+      // Bug A: the lock screen must show a CURRENT picture when the machine
+      // sleeps - the engine is not running at that point, so the frame has
+      // to be on disk BEFORE the sleep. Fire-and-forget (the shared helper
+      // spawns a detached, below-normal child) so the suspend path is never
+      // delayed.
+      MaybeTriggerLockscreenSync(current_video_utf8_,
+                                 LockscreenTrigger::kSuspend, &EngineApp::Log);
       OnSuspend();
       return;
     case PBT_APMRESUMEAUTOMATIC:
@@ -1871,7 +1900,10 @@ void EngineApp::HandlePowerBroadcast(WPARAM wParam, LPARAM lParam) {
           // Re-extract the lockscreen frame onto the live surface after the
           // screen comes back on (e.g. monitor off/on, wake), so the lockscreen
           // stays static/current instead of stale or missing.
-          if (!current_video_utf8_.empty()) MaybeTriggerLockscreenSync(current_video_utf8_, &EngineApp::Log);
+          if (!current_video_utf8_.empty())
+            MaybeTriggerLockscreenSync(current_video_utf8_,
+                                       LockscreenTrigger::kMonitorOn,
+                                       &EngineApp::Log);
           break;
         case 2:
           Log("power: monitor dimmed (Data=2, ignored)");
@@ -1956,11 +1988,43 @@ LRESULT EngineApp::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
       OnDisplayChange(width, height);
       return 0;
     }
+    case WM_QUERYENDSESSION:
+      // The session is about to end (shutdown / logoff). Two things must
+      // happen BEFORE the session goes away, because the engine will not be
+      // running afterwards:
+      //   1. the lock screen frame must be refreshed - this trigger WAITS
+      //      for the extract (bounded), so the picture on the next lock
+      //      screen is the current one;
+      //   2. the OS wallpaper must be restored, so the next logon does not
+      //      show a wallpaper the engine is no longer driving.
+      // Returning TRUE lets the session end proceed.
+      LogImportant("session: WM_QUERYENDSESSION received, refreshing the "
+                   "lockscreen and restoring the wallpaper");
+      MaybeTriggerLockscreenSync(current_video_utf8_,
+                                 LockscreenTrigger::kShutdown, &EngineApp::Log);
+      os_wallpaper_.Restore();
+      return TRUE;
+    case WM_ENDSESSION:
+      // wParam != 0: the session really ended. The wallpaper restore above
+      // already ran; this is the belt-and-braces pass (the message can also
+      // arrive without a preceding WM_QUERYENDSESSION, e.g. a forced
+      // logoff).
+      if (wParam != 0) {
+        LogImportant("session: WM_ENDSESSION received, restoring the wallpaper");
+        os_wallpaper_.Restore();
+      }
+      return 0;
     case WM_WTSSESSION_CHANGE:
       switch (wParam) {
         case WTS_SESSION_LOCK:
           LogImportant("session: WTS_SESSION_LOCK received, pausing decode");
           SetPauseOwner(kPauseSessionLock, true);
+          // Bug A: the lock screen appears NOW, and the engine is the only
+          // thing that can refresh the frame. The refresh bypasses the
+          // debounce: the picture has to be current, not the last one.
+          MaybeTriggerLockscreenSync(current_video_utf8_,
+                                     LockscreenTrigger::kSessionLock,
+                                     &EngineApp::Log);
           return 0;
         case WTS_SESSION_UNLOCK:
           LogImportant("session: WTS_SESSION_UNLOCK received, resuming decode");

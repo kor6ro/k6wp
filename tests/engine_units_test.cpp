@@ -8,6 +8,7 @@
 #include "cli_options.hpp"
 #include "config_watch.hpp"
 #include "crash_restart_guard.hpp"
+#include "engine_watchdog.hpp"
 #include "pause_controller.hpp"
 #include "pending_queue.hpp"
 #include "power.hpp"
@@ -364,6 +365,35 @@ void TestCrashRestart() {
   Check(s.count == 1, "crash-restart: zero window never accumulates");
 }
 
+// Bug C1: the hang watchdog's decision. A paused engine waits INFINITE on
+// purpose - that must NOT be reported as a hang, and a live heartbeat must
+// never be either.
+void TestHangDetector() {
+  // The heartbeat advanced -> not hung.
+  Check(!k6wp::IsEngineHung(1, 2, /*parked=*/false, /*enabled=*/true, 20000, 19000,
+                      15000),
+        "watchdog: an advancing heartbeat is not a hang");
+  // The heartbeat is stuck and the stall is long enough -> hung.
+  Check(k6wp::IsEngineHung(7, 7, /*parked=*/false, /*enabled=*/true, 20000, 1000,
+                     15000),
+        "watchdog: a stalled heartbeat past the timeout is a hang");
+  // The stall is not long enough yet.
+  Check(!k6wp::IsEngineHung(7, 7, /*parked=*/false, /*enabled=*/true, 5000, 1000,
+                      15000),
+        "watchdog: a short stall is not a hang yet");
+  // The loop is parked on purpose (paused engine, INFINITE wait).
+  Check(!k6wp::IsEngineHung(7, 7, /*parked=*/true, /*enabled=*/true, 20000, 1000,
+                      15000),
+        "watchdog: a parked (paused) loop is never a hang");
+  // The watchdog is off.
+  Check(!k6wp::IsEngineHung(7, 7, /*parked=*/false, /*enabled=*/false, 20000, 1000,
+                      15000),
+        "watchdog: a disabled watchdog never reports a hang");
+  // A zero timeout disables the detection.
+  Check(!k6wp::IsEngineHung(7, 7, /*parked=*/false, /*enabled=*/true, 20000, 1000, 0),
+        "watchdog: a zero timeout disables the detection");
+}
+
 }  // namespace
 
 int main() {
@@ -374,6 +404,7 @@ int main() {
   TestDisplaysSecondFileWatch();
   TestPowerCapAction();
   TestCrashRestart();
+  TestHangDetector();
 
   std::printf(g_failures == 0 ? "RESULT: ALL ENGINE-UNIT CHECKS PASSED\n"
                               : "RESULT: %d CHECK(S) FAILED\n",

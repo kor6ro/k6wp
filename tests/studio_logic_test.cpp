@@ -430,6 +430,15 @@ void QmlShell::SetImportTarget(LibraryGridModel*) {}
 void QmlShell::syncPreviewGeometry(int, int, int, int) {}
 void QmlShell::loadPreview(const QString&) {}
 void QmlShell::setPreviewPaused(bool) {}
+// Bug A: the lock-screen toggle drives the launcher's policy registration
+// through the shared test seam, so the suite can exercise "the registration
+// succeeded" and "the user declined the UAC prompt" without a prompt.
+LockscreenElevationResult StubElevationOk(bool enable, int /*timeout_ms*/) {
+  LockscreenElevationResult r;
+  r.ran = true;
+  r.exit_code = enable ? kExitOk : kExitOk;
+  return r;
+}
 }  // namespace k6wp
 
 int main(int argc, char** argv) {
@@ -600,7 +609,8 @@ int main(int argc, char** argv) {
           "contract LOCALAPPDATA redirected");
     auto write_settings = [&](bool sync, double offset, int crf, int fps,
                               const std::string& mode, bool auto_comp,
-                              bool start_win, bool advanced, bool updates) {
+                              bool start_win, bool advanced, bool updates,
+                              bool offer_shown = false) {
       k6wp::StudioSettings s = k6wp::DefaultStudioSettings();
       s.compress_output_dir = (scratch / L"K6WP" / L"wallpapers").wstring();
       s.cache_dir = (scratch / L"K6WP" / L"cache").wstring();
@@ -613,6 +623,7 @@ int main(int argc, char** argv) {
       s.start_with_windows = start_win;
       s.compress_advanced_visible = advanced;
       s.check_updates = updates;
+      s.lockscreen_offer_shown = offer_shown;
       k6wp::SaveStudioSettings(k6wp::DefaultStudioSettingsPath(), s);
     };
     // A: every forbidden field non-default, sync OFF -> engine sees OFF/1.0.
@@ -622,7 +633,11 @@ int main(int argc, char** argv) {
     Check(k6wp::LockscreenOffsetSec() == 1.0,
           "contract offset default visible");
     // B: flip ONLY forbidden fields -> engine-visible behavior identical.
-    write_settings(false, 1.0, 16, 1, "source", true, false, false, true);
+    // The v4 field lockscreen_offer_shown is forbidden too: it is
+    // Studio-private (the onboarding offer flag) and must never reach the
+    // Engine.
+    write_settings(false, 1.0, 16, 1, "source", true, false, false, true,
+                   /*offer_shown=*/true);
     Check(!k6wp::IsLockscreenSyncEnabled(),
           "contract forbidden flip keeps sync off");
     Check(k6wp::LockscreenOffsetSec() == 1.0,
@@ -633,6 +648,11 @@ int main(int argc, char** argv) {
           "contract lockscreen_sync=true visible");
     Check(k6wp::LockscreenOffsetSec() == 2.5,
           "contract lockscreen_offset_sec visible");
+    // C2: the Studio-private v4 field must not leak into the Engine's view.
+    write_settings(false, 1.0, 16, 1, "source", true, false, false, true,
+                   /*offer_shown=*/true);
+    Check(!k6wp::IsLockscreenSyncEnabled(),
+          "contract lockscreen_offer_shown never reaches the Engine");
     // D: settings file missing -> safe defaults (never throws).
     std::filesystem::remove(k6wp::DefaultStudioSettingsPath(), ec);
     Check(!k6wp::IsLockscreenSyncEnabled(),
@@ -2433,7 +2453,13 @@ int main(int argc, char** argv) {
         loaded = false;
       }
       Check(loaded, "todo8 old file without new keys loads cleanly");
-      Check(s.version == 3, "todo8 old file stays at schema v3 (no bump)");
+      Check(s.version == k6wp::kStudioSettingsSchemaVersion,
+            "todo8 old file migrates to the current studio schema version");
+      Check(s.lockscreen_offer_shown == false,
+            "todo8 old file -> lockscreen_offer_shown defaults false");
+      Check(s.lockscreen_sync == false,
+            "todo8 old file -> the user's lockscreen_sync decision is kept "
+            "(never silently flipped by a migration)");
       Check(s.close_to_tray == false,
             "todo8 old file -> close_to_tray defaults false");
       Check(s.playlist_source == "all",
@@ -3075,11 +3101,22 @@ int main(int argc, char** argv) {
       }
 
       // --- lockscreenSync: toggle true WITHOUT apply() -> JSON on disk ----
+      // The toggle is HONEST (Bug A): it only turns ON when the HKLM policy
+      // registration really succeeded, so the test drives the elevation
+      // through the shared test seam.
       {
         k6wp::SettingsBridge bridge;
         Check(!bridge.lockscreenSync(),
               "writethrough lockscreenSync starts false (default)");
         bridge.setLockscreenSync(true);  // NO apply() call
+        Check(!bridge.lockscreenSync(),
+              "writethrough a REFUSED lockscreen registration leaves the "
+              "toggle off (no 'ON but no policy' state)");
+        Check(!bridge.lastError().isEmpty(),
+              "writethrough a refused registration reports an error");
+        k6wp::SetLockscreenElevationFn(&k6wp::StubElevationOk);
+        bridge.setLockscreenSync(true);  // NO apply() call
+        k6wp::SetLockscreenElevationFn(nullptr);
         Check(bridge.lockscreenSync(),
               "writethrough setLockscreenSync(true) updates the property");
         const std::string text = read_json();

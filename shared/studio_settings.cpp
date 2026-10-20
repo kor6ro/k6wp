@@ -93,6 +93,7 @@ StudioSettings DefaultStudioSettings() {
   s.start_with_windows = false;
   s.lockscreen_sync = false;
   s.lockscreen_offset_sec = 1.0;
+  s.lockscreen_offer_shown = false;
   s.compress_advanced_visible = false;
   s.check_updates = true;
   s.close_to_tray = false;
@@ -167,6 +168,7 @@ void SaveStudioSettings(const std::filesystem::path& path,
   j["start_with_windows"] = copy.start_with_windows;
   j["lockscreen_sync"] = copy.lockscreen_sync;
   j["lockscreen_offset_sec"] = copy.lockscreen_offset_sec;
+  j["lockscreen_offer_shown"] = copy.lockscreen_offer_shown;
   j["compress_advanced_visible"] = copy.compress_advanced_visible;
   j["check_updates"] = copy.check_updates;
   j["closeToTray"] = copy.close_to_tray;
@@ -254,6 +256,14 @@ StudioSettings MigrateStudioSettings(const nlohmann::json& raw) {
     s.lockscreen_sync = raw.value("lockscreen_sync", defaults.lockscreen_sync);
     s.lockscreen_offset_sec =
         raw.value("lockscreen_offset_sec", defaults.lockscreen_offset_sec);
+    // v4 (Studio-private): the one-time onboarding offer flag. A v3 file has
+    // no such key -> false (the offer was never shown). The user's
+    // `lockscreen_sync` decision above is NEVER changed by the migration:
+    // enabling the lock screen needs an administrator policy registration,
+    // so flipping the flag silently would leave the engine refreshing a
+    // picture Windows never shows.
+    s.lockscreen_offer_shown =
+        raw.value("lockscreen_offer_shown", defaults.lockscreen_offer_shown);
     s.compress_advanced_visible = raw.value("compress_advanced_visible",
                                             defaults.compress_advanced_visible);
     s.check_updates = raw.value("check_updates", defaults.check_updates);

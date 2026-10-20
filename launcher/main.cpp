@@ -267,6 +267,14 @@ int Run(int argc, wchar_t** argv) {
     return RunStop();
   }
 
+  // --delay-ms: the engine's hang watchdog spawns the launcher with a delay
+  // so the replacement engine starts AFTER the hung one released the
+  // singleton mutex. Waiting here (before any mutex is taken) keeps that
+  // ordering guarantee.
+  if (opts.delay_ms > 0) {
+    Sleep(static_cast<DWORD>(opts.delay_ms));
+  }
+
   // Per-user studio singleton. When a previous launcher already signalled a
   // studio launch, focus that window and exit 0 WITHOUT spawning an engine.
   // (The first launcher holds the mutex while it spawns; the pipe probe in
