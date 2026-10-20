@@ -95,14 +95,16 @@ supposed to cost the user nothing.
 
 ## What is NOT proven
 
-- **The on-screen animation could not be captured in this session.** The agent
-  harness's own always-on-top cursor overlay covers the whole screen, and the
-  engine correctly treats a fully covered desktop as "occluded" and pauses the
-  wallpaper (the occlusion watcher). A paused engine holds a still frame, so
-  a screen-level "do the frames move?" check is impossible here. The engine
-  was verified to be *rendering* (sustained decode work) and the rendered
-  frames are identical, but "the picture on the desktop moves" stays
-  **UNPROVEN in this environment** — it is not proven *broken* either.
+- **A screen-level "the picture on the desktop moves" check is impossible in
+  this session.** The agent harness's own always-on-top cursor overlay covers
+  the whole screen, and the engine correctly treats a fully covered desktop
+  as occluded and pauses the wallpaper (the occlusion watcher). A paused
+  engine holds a still frame, so a desktop grab records the plain desktop.
+  The check was therefore made against the **injected wallpaper window
+  itself** (PrintWindow on the `K6WP.DesktopInject.1` surface), which is
+  what the engine actually presents:
+  `tools/check_live_animation.ps1` → frame-to-frame diff **18.687** — the
+  live wallpaper **is animating** with the vsync build.
 - Multi-monitor, mixed-DPI, and hardware other than this iGPU+dGPU pair are
   **UNPROVEN** (single monitor, one rig).
 
@@ -129,6 +131,7 @@ supposed to cost the user nothing.
 | `tools/bench_ab.ps1` | paired A/B over the Phase 0 metrics, noise-aware |
 | `tools/bench_frames.ps1` | engine-side rendered-frame parity (the gate) |
 | `tools/bench_wallpaper_frames.ps1` | captures the injected wallpaper window itself (PrintWindow) |
+| `tools/check_live_animation.ps1` | one-shot "is the live wallpaper moving?" check against the running engine |
 | `tools/bench_vo_sustained.ps1` | proves the VO keeps presenting (sustained GPU work) |
 | `tools/diag_wakeups3.ps1` | per-thread CPU/context-switch attribution |
 | `tools/list_windows.ps1` | enumerates the visible top-level windows |
