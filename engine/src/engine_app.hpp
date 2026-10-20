@@ -246,6 +246,28 @@ class EngineApp {
   // L-01: one-shot latch so the healthy-uptime reset fires once per process
   // (Run loop thread only).
   bool healthy_uptime_noted_ = false;
+  // Hidden QA flag (--capture-frames <prefix>): the rendered-frame capture
+  // state. Run-loop thread only. The prefix is UTF-8 (the capture APIs take
+  // UTF-8 paths).
+  std::string capture_frames_prefix_;
+  int capture_frames_count_ = 0;
+  int capture_frames_interval_ms_ = 0;
+  int capture_frames_done_ = 0;
+  long long capture_frames_next_ms_ = 0;
+  bool capture_frames_seek_done_ = false;
+  double capture_frames_seek_ = -1.0;
+  // Runs one capture step (seek once, then write the frames). Driven by the
+  // loop cadence: a WM_TIMER would NOT work, because
+  // MsgWaitForMultipleObjects(..., QS_ALLINPUT) does not wake on a posted
+  // WM_TIMER and the loop parks INFINITE while the engine is paused.
+  void CaptureFramesStep(long long elapsed_ms);
+  // True while a frame capture is still pending: the loop then keeps
+  // ticking (500 ms) instead of parking INFINITE, so the capture runs even
+  // when the engine is paused.
+  bool CaptureFramesPending() const {
+    return !capture_frames_prefix_.empty() &&
+           capture_frames_done_ < (capture_frames_count_ > 0 ? capture_frames_count_ : 3);
+  }
   int init_exit_code_ = 2;
   std::atomic<bool> device_lost_{false};
   // Config file watcher (Todo 11): started in Init() from CliOptions

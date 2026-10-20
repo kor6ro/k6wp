@@ -121,6 +121,27 @@ BOOL CALLBACK EnumProgmanChildProc(HWND hwnd, LPARAM lParam) {
   return TRUE;
 }
 
+// True when the WorkerW can host our injected surface.
+//
+// A WorkerW qualifies when it is EMPTY - that is the shell's wallpaper
+// WorkerW, the only host that puts the surface above the wallpaper layer
+// and below the icons. It ALSO qualifies when its only child is one of OUR
+// OWN stale injected surfaces (class kInjectedClass): a re-anchor pass
+// resolves the host BEFORE the old surface is released, so the previous
+// wallpaper window is still parented in the WorkerW at that moment.
+// Treating that as "not a wallpaper WorkerW" made the engine fall back to
+// the layered- Progman-child branch, which sits BELOW the shell's DefView
+// and is therefore invisible - the wallpaper vanished a fraction of a
+// second after every start.
+bool WorkerWAcceptsSurface(HWND workerw) {
+  HWND child = GetWindow(workerw, GW_CHILD);
+  while (child) {
+    if (!IsClass(child, kInjectedClass)) return false;
+    child = GetWindow(child, GW_CHILD);
+  }
+  return true;
+}
+
 DesktopWindows FindDesktopWindows() {
   DesktopWindows d;
   d.progman = FindWindowW(kProgmanClass, nullptr);
@@ -743,7 +764,7 @@ SharedHost ResolveSharedHost(InjectMode mode, LogFn log) {
     // exactly the wallpaper WorkerW we want.
     HWND existing = nullptr;
     for (HWND w : d.progman_worker_ws) {
-      if (GetWindow(w, GW_CHILD) == nullptr) {
+      if (WorkerWAcceptsSurface(w)) {
         existing = w;
         break;
       }

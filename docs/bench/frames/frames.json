@@ -1,0 +1,46 @@
+﻿{
+    "tool":  "bench_frames",
+    "phase":  1,
+    "date":  "2026-10-21T03:39:39+07:00",
+    "label":  "live-proven",
+    "method":  "engine-side rendered frames (hidden --capture-frames QA flag, mpv decoded-frame screenshot); immune to the desktop composite",
+    "corpus":  "C:\\Users\\axioo\\Desktop\\k6wp\\tools\\..\\tests\\corpus\\anime.mp4",
+    "tolerance":  3,
+    "frames":  [
+                   {
+                       "frame":  1,
+                       "size":  "1920x1080",
+                       "baseline_luma":  128.19,
+                       "candidate_luma":  128.19,
+                       "luma_delta":  0,
+                       "baseline_rgb":  "125.11,129.36,125.69",
+                       "candidate_rgb":  "125.11,129.36,125.69",
+                       "pixel_diff":  0,
+                       "pass":  true
+                   },
+                   {
+                       "frame":  2,
+                       "size":  "1920x1080",
+                       "baseline_luma":  128.19,
+                       "candidate_luma":  128.19,
+                       "luma_delta":  0,
+                       "baseline_rgb":  "125.11,129.36,125.69",
+                       "candidate_rgb":  "125.11,129.36,125.69",
+                       "pixel_diff":  0,
+                       "pass":  true
+                   },
+                   {
+                       "frame":  3,
+                       "size":  "1920x1080",
+                       "baseline_luma":  128.19,
+                       "candidate_luma":  128.19,
+                       "luma_delta":  0,
+                       "baseline_rgb":  "125.11,129.36,125.69",
+                       "candidate_rgb":  "125.11,129.36,125.69",
+                       "pixel_diff":  0,
+                       "pass":  true
+                   }
+               ],
+    "worst_pixel_diff":  0,
+    "pass":  true
+}

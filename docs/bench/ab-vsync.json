@@ -1,0 +1,583 @@
+﻿{
+    "tool":  "bench_ab",
+    "phase":  1,
+    "date":  "2026-10-21T03:52:16+07:00",
+    "label":  "live-proven",
+    "tag":  "vsync",
+    "baseline_exe":  "C:\\Users\\axioo\\Desktop\\k6wp\\build\\ab\\engine-baseline.exe",
+    "candidate_exe":  "C:\\Users\\axioo\\Desktop\\k6wp\\build\\ab\\engine-candidate.exe",
+    "runs_per_state":  5,
+    "states":  [
+                   "playback_1080p",
+                   "paused_30s"
+               ],
+    "method":  "same harness, same corpus, same n, same host; deltas compared against the measured noise band",
+    "comparison":  [
+                       {
+                           "state":  "playback_1080p",
+                           "metric":  "private_mb",
+                           "unit":  "MB",
+                           "baseline":  169.05,
+                           "candidate":  170.43,
+                           "delta":  1.38,
+                           "delta_pct":  0.82,
+                           "noise_pct":  4.16,
+                           "direction":  "lower",
+                           "improved":  false,
+                           "significant":  false,
+                           "verdict":  "same"
+                       },
+                       {
+                           "state":  "playback_1080p",
+                           "metric":  "ws_mb",
+                           "unit":  "MB",
+                           "baseline":  16.26,
+                           "candidate":  15.96,
+                           "delta":  -0.3,
+                           "delta_pct":  -1.85,
+                           "noise_pct":  9.78,
+                           "direction":  "lower",
+                           "improved":  true,
+                           "significant":  false,
+                           "verdict":  "same"
+                       },
+                       {
+                           "state":  "playback_1080p",
+                           "metric":  "cpu_pct",
+                           "unit":  "%",
+                           "baseline":  3.86,
+                           "candidate":  1.06,
+                           "delta":  -2.8,
+                           "delta_pct":  -72.54,
+                           "noise_pct":  27.46,
+                           "direction":  "lower",
+                           "improved":  true,
+                           "significant":  true,
+                           "verdict":  "BETTER"
+                       },
+                       {
+                           "state":  "playback_1080p",
+                           "metric":  "gpu_total_pct",
+                           "unit":  "%",
+                           "baseline":  36.25,
+                           "candidate":  23.81,
+                           "delta":  -12.44,
+                           "delta_pct":  -34.32,
+                           "noise_pct":  10.15,
+                           "direction":  "lower",
+                           "improved":  true,
+                           "significant":  true,
+                           "verdict":  "BETTER"
+                       },
+                       {
+                           "state":  "playback_1080p",
+                           "metric":  "gpu_decode_pct",
+                           "unit":  "%",
+                           "baseline":  10.76,
+                           "candidate":  14.52,
+                           "delta":  3.76,
+                           "delta_pct":  34.94,
+                           "noise_pct":  12.36,
+                           "direction":  "lower",
+                           "improved":  false,
+                           "significant":  true,
+                           "verdict":  "WORSE"
+                       },
+                       {
+                           "state":  "playback_1080p",
+                           "metric":  "gpu_3d_pct",
+                           "unit":  "%",
+                           "baseline":  25.17,
+                           "candidate":  9.39,
+                           "delta":  -15.78,
+                           "delta_pct":  -62.69,
+                           "noise_pct":  10.41,
+                           "direction":  "lower",
+                           "improved":  true,
+                           "significant":  true,
+                           "verdict":  "BETTER"
+                       },
+                       {
+                           "state":  "playback_1080p",
+                           "metric":  "gpu_shared_mb",
+                           "unit":  "MB",
+                           "baseline":  150.42,
+                           "candidate":  150.43,
+                           "delta":  0.01,
+                           "delta_pct":  0.01,
+                           "noise_pct":  4.00,
+                           "direction":  "lower",
+                           "improved":  false,
+                           "significant":  false,
+                           "verdict":  "same"
+                       },
+                       {
+                           "state":  "playback_1080p",
+                           "metric":  "wakeups_per_sec",
+                           "unit":  "/s",
+                           "baseline":  1381,
+                           "candidate":  1102.82,
+                           "delta":  -278.18,
+                           "delta_pct":  -20.14,
+                           "noise_pct":  10.85,
+                           "direction":  "lower",
+                           "improved":  true,
+                           "significant":  true,
+                           "verdict":  "BETTER"
+                       },
+                       {
+                           "state":  "paused_30s",
+                           "metric":  "private_mb",
+                           "unit":  "MB",
+                           "baseline":  168.69,
+                           "candidate":  170.11,
+                           "delta":  1.42,
+                           "delta_pct":  0.84,
+                           "noise_pct":  5.44,
+                           "direction":  "lower",
+                           "improved":  false,
+                           "significant":  false,
+                           "verdict":  "same"
+                       },
+                       {
+                           "state":  "paused_30s",
+                           "metric":  "ws_mb",
+                           "unit":  "MB",
+                           "baseline":  17.12,
+                           "candidate":  17.31,
+                           "delta":  0.19,
+                           "delta_pct":  1.11,
+                           "noise_pct":  2.57,
+                           "direction":  "lower",
+                           "improved":  false,
+                           "significant":  false,
+                           "verdict":  "same"
+                       },
+                       {
+                           "state":  "paused_30s",
+                           "metric":  "cpu_pct",
+                           "unit":  "%",
+                           "baseline":  0,
+                           "candidate":  0,
+                           "delta":  0,
+                           "delta_pct":  null,
+                           "noise_pct":  0,
+                           "direction":  "lower",
+                           "improved":  false,
+                           "significant":  false,
+                           "verdict":  "same"
+                       },
+                       {
+                           "state":  "paused_30s",
+                           "metric":  "gpu_total_pct",
+                           "unit":  "%",
+                           "baseline":  0,
+                           "candidate":  0,
+                           "delta":  0,
+                           "delta_pct":  null,
+                           "noise_pct":  0,
+                           "direction":  "lower",
+                           "improved":  false,
+                           "significant":  false,
+                           "verdict":  "same"
+                       },
+                       {
+                           "state":  "paused_30s",
+                           "metric":  "gpu_decode_pct",
+                           "unit":  "%",
+                           "baseline":  0,
+                           "candidate":  0,
+                           "delta":  0,
+                           "delta_pct":  null,
+                           "noise_pct":  0,
+                           "direction":  "lower",
+                           "improved":  false,
+                           "significant":  false,
+                           "verdict":  "same"
+                       },
+                       {
+                           "state":  "paused_30s",
+                           "metric":  "gpu_3d_pct",
+                           "unit":  "%",
+                           "baseline":  0,
+                           "candidate":  0,
+                           "delta":  0,
+                           "delta_pct":  null,
+                           "noise_pct":  0,
+                           "direction":  "lower",
+                           "improved":  false,
+                           "significant":  false,
+                           "verdict":  "same"
+                       },
+                       {
+                           "state":  "paused_30s",
+                           "metric":  "gpu_shared_mb",
+                           "unit":  "MB",
+                           "baseline":  150.43,
+                           "candidate":  150.42,
+                           "delta":  -0.01,
+                           "delta_pct":  -0.01,
+                           "noise_pct":  6.00,
+                           "direction":  "lower",
+                           "improved":  true,
+                           "significant":  false,
+                           "verdict":  "same"
+                       },
+                       {
+                           "state":  "paused_30s",
+                           "metric":  "wakeups_per_sec",
+                           "unit":  "/s",
+                           "baseline":  33.48,
+                           "candidate":  31.26,
+                           "delta":  -2.22,
+                           "delta_pct":  -6.63,
+                           "noise_pct":  11.92,
+                           "direction":  "lower",
+                           "improved":  true,
+                           "significant":  false,
+                           "verdict":  "same"
+                       }
+                   ],
+    "better_count":  4,
+    "worse_count":  1,
+    "baseline":  {
+                     "tool":  "bench_engine",
+                     "phase":  0,
+                     "date":  "2026-10-21",
+                     "label":  "live-proven",
+                     "engine":  "C:\\Users\\axioo\\Desktop\\k6wp\\build\\ab\\engine-baseline.exe",
+                     "runs_per_state":  5,
+                     "hw":  {
+                                "os":  "Microsoft Windows 11 Home 10.0.26200 build 26200",
+                                "cpu":  "12th Gen Intel(R) Core(TM) i7-12650H",
+                                "cores":  10,
+                                "logical":  16,
+                                "ram_kib":  16457592,
+                                "gpus":  [
+                                             "Virtual Display Driver",
+                                             "NVIDIA GeForce RTX 2050",
+                                             "Intel(R) UHD Graphics"
+                                         ],
+                                "power_plan":  "Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)",
+                                "monitors":  [
+                                                 {
+                                                     "id":  0,
+                                                     "x":  0,
+                                                     "y":  0,
+                                                     "width":  1920,
+                                                     "height":  1080,
+                                                     "is_primary":  true,
+                                                     "device_name":  "\\\\.\\DISPLAY1",
+                                                     "orientation":  0,
+                                                     "refresh_hz":  144,
+                                                     "scale_pct":  100,
+                                                     "stable_key":  "ccd:\\\\?\\display#cmn1521#4\u0026a115999\u00260\u0026uid8388688#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}"
+                                                 }
+                                             ],
+                                "date":  "2026-10-21T03:40:03+07:00"
+                            },
+                     "method":  "real engine.exe; isolated LOCALAPPDATA; windows minimized; typeperf GPU/wakeup CSV; .NET process counters; n\u003e=5; settle per state",
+                     "states":  {
+                                    "playback_1080p":  {
+                                                           "runs":  5,
+                                                           "note":  "anime.mp4 1080p30 H.264, 1 slot",
+                                                           "video":  "C:\\Users\\axioo\\Desktop\\k6wp\\tools\\..\\tests\\corpus\\anime.mp4",
+                                                           "private_mb":  {
+                                                                              "n":  5,
+                                                                              "median":  169.05,
+                                                                              "mean":  167.65,
+                                                                              "min":  163.2,
+                                                                              "max":  170.23
+                                                                          },
+                                                           "ws_mb":  {
+                                                                         "n":  5,
+                                                                         "median":  16.26,
+                                                                         "mean":  16.46,
+                                                                         "min":  16.01,
+                                                                         "max":  17.6
+                                                                     },
+                                                           "cpu_pct":  {
+                                                                           "n":  5,
+                                                                           "median":  3.86,
+                                                                           "mean":  3.79,
+                                                                           "min":  3.23,
+                                                                           "max":  4.29
+                                                                       },
+                                                           "gpu_total_pct":  {
+                                                                                 "n":  5,
+                                                                                 "median":  36.25,
+                                                                                 "mean":  35.11,
+                                                                                 "min":  32.91,
+                                                                                 "max":  36.59
+                                                                             },
+                                                           "gpu_decode_pct":  {
+                                                                                  "n":  5,
+                                                                                  "median":  10.76,
+                                                                                  "mean":  10.54,
+                                                                                  "min":  9.81,
+                                                                                  "max":  11.14
+                                                                              },
+                                                           "gpu_3d_pct":  {
+                                                                              "n":  5,
+                                                                              "median":  25.17,
+                                                                              "mean":  24.41,
+                                                                              "min":  22.86,
+                                                                              "max":  25.48
+                                                                          },
+                                                           "gpu_shared_mb":  {
+                                                                                 "n":  5,
+                                                                                 "median":  150.42,
+                                                                                 "mean":  148.63,
+                                                                                 "min":  144.42,
+                                                                                 "max":  150.43
+                                                                             },
+                                                           "wakeups_per_sec":  {
+                                                                                   "n":  5,
+                                                                                   "median":  1381,
+                                                                                   "mean":  1346.21,
+                                                                                   "min":  1252.24,
+                                                                                   "max":  1402.04
+                                                                               },
+                                                           "occlusion_pause_seen":  0,
+                                                           "hwdec":  [
+                                                                         "mpv: hwdec-current=d3d11va (hwdec active)"
+                                                                     ]
+                                                       },
+                                    "paused_30s":  {
+                                                       "runs":  5,
+                                                       "note":  "play 5s, pause, hold 30s, then sample",
+                                                       "video":  "C:\\Users\\axioo\\Desktop\\k6wp\\tools\\..\\tests\\corpus\\anime.mp4",
+                                                       "private_mb":  {
+                                                                          "n":  5,
+                                                                          "median":  168.69,
+                                                                          "mean":  165.54,
+                                                                          "min":  160.12,
+                                                                          "max":  169.3
+                                                                      },
+                                                       "ws_mb":  {
+                                                                     "n":  5,
+                                                                     "median":  17.12,
+                                                                     "mean":  17.17,
+                                                                     "min":  16.93,
+                                                                     "max":  17.37
+                                                                 },
+                                                       "cpu_pct":  {
+                                                                       "n":  5,
+                                                                       "median":  0,
+                                                                       "mean":  0,
+                                                                       "min":  0,
+                                                                       "max":  0
+                                                                   },
+                                                       "gpu_total_pct":  {
+                                                                             "n":  5,
+                                                                             "median":  0,
+                                                                             "mean":  0,
+                                                                             "min":  0,
+                                                                             "max":  0
+                                                                         },
+                                                       "gpu_decode_pct":  {
+                                                                              "n":  5,
+                                                                              "median":  0,
+                                                                              "mean":  0,
+                                                                              "min":  0,
+                                                                              "max":  0
+                                                                          },
+                                                       "gpu_3d_pct":  {
+                                                                          "n":  5,
+                                                                          "median":  0,
+                                                                          "mean":  0,
+                                                                          "min":  0,
+                                                                          "max":  0
+                                                                      },
+                                                       "gpu_shared_mb":  {
+                                                                             "n":  5,
+                                                                             "median":  150.43,
+                                                                             "mean":  146.82,
+                                                                             "min":  141.4,
+                                                                             "max":  150.43
+                                                                         },
+                                                       "wakeups_per_sec":  {
+                                                                               "n":  5,
+                                                                               "median":  33.48,
+                                                                               "mean":  33.33,
+                                                                               "min":  31.05,
+                                                                               "max":  35.04
+                                                                           },
+                                                       "occlusion_pause_seen":  0,
+                                                       "hwdec":  [
+                                                                     "mpv: hwdec-current=d3d11va (hwdec active)"
+                                                                 ]
+                                                   }
+                                }
+                 },
+    "candidate":  {
+                      "tool":  "bench_engine",
+                      "phase":  0,
+                      "date":  "2026-10-21",
+                      "label":  "live-proven",
+                      "engine":  "C:\\Users\\axioo\\Desktop\\k6wp\\build\\ab\\engine-candidate.exe",
+                      "runs_per_state":  5,
+                      "hw":  {
+                                 "os":  "Microsoft Windows 11 Home 10.0.26200 build 26200",
+                                 "cpu":  "12th Gen Intel(R) Core(TM) i7-12650H",
+                                 "cores":  10,
+                                 "logical":  16,
+                                 "ram_kib":  16457592,
+                                 "gpus":  [
+                                              "Virtual Display Driver",
+                                              "NVIDIA GeForce RTX 2050",
+                                              "Intel(R) UHD Graphics"
+                                          ],
+                                 "power_plan":  "Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)",
+                                 "monitors":  [
+                                                  {
+                                                      "id":  0,
+                                                      "x":  0,
+                                                      "y":  0,
+                                                      "width":  1920,
+                                                      "height":  1080,
+                                                      "is_primary":  true,
+                                                      "device_name":  "\\\\.\\DISPLAY1",
+                                                      "orientation":  0,
+                                                      "refresh_hz":  144,
+                                                      "scale_pct":  100,
+                                                      "stable_key":  "ccd:\\\\?\\display#cmn1521#4\u0026a115999\u00260\u0026uid8388688#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}"
+                                                  }
+                                              ],
+                                 "date":  "2026-10-21T03:46:13+07:00"
+                             },
+                      "method":  "real engine.exe; isolated LOCALAPPDATA; windows minimized; typeperf GPU/wakeup CSV; .NET process counters; n\u003e=5; settle per state",
+                      "states":  {
+                                     "playback_1080p":  {
+                                                            "runs":  5,
+                                                            "note":  "anime.mp4 1080p30 H.264, 1 slot",
+                                                            "video":  "C:\\Users\\axioo\\Desktop\\k6wp\\tools\\..\\tests\\corpus\\anime.mp4",
+                                                            "private_mb":  {
+                                                                               "n":  5,
+                                                                               "median":  170.43,
+                                                                               "mean":  170.44,
+                                                                               "min":  170.05,
+                                                                               "max":  170.93
+                                                                           },
+                                                            "ws_mb":  {
+                                                                          "n":  5,
+                                                                          "median":  15.96,
+                                                                          "mean":  15.9,
+                                                                          "min":  15.7,
+                                                                          "max":  16.13
+                                                                      },
+                                                            "cpu_pct":  {
+                                                                            "n":  5,
+                                                                            "median":  1.06,
+                                                                            "mean":  1.18,
+                                                                            "min":  0.92,
+                                                                            "max":  1.79
+                                                                        },
+                                                            "gpu_total_pct":  {
+                                                                                  "n":  5,
+                                                                                  "median":  23.81,
+                                                                                  "mean":  23.8,
+                                                                                  "min":  23.57,
+                                                                                  "max":  23.98
+                                                                              },
+                                                            "gpu_decode_pct":  {
+                                                                                   "n":  5,
+                                                                                   "median":  14.52,
+                                                                                   "mean":  14.44,
+                                                                                   "min":  14.07,
+                                                                                   "max":  14.63
+                                                                               },
+                                                            "gpu_3d_pct":  {
+                                                                               "n":  5,
+                                                                               "median":  9.39,
+                                                                               "mean":  9.38,
+                                                                               "min":  9.33,
+                                                                               "max":  9.43
+                                                                           },
+                                                            "gpu_shared_mb":  {
+                                                                                  "n":  5,
+                                                                                  "median":  150.43,
+                                                                                  "mean":  150.43,
+                                                                                  "min":  150.43,
+                                                                                  "max":  150.43
+                                                                              },
+                                                            "wakeups_per_sec":  {
+                                                                                    "n":  5,
+                                                                                    "median":  1102.82,
+                                                                                    "mean":  1097.62,
+                                                                                    "min":  1069,
+                                                                                    "max":  1121.95
+                                                                                },
+                                                            "occlusion_pause_seen":  0,
+                                                            "hwdec":  [
+                                                                          "mpv: hwdec-current=d3d11va (hwdec active)"
+                                                                      ]
+                                                        },
+                                     "paused_30s":  {
+                                                        "runs":  5,
+                                                        "note":  "play 5s, pause, hold 30s, then sample",
+                                                        "video":  "C:\\Users\\axioo\\Desktop\\k6wp\\tools\\..\\tests\\corpus\\anime.mp4",
+                                                        "private_mb":  {
+                                                                           "n":  5,
+                                                                           "median":  170.11,
+                                                                           "mean":  167.23,
+                                                                           "min":  161.34,
+                                                                           "max":  170.32
+                                                                       },
+                                                        "ws_mb":  {
+                                                                      "n":  5,
+                                                                      "median":  17.31,
+                                                                      "mean":  17.26,
+                                                                      "min":  16.98,
+                                                                      "max":  17.42
+                                                                  },
+                                                        "cpu_pct":  {
+                                                                        "n":  5,
+                                                                        "median":  0,
+                                                                        "mean":  0,
+                                                                        "min":  0,
+                                                                        "max":  0
+                                                                    },
+                                                        "gpu_total_pct":  {
+                                                                              "n":  5,
+                                                                              "median":  0,
+                                                                              "mean":  0,
+                                                                              "min":  0,
+                                                                              "max":  0
+                                                                          },
+                                                        "gpu_decode_pct":  {
+                                                                               "n":  5,
+                                                                               "median":  0,
+                                                                               "mean":  0,
+                                                                               "min":  0,
+                                                                               "max":  0
+                                                                           },
+                                                        "gpu_3d_pct":  {
+                                                                           "n":  5,
+                                                                           "median":  0,
+                                                                           "mean":  0,
+                                                                           "min":  0,
+                                                                           "max":  0
+                                                                       },
+                                                        "gpu_shared_mb":  {
+                                                                              "n":  5,
+                                                                              "median":  150.42,
+                                                                              "mean":  147.42,
+                                                                              "min":  141.42,
+                                                                              "max":  150.43
+                                                                          },
+                                                        "wakeups_per_sec":  {
+                                                                                "n":  5,
+                                                                                "median":  31.26,
+                                                                                "mean":  32.88,
+                                                                                "min":  30.36,
+                                                                                "max":  38.8
+                                                                            },
+                                                        "occlusion_pause_seen":  0,
+                                                        "hwdec":  [
+                                                                      "mpv: hwdec-current=d3d11va (hwdec active)"
+                                                                  ]
+                                                    }
+                                 }
+                  }
+}

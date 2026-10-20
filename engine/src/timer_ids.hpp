@@ -77,6 +77,16 @@ static_assert(kReconcileDebounceTimerId != kReconcileRetryTimerId,
               "engine timer IDs must be pairwise distinct");
 static_assert(kDebounceTimerId != kTopologyReconcileTimerId,
               "engine timer IDs must be pairwise distinct");
+static_assert(kWorkingSetTrimTimerId != kOcclusionPokeTimerId,
+              "engine timer IDs must be pairwise distinct");
+static_assert(kOcclusionPokeTimerId != kReconcileDebounceTimerId,
+              "engine timer IDs must be pairwise distinct");
+static_assert(kOcclusionPokeTimerId != kReconcileRetryTimerId,
+              "engine timer IDs must be pairwise distinct");
+static_assert(kReconcileDebounceTimerId != kReconcileRetryTimerId,
+              "engine timer IDs must be pairwise distinct");
+static_assert(kDebounceTimerId != kTopologyReconcileTimerId,
+              "engine timer IDs must be pairwise distinct");
 static_assert(kWorkingSetTrimTimerId != kTopologyReconcileTimerId,
               "engine timer IDs must be pairwise distinct");
 static_assert(kOcclusionPokeTimerId != kTopologyReconcileTimerId,

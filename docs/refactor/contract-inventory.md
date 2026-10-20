@@ -141,6 +141,17 @@ Parser: `engine/src/cli_options.cpp:39-188` (`ParseCli`). Options struct: `engin
 | `--simulate-suspend-after-ms <N>` | 1 | **HIDDEN**; post `PBT_APMSUSPEND` after N ms, `PBT_APMRESUMEAUTOMATIC` +2 s | missing value / non-integer / `< 0` → **2** | `engine/src/cli_options.cpp:135-148`, `docs/dev-test-flags.md:12` |
 | `--simulate-dc-after-ms <N>` | 1 | **HIDDEN**; latch forced-DC + post `PBT_APMPOWERSTATUSCHANGE` after N ms, AC restore +2 s | missing value / non-integer / `< 0` → **2** | `engine/src/cli_options.cpp:149-162`, `docs/dev-test-flags.md:13` |
 | `--simulate-monitor-off-after-ms <N>` | 1 | **HIDDEN**; `PBT_POWERSETTINGCHANGE` Data=0 (off) after N ms, Data=1 (on) +2 s | missing value / non-integer / `< 0` → **2** | `engine/src/cli_options.cpp:163-176`, `docs/dev-test-flags.md:14` |
+| `--capture-frames <prefix>` | 1 | **HIDDEN**; write the RENDERED frames to `<prefix><n>.jpg` (QA only) | missing value → **2** | `engine/src/cli_options.cpp`, `docs/dev-test-flags.md` |
+| `--capture-frames-count <n>` | 1 | **HIDDEN**; how many frames to write (default 3) | missing value / non-integer / `< 0` → **2** | `engine/src/cli_options.cpp`, `docs/dev-test-flags.md` |
+| `--capture-frames-interval-ms <n>` | 1 | **HIDDEN**; delay between frames (default 1000) | missing value / non-integer / `< 0` → **2** | `engine/src/cli_options.cpp`, `docs/dev-test-flags.md` |
+| `--capture-frames-seek <sec>` | 1 | **HIDDEN**; seek to this position and pause before the first frame | missing value / non-numeric / `< 0` → **2** | `engine/src/cli_options.cpp`, `docs/dev-test-flags.md` |
+
+**Added after the first freeze (Phase 1.2).** The `--capture-frames` family
+exists so the visual-parity gate compares the picture the RENDERER produced,
+not what the desktop composite shows (an always-on-top overlay, a covered
+desktop or a paused engine all make a screen grab record the plain desktop,
+which silently turns the gate into a no-op). The capture seeks and pauses
+first, so the frame is the same source frame on every run.
 
 **Unknown `--flag` → stderr `error: unknown flag '<arg>'` + the full usage text on stderr → exit 2** (`engine/src/cli_options.cpp:177-185`).
 **Bare positional argument (no `--` prefix) → warning `warning: ignoring unknown argument '<arg>'` and it is SKIPPED (exit code unaffected)** (`engine/src/cli_options.cpp:46-49`). This is a deliberate compat difference from the launcher, which rejects the same input with exit 2.

@@ -17,11 +17,16 @@ if (-not ([System.Management.Automation.PSTypeName]'K6wpBench.Native').Type) {
 Add-Type @"
 using System;
 using System.Runtime.InteropServices;
+using System.Text;
 namespace K6wpBench {
   public static class Native {
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
     [DllImport("user32.dll")] public static extern bool GetWindowPlacement(IntPtr hWnd, ref WINDOWPLACEMENT p);
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder buf, int n);
+    [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc cb, IntPtr p);
+    [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
+    public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
     [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; }
     [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
     [StructLayout(LayoutKind.Sequential)] public struct WINDOWPLACEMENT {
@@ -326,24 +331,56 @@ function Read-TypeperfCsv {
 }
 
 function Get-DesktopWindows {
-    # Save + minimize every visible top-level app window so the injected
+    # Save + hide every visible top-level app window so the injected
     # wallpaper is not occluded. Shell surfaces (taskbar/Progman/WorkerW) are
     # never touched.
+    #
+    # The windows are enumerated with EnumWindows, NOT through
+    # Get-Process.MainWindowHandle: a process can own several top-level
+    # windows and the "main" one is not necessarily the one on screen (a
+    # File Explorer window owned by a helper process, an Electron app with
+    # one window per process, ...). Missing a covering window makes the
+    # engine pause (occlusion/fullscreen) and the capture records the plain
+    # desktop instead of the wallpaper.
     $saved = @()
-    $skip = @('Shell_TrayWnd', 'Progman', 'WorkerW', 'K6WP.DesktopInject.1')
-    foreach ($pr in @(Get-Process | Where-Object { $_.MainWindowHandle -ne 0 })) {
+    $skip = @('Shell_TrayWnd', 'Progman', 'WorkerW', 'K6WP.DesktopInject.1', 'Windows.UI.Core.CoreWindow')
+    # An always-on-top agent-cursor overlay covers the WHOLE screen. It is
+    # not an app window: minimizing it does nothing, but leaving it up makes
+    # the engine's fullscreen watcher pause the decode AND the occlusion
+    # watcher report 100 % coverage, so every measurement reads a paused
+    # engine and the capture records the plain desktop. It is hidden for the
+    # measurement and restored afterwards.
+    $hideClasses = @('Cua.AgentCursorOverlay')
+    $found = New-Object System.Collections.Generic.List[object]
+    $cb = [K6wpBench.Native+EnumWindowsProc] {
+        param($h, $p)
+        if (-not [K6wpBench.Native]::IsWindowVisible($h)) { return $true }
+        $sb = New-Object System.Text.StringBuilder 256
+        [void][K6wpBench.Native]::GetClassName($h, $sb, 256)
+        $cls = $sb.ToString()
+        $procId = 0
+        [void][K6wpBench.Native]::GetWindowThreadProcessId($h, [ref]$procId)
+        $found.Add([pscustomobject]@{ Handle = $h; Class = $cls; Pid = $procId })
+        return $true
+    }
+    [void][K6wpBench.Native]::EnumWindows($cb, [IntPtr]::Zero)
+    foreach ($w in $found) {
         try {
-            $h = $pr.MainWindowHandle
-            $sb = New-Object System.Text.StringBuilder 256
-            [void][K6wpBench.Native]::GetClassName($h, $sb, 256)
-            $cls = $sb.ToString()
+            $h = $w.Handle
+            $cls = $w.Class
             if ($skip -contains $cls) { continue }
             $wp = New-Object K6wpBench.Native+WINDOWPLACEMENT
             $wp.length = [Runtime.InteropServices.Marshal]::SizeOf($wp)
             if (-not [K6wpBench.Native]::GetWindowPlacement($h, [ref]$wp)) { continue }
             if ($wp.showCmd -eq 6) { continue }  # already minimized
-            $saved += [pscustomobject]@{ Handle = $h; ShowCmd = $wp.showCmd; Name = $pr.ProcessName; Class = $cls }
-            [void][K6wpBench.Native]::ShowWindow($h, 6)
+            $name = ''
+            try { $name = (Get-Process -Id $w.Pid -ErrorAction Stop).ProcessName } catch { $name = "pid$($w.Pid)" }
+            $saved += [pscustomobject]@{ Handle = $h; ShowCmd = $wp.showCmd; Name = $name; Class = $cls }
+            if ($hideClasses -contains $cls) {
+                [void][K6wpBench.Native]::ShowWindow($h, 0)   # SW_HIDE
+            } else {
+                [void][K6wpBench.Native]::ShowWindow($h, 6)   # SW_MINIMIZE
+            }
         } catch { }
     }
     return $saved

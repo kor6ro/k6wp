@@ -125,6 +125,13 @@ class MpvRenderer {
   // refused. Never throws.
   bool ScreenshotToFile(const std::string& path);
 
+  // Seeks the live stream to an absolute position in seconds. Used by the
+  // hidden QA frame capture so two builds can be compared on the SAME
+  // source frame (a capture taken "2 s after boot" lands on a different
+  // frame every run, which would make a pixel comparison meaningless).
+  // Returns false when there is no instance or mpv refuses the command.
+  bool SeekTo(double seconds);
+
   // Registers the engine hidden window for PROPERTY_CHANGE notifications.
   // Called once by EngineApp during Init (Todo 7); until set, the event
   // thread handles property changes inline (pre-P2.4 behavior preserved).

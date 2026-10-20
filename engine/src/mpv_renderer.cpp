@@ -186,10 +186,12 @@ bool MpvRenderer::Create(void* hwnd) {
   set_opt("interpolation", "no");
   set_opt("deinterlace", "no");
   set_opt("framedrop", "vo");
-  // Pacing: P1.1 switches vblank-locked display-vsync to display-desync
-  // (lower render overhead for a wallpaper; long-loop behavior recorded
-  // in docs/bench_phase1.json as a watch item, not assumed safe).
-  set_opt("video-sync", "display-desync");
+  // Pacing: vblank-locked display-vsync. A/B 2026-10-21 (Phase 1.2):
+  // display-desync busy-waits in mpv's VO thread (no vblank to sleep on),
+  // which measured 684 context switches/sec on ONE thread and ~97% of a
+  // core during 1080p playback. display-vsync blocks in the present call
+  // instead, so the CPU sleeps between frames. See docs/bench/ab-vsync.json.
+  set_opt("video-sync", "display-vsync");
   // P1.1 lean profile (new knobs only; hwdec/loop/audio=no above untouched).
   set_opt("gpu-api", "d3d11");
   // Bitblt presentation, never flip model. The injected window is a
@@ -259,7 +261,7 @@ bool MpvRenderer::Create(void* hwnd) {
   {
     char* cur = mpv_get_property_string(mpv_, "hwdec-current");
     LogImportant("mpv: start vo=%s hwdec-current=%s adapter=%s "
-                 "(req hwdec=d3d11va gpu-api=d3d11 video-sync=display-desync; "
+                 "(req hwdec=d3d11va gpu-api=d3d11 video-sync=display-vsync; "
                  "active hwdec follows via observer)",
                  vo_attempted, cur ? cur : "unknown",
                  pin_applied_.empty() ? "default" : pin_applied_.c_str());
@@ -331,6 +333,15 @@ bool MpvRenderer::ScreenshotToFile(const std::string& path) {
   }
   const std::string cmd = "screenshot-to-file \"" + escaped + "\" \"video\"";
   return mpv_command_string(mpv_, cmd.c_str()) >= 0;
+}
+
+bool MpvRenderer::SeekTo(double seconds) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (!mpv_ || !initialized_) return false;
+  if (seconds < 0) return false;
+  char cmd[64];
+  std::snprintf(cmd, sizeof(cmd), "seek %.3f absolute", seconds);
+  return mpv_command_string(mpv_, cmd) >= 0;
 }
 
 void MpvRenderer::SetHWND(void* hwnd) {

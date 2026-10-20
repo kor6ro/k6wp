@@ -20,6 +20,10 @@ param(
     [string]$CorpusDir = '',
     [int]$Runs = 5,
     [string]$OutJson = '',
+    # NOT "States": PowerShell variables are case-insensitive, so a
+    # $States parameter would be the SAME variable as the local $states
+    # array below, and assigning the array would clobber the filter.
+    [string[]]$OnlyStates = @(),
     [switch]$SkipMinimize
 )
 
@@ -48,6 +52,18 @@ $states = @(
     [pscustomobject]@{ name = 'playback_4k'; video = $video4k; settle_ms = 6000; sample_s = 10; pause_after_ms = 0; run_ms = 21000; note = 'highdpb_4k.mp4 4K30 H.264, 16 refs, 1 slot' },
     [pscustomobject]@{ name = 'paused_30s'; video = $video1080; settle_ms = 5000; sample_s = 12; pause_after_ms = 5000; run_ms = 56000; note = 'play 5s, pause, hold 30s, then sample' }
 )
+# -OnlyStates filters the sweep (used by the A/B experiments, which only need
+# the playback state). An unknown name is an error, not a silent no-op.
+if ($OnlyStates.Count -gt 0) {
+    # The value may arrive as ONE comma-joined string (a nested call through
+    # & operator flattens a string[] into a single string), so split it.
+    $wanted = @($OnlyStates | ForEach-Object { ([string]$_) -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    $known = @($states | ForEach-Object { $_.name })
+    foreach ($s in $wanted) {
+        if ($known -notcontains $s) { throw "unknown state '$s' (known: $($known -join ', '))" }
+    }
+    $states = @($states | Where-Object { $wanted -contains $_.name })
+}
 
 $hw = Get-HwInventory
 $savedWindows = @()

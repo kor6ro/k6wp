@@ -64,17 +64,21 @@ each phase also carries a **target** that is deliberately tighter than the
 parity gate. A phase that hits its parity gate but misses its target is
 "accepted with debt", not "done".
 
-| Phase | Metric | Baseline | Parity gate | **Target** |
-|---|---|---|---|---|
-| 1.1 | private bytes, paused 30 s | 162.35 MB | ≤ 168.4 MB | **≤ 60 MB** (mpv unloaded) |
-| 1.1 | GPU shared, paused 30 s | 151.57 MB | ≤ 163.6 MB | **≤ 20 MB** |
-| 1.2 | wakeups/s, playback | 1273 | ≤ 1400 | **≤ 700** (event-driven) |
-| 1.3 | install size, mpv group | 114.77 MB | ≤ 114.77 MB | **≤ 60 MB** (lean libmpv build) |
-| 2.3 | Studio private bytes | 337.53 MB | ≤ 348 MB | **≤ 150 MB** (Slint, no Qt) |
-| 2.7 | install size, qt group | 48.0 MB + 8.1 MB payload | ≤ 56.1 MB | **0 MB** |
-| 2.7 | Studio startup | 1290 ms | ≤ 1600 ms | **≤ 700 ms** |
-| 3.x | install size, ffmpeg group | 194.16 MB | ≤ 194.16 MB | **≤ 100 MB** (or 0 if ffmpeg is dropped) |
-| 3.x | install size, total | 389.14 MB | ≤ 389.14 MB | **≤ 200 MB** |
+| Phase | Metric | Baseline | Parity gate | **Target** | **Result** |
+|---|---|---|---|---|---|
+| 1.1 | private bytes, paused 30 s | 162.35 MB | ≤ 168.4 MB | **≤ 60 MB** (mpv unloaded) | pending |
+| 1.1 | GPU shared, paused 30 s | 151.57 MB | ≤ 163.6 MB | **≤ 20 MB** | pending |
+| 1.2 | wakeups/s, playback | 1273 | ≤ 1400 | **≤ 700** (event-driven) | **1103** — the desync busy-wait is gone (`phase1-2-vsync.md`) |
+| 1.2 | CPU, playback 1080p | 4.73 % | ≤ 6.5 % | lower | **1.06 %** (−72.5 %) |
+| 1.2 | CPU, playback 4K | 4.64 % | ≤ 6.5 % | lower | **1.45 %** (−64.9 %) |
+| 1.2 | GPU 3D, playback 1080p | 12.47 % | ≤ 15.0 % | lower | **9.39 %** (−62.7 %) |
+| 1.2 | rendered-frame parity | — | pixel diff 0 | 0 | **0.000** (byte-identical) |
+| 1.3 | install size, mpv group | 114.77 MB | ≤ 114.77 MB | **≤ 60 MB** (lean libmpv build) | pending |
+| 2.3 | Studio private bytes | 337.53 MB | ≤ 348 MB | **≤ 150 MB** (Slint, no Qt) | pending |
+| 2.7 | install size, qt group | 48.0 MB + 8.1 MB payload | ≤ 56.1 MB | **0 MB** | pending |
+| 2.7 | Studio startup | 1290 ms | ≤ 1600 ms | **≤ 700 ms** | pending |
+| 3.x | install size, ffmpeg group | 194.16 MB | ≤ 194.16 MB | **≤ 100 MB** (or 0 if ffmpeg is dropped) | pending |
+| 3.x | install size, total | 389.14 MB | ≤ 389.14 MB | **≤ 200 MB** | pending |
 
 ## Bundle budget rationale
 

@@ -174,6 +174,53 @@ int ParseCli(int argc, char** argv, CliOptions& out) {
         std::fprintf(stderr, "error: --simulate-monitor-off-after-ms must be >= 0\n");
         return 2;
       }
+    } else if (flag == "--capture-frames") {
+      // Hidden QA flag: write the rendered frames to "<prefix><n>.jpg".
+      const auto value = take_value("--capture-frames");
+      if (!value) return 2;
+      out.capture_frames_prefix = std::filesystem::u8path(*value).wstring();
+    } else if (flag == "--capture-frames-seek") {
+      const auto value = take_value("--capture-frames-seek");
+      if (!value) return 2;
+      try {
+        out.capture_frames_seek = std::stod(*value);
+      } catch (...) {
+        std::fprintf(stderr, "error: --capture-frames-seek expects a number, got '%s'\n",
+                     value->c_str());
+        return 2;
+      }
+      if (out.capture_frames_seek < 0) {
+        std::fprintf(stderr, "error: --capture-frames-seek must be >= 0\n");
+        return 2;
+      }
+    } else if (flag == "--capture-frames-count") {
+      const auto value = take_value("--capture-frames-count");
+      if (!value) return 2;
+      try {
+        out.capture_frames_count = std::stoi(*value);
+      } catch (...) {
+        std::fprintf(stderr, "error: --capture-frames-count expects an integer, got '%s'\n",
+                     value->c_str());
+        return 2;
+      }
+      if (out.capture_frames_count < 0) {
+        std::fprintf(stderr, "error: --capture-frames-count must be >= 0\n");
+        return 2;
+      }
+    } else if (flag == "--capture-frames-interval-ms") {
+      const auto value = take_value("--capture-frames-interval-ms");
+      if (!value) return 2;
+      try {
+        out.capture_frames_interval_ms = std::stoi(*value);
+      } catch (...) {
+        std::fprintf(stderr, "error: --capture-frames-interval-ms expects an integer, got '%s'\n",
+                     value->c_str());
+        return 2;
+      }
+      if (out.capture_frames_interval_ms < 0) {
+        std::fprintf(stderr, "error: --capture-frames-interval-ms must be >= 0\n");
+        return 2;
+      }
     } else {
       // Unknown --flag: usage to stderr + exit 2 (never ignore silently).
       // Bare positional args (no -- prefix) stay a warning for compat.

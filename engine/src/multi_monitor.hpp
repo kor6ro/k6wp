@@ -170,6 +170,11 @@ class MultiMonitor {
   // accepted it.
   bool CaptureLiveFrame(const std::string& path);
 
+  // Seeks every live slot to an absolute position (seconds). Used by the
+  // hidden QA frame capture so two builds are compared on the SAME source
+  // frame. No-op with no live slots.
+  void SeekAllTo(double seconds);
+
   // Row 15: true when a live slot's GDI device name matches `device`
   // (UTF-8, e.g. \\.\DISPLAY1). The set_display_video resolve predicate:
   // an unknown/absent key returns false and the caller rejects the command

@@ -464,6 +464,22 @@ bool EngineApp::Init(int argc, char** argv) {
     current_video_utf8_ = std::filesystem::path(options_.video_path).u8string();
     boot_video = current_video_utf8_;
     if (!boot_video.empty()) tray_.PushRecent(boot_video);
+    // Hidden QA flag (--capture-frames <prefix>): arm the rendered-frame
+    // capture. The first frame is taken 2 s after boot so the renderer has
+    // produced frames by then.
+    if (!options_.capture_frames_prefix.empty()) {
+      capture_frames_prefix_ =
+          std::filesystem::path(options_.capture_frames_prefix).u8string();
+      capture_frames_count_ = options_.capture_frames_count;
+      capture_frames_interval_ms_ = options_.capture_frames_interval_ms;
+      capture_frames_seek_ = options_.capture_frames_seek;
+      capture_frames_done_ = 0;
+      // The first step runs after 2 s so the renderer has produced frames.
+      capture_frames_next_ms_ = 2000;
+      LogImportant("test: capture-frames armed prefix='%s' count=%d interval=%d seek=%.3f",
+                   capture_frames_prefix_.c_str(), capture_frames_count_,
+                   capture_frames_interval_ms_, capture_frames_seek_);
+    }
   }
   const bool boot_autoplay =
       !boot_video.empty() &&
@@ -648,8 +664,60 @@ DWORD EngineApp::ComputeWaitTimeoutMs() const {
   // INFINITE while SlotsPaused() (zero periodic wakeups when paused);
   // 1500 ms while unpaused (Todo 9 occlusion cadence hook).
   if (AnySimulateArmed()) return 50;
+  // Phase 1.2 QA: a pending frame capture keeps the loop ticking. The
+  // capture runs on the loop cadence, and the loop parks INFINITE while
+  // paused - so without this the capture would never run in a paused
+  // engine. Only the hidden QA flag can turn this on.
+  if (CaptureFramesPending()) return 500;
   if (SlotsPaused()) return INFINITE;
   return 1500;
+}
+
+// One capture step: seek once (so the frame is deterministic), then write
+// the frames one by one.
+void EngineApp::CaptureFramesStep(long long elapsed_ms) {
+  if (capture_frames_prefix_.empty()) return;
+  const int want = capture_frames_count_ > 0 ? capture_frames_count_ : 3;
+  if (capture_frames_done_ >= want) return;
+  if (!capture_frames_seek_done_ && capture_frames_seek_ >= 0.0) {
+    // Seek ONCE, before the first frame, so the capture lands on a
+    // DETERMINISTIC source frame: a capture taken "2 s after boot" lands on
+    // a different frame every run, which would make a pixel comparison
+    // between two builds meaningless.
+    //
+    // The seek has its own latch: the capture counter is NOT incremented
+    // here, so without the latch the seek branch would re-enter on every
+    // step and the capture would never run.
+    if (wallpaper_surface_live_.load(std::memory_order_acquire)) {
+      multi_monitor_.SeekAllTo(capture_frames_seek_);
+      // PAUSE after the seek: playback continues past the seeked position,
+      // so without the pause the capture would land on a different frame on
+      // every run and the comparison between two builds would be noise.
+      multi_monitor_.PauseAll();
+    } else if (std::shared_ptr<MpvRenderer> renderer = AcquireRenderer()) {
+      renderer->SeekTo(capture_frames_seek_);
+      renderer->Pause();
+    }
+    capture_frames_seek_done_ = true;
+    // Let the seek land (and the VO present the seeked frame) before the
+    // capture is requested.
+    capture_frames_next_ms_ = elapsed_ms + 1500;
+    return;
+  }
+  char suffix[32];
+  std::snprintf(suffix, sizeof(suffix), "%d.jpg", capture_frames_done_ + 1);
+  const std::string target = capture_frames_prefix_ + suffix;
+  bool accepted = false;
+  if (wallpaper_surface_live_.load(std::memory_order_acquire)) {
+    accepted = multi_monitor_.CaptureLiveFrame(target);
+  } else if (std::shared_ptr<MpvRenderer> renderer = AcquireRenderer()) {
+    accepted = renderer->ScreenshotToFile(target);
+  }
+  capture_frames_done_++;
+  LogImportant("test: capture-frames %d/%d accepted=%d path='%s'",
+               capture_frames_done_, want, accepted ? 1 : 0, target.c_str());
+  capture_frames_next_ms_ = elapsed_ms +
+      (capture_frames_interval_ms_ > 0 ? capture_frames_interval_ms_ : 1000);
 }
 
 void EngineApp::ApplyFitMode(const std::string& fit_mode) {
@@ -751,6 +819,25 @@ int EngineApp::Run() {
     if (!healthy_uptime_noted_ && elapsed_ms >= 300000) {
       healthy_uptime_noted_ = true;
       NoteHealthyUptime();
+    }
+
+    // Hidden QA flag (--capture-frames <prefix>): write the frames the
+    // renderer is actually presenting to "<prefix><n>.jpg". It is the only
+    // visual-parity evidence that does not depend on what the DESKTOP
+    // composite shows (an always-on-top overlay or a paused engine makes a
+    // screen capture record the plain desktop instead of the wallpaper).
+    //
+    // The capture runs on the LOOP CADENCE, and ComputeWaitTimeoutMs()
+    // keeps the loop ticking (500 ms instead of INFINITE) while a capture is
+    // pending. A WM_TIMER would NOT work: MsgWaitForMultipleObjects with
+    // QS_ALLINPUT does not wake on a posted WM_TIMER, and the loop parks
+    // INFINITE while the engine is paused - so the timer message would sit
+    // in the queue unprocessed.
+    //
+    // The capture is ASYNCHRONOUS (mpv's VO thread writes the file), so
+    // the log line says "accepted" and the caller waits for the file.
+    if (!capture_frames_prefix_.empty() && elapsed_ms >= capture_frames_next_ms_) {
+      CaptureFramesStep(elapsed_ms);
     }
 
     const TestSimulator::Fired fired = sim_.Tick(elapsed_ms);

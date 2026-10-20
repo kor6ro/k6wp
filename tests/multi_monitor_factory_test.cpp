@@ -444,6 +444,8 @@ bool MpvRenderer::ScreenshotToFile(const std::string& path) {
   return s.screenshot_ok;
 }
 
+bool MpvRenderer::SeekTo(double /*seconds*/) { return false; }
+
 void MpvRenderer::SetAdapterPin(const std::string& substr) {
   g_ren[this].adapter_pin = substr;
   g_events.push_back("setpin");

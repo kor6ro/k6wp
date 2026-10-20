@@ -25,6 +25,19 @@ struct CliOptions {
   int simulate_suspend_after_ms = 0;  // hidden test flag; 0 = never (+2s resume)
   int simulate_dc_after_ms = 0;  // hidden test flag; 0 = never (+2s AC restore)
   int simulate_monitor_off_after_ms = 0;  // hidden; 0 = never (+2s monitor on)
+  // Hidden QA flag: write the CURRENTLY RENDERED frame (the decoded video
+  // frame, not the desktop) to this path, then keep running. It exists
+  // because a screen capture of the desktop only proves what the composite
+  // shows: any always-on-top overlay (or a paused engine) makes it record
+  // the plain desktop instead of the wallpaper, which silently turns a
+  // visual-parity gate into a no-op. The engine-side frame is immune to
+  // that. The path is a prefix: "<prefix>1.jpg", "<prefix>2.jpg", ...
+  std::wstring capture_frames_prefix;
+  int capture_frames_count = 0;  // how many frames to write (default 3)
+  int capture_frames_interval_ms = 0;  // delay between frames (default 1000)
+  // Seek position (seconds) the capture seeks to before the first frame, so
+  // two builds are compared on the SAME source frame. Negative = no seek.
+  double capture_frames_seek = -1.0;
 };
 
 const char* WallpaperModeToString(WallpaperMode mode);
