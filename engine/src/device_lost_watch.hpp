@@ -37,6 +37,21 @@ class DeviceLostWatch {
   // on a never-started object and from the destructor.
   void Stop();
 
+  // Re-arms the watch AFTER an adapter-removed event was delivered.
+  //
+  // WHY: the event was registered on ONE IDXGIFactory7. When the adapter it
+  // watched disappears, that factory is no longer "current"
+  // (IDXGIFactory::IsCurrent() goes FALSE), and a factory that is not
+  // current does not deliver further events - so the SECOND adapter change
+  // would go unnoticed and the wallpaper would stay black.
+  //
+  // The watch therefore creates a FRESH factory and registers the SAME
+  // event handle on it (the handle stays stable, so the engine's wait array
+  // needs no change). Returns true when the watch is armed again; false when
+  // it could not be re-armed (the watch then stays inactive and the engine
+  // runs without adapter-removed detection - never a crash).
+  bool Rearm();
+
   // The registered event handle (HANDLE) to add to the loop wait array, or
   // nullptr when not started. The engine resets it (manual-reset) after
   // handling.

@@ -915,6 +915,18 @@ int EngineApp::Run() {
         // The existing device-lost path (OnDeviceLost -> flag -> RecreateDevice
         // at the top of the next loop iteration) is reused verbatim.
         OnDeviceLost();
+        // B6: the factory that carried this registration is no longer
+        // current (the adapter it watched is gone), and a factory that is not
+        // current delivers NO further events - so the watch is re-armed on a
+        // fresh factory, otherwise the SECOND adapter change would go
+        // unnoticed. The event handle stays the same, so the wait array
+        // needs no change.
+        device_lost_watch_.Rearm();
+        // B6 (dedup): the full surface rebuild below supersedes the pending
+        // topology reconcile - the fresh slots are already correct, so the
+        // re-anchor is cancelled instead of running a second rebuild in the
+        // same burst.
+        CancelTopologyReconcile("device-lost");
         if (void* dev_event = device_lost_watch_.EventHandle()) {
           // Manual-reset: clear it so the event is re-armed for the NEXT
           // adapter change instead of keeping the wait permanently hot.
@@ -1077,6 +1089,16 @@ void EngineApp::ArmTopologyReconcile(const char* trigger) {
   KillTimer(message_hwnd_, kTopologyReconcileTimerId);
   SetTimer(message_hwnd_, kTopologyReconcileTimerId, 400, nullptr);
   Log("display: topology reconcile armed (trigger=%s)", trigger);
+}
+
+void EngineApp::CancelTopologyReconcile(const char* reason) {
+  if (!topology_reconcile_armed_) return;
+  KillTimer(message_hwnd_, kTopologyReconcileTimerId);
+  topology_reconcile_armed_ = false;
+  topology_reconcile_trigger_.clear();
+  topology_signature_valid_ = false;
+  Log("display: topology reconcile cancelled (%s)",
+      reason != nullptr ? reason : "superseded");
 }
 
 void EngineApp::RunTopologyReconcile() {

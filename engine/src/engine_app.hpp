@@ -439,6 +439,10 @@ class EngineApp {
   // enumeration can still be moving, and converging on a half-reported
   // topology tears down slots that are about to come back.
   void ArmTopologyReconcile(const char* trigger);
+  // Drops a pending reconcile pass: the work it would do is already done (or
+  // is about to be done by a heavier path). Used by the device-lost
+  // recovery, whose full surface rebuild supersedes the re-anchor.
+  void CancelTopologyReconcile(const char* reason);
   void RunTopologyReconcile();
   // The trigger of the burst currently in flight ("" = none).
   std::string topology_reconcile_trigger_;

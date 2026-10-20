@@ -20,6 +20,24 @@
 
 namespace k6wp {
 
+namespace {
+
+// Creates a fresh IDXGIFactory7. Returns nullptr on failure.
+IDXGIFactory7* CreateFactory7() {
+  IDXGIFactory1* factory1 = nullptr;
+  HRESULT hr = CreateDXGIFactory1(__uuidof(IDXGIFactory1),
+                                  reinterpret_cast<void**>(&factory1));
+  if (FAILED(hr) || factory1 == nullptr) return nullptr;
+  IDXGIFactory7* factory7 = nullptr;
+  hr = factory1->QueryInterface(__uuidof(IDXGIFactory7),
+                                reinterpret_cast<void**>(&factory7));
+  factory1->Release();
+  if (FAILED(hr) || factory7 == nullptr) return nullptr;
+  return factory7;
+}
+
+}  // namespace
+
 DeviceLostWatch::~DeviceLostWatch() { Stop(); }
 
 bool DeviceLostWatch::Start() {
@@ -84,6 +102,51 @@ bool DeviceLostWatch::Start() {
   event_ = event;
   cookie_ = cookie;
   active_ = true;
+  return true;
+}
+
+bool DeviceLostWatch::Rearm() {
+  if (event_ == nullptr) return false;
+  // Drop the old registration first: the factory that carried it is about to
+  // be released, and an un-registered event is what the engine's wait array
+  // expects.
+  if (factory_ != nullptr && cookie_ != 0) {
+    static_cast<IDXGIFactory7*>(factory_)->UnregisterAdaptersChangedEvent(cookie_);
+    cookie_ = 0;
+  }
+  if (factory_ != nullptr) {
+    static_cast<IDXGIFactory7*>(factory_)->Release();
+    factory_ = nullptr;
+  }
+  // A FRESH factory: the old one is no longer current after the adapter it
+  // watched disappeared, and a factory that is not current delivers no
+  // further events.
+  IDXGIFactory7* fresh = CreateFactory7();
+  if (fresh == nullptr) {
+    if (log_) {
+      log_("device-lost: the adapter watch could not be re-armed (no fresh "
+           "DXGI factory); adapter-removed detection is off until the next "
+           "engine start");
+    }
+    return false;
+  }
+  DWORD cookie = 0;
+  const HRESULT hr = fresh->RegisterAdaptersChangedEvent(
+      static_cast<HANDLE>(event_), &cookie);
+  if (FAILED(hr)) {
+    fresh->Release();
+    if (log_) {
+      log_("device-lost: the adapter watch could not be re-armed (hr=0x%08lX); "
+           "adapter-removed detection is off until the next engine start",
+           static_cast<unsigned long>(hr));
+    }
+    return false;
+  }
+  factory_ = fresh;
+  cookie_ = cookie;
+  if (log_) {
+    log_("device-lost: adapter-removed watch re-armed on a fresh DXGI factory");
+  }
   return true;
 }
 

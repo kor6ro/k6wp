@@ -139,6 +139,17 @@ doc — when in doubt, read the code.
   wake the enumeration can still be moving, and converging on a
   half-reported topology tears down slots that are about to come back.
   The pure decision layer is unit-tested (`tests/reconcile_policy_test.cpp`).
+- **The adapter-removed watch is re-armed after every signal** (Bug B, B6).
+  `IDXGIFactory7::RegisterAdaptersChangedEvent` was registered on ONE
+  factory; when the adapter it watched disappears, that factory is no longer
+  current (`IsCurrent()` goes FALSE) and a factory that is not current
+  delivers NO further events - so the SECOND adapter change would go
+  unnoticed and the wallpaper would stay black. The watch now re-registers
+  the SAME event handle on a FRESH factory after every signal
+  (`DeviceLostWatch::Rearm`), so the handle (and the engine's wait array)
+  stays stable. A device-lost burst also CANCELS the pending topology
+  reconcile: the full surface rebuild supersedes the re-anchor, so the burst
+  costs one rebuild, not two.
 
 - `get_state.state` fields (`EngineApp::BuildStateJson`,
   `engine/src/engine_app.cpp`): `running`, `paused`, `pid`,
