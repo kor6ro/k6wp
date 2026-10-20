@@ -1,0 +1,160 @@
+# OpenCode v2 Agentic Coding Installation Guide
+
+This guide will help you install all the major agentic coding tools and repositories mentioned in the research. Follow these steps in order:
+
+## Prerequisites
+
+1. Install Node.js (version 18 or higher)
+2. Install Git
+3. Install Bun (recommended) or npm (alternative)
+4. Authenticate with OpenCode: `opencode auth`
+5. Authenticate with GitHub CLI: `gh auth login`
+
+## 1. Install opencode-workflows (Core Workflow Framework)
+
+```bash
+# Install the core workflow framework
+curl -fsSL https://raw.githubusercontent.com/zb-ss/opencode-workflows/master/bootstrap.mjs | node --input-type=module
+
+# Verify installation
+opencode --version
+```
+
+## 2. Install agent-swarm (9-Agent Pipeline)
+
+```bash
+# Clone the repository
+git clone https://github.com/JohTandou/agent-swarm.git
+cd agent-swarm
+
+# Copy configuration files to your OpenCode directory
+cp -r .opencode/* ~/.opencode/
+cp agent-swarm/opencode.json ~/.config/opencode/opencode.json
+
+# Configure API keys in ~/.config/opencode/.env
+# Required keys:
+# - DEEPSEEK_API_KEY
+# - OPENCODE_API_KEY
+# Optional: SUPABASE_ACCESS_TOKEN, MAGIC_21ST_API_KEY, CONTEXT7_API_KEY, VERCEL_TOKEN, RENDER_API_KEY
+
+# Install dependencies
+cd ~/.opencode/tools/github-orchestrator
+npm install
+
+# Restart OpenCode
+opencode restart
+```
+
+## 3. Install opencode-agent-kit (33 Specialized Agents)
+
+```bash
+# Install globally (recommended for all projects)
+npx opencode-agent-kit init --global
+
+# Or for a specific project
+cd /path/to/your/project
+npx opencode-agent-kit init
+
+# Verify installation
+opencode --version
+```
+
+## 4. Install opencode-swarm (Architect-led Team)
+
+```bash
+# Install using Bun (recommended)
+bunx opencode-swarm install
+
+# Or using npm
+npm install -g opencode-swarm && opencode-swarm install
+
+# Configure API keys in ~/.config/opencode/.env
+# Required:
+# - DEEPSEEK_API_KEY
+# - OPENCODE_API_KEY
+
+# Verify installation
+opencode-swarm --version
+```
+
+## 5. Install opencode-forgecode (All-in-One Plugin)
+
+```bash
+# Install globally
+npm install -g opencode-forgecode
+
+# Verify installation
+opencode-forgecode --version
+```
+
+## 6. Install opencode-agents-system (79 Specialized Agents)
+
+```bash
+# Clone the repository
+git clone https://github.com/shariqriazz/opencode-agents-system.git
+cd opencode-agents-system
+
+# Install dependencies
+npm install
+
+# Configure your OpenCode settings
+# Copy the example config and customize as needed
+cp opencode.example.json opencode.json
+
+# Set up your preferred models in opencode.json
+# See the README for detailed configuration instructions
+```
+
+## 7. Install opencode-swarm-plugin (Swarm Coordination)
+
+```bash
+# Install globally
+npm install -g opencode-swarm-plugin@latest
+
+# Setup the plugin
+swarm setup
+
+# Verify installation
+opencode-swarm-plugin --version
+```
+
+## Post-Installation Steps
+
+1. Restart OpenCode to load all new plugins:
+   ```bash
+   opencode restart
+   ```
+
+2. Verify all plugins are loaded:
+   ```bash
+   opencode plugins list
+   ```
+
+3. Test a simple workflow:
+   ```bash
+   # For opencode-workflows
+   /workflow feature Add authentication
+
+   # For agent-swarm
+   /swarm agents
+
+   # For opencode-agent-kit
+   /plan "Build a JWT auth system"
+   ```
+
+## Important Notes
+
+1. **Version Compatibility**: Ensure all tools are compatible with OpenCode v2.0+
+2. **API Keys**: Make sure you have valid API keys for all services (OpenAI, Anthropic, etc.)
+3. **Resource Management**: Some tools (like opencode-swarm) can be resource-intensive
+4. **Conflict Prevention**: Some tools might have overlapping functionality - choose the ones that best fit your workflow
+5. **Documentation**: Each repository has detailed documentation in its README file
+
+## Troubleshooting
+
+- If you encounter permission errors, try using sudo or check your user permissions
+- For Node.js related issues, ensure you're using the correct version
+- Check the OpenCode community forums for any known issues with specific versions
+- If a tool fails to install, check its specific documentation for troubleshooting steps
+
+This installation guide covers all the major agentic coding tools and repositories identified in the research. You now have a comprehensive agentic coding environment ready for OpenCode v2.
