@@ -41,6 +41,13 @@ add_executable(compress_friendly_error_test
 )
 target_link_libraries(compress_friendly_error_test PRIVATE k6wp_shared)
 add_test(NAME compress_friendly_error COMMAND compress_friendly_error_test)
+# Check 7 builds a real lockframe cmdline, so FindFfmpeg() must succeed.
+# CI configures a one-level "build/" dir, but shared/ffmpeg_path.cpp's
+# build-layout guess is "build/<preset>/" (two levels up to the repo root),
+# so point the test at the vendored binary explicitly instead of depending on
+# the build-dir depth (same fixture as studio_logic_test).
+set_tests_properties(compress_friendly_error PROPERTIES
+  ENVIRONMENT "K6WP_FFMPEG=${CMAKE_SOURCE_DIR}/vendor/ffmpeg/ffmpeg.exe")
 
 # widen_utf8_test (MED-10): #includes the real ffmpeg_job.cpp so the
 # anonymous-namespace Widen() under test is production code; FindFfmpeg and
