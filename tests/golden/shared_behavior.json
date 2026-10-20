@@ -1,0 +1,1492 @@
+{
+  "cases": [
+    {
+      "fn": "WallpaperConfig::default",
+      "id": "config.default",
+      "input": {},
+      "output": {
+        "battery_mode": "cap24",
+        "battery_saver": false,
+        "cpu_affinity": "auto",
+        "crf": 22,
+        "fit_mode": "cover",
+        "fps_cap": 24,
+        "gpu_adapter": "auto",
+        "monitor_id": -1,
+        "reconcile_mode": "legacy",
+        "resolution_h": 0,
+        "resolution_w": 0,
+        "speed": 1.0,
+        "version": 5,
+        "video_path": ""
+      }
+    },
+    {
+      "fn": "MigrateConfig",
+      "id": "config.migrate.v0_legacy",
+      "input": "{\"version\":0,\"video_path\":\"C:\\\\v\\\\a.mp4\"}",
+      "output": {
+        "battery_mode": "cap24",
+        "battery_saver": false,
+        "cpu_affinity": "auto",
+        "crf": 22,
+        "fit_mode": "cover",
+        "fps_cap": 24,
+        "gpu_adapter": "auto",
+        "monitor_id": -1,
+        "reconcile_mode": "legacy",
+        "resolution_h": 0,
+        "resolution_w": 0,
+        "speed": 1.0,
+        "version": 5,
+        "video_path": "C:\\v\\a.mp4"
+      }
+    },
+    {
+      "fn": "MigrateConfig",
+      "id": "config.migrate.v0_empty",
+      "input": "{}",
+      "output": {
+        "battery_mode": "cap24",
+        "battery_saver": false,
+        "cpu_affinity": "auto",
+        "crf": 22,
+        "fit_mode": "cover",
+        "fps_cap": 24,
+        "gpu_adapter": "auto",
+        "monitor_id": -1,
+        "reconcile_mode": "legacy",
+        "resolution_h": 0,
+        "resolution_w": 0,
+        "speed": 1.0,
+        "version": 5,
+        "video_path": ""
+      }
+    },
+    {
+      "fn": "MigrateConfig",
+      "id": "config.migrate.v1_monitor",
+      "input": "{\"version\":1,\"video_path\":\"C:\\\\v\\\\a.mp4\",\"monitor_id\":2}",
+      "output": {
+        "battery_mode": "cap24",
+        "battery_saver": false,
+        "cpu_affinity": "auto",
+        "crf": 22,
+        "fit_mode": "cover",
+        "fps_cap": 24,
+        "gpu_adapter": "auto",
+        "monitor_id": -1,
+        "reconcile_mode": "legacy",
+        "resolution_h": 0,
+        "resolution_w": 0,
+        "speed": 1.0,
+        "version": 5,
+        "video_path": "C:\\v\\a.mp4"
+      }
+    },
+    {
+      "fn": "MigrateConfig",
+      "id": "config.migrate.v2_fill",
+      "input": "{\"version\":2,\"fit_mode\":\"fill\"}",
+      "output": {
+        "battery_mode": "cap24",
+        "battery_saver": false,
+        "cpu_affinity": "auto",
+        "crf": 22,
+        "fit_mode": "cover",
+        "fps_cap": 24,
+        "gpu_adapter": "auto",
+        "monitor_id": -1,
+        "reconcile_mode": "legacy",
+        "resolution_h": 0,
+        "resolution_w": 0,
+        "speed": 1.0,
+        "version": 5,
+        "video_path": ""
+      }
+    },
+    {
+      "fn": "MigrateConfig",
+      "id": "config.migrate.v2_fill_explicit_monitor",
+      "input": "{\"version\":2,\"fit_mode\":\"fill\",\"monitor_id\":1}",
+      "output": {
+        "battery_mode": "cap24",
+        "battery_saver": false,
+        "cpu_affinity": "auto",
+        "crf": 22,
+        "fit_mode": "cover",
+        "fps_cap": 24,
+        "gpu_adapter": "auto",
+        "monitor_id": 1,
+        "reconcile_mode": "legacy",
+        "resolution_h": 0,
+        "resolution_w": 0,
+        "speed": 1.0,
+        "version": 5,
+        "video_path": ""
+      }
+    },
+    {
+      "fn": "MigrateConfig",
+      "id": "config.migrate.v3_battery",
+      "input": "{\"version\":3,\"battery_mode\":\"static\"}",
+      "output": {
+        "battery_mode": "static",
+        "battery_saver": false,
+        "cpu_affinity": "auto",
+        "crf": 22,
+        "fit_mode": "cover",
+        "fps_cap": 24,
+        "gpu_adapter": "auto",
+        "monitor_id": -1,
+        "reconcile_mode": "legacy",
+        "resolution_h": 0,
+        "resolution_w": 0,
+        "speed": 1.0,
+        "version": 5,
+        "video_path": ""
+      }
+    },
+    {
+      "fn": "MigrateConfig",
+      "id": "config.migrate.v4_affinity",
+      "input": "{\"version\":4,\"cpu_affinity\":\"all\",\"gpu_adapter\":\"discrete\"}",
+      "output": {
+        "battery_mode": "cap24",
+        "battery_saver": false,
+        "cpu_affinity": "all",
+        "crf": 22,
+        "fit_mode": "cover",
+        "fps_cap": 24,
+        "gpu_adapter": "discrete",
+        "monitor_id": -1,
+        "reconcile_mode": "legacy",
+        "resolution_h": 0,
+        "resolution_w": 0,
+        "speed": 1.0,
+        "version": 5,
+        "video_path": ""
+      }
+    },
+    {
+      "fn": "MigrateConfig",
+      "id": "config.migrate.v5_current",
+      "input": "{\"version\":5,\"video_path\":\"C:\\\\v\\\\b.mp4\",\"fit_mode\":\"fit\",\"speed\":1.5,\"monitor_id\":0,\"crf\":18,\"resolution_w\":1920,\"resolution_h\":1080,\"fps_cap\":30,\"battery_saver\":true,\"battery_mode\":\"static\",\"cpu_affinity\":\"all\",\"gpu_adapter\":\"integrated\",\"reconcile_mode\":\"shadow\"}",
+      "output": {
+        "battery_mode": "static",
+        "battery_saver": true,
+        "cpu_affinity": "all",
+        "crf": 18,
+        "fit_mode": "fit",
+        "fps_cap": 30,
+        "gpu_adapter": "integrated",
+        "monitor_id": 0,
+        "reconcile_mode": "shadow",
+        "resolution_h": 1080,
+        "resolution_w": 1920,
+        "speed": 1.5,
+        "version": 5,
+        "video_path": "C:\\v\\b.mp4"
+      }
+    },
+    {
+      "fn": "MigrateConfig",
+      "id": "config.migrate.v5_reconcile_on",
+      "input": "{\"version\":5,\"reconcile_mode\":\"on\"}",
+      "output": {
+        "battery_mode": "cap24",
+        "battery_saver": false,
+        "cpu_affinity": "auto",
+        "crf": 22,
+        "fit_mode": "cover",
+        "fps_cap": 24,
+        "gpu_adapter": "auto",
+        "monitor_id": -1,
+        "reconcile_mode": "on",
+        "resolution_h": 0,
+        "resolution_w": 0,
+        "speed": 1.0,
+        "version": 5,
+        "video_path": ""
+      }
+    },
+    {
+      "fn": "MigrateConfig",
+      "id": "config.migrate.v5_reconcile_bogus",
+      "input": "{\"version\":5,\"reconcile_mode\":\"bogus\"}",
+      "output": {
+        "battery_mode": "cap24",
+        "battery_saver": false,
+        "cpu_affinity": "auto",
+        "crf": 22,
+        "fit_mode": "cover",
+        "fps_cap": 24,
+        "gpu_adapter": "auto",
+        "monitor_id": -1,
+        "reconcile_mode": "bogus",
+        "resolution_h": 0,
+        "resolution_w": 0,
+        "speed": 1.0,
+        "version": 5,
+        "video_path": ""
+      }
+    },
+    {
+      "error": "unsupported config schema version: 6",
+      "fn": "MigrateConfig",
+      "id": "config.migrate.v6_future",
+      "input": "{\"version\":6}"
+    },
+    {
+      "error": "unsupported config schema version: -1",
+      "fn": "MigrateConfig",
+      "id": "config.migrate.v_neg",
+      "input": "{\"version\":-1}"
+    },
+    {
+      "fn": "MigrateConfig",
+      "id": "config.migrate.unknown_fit",
+      "input": "{\"version\":5,\"fit_mode\":\"squish\"}",
+      "output": {
+        "battery_mode": "cap24",
+        "battery_saver": false,
+        "cpu_affinity": "auto",
+        "crf": 22,
+        "fit_mode": "squish",
+        "fps_cap": 24,
+        "gpu_adapter": "auto",
+        "monitor_id": -1,
+        "reconcile_mode": "legacy",
+        "resolution_h": 0,
+        "resolution_w": 0,
+        "speed": 1.0,
+        "version": 5,
+        "video_path": ""
+      }
+    },
+    {
+      "fn": "MigrateConfig",
+      "id": "config.migrate.crf_low",
+      "input": "{\"version\":5,\"crf\":15}",
+      "output": {
+        "battery_mode": "cap24",
+        "battery_saver": false,
+        "cpu_affinity": "auto",
+        "crf": 15,
+        "fit_mode": "cover",
+        "fps_cap": 24,
+        "gpu_adapter": "auto",
+        "monitor_id": -1,
+        "reconcile_mode": "legacy",
+        "resolution_h": 0,
+        "resolution_w": 0,
+        "speed": 1.0,
+        "version": 5,
+        "video_path": ""
+      }
+    },
+    {
+      "fn": "MigrateConfig",
+      "id": "config.migrate.crf_high",
+      "input": "{\"version\":5,\"crf\":29}",
+      "output": {
+        "battery_mode": "cap24",
+        "battery_saver": false,
+        "cpu_affinity": "auto",
+        "crf": 29,
+        "fit_mode": "cover",
+        "fps_cap": 24,
+        "gpu_adapter": "auto",
+        "monitor_id": -1,
+        "reconcile_mode": "legacy",
+        "resolution_h": 0,
+        "resolution_w": 0,
+        "speed": 1.0,
+        "version": 5,
+        "video_path": ""
+      }
+    },
+    {
+      "fn": "MigrateConfig",
+      "id": "config.migrate.speed_low",
+      "input": "{\"version\":5,\"speed\":0.4}",
+      "output": {
+        "battery_mode": "cap24",
+        "battery_saver": false,
+        "cpu_affinity": "auto",
+        "crf": 22,
+        "fit_mode": "cover",
+        "fps_cap": 24,
+        "gpu_adapter": "auto",
+        "monitor_id": -1,
+        "reconcile_mode": "legacy",
+        "resolution_h": 0,
+        "resolution_w": 0,
+        "speed": 0.4,
+        "version": 5,
+        "video_path": ""
+      }
+    },
+    {
+      "fn": "MigrateConfig",
+      "id": "config.migrate.speed_high",
+      "input": "{\"version\":5,\"speed\":2.1}",
+      "output": {
+        "battery_mode": "cap24",
+        "battery_saver": false,
+        "cpu_affinity": "auto",
+        "crf": 22,
+        "fit_mode": "cover",
+        "fps_cap": 24,
+        "gpu_adapter": "auto",
+        "monitor_id": -1,
+        "reconcile_mode": "legacy",
+        "resolution_h": 0,
+        "resolution_w": 0,
+        "speed": 2.1,
+        "version": 5,
+        "video_path": ""
+      }
+    },
+    {
+      "fn": "MigrateConfig",
+      "id": "config.migrate.fps_zero",
+      "input": "{\"version\":5,\"fps_cap\":0}",
+      "output": {
+        "battery_mode": "cap24",
+        "battery_saver": false,
+        "cpu_affinity": "auto",
+        "crf": 22,
+        "fit_mode": "cover",
+        "fps_cap": 0,
+        "gpu_adapter": "auto",
+        "monitor_id": -1,
+        "reconcile_mode": "legacy",
+        "resolution_h": 0,
+        "resolution_w": 0,
+        "speed": 1.0,
+        "version": 5,
+        "video_path": ""
+      }
+    },
+    {
+      "fn": "MigrateConfig",
+      "id": "config.migrate.fps_high",
+      "input": "{\"version\":5,\"fps_cap\":31}",
+      "output": {
+        "battery_mode": "cap24",
+        "battery_saver": false,
+        "cpu_affinity": "auto",
+        "crf": 22,
+        "fit_mode": "cover",
+        "fps_cap": 31,
+        "gpu_adapter": "auto",
+        "monitor_id": -1,
+        "reconcile_mode": "legacy",
+        "resolution_h": 0,
+        "resolution_w": 0,
+        "speed": 1.0,
+        "version": 5,
+        "video_path": ""
+      }
+    },
+    {
+      "fn": "MigrateConfig",
+      "id": "config.migrate.res_negative",
+      "input": "{\"version\":5,\"resolution_w\":-1}",
+      "output": {
+        "battery_mode": "cap24",
+        "battery_saver": false,
+        "cpu_affinity": "auto",
+        "crf": 22,
+        "fit_mode": "cover",
+        "fps_cap": 24,
+        "gpu_adapter": "auto",
+        "monitor_id": -1,
+        "reconcile_mode": "legacy",
+        "resolution_h": 0,
+        "resolution_w": -1,
+        "speed": 1.0,
+        "version": 5,
+        "video_path": ""
+      }
+    },
+    {
+      "fn": "MigrateConfig",
+      "id": "config.migrate.monitor_below_minus1",
+      "input": "{\"version\":5,\"monitor_id\":-2}",
+      "output": {
+        "battery_mode": "cap24",
+        "battery_saver": false,
+        "cpu_affinity": "auto",
+        "crf": 22,
+        "fit_mode": "cover",
+        "fps_cap": 24,
+        "gpu_adapter": "auto",
+        "monitor_id": -2,
+        "reconcile_mode": "legacy",
+        "resolution_h": 0,
+        "resolution_w": 0,
+        "speed": 1.0,
+        "version": 5,
+        "video_path": ""
+      }
+    },
+    {
+      "fn": "MigrateConfig",
+      "id": "config.migrate.battery_mode_bogus",
+      "input": "{\"version\":5,\"battery_mode\":\"zzz\"}",
+      "output": {
+        "battery_mode": "zzz",
+        "battery_saver": false,
+        "cpu_affinity": "auto",
+        "crf": 22,
+        "fit_mode": "cover",
+        "fps_cap": 24,
+        "gpu_adapter": "auto",
+        "monitor_id": -1,
+        "reconcile_mode": "legacy",
+        "resolution_h": 0,
+        "resolution_w": 0,
+        "speed": 1.0,
+        "version": 5,
+        "video_path": ""
+      }
+    },
+    {
+      "fn": "MigrateConfig",
+      "id": "config.migrate.affinity_bogus",
+      "input": "{\"version\":5,\"cpu_affinity\":\"zzz\"}",
+      "output": {
+        "battery_mode": "cap24",
+        "battery_saver": false,
+        "cpu_affinity": "zzz",
+        "crf": 22,
+        "fit_mode": "cover",
+        "fps_cap": 24,
+        "gpu_adapter": "auto",
+        "monitor_id": -1,
+        "reconcile_mode": "legacy",
+        "resolution_h": 0,
+        "resolution_w": 0,
+        "speed": 1.0,
+        "version": 5,
+        "video_path": ""
+      }
+    },
+    {
+      "fn": "MigrateConfig",
+      "id": "config.migrate.adapter_bogus",
+      "input": "{\"version\":5,\"gpu_adapter\":\"zzz\"}",
+      "output": {
+        "battery_mode": "cap24",
+        "battery_saver": false,
+        "cpu_affinity": "auto",
+        "crf": 22,
+        "fit_mode": "cover",
+        "fps_cap": 24,
+        "gpu_adapter": "zzz",
+        "monitor_id": -1,
+        "reconcile_mode": "legacy",
+        "resolution_h": 0,
+        "resolution_w": 0,
+        "speed": 1.0,
+        "version": 5,
+        "video_path": ""
+      }
+    },
+    {
+      "error": "config field type error: [json.exception.type_error.302] type must be number, but is string",
+      "fn": "MigrateConfig",
+      "id": "config.migrate.type_corrupt_speed",
+      "input": "{\"version\":5,\"speed\":\"fast\"}"
+    },
+    {
+      "error": "config field type error: [json.exception.type_error.302] type must be number, but is string",
+      "fn": "MigrateConfig",
+      "id": "config.migrate.type_corrupt_version",
+      "input": "{\"version\":\"5\"}"
+    },
+    {
+      "error": "config root must be a JSON object",
+      "fn": "MigrateConfig",
+      "id": "config.migrate.not_an_object",
+      "input": "[1,2,3]"
+    },
+    {
+      "error": "corrupt config JSON: parse error",
+      "fn": "MigrateConfig",
+      "id": "config.migrate.corrupt_json",
+      "input": "{\"version\":5,"
+    },
+    {
+      "fn": "DefaultStudioSettings",
+      "id": "settings.default",
+      "input": {},
+      "output": {
+        "auto_compress_on_import": true,
+        "cache_dir_basename": [
+          99,
+          97,
+          99,
+          104,
+          101
+        ],
+        "check_updates": true,
+        "close_to_tray": false,
+        "compress_advanced_visible": false,
+        "compress_output_dir_basename": [
+          119,
+          97,
+          108,
+          108,
+          112,
+          97,
+          112,
+          101,
+          114,
+          115
+        ],
+        "default_crf": 22,
+        "default_fps": 30,
+        "default_resolution_mode": "match_monitor",
+        "lockscreen_offer_shown": false,
+        "lockscreen_offset_sec": 0.0,
+        "lockscreen_sync": true,
+        "performance_preset": "Seimbang",
+        "playlist_source": "all",
+        "start_with_windows": false,
+        "version": 5,
+        "wallpaper_sync": true
+      }
+    },
+    {
+      "fn": "MigrateStudioSettings",
+      "id": "settings.migrate.v0_legacy",
+      "input": "{\"version\":0}",
+      "output": {
+        "auto_compress_on_import": true,
+        "check_updates": true,
+        "close_to_tray": false,
+        "compress_advanced_visible": false,
+        "default_crf": 22,
+        "default_fps": 30,
+        "default_resolution_mode": "match_monitor",
+        "lockscreen_offer_shown": false,
+        "lockscreen_offset_sec": 0.0,
+        "lockscreen_sync": true,
+        "performance_preset": "Seimbang",
+        "playlist_source": "all",
+        "version": 5,
+        "wallpaper_sync": true
+      }
+    },
+    {
+      "fn": "MigrateStudioSettings",
+      "id": "settings.migrate.v1_lockscreen",
+      "input": "{\"version\":1,\"lockscreen_sync\":false}",
+      "output": {
+        "auto_compress_on_import": true,
+        "check_updates": true,
+        "close_to_tray": false,
+        "compress_advanced_visible": false,
+        "default_crf": 22,
+        "default_fps": 30,
+        "default_resolution_mode": "match_monitor",
+        "lockscreen_offer_shown": false,
+        "lockscreen_offset_sec": 0.0,
+        "lockscreen_sync": false,
+        "performance_preset": "Seimbang",
+        "playlist_source": "all",
+        "version": 5,
+        "wallpaper_sync": true
+      }
+    },
+    {
+      "fn": "MigrateStudioSettings",
+      "id": "settings.migrate.v2_advanced",
+      "input": "{\"version\":2,\"compress_advanced_visible\":true}",
+      "output": {
+        "auto_compress_on_import": true,
+        "check_updates": true,
+        "close_to_tray": false,
+        "compress_advanced_visible": true,
+        "default_crf": 22,
+        "default_fps": 30,
+        "default_resolution_mode": "match_monitor",
+        "lockscreen_offer_shown": false,
+        "lockscreen_offset_sec": 0.0,
+        "lockscreen_sync": true,
+        "performance_preset": "Seimbang",
+        "playlist_source": "all",
+        "version": 5,
+        "wallpaper_sync": true
+      }
+    },
+    {
+      "fn": "MigrateStudioSettings",
+      "id": "settings.migrate.v3_ui_prefs",
+      "input": "{\"version\":3,\"closeToTray\":true,\"playlistSource\":\"custom\",\"performancePreset\":\"Maksimal\"}",
+      "output": {
+        "auto_compress_on_import": true,
+        "check_updates": true,
+        "close_to_tray": true,
+        "compress_advanced_visible": false,
+        "default_crf": 22,
+        "default_fps": 30,
+        "default_resolution_mode": "match_monitor",
+        "lockscreen_offer_shown": false,
+        "lockscreen_offset_sec": 0.0,
+        "lockscreen_sync": true,
+        "performance_preset": "Maksimal",
+        "playlist_source": "custom",
+        "version": 5,
+        "wallpaper_sync": true
+      }
+    },
+    {
+      "fn": "MigrateStudioSettings",
+      "id": "settings.migrate.v4_offer",
+      "input": "{\"version\":4,\"lockscreen_offer_shown\":true}",
+      "output": {
+        "auto_compress_on_import": true,
+        "check_updates": true,
+        "close_to_tray": false,
+        "compress_advanced_visible": false,
+        "default_crf": 22,
+        "default_fps": 30,
+        "default_resolution_mode": "match_monitor",
+        "lockscreen_offer_shown": true,
+        "lockscreen_offset_sec": 0.0,
+        "lockscreen_sync": true,
+        "performance_preset": "Seimbang",
+        "playlist_source": "all",
+        "version": 5,
+        "wallpaper_sync": true
+      }
+    },
+    {
+      "fn": "MigrateStudioSettings",
+      "id": "settings.migrate.v4_offset_one",
+      "input": "{\"version\":4,\"lockscreen_offset_sec\":1.0}",
+      "output": {
+        "auto_compress_on_import": true,
+        "check_updates": true,
+        "close_to_tray": false,
+        "compress_advanced_visible": false,
+        "default_crf": 22,
+        "default_fps": 30,
+        "default_resolution_mode": "match_monitor",
+        "lockscreen_offer_shown": false,
+        "lockscreen_offset_sec": 0.0,
+        "lockscreen_sync": true,
+        "performance_preset": "Seimbang",
+        "playlist_source": "all",
+        "version": 5,
+        "wallpaper_sync": true
+      }
+    },
+    {
+      "fn": "MigrateStudioSettings",
+      "id": "settings.migrate.v4_offset_half",
+      "input": "{\"version\":4,\"lockscreen_offset_sec\":0.5}",
+      "output": {
+        "auto_compress_on_import": true,
+        "check_updates": true,
+        "close_to_tray": false,
+        "compress_advanced_visible": false,
+        "default_crf": 22,
+        "default_fps": 30,
+        "default_resolution_mode": "match_monitor",
+        "lockscreen_offer_shown": false,
+        "lockscreen_offset_sec": 0.5,
+        "lockscreen_sync": true,
+        "performance_preset": "Seimbang",
+        "playlist_source": "all",
+        "version": 5,
+        "wallpaper_sync": true
+      }
+    },
+    {
+      "fn": "MigrateStudioSettings",
+      "id": "settings.migrate.v4_offset_zero",
+      "input": "{\"version\":4,\"lockscreen_offset_sec\":0.0}",
+      "output": {
+        "auto_compress_on_import": true,
+        "check_updates": true,
+        "close_to_tray": false,
+        "compress_advanced_visible": false,
+        "default_crf": 22,
+        "default_fps": 30,
+        "default_resolution_mode": "match_monitor",
+        "lockscreen_offer_shown": false,
+        "lockscreen_offset_sec": 0.0,
+        "lockscreen_sync": true,
+        "performance_preset": "Seimbang",
+        "playlist_source": "all",
+        "version": 5,
+        "wallpaper_sync": true
+      }
+    },
+    {
+      "fn": "MigrateStudioSettings",
+      "id": "settings.migrate.v5_current",
+      "input": "{\"version\":5,\"auto_compress_on_import\":false,\"default_crf\":18,\"default_fps\":24,\"default_resolution_mode\":\"source\",\"wallpaper_sync\":false,\"lockscreen_sync\":true,\"lockscreen_offset_sec\":2.5}",
+      "output": {
+        "auto_compress_on_import": false,
+        "check_updates": true,
+        "close_to_tray": false,
+        "compress_advanced_visible": false,
+        "default_crf": 18,
+        "default_fps": 24,
+        "default_resolution_mode": "source",
+        "lockscreen_offer_shown": false,
+        "lockscreen_offset_sec": 2.5,
+        "lockscreen_sync": true,
+        "performance_preset": "Seimbang",
+        "playlist_source": "all",
+        "version": 5,
+        "wallpaper_sync": false
+      }
+    },
+    {
+      "error": "unsupported studio settings schema version: 6",
+      "fn": "MigrateStudioSettings",
+      "id": "settings.migrate.v6_future",
+      "input": "{\"version\":6}"
+    },
+    {
+      "fn": "MigrateStudioSettings",
+      "id": "settings.migrate.playlist_source_bogus",
+      "input": "{\"version\":5,\"playlistSource\":\"nope\"}",
+      "output": {
+        "auto_compress_on_import": true,
+        "check_updates": true,
+        "close_to_tray": false,
+        "compress_advanced_visible": false,
+        "default_crf": 22,
+        "default_fps": 30,
+        "default_resolution_mode": "match_monitor",
+        "lockscreen_offer_shown": false,
+        "lockscreen_offset_sec": 0.0,
+        "lockscreen_sync": true,
+        "performance_preset": "Seimbang",
+        "playlist_source": "all",
+        "version": 5,
+        "wallpaper_sync": true
+      }
+    },
+    {
+      "fn": "MigrateStudioSettings",
+      "id": "settings.migrate.performance_preset_bogus",
+      "input": "{\"version\":5,\"performancePreset\":\"nope\"}",
+      "output": {
+        "auto_compress_on_import": true,
+        "check_updates": true,
+        "close_to_tray": false,
+        "compress_advanced_visible": false,
+        "default_crf": 22,
+        "default_fps": 30,
+        "default_resolution_mode": "match_monitor",
+        "lockscreen_offer_shown": false,
+        "lockscreen_offset_sec": 0.0,
+        "lockscreen_sync": true,
+        "performance_preset": "Seimbang",
+        "playlist_source": "all",
+        "version": 5,
+        "wallpaper_sync": true
+      }
+    },
+    {
+      "fn": "MigrateStudioSettings",
+      "id": "settings.migrate.crf_low",
+      "input": "{\"version\":5,\"default_crf\":15}",
+      "output": {
+        "auto_compress_on_import": true,
+        "check_updates": true,
+        "close_to_tray": false,
+        "compress_advanced_visible": false,
+        "default_crf": 15,
+        "default_fps": 30,
+        "default_resolution_mode": "match_monitor",
+        "lockscreen_offer_shown": false,
+        "lockscreen_offset_sec": 0.0,
+        "lockscreen_sync": true,
+        "performance_preset": "Seimbang",
+        "playlist_source": "all",
+        "version": 5,
+        "wallpaper_sync": true
+      }
+    },
+    {
+      "fn": "MigrateStudioSettings",
+      "id": "settings.migrate.fps_high",
+      "input": "{\"version\":5,\"default_fps\":31}",
+      "output": {
+        "auto_compress_on_import": true,
+        "check_updates": true,
+        "close_to_tray": false,
+        "compress_advanced_visible": false,
+        "default_crf": 22,
+        "default_fps": 31,
+        "default_resolution_mode": "match_monitor",
+        "lockscreen_offer_shown": false,
+        "lockscreen_offset_sec": 0.0,
+        "lockscreen_sync": true,
+        "performance_preset": "Seimbang",
+        "playlist_source": "all",
+        "version": 5,
+        "wallpaper_sync": true
+      }
+    },
+    {
+      "fn": "MigrateStudioSettings",
+      "id": "settings.migrate.resolution_mode_bogus",
+      "input": "{\"version\":5,\"default_resolution_mode\":\"nope\"}",
+      "output": {
+        "auto_compress_on_import": true,
+        "check_updates": true,
+        "close_to_tray": false,
+        "compress_advanced_visible": false,
+        "default_crf": 22,
+        "default_fps": 30,
+        "default_resolution_mode": "nope",
+        "lockscreen_offer_shown": false,
+        "lockscreen_offset_sec": 0.0,
+        "lockscreen_sync": true,
+        "performance_preset": "Seimbang",
+        "playlist_source": "all",
+        "version": 5,
+        "wallpaper_sync": true
+      }
+    },
+    {
+      "fn": "MigrateStudioSettings",
+      "id": "settings.migrate.removed_keys",
+      "input": "{\"version\":3,\"keep_original\":true,\"start_minimized\":true}",
+      "output": {
+        "auto_compress_on_import": true,
+        "check_updates": true,
+        "close_to_tray": false,
+        "compress_advanced_visible": false,
+        "default_crf": 22,
+        "default_fps": 30,
+        "default_resolution_mode": "match_monitor",
+        "lockscreen_offer_shown": false,
+        "lockscreen_offset_sec": 0.0,
+        "lockscreen_sync": true,
+        "performance_preset": "Seimbang",
+        "playlist_source": "all",
+        "version": 5,
+        "wallpaper_sync": true
+      }
+    },
+    {
+      "error": "studio settings field type error: [json.exception.type_error.302] type must be number, but is string",
+      "fn": "MigrateStudioSettings",
+      "id": "settings.migrate.type_corrupt",
+      "input": "{\"version\":5,\"default_crf\":\"x\"}"
+    },
+    {
+      "error": "studio settings root must be a JSON object",
+      "fn": "MigrateStudioSettings",
+      "id": "settings.migrate.not_an_object",
+      "input": "\"hello\""
+    },
+    {
+      "fn": "MigratePlaylist",
+      "id": "playlist.migrate.v0_legacy",
+      "input": "{\"version\":0}",
+      "output": {
+        "enabled": false,
+        "interval_min": 30,
+        "order": [],
+        "shuffle": false,
+        "version": 1
+      }
+    },
+    {
+      "fn": "MigratePlaylist",
+      "id": "playlist.migrate.v1_current",
+      "input": "{\"version\":1,\"enabled\":true,\"interval_min\":15,\"shuffle\":true,\"order\":[\"C:\\\\a.mp4\",\"C:\\\\b.mp4\"]}",
+      "output": {
+        "enabled": true,
+        "interval_min": 15,
+        "order": [
+          "C:\\a.mp4",
+          "C:\\b.mp4"
+        ],
+        "shuffle": true,
+        "version": 1
+      }
+    },
+    {
+      "error": "unsupported playlist schema version: 2",
+      "fn": "MigratePlaylist",
+      "id": "playlist.migrate.v2_future",
+      "input": "{\"version\":2}"
+    },
+    {
+      "fn": "MigratePlaylist",
+      "id": "playlist.migrate.interval_zero",
+      "input": "{\"version\":1,\"interval_min\":0}",
+      "output": {
+        "enabled": false,
+        "interval_min": 0,
+        "order": [],
+        "shuffle": false,
+        "version": 1
+      }
+    },
+    {
+      "fn": "MigratePlaylist",
+      "id": "playlist.migrate.interval_high",
+      "input": "{\"version\":1,\"interval_min\":1441}",
+      "output": {
+        "enabled": false,
+        "interval_min": 1441,
+        "order": [],
+        "shuffle": false,
+        "version": 1
+      }
+    },
+    {
+      "fn": "MigratePlaylist",
+      "id": "playlist.migrate.order_dupes",
+      "input": "{\"version\":1,\"order\":[\"C:\\\\a.mp4\",\"C:\\\\a.mp4\",\"C:\\\\b.mp4\"]}",
+      "output": {
+        "enabled": false,
+        "interval_min": 30,
+        "order": [
+          "C:\\a.mp4",
+          "C:\\b.mp4"
+        ],
+        "shuffle": false,
+        "version": 1
+      }
+    },
+    {
+      "fn": "MigratePlaylist",
+      "id": "playlist.migrate.order_empty_entry",
+      "input": "{\"version\":1,\"order\":[\"C:\\\\a.mp4\",\"\"]}",
+      "output": {
+        "enabled": false,
+        "interval_min": 30,
+        "order": [
+          "C:\\a.mp4"
+        ],
+        "shuffle": false,
+        "version": 1
+      }
+    },
+    {
+      "error": "playlist root must be a JSON object",
+      "fn": "MigratePlaylist",
+      "id": "playlist.migrate.not_an_object",
+      "input": "[]"
+    },
+    {
+      "fn": "SelectNextIndex",
+      "id": "playlist.select_next_index",
+      "input": {
+        "calls": [
+          {
+            "count": 0,
+            "current": 0,
+            "fn": "SelectNextIndex",
+            "shuffle": false
+          },
+          {
+            "count": 0,
+            "current": 2,
+            "fn": "SelectNextIndex",
+            "shuffle": false
+          },
+          {
+            "count": 0,
+            "current": 0,
+            "fn": "SelectNextIndex",
+            "shuffle": true
+          },
+          {
+            "count": 1,
+            "current": 0,
+            "fn": "SelectNextIndex",
+            "shuffle": false
+          },
+          {
+            "count": 1,
+            "current": 2,
+            "fn": "SelectNextIndex",
+            "shuffle": false
+          },
+          {
+            "count": 1,
+            "current": 0,
+            "fn": "SelectNextIndex",
+            "shuffle": true
+          },
+          {
+            "count": 3,
+            "current": 0,
+            "fn": "SelectNextIndex",
+            "shuffle": false
+          },
+          {
+            "count": 3,
+            "current": 2,
+            "fn": "SelectNextIndex",
+            "shuffle": false
+          },
+          {
+            "count": 3,
+            "current": 0,
+            "fn": "SelectNextIndex",
+            "shuffle": true
+          },
+          {
+            "count": 8,
+            "current": 0,
+            "fn": "SelectNextIndex",
+            "shuffle": false
+          },
+          {
+            "count": 8,
+            "current": 2,
+            "fn": "SelectNextIndex",
+            "shuffle": false
+          },
+          {
+            "count": 8,
+            "current": 0,
+            "fn": "SelectNextIndex",
+            "shuffle": true
+          }
+        ],
+        "note": "The shuffle RNG state is carried across the calls in this list, in order. A replayer must use the same seed and the same call order.",
+        "rng_seed": "0x0123456789ABCDEF"
+      },
+      "output": [
+        {
+          "count": 0,
+          "sequential_from_0": 0,
+          "sequential_from_2": 0,
+          "shuffle_from_0": 0
+        },
+        {
+          "count": 1,
+          "sequential_from_0": 0,
+          "sequential_from_2": 0,
+          "shuffle_from_0": 0
+        },
+        {
+          "count": 3,
+          "sequential_from_0": 1,
+          "sequential_from_2": 0,
+          "shuffle_from_0": 2
+        },
+        {
+          "count": 8,
+          "sequential_from_0": 1,
+          "sequential_from_2": 3,
+          "shuffle_from_0": 4
+        }
+      ]
+    },
+    {
+      "fn": "PlaylistIndexForPath",
+      "id": "playlist.index_for_path",
+      "input": {
+        "note": "The output keys map to the queries in order, plus an empty-order query.",
+        "order": [
+          "C:\\Videos\\A.mp4",
+          "C:\\Videos\\b.mp4"
+        ],
+        "queries": [
+          "C:\\Videos\\A.mp4",
+          "c:\\videos\\B.MP4",
+          "C:\\other.mp4"
+        ]
+      },
+      "output": {
+        "empty_order": -1,
+        "found_case_insensitive": 1,
+        "found_exact": 0,
+        "not_found": -1
+      }
+    },
+    {
+      "fn": "NormalizeOrder",
+      "id": "playlist.normalize_order",
+      "input": {
+        "order": [
+          "C:\\a.mp4",
+          "",
+          "C:\\A.mp4",
+          "C:\\b.mp4",
+          "C:\\b.mp4"
+        ]
+      },
+      "output": [
+        "C:\\a.mp4",
+        "C:\\b.mp4"
+      ]
+    },
+    {
+      "fn": "MigrateDisplays",
+      "id": "displays.migrate.v0_legacy",
+      "input": "{\"version\":0}",
+      "output": {
+        "assignments": {},
+        "version": 1
+      }
+    },
+    {
+      "fn": "MigrateDisplays",
+      "id": "displays.migrate.v1_current",
+      "input": "{\"version\":1,\"assignments\":{\"\\\\\\\\.\\\\DISPLAY1\":{\"path\":\"C:\\\\a.mp4\",\"exists\":true},\"\\\\\\\\.\\\\DISPLAY2\":{\"path\":\"C:\\\\b.mp4\",\"exists\":false,\"key_stable\":\"ccd:abc\"}}}",
+      "output": {
+        "assignments": {
+          "\\\\.\\DISPLAY1": {
+            "exists": true,
+            "key_stable": "",
+            "path": "C:\\a.mp4"
+          },
+          "\\\\.\\DISPLAY2": {
+            "exists": false,
+            "key_stable": "ccd:abc",
+            "path": "C:\\b.mp4"
+          }
+        },
+        "version": 1
+      }
+    },
+    {
+      "fn": "MigrateDisplays",
+      "id": "displays.migrate.v1_with_metadata",
+      "input": "{\"version\":1,\"assignments\":{},\"displays\":[{\"device\":\"\\\\\\\\.\\\\DISPLAY1\"}],\"key_aliases\":{\"\\\\\\\\.\\\\DISPLAY1\":\"ccd:abc\"}}",
+      "output": {
+        "assignments": {},
+        "version": 1
+      }
+    },
+    {
+      "error": "unsupported displays schema version: 2",
+      "fn": "MigrateDisplays",
+      "id": "displays.migrate.v2_future",
+      "input": "{\"version\":2}"
+    },
+    {
+      "error": "displays assignment value must be an object",
+      "fn": "MigrateDisplays",
+      "id": "displays.migrate.assignment_not_object",
+      "input": "{\"version\":1,\"assignments\":{\"\\\\\\\\.\\\\DISPLAY1\":\"oops\"}}"
+    },
+    {
+      "fn": "MigrateDisplays",
+      "id": "displays.migrate.not_an_object",
+      "input": "{}",
+      "output": {
+        "assignments": {},
+        "version": 1
+      }
+    },
+    {
+      "fn": "CmdToString/CmdFromString",
+      "id": "ipc.cmd_vocabulary",
+      "input": {},
+      "output": {
+        "from_string": {
+          "<empty>": -1,
+          "get_state": 4,
+          "nope": -1,
+          "pause": 1,
+          "quit": 5,
+          "resume": 2,
+          "set_display_video": 6,
+          "set_monitor": 3,
+          "set_video": 0
+        },
+        "get_state": 4,
+        "max_payload_bytes": 65536,
+        "pause": 1,
+        "protocol_version": 1,
+        "quit": 5,
+        "resume": 2,
+        "set_display_video": 6,
+        "set_monitor": 3,
+        "set_video": 0
+      }
+    },
+    {
+      "fn": "Encode",
+      "id": "ipc.encode.set_video",
+      "input": {
+        "path": "C:\\v\\a.mp4"
+      },
+      "output": "{\"cmd\":\"set_video\",\"payload\":{\"path\":\"C:\\\\v\\\\a.mp4\"},\"version\":1}\n"
+    },
+    {
+      "fn": "Encode",
+      "id": "ipc.encode.pause",
+      "input": {},
+      "output": "{\"cmd\":\"pause\",\"payload\":{},\"version\":1}\n"
+    },
+    {
+      "fn": "Encode",
+      "id": "ipc.encode.resume",
+      "input": {},
+      "output": "{\"cmd\":\"resume\",\"payload\":{},\"version\":1}\n"
+    },
+    {
+      "fn": "Encode",
+      "id": "ipc.encode.set_monitor",
+      "input": {
+        "monitor_id": 1
+      },
+      "output": "{\"cmd\":\"set_monitor\",\"payload\":{\"monitor_id\":1},\"version\":1}\n"
+    },
+    {
+      "fn": "Encode",
+      "id": "ipc.encode.get_state",
+      "input": {},
+      "output": "{\"cmd\":\"get_state\",\"payload\":{},\"version\":1}\n"
+    },
+    {
+      "fn": "Encode",
+      "id": "ipc.encode.quit",
+      "input": {},
+      "output": "{\"cmd\":\"quit\",\"payload\":{},\"version\":1}\n"
+    },
+    {
+      "fn": "Encode",
+      "id": "ipc.encode.set_display_video",
+      "input": {
+        "device": "\\\\.\\DISPLAY1",
+        "path": "C:\\v\\b.mp4"
+      },
+      "output": "{\"cmd\":\"set_display_video\",\"payload\":{\"device\":\"\\\\\\\\.\\\\DISPLAY1\",\"path\":\"C:\\\\v\\\\b.mp4\"},\"version\":1}\n"
+    },
+    {
+      "fn": "Decode",
+      "id": "ipc.decode.valid_set_video",
+      "input": "{\"version\":1,\"cmd\":\"set_video\",\"payload\":{\"path\":\"C:\\\\v\\\\a.mp4\"}}\n",
+      "output": {
+        "cmd": "set_video",
+        "payload": {
+          "path": "C:\\v\\a.mp4"
+        },
+        "version": 1
+      }
+    },
+    {
+      "fn": "Decode",
+      "id": "ipc.decode.valid_no_newline",
+      "input": "{\"version\":1,\"cmd\":\"get_state\",\"payload\":{}}",
+      "output": {
+        "cmd": "get_state",
+        "payload": {},
+        "version": 1
+      }
+    },
+    {
+      "fn": "Decode",
+      "id": "ipc.decode.valid_crlf",
+      "input": "{\"version\":1,\"cmd\":\"pause\",\"payload\":{}}\r\n",
+      "output": {
+        "cmd": "pause",
+        "payload": {},
+        "version": 1
+      }
+    },
+    {
+      "error": "decode rejected the frame",
+      "fn": "Decode",
+      "id": "ipc.decode.empty",
+      "input": ""
+    },
+    {
+      "error": "decode rejected the frame",
+      "fn": "Decode",
+      "id": "ipc.decode.newline_only",
+      "input": "\n"
+    },
+    {
+      "error": "decode rejected the frame",
+      "fn": "Decode",
+      "id": "ipc.decode.bad_json",
+      "input": "{\"version\":1,"
+    },
+    {
+      "error": "decode rejected the frame",
+      "fn": "Decode",
+      "id": "ipc.decode.not_object",
+      "input": "[1,2,3]"
+    },
+    {
+      "error": "decode rejected the frame",
+      "fn": "Decode",
+      "id": "ipc.decode.missing_version",
+      "input": "{\"cmd\":\"get_state\"}"
+    },
+    {
+      "error": "decode rejected the frame",
+      "fn": "Decode",
+      "id": "ipc.decode.version_string",
+      "input": "{\"version\":\"1\",\"cmd\":\"get_state\"}"
+    },
+    {
+      "error": "decode rejected the frame",
+      "fn": "Decode",
+      "id": "ipc.decode.wrong_version",
+      "input": "{\"version\":2,\"cmd\":\"get_state\"}"
+    },
+    {
+      "error": "decode rejected the frame",
+      "fn": "Decode",
+      "id": "ipc.decode.missing_cmd",
+      "input": "{\"version\":1}"
+    },
+    {
+      "error": "decode rejected the frame",
+      "fn": "Decode",
+      "id": "ipc.decode.cmd_not_string",
+      "input": "{\"version\":1,\"cmd\":5}"
+    },
+    {
+      "error": "decode rejected the frame",
+      "fn": "Decode",
+      "id": "ipc.decode.unknown_cmd",
+      "input": "{\"version\":1,\"cmd\":\"explode\"}"
+    },
+    {
+      "error": "decode rejected the frame",
+      "fn": "Decode",
+      "id": "ipc.decode.embedded_newline",
+      "input": "{\"version\":1,\"cmd\":\"get_state\"}\n{\"version\":1,\"cmd\":\"quit\"}"
+    },
+    {
+      "fn": "ParseEngineState",
+      "id": "ipc.parse_state.full",
+      "input": "{\"state\":{\"pid\":1234,\"video\":\"C:\\\\v\\\\a.mp4\",\"paused\":true,\"headless_slots\":1,\"live\":false,\"display_capability\":1,\"display_assignments\":{\"\\\\\\\\.\\\\DISPLAY1\":\"C:\\\\v\\\\a.mp4\"},\"display_coverage\":{\"\\\\\\\\.\\\\DISPLAY1\":\"covered\"},\"playlist_enabled\":true,\"playlist_size\":4,\"playlist_index\":2,\"reconcile\":{\"mode\":\"on\",\"last_trigger\":\"resume\",\"last_verdict\":\"ok\",\"retries\":2,\"degraded_keys\":[\"\\\\\\\\.\\\\DISPLAY2\"]}}}",
+      "output": {
+        "display_assignments": {
+          "\\\\.\\DISPLAY1": "C:\\v\\a.mp4"
+        },
+        "display_capability": 1,
+        "display_coverage": {
+          "\\\\.\\DISPLAY1": "covered"
+        },
+        "headless_slots": 1,
+        "live": false,
+        "paused": true,
+        "pid": 1234,
+        "playlist_enabled": true,
+        "playlist_index": 2,
+        "playlist_size": 4,
+        "reconcile_degraded_keys": [
+          "\\\\.\\DISPLAY2"
+        ],
+        "reconcile_last_trigger": "resume",
+        "reconcile_last_verdict": "ok",
+        "reconcile_mode": "on",
+        "reconcile_retries": 2,
+        "video": "C:\\v\\a.mp4"
+      }
+    },
+    {
+      "fn": "ParseEngineState",
+      "id": "ipc.parse_state.minimal",
+      "input": "{\"state\":{\"pid\":7}}",
+      "output": {
+        "display_assignments": {},
+        "display_capability": 0,
+        "display_coverage": {},
+        "headless_slots": 0,
+        "live": true,
+        "paused": false,
+        "pid": 7,
+        "playlist_enabled": false,
+        "playlist_index": -1,
+        "playlist_size": 0,
+        "reconcile_degraded_keys": [],
+        "reconcile_last_trigger": "",
+        "reconcile_last_verdict": "",
+        "reconcile_mode": "",
+        "reconcile_retries": 0,
+        "video": ""
+      }
+    },
+    {
+      "fn": "ParseEngineState",
+      "id": "ipc.parse_state.empty_state",
+      "input": "{}",
+      "output": {
+        "display_assignments": {},
+        "display_capability": 0,
+        "display_coverage": {},
+        "headless_slots": 0,
+        "live": true,
+        "paused": false,
+        "pid": 0,
+        "playlist_enabled": false,
+        "playlist_index": -1,
+        "playlist_size": 0,
+        "reconcile_degraded_keys": [],
+        "reconcile_last_trigger": "",
+        "reconcile_last_verdict": "",
+        "reconcile_mode": "",
+        "reconcile_retries": 0,
+        "video": ""
+      }
+    },
+    {
+      "fn": "ParseEngineState",
+      "id": "ipc.parse_state.no_state_key",
+      "input": "{\"other\":1}",
+      "output": {
+        "display_assignments": {},
+        "display_capability": 0,
+        "display_coverage": {},
+        "headless_slots": 0,
+        "live": true,
+        "paused": false,
+        "pid": 0,
+        "playlist_enabled": false,
+        "playlist_index": -1,
+        "playlist_size": 0,
+        "reconcile_degraded_keys": [],
+        "reconcile_last_trigger": "",
+        "reconcile_last_verdict": "",
+        "reconcile_mode": "",
+        "reconcile_retries": 0,
+        "video": ""
+      }
+    },
+    {
+      "fn": "ParseEngineState",
+      "id": "ipc.parse_state.wrong_types",
+      "input": "{\"state\":{\"pid\":\"x\",\"paused\":\"yes\",\"display_capability\":\"y\",\"display_assignments\":[],\"playlist_size\":\"z\",\"reconcile\":\"nope\"}}",
+      "output": {
+        "display_assignments": {},
+        "display_capability": 0,
+        "display_coverage": {},
+        "headless_slots": 0,
+        "live": true,
+        "paused": false,
+        "pid": 0,
+        "playlist_enabled": false,
+        "playlist_index": -1,
+        "playlist_size": 0,
+        "reconcile_degraded_keys": [],
+        "reconcile_last_trigger": "",
+        "reconcile_last_verdict": "",
+        "reconcile_mode": "",
+        "reconcile_retries": 0,
+        "video": ""
+      }
+    }
+  ],
+  "note": "Frozen behaviour of the pure C++ shared/ layer. A Rust port must reproduce every case's output byte-for-byte. Regenerate with golden_dump <file>; verify with golden_dump --check <file>.",
+  "schema": "k6wp.golden.v1"
+}

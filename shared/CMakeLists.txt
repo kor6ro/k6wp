@@ -48,6 +48,13 @@ target_include_directories(monitor_dump PRIVATE "${CMAKE_SOURCE_DIR}/packaging")
 endif()
 
 if(BUILD_TESTING)
+# golden_dump - Phase 0 task 0.6: freeze the pure shared/ behaviour as a
+# golden JSON document a Rust port can replay. NOT a test binary: it writes
+# (or checks) tests/golden/shared_behavior.json.
+add_executable(golden_dump ../tests/golden_dump.cpp)
+target_link_libraries(golden_dump PRIVATE k6wp_shared)
+target_include_directories(golden_dump PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
 # config_test - mini unit tests for the config schema (Todo 5). argv[1]
 # carries config_schema.json so the schema-doc sync guard can run.
 add_executable(config_test ../tests/config_test.cpp)
@@ -112,4 +119,11 @@ add_executable(still_test ../tests/still_test.cpp)
 target_link_libraries(still_test PRIVATE k6wp_shared)
 target_include_directories(still_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 add_test(NAME still_test COMMAND still_test)
+
+# golden_test - CI gate for the frozen shared/ behaviour. Regenerates the
+# golden document and fails when it drifts from the committed copy, so a
+# behaviour change in shared/ can never land unnoticed (the Rust port
+# replays the SAME file in Phase 2/3).
+add_test(NAME golden_test COMMAND golden_dump --check
+         "${CMAKE_SOURCE_DIR}/tests/golden/shared_behavior.json")
 endif()

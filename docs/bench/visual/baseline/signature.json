@@ -1,0 +1,78 @@
+﻿{
+    "tool":  "bench_visual",
+    "phase":  0,
+    "date":  "2026-10-21T00:53:58+07:00",
+    "label":  "live-proven",
+    "dir":  "C:\\Users\\axioo\\Desktop\\k6wp\\docs\\bench\\visual\\baseline",
+    "region":  {
+                   "full_screen":  true,
+                   "crop_width":  0,
+                   "crop_height":  0,
+                   "note":  "signature and motion diff are computed over the full captured frame"
+               },
+    "frames":  [
+                   {
+                       "index":  1,
+                       "file":  "frame1.png",
+                       "signature":  {
+                                         "pixels":  129600,
+                                         "mean_luma":  126.04,
+                                         "stddev":  67.47,
+                                         "mean_r":  122.4,
+                                         "mean_g":  127.37,
+                                         "mean_b":  123.53
+                                     }
+                   },
+                   {
+                       "index":  2,
+                       "file":  "frame2.png",
+                       "signature":  {
+                                         "pixels":  129600,
+                                         "mean_luma":  128.51,
+                                         "stddev":  66.69,
+                                         "mean_r":  124.79,
+                                         "mean_g":  129.89,
+                                         "mean_b":  125.71
+                                     }
+                   },
+                   {
+                       "index":  3,
+                       "file":  "frame3.png",
+                       "signature":  {
+                                         "pixels":  129600,
+                                         "mean_luma":  128.46,
+                                         "stddev":  66.7,
+                                         "mean_r":  124.89,
+                                         "mean_g":  129.78,
+                                         "mean_b":  125.94
+                                     }
+                   },
+                   {
+                       "index":  4,
+                       "file":  "frame4.png",
+                       "signature":  {
+                                         "pixels":  129600,
+                                         "mean_luma":  128.49,
+                                         "stddev":  66.68,
+                                         "mean_r":  125.01,
+                                         "mean_g":  129.78,
+                                         "mean_b":  125.95
+                                     }
+                   }
+               ],
+    "mean_luma":  {
+                      "n":  4,
+                      "median":  128.48,
+                      "mean":  127.88,
+                      "min":  126.04,
+                      "max":  128.51
+                  },
+    "stddev":  {
+                   "n":  4,
+                   "median":  66.69,
+                   "mean":  66.89,
+                   "min":  66.68,
+                   "max":  67.47
+               },
+    "motion_diff":  84.865
+}

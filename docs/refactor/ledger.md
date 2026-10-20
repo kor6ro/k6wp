@@ -10,15 +10,16 @@ Evidence labels: **live-proven** (observed on this machine), **test-proven**
 
 | ID | Hypothesis | Status | Evidence |
 |---|---|---|---|
-| 0.1 | Tag + branch isolate the baseline; hygiene does not change binaries | pending | |
-| 0.2 | Release + Debug build green; ctest result recorded without fixes | pending | |
-| 0.3 | Existing harness covers CPU/RAM/startup; GPU, wakeups, resume latency, Studio, bundle and visual parity need new samplers | pending | |
-| 0.4 | A 1080p and a 4K high-DPB clip expose decode-pool cost | pending | |
-| 0.5 | n≥5 medians establish noise bands for every protected metric | pending | |
-| 0.6 | Pure C++ behaviour can be frozen as golden JSON and replayed by Rust | pending | |
-| 0.7 | CLI/exit-code/tray/config/Studio inventory is complete enough for parity | pending | |
+| 0.1 | Tag + branch isolate the baseline; hygiene does not change binaries | applied | tag `baseline-pre-refactor` @ `9923cc0`; branch `refactor/rust`; `docs/refactor/repo-hygiene.md` (code-quoted) |
+| 0.2 | Release + Debug build green; ctest result recorded without fixes | applied | `docs/refactor/baseline-tests.md` — release configure/build exit 0, ctest **48/48** in 72.5 s (code-quoted) |
+| 0.3 | Existing harness covers CPU/RAM/startup; GPU, wakeups, resume latency, Studio, bundle and visual parity need new samplers | applied | new: `tools/bench_engine.ps1` (GPU+GPU-mem+wakeups), `tools/bench_resume.ps1`, `tools/bench_studio.ps1`, `tools/bench_bundle.ps1`, `tools/bench_visual.ps1`; shared helpers in `tools/bench_lib.ps1` (live-proven) |
+| 0.4 | A 1080p and a 4K high-DPB clip expose decode-pool cost | applied | `tests/corpus/highdpb_4k.mp4` (4K30, 16 refs) → 387.5 MB private / 468.1 MB GPU shared vs 162.3 / 151.6 at 1080p (live-proven) |
+| 0.5 | n≥5 medians establish noise bands for every protected metric | applied | `docs/bench/phase0.json` + `.raw.json` (20 runs, 4 states); bands in `docs/refactor/phase0-baseline.md` (live-proven) |
+| 0.6 | Pure C++ behaviour can be frozen as golden JSON and replayed by Rust | applied | `tests/golden/shared_behavior.json` — **92 cases** from `tests/golden_dump.cpp`; enforced by the `golden_test` ctest (test-proven) |
+| 0.7 | CLI/exit-code/tray/config/Studio inventory is complete enough for parity | applied | `docs/refactor/contract-inventory.md` — 744 lines, every claim `file:line`-cited (code-quoted) |
 | 0.8 | Repo hygiene removes noise without deleting evidence | applied | `docs/refactor/repo-hygiene.md` (code-quoted) |
-| 0.9 | Budgets are realistic against measured noise | pending | |
+| 0.9 | Budgets are realistic against measured noise | applied | `docs/refactor/budgets.md` — 20 parity gates + 9 improvement targets, each derived from a measured band (live-proven) |
+| 0.10 | The visual parity gate can actually FAIL (a gate that never fails is not a gate) | applied | `tools/verify_visual_negative.ps1` rejects the non-playing desktop (luma delta 59.5 vs tolerance 12) (live-proven) |
 
 ## Phase 1 — quick wins in C++
 

@@ -1,0 +1,87 @@
+﻿{
+    "tool":  "bench_resume",
+    "phase":  0,
+    "date":  "2026-10-21T00:53:46+07:00",
+    "label":  "live-proven",
+    "engine":  "C:\\Users\\axioo\\Desktop\\k6wp\\tools\\..\\build\\release\\engine.exe",
+    "video":  "C:\\Users\\axioo\\Desktop\\k6wp\\tools\\..\\tests\\corpus\\anime.mp4",
+    "runs":  3,
+    "hw":  {
+               "os":  "Microsoft Windows 11 Home 10.0.26200 build 26200",
+               "cpu":  "12th Gen Intel(R) Core(TM) i7-12650H",
+               "cores":  10,
+               "logical":  16,
+               "ram_kib":  16457592,
+               "gpus":  [
+                            "Virtual Display Driver",
+                            "NVIDIA GeForce RTX 2050",
+                            "Intel(R) UHD Graphics"
+                        ],
+               "power_plan":  "Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)",
+               "monitors":  [
+                                {
+                                    "id":  0,
+                                    "x":  0,
+                                    "y":  0,
+                                    "width":  1920,
+                                    "height":  1080,
+                                    "is_primary":  true,
+                                    "device_name":  "\\\\.\\DISPLAY1",
+                                    "orientation":  0,
+                                    "refresh_hz":  144,
+                                    "scale_pct":  100,
+                                    "stable_key":  "ccd:\\\\?\\display#cmn1521#4\u0026a115999\u00260\u0026uid8388688#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}"
+                                }
+                            ],
+               "date":  "2026-10-21T00:53:15+07:00"
+           },
+    "method":  "real engine.exe; --simulate-suspend-after-ms posts the real PBT_APMSUSPEND/PBT_APMRESUMEAUTOMATIC path; control latency = the engine log timestamps; visual latency = GDI screen-sample diff until the desktop changes again",
+    "control_path_ms":  {
+                            "n":  3,
+                            "median":  2006,
+                            "mean":  2005,
+                            "min":  1998,
+                            "max":  2011
+                        },
+    "visual_change_ms":  {
+                             "n":  3,
+                             "median":  1331,
+                             "mean":  1367.33,
+                             "min":  1114,
+                             "max":  1657
+                         },
+    "caveats":  [
+                    "control_path_ms is the engine log timestamp delta between the suspend and resume markers. The engine posts the resume 2000 ms after the suspend, so ~2000 ms is the EXPECTED control value here, not the engine reacting to a real sleep.",
+                    "visual_change_ms is a PROXY lower bound: it depends on the GDI screen-capture path and on the video content changing. A still frame would read as \"no change\".",
+                    "Neither number is the duration of a real machine sleep; a real suspend/resume needs the hardware path and cannot be simulated faithfully in-process."
+                ],
+    "raw":  [
+                {
+                    "run":  1,
+                    "control_path_ms":  2006,
+                    "visual_change_ms":  1114,
+                    "resume_log_line":  "[00:53:23.941] power: PBT_APMRESUMEAUTOMATIC received",
+                    "paused_after_resume":  false,
+                    "video_after_resume":  "C:\\Users\\axioo\\Desktop\\k6wp\\tools\\..\\tests\\corpus\\anime.mp4",
+                    "data_dir":  "C:\\Users\\axioo\\AppData\\Local\\Temp\\k6wp-bench-resume-c378e33b"
+                },
+                {
+                    "run":  2,
+                    "control_path_ms":  2011,
+                    "visual_change_ms":  1331,
+                    "resume_log_line":  "[00:53:33.377] power: PBT_APMRESUMEAUTOMATIC received",
+                    "paused_after_resume":  false,
+                    "video_after_resume":  "C:\\Users\\axioo\\Desktop\\k6wp\\tools\\..\\tests\\corpus\\anime.mp4",
+                    "data_dir":  "C:\\Users\\axioo\\AppData\\Local\\Temp\\k6wp-bench-resume-c2343a42"
+                },
+                {
+                    "run":  3,
+                    "control_path_ms":  1998,
+                    "visual_change_ms":  1657,
+                    "resume_log_line":  "[00:53:43.096] power: PBT_APMRESUMEAUTOMATIC received",
+                    "paused_after_resume":  false,
+                    "video_after_resume":  "C:\\Users\\axioo\\Desktop\\k6wp\\tools\\..\\tests\\corpus\\anime.mp4",
+                    "data_dir":  "C:\\Users\\axioo\\AppData\\Local\\Temp\\k6wp-bench-resume-fa8ce6c0"
+                }
+            ]
+}

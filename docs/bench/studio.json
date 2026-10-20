@@ -1,0 +1,158 @@
+﻿{
+    "tool":  "bench_studio",
+    "phase":  0,
+    "date":  "2026-10-21T00:53:12+07:00",
+    "label":  "live-proven",
+    "studio":  "C:\\Users\\axioo\\Desktop\\k6wp\\tools\\..\\build\\release\\studio.exe",
+    "runs":  3,
+    "hw":  {
+               "os":  "Microsoft Windows 11 Home 10.0.26200 build 26200",
+               "cpu":  "12th Gen Intel(R) Core(TM) i7-12650H",
+               "cores":  10,
+               "logical":  16,
+               "ram_kib":  16457592,
+               "gpus":  [
+                            "Virtual Display Driver",
+                            "NVIDIA GeForce RTX 2050",
+                            "Intel(R) UHD Graphics"
+                        ],
+               "power_plan":  "Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)",
+               "monitors":  [
+                                {
+                                    "id":  0,
+                                    "x":  0,
+                                    "y":  0,
+                                    "width":  1920,
+                                    "height":  1080,
+                                    "is_primary":  true,
+                                    "device_name":  "\\\\.\\DISPLAY1",
+                                    "orientation":  0,
+                                    "refresh_hz":  144,
+                                    "scale_pct":  100,
+                                    "stable_key":  "ccd:\\\\?\\display#cmn1521#4\u0026a115999\u00260\u0026uid8388688#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}"
+                                }
+                            ],
+               "date":  "2026-10-21T00:52:28+07:00"
+           },
+    "method":  "real studio.exe; isolated LOCALAPPDATA; startup = process start -\u003e first visible top-level window; idle sampled 10s after a 3s settle; .NET process counters",
+    "startup_window_ms":  {
+                              "n":  3,
+                              "median":  1290,
+                              "mean":  1358,
+                              "min":  1226,
+                              "max":  1558
+                          },
+    "private_mb":  {
+                       "n":  3,
+                       "median":  337.53,
+                       "mean":  338.05,
+                       "min":  337.14,
+                       "max":  339.49
+                   },
+    "ws_mb":  {
+                  "n":  3,
+                  "median":  219.05,
+                  "mean":  219.33,
+                  "min":  218.97,
+                  "max":  219.98
+              },
+    "cpu_pct":  {
+                    "n":  3,
+                    "median":  0,
+                    "mean":  0,
+                    "min":  0,
+                    "max":  0
+                },
+    "raw":  [
+                {
+                    "run":  1,
+                    "startup_window_ms":  1558,
+                    "startup_title_ms":  1559,
+                    "exit_code":  null,
+                    "private_mb":  {
+                                       "n":  10,
+                                       "median":  339.49,
+                                       "mean":  342.76,
+                                       "min":  339.49,
+                                       "max":  350.38
+                                   },
+                    "ws_mb":  {
+                                  "n":  10,
+                                  "median":  218.97,
+                                  "mean":  222.23,
+                                  "min":  218.96,
+                                  "max":  229.84
+                              },
+                    "cpu_pct":  {
+                                    "n":  10,
+                                    "median":  0,
+                                    "mean":  0.01,
+                                    "min":  0,
+                                    "max":  0.1
+                                },
+                    "threads_last":  56,
+                    "handles_last":  1572,
+                    "data_dir":  "C:\\Users\\axioo\\AppData\\Local\\Temp\\k6wp-bench-studio-973fedb0"
+                },
+                {
+                    "run":  2,
+                    "startup_window_ms":  1226,
+                    "startup_title_ms":  1226,
+                    "exit_code":  null,
+                    "private_mb":  {
+                                       "n":  10,
+                                       "median":  337.14,
+                                       "mean":  339.96,
+                                       "min":  337.14,
+                                       "max":  346.53
+                                   },
+                    "ws_mb":  {
+                                  "n":  10,
+                                  "median":  219.98,
+                                  "mean":  222.79,
+                                  "min":  219.98,
+                                  "max":  229.35
+                              },
+                    "cpu_pct":  {
+                                    "n":  10,
+                                    "median":  0,
+                                    "mean":  0,
+                                    "min":  0,
+                                    "max":  0
+                                },
+                    "threads_last":  53,
+                    "handles_last":  1558,
+                    "data_dir":  "C:\\Users\\axioo\\AppData\\Local\\Temp\\k6wp-bench-studio-bb669f91"
+                },
+                {
+                    "run":  3,
+                    "startup_window_ms":  1290,
+                    "startup_title_ms":  1264,
+                    "exit_code":  null,
+                    "private_mb":  {
+                                       "n":  10,
+                                       "median":  337.53,
+                                       "mean":  340.51,
+                                       "min":  337.53,
+                                       "max":  347.48
+                                   },
+                    "ws_mb":  {
+                                  "n":  10,
+                                  "median":  219.05,
+                                  "mean":  222.03,
+                                  "min":  219.05,
+                                  "max":  229
+                              },
+                    "cpu_pct":  {
+                                    "n":  10,
+                                    "median":  0,
+                                    "mean":  0.06,
+                                    "min":  0,
+                                    "max":  0.19
+                                },
+                    "threads_last":  55,
+                    "handles_last":  1570,
+                    "data_dir":  "C:\\Users\\axioo\\AppData\\Local\\Temp\\k6wp-bench-studio-adff5b5a"
+                }
+            ]
+}

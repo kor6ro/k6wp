@@ -1,0 +1,309 @@
+﻿{
+    "tool":  "bench_bundle",
+    "phase":  0,
+    "date":  "2026-10-21T00:53:13+07:00",
+    "label":  "live-proven",
+    "method":  "filesystem census of the release build tree (the set packaging/installer.nsi stages) + shipped zips in dist/",
+    "build_dir":  "C:\\Users\\axioo\\Desktop\\k6wp\\build\\release",
+    "total_files":  1306,
+    "total_bytes":  408046248,
+    "total_mb":  389.14,
+    "groups":  {
+                   "k6wp-exes":  {
+                                     "files":  4,
+                                     "bytes":  5704192,
+                                     "mb":  5.44,
+                                     "pct":  1.4
+                                 },
+                   "msvc-runtime":  {
+                                        "files":  3,
+                                        "bytes":  872240,
+                                        "mb":  0.83,
+                                        "pct":  0.2
+                                    },
+                   "qt-payload/networkinformation":  {
+                                                         "files":  1,
+                                                         "bytes":  71304,
+                                                         "mb":  0.07,
+                                                         "pct":  0
+                                                     },
+                   "qt-payload/platforms":  {
+                                                "files":  1,
+                                                "bytes":  907912,
+                                                "mb":  0.87,
+                                                "pct":  0.2
+                                            },
+                   "qt":  {
+                              "files":  30,
+                              "bytes":  50327536,
+                              "mb":  48,
+                              "pct":  12.3
+                          },
+                   "ffmpeg":  {
+                                  "files":  2,
+                                  "bytes":  203590656,
+                                  "mb":  194.16,
+                                  "pct":  49.9
+                              },
+                   "qt-payload/tls":  {
+                                          "files":  2,
+                                          "bytes":  356624,
+                                          "mb":  0.34,
+                                          "pct":  0.1
+                                      },
+                   "qt-payload/styles":  {
+                                             "files":  1,
+                                             "bytes":  215688,
+                                             "mb":  0.21,
+                                             "pct":  0.1
+                                         },
+                   "shader-cache":  {
+                                        "files":  2,
+                                        "bytes":  15826800,
+                                        "mb":  15.09,
+                                        "pct":  3.9
+                                    },
+                   "other":  {
+                                 "files":  19,
+                                 "bytes":  504623,
+                                 "mb":  0.48,
+                                 "pct":  0.1
+                             },
+                   "mpv":  {
+                               "files":  1,
+                               "bytes":  120342528,
+                               "mb":  114.77,
+                               "pct":  29.5
+                           },
+                   "qt-payload/imageformats":  {
+                                                   "files":  4,
+                                                   "bytes":  708640,
+                                                   "mb":  0.68,
+                                                   "pct":  0.2
+                                               },
+                   "qt-payload/iconengines":  {
+                                                  "files":  1,
+                                                  "bytes":  77448,
+                                                  "mb":  0.07,
+                                                  "pct":  0
+                                              },
+                   "qt-payload/qml":  {
+                                          "files":  1235,
+                                          "bytes":  8540057,
+                                          "mb":  8.14,
+                                          "pct":  2.1
+                                      }
+               },
+    "largest_files":  [
+                          {
+                              "rel":  "libmpv-2.dll",
+                              "bytes":  120342528,
+                              "mb":  114.77,
+                              "group":  "mpv",
+                              "source":  "vendor"
+                          },
+                          {
+                              "rel":  "ffmpeg.exe",
+                              "bytes":  101897728,
+                              "mb":  97.18,
+                              "group":  "ffmpeg",
+                              "source":  "vendor"
+                          },
+                          {
+                              "rel":  "ffprobe.exe",
+                              "bytes":  101692928,
+                              "mb":  96.98,
+                              "group":  "ffmpeg",
+                              "source":  "vendor"
+                          },
+                          {
+                              "rel":  "dxcompiler.dll",
+                              "bytes":  14317000,
+                              "mb":  13.65,
+                              "group":  "shader-cache",
+                              "source":  "build"
+                          },
+                          {
+                              "rel":  "Qt6Gui.dll",
+                              "bytes":  9285768,
+                              "mb":  8.86,
+                              "group":  "qt",
+                              "source":  "build"
+                          },
+                          {
+                              "rel":  "Qt6Widgets.dll",
+                              "bytes":  6500488,
+                              "mb":  6.2,
+                              "group":  "qt",
+                              "source":  "build"
+                          },
+                          {
+                              "rel":  "Qt6Quick.dll",
+                              "bytes":  6281352,
+                              "mb":  5.99,
+                              "group":  "qt",
+                              "source":  "build"
+                          },
+                          {
+                              "rel":  "Qt6Core.dll",
+                              "bytes":  6159496,
+                              "mb":  5.87,
+                              "group":  "qt",
+                              "source":  "build"
+                          },
+                          {
+                              "rel":  "Qt6Qml.dll",
+                              "bytes":  5250184,
+                              "mb":  5.01,
+                              "group":  "qt",
+                              "source":  "build"
+                          },
+                          {
+                              "rel":  "studio.exe",
+                              "bytes":  4098048,
+                              "mb":  3.91,
+                              "group":  "k6wp-exes",
+                              "source":  "build"
+                          },
+                          {
+                              "rel":  "qml/QtQuick/Controls/FluentWinUI3/qtquickcontrols2fluentwinui3styleplugin.dll",
+                              "bytes":  2793608,
+                              "mb":  2.66,
+                              "group":  "qt-payload/qml",
+                              "source":  "build"
+                          },
+                          {
+                              "rel":  "Qt6QuickControls2Imagine.dll",
+                              "bytes":  2545288,
+                              "mb":  2.43,
+                              "group":  "qt",
+                              "source":  "build"
+                          },
+                          {
+                              "rel":  "Qt6OpenGL.dll",
+                              "bytes":  1970824,
+                              "mb":  1.88,
+                              "group":  "qt",
+                              "source":  "build"
+                          },
+                          {
+                              "rel":  "Qt6QuickTemplates2.dll",
+                              "bytes":  1868936,
+                              "mb":  1.78,
+                              "group":  "qt",
+                              "source":  "build"
+                          },
+                          {
+                              "rel":  "Qt6Network.dll",
+                              "bytes":  1755784,
+                              "mb":  1.67,
+                              "group":  "qt",
+                              "source":  "build"
+                          },
+                          {
+                              "rel":  "dxil.dll",
+                              "bytes":  1509800,
+                              "mb":  1.44,
+                              "group":  "shader-cache",
+                              "source":  "build"
+                          },
+                          {
+                              "rel":  "Qt6QuickControls2Basic.dll",
+                              "bytes":  1351304,
+                              "mb":  1.29,
+                              "group":  "qt",
+                              "source":  "build"
+                          },
+                          {
+                              "rel":  "Qt6QuickControls2Material.dll",
+                              "bytes":  1347208,
+                              "mb":  1.28,
+                              "group":  "qt",
+                              "source":  "build"
+                          },
+                          {
+                              "rel":  "qml/QtQuick/Controls/FluentWinUI3/Config.qml",
+                              "bytes":  1235933,
+                              "mb":  1.18,
+                              "group":  "qt-payload/qml",
+                              "source":  "build"
+                          },
+                          {
+                              "rel":  "Qt6QuickControls2Fusion.dll",
+                              "bytes":  1168520,
+                              "mb":  1.11,
+                              "group":  "qt",
+                              "source":  "build"
+                          },
+                          {
+                              "rel":  "Qt6QuickControls2Universal.dll",
+                              "bytes":  1071752,
+                              "mb":  1.02,
+                              "group":  "qt",
+                              "source":  "build"
+                          },
+                          {
+                              "rel":  "platforms/qwindows.dll",
+                              "bytes":  907912,
+                              "mb":  0.87,
+                              "group":  "qt-payload/platforms",
+                              "source":  "build"
+                          },
+                          {
+                              "rel":  "engine.exe",
+                              "bytes":  841216,
+                              "mb":  0.8,
+                              "group":  "k6wp-exes",
+                              "source":  "build"
+                          },
+                          {
+                              "rel":  "qml/QtQuick/NativeStyle/qtquickcontrols2nativestyleplugin.dll",
+                              "bytes":  786056,
+                              "mb":  0.75,
+                              "group":  "qt-payload/qml",
+                              "source":  "build"
+                          },
+                          {
+                              "rel":  "Qt6QmlModels.dll",
+                              "bytes":  739464,
+                              "mb":  0.71,
+                              "group":  "qt",
+                              "source":  "build"
+                          }
+                      ],
+    "shipped_zips":  [
+                         {
+                             "name":  "K6WP-portable-0.0.1-alpha.3.zip",
+                             "bytes":  155596250,
+                             "mb":  148.39,
+                             "modified":  "2026-10-20"
+                         },
+                         {
+                             "name":  "K6WP-portable-0.0.1-alpha.2.zip",
+                             "bytes":  155479991,
+                             "mb":  148.28,
+                             "modified":  "2026-10-17"
+                         },
+                         {
+                             "name":  "K6WP-portable-0.0.1-test.zip",
+                             "bytes":  155419471,
+                             "mb":  148.22,
+                             "modified":  "2026-10-11"
+                         },
+                         {
+                             "name":  "K6WP-portable-0.0.1-alpha.zip",
+                             "bytes":  155419472,
+                             "mb":  148.22,
+                             "modified":  "2026-10-10"
+                         }
+                     ],
+    "missing_vendor":  [
+
+                       ],
+    "notes":  [
+                  "mpv = libmpv-2.dll; qt = Qt6*.dll; qml/qt-payload = the QML module tree; ffmpeg = ffmpeg.exe+ffprobe.exe.",
+                  "The staging set mirrors packaging/installer.nsi: libmpv + VC runtime come from vendor\\, the Qt payload from the release build tree.",
+                  "This is the pre-refactor baseline. Phase 1.3 (lean libmpv), Phase 2.7 (Qt removal) and Phase 3 target these groups.",
+                  "Sizes are on-disk bytes; the ZIP column is the compressed shipping size (dist/ may lag the current build)."
+              ]
+}
