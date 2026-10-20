@@ -30,7 +30,7 @@
 #include "mpv_renderer.hpp"
 #include "multi_monitor.hpp"
 #include "cpu_affinity.hpp"
-#include "lockscreen_glue.hpp"
+#include "lockscreen_refresher.hpp"
 #include "occlusion_poke_scheduler.hpp"
 #include "lock_order.hpp"
 #include "topology_snapshot.hpp"

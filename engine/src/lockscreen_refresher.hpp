@@ -48,7 +48,7 @@ class LockscreenRefresher {
   // Never throws; a thread that cannot be started leaves the refresher
   // inactive (the caller then falls back to the direct fire-and-forget
   // path).
-  void Start(CaptureFn capture);
+  void Start(CaptureFn capture, LogFn log);
 
   // Requests a refresh of `video_path` (UTF-8). Returns immediately; the
   // worker does the work. The newest request wins. The trigger decides the

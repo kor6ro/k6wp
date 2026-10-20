@@ -22,9 +22,9 @@ namespace k6wp {
 
 // Forward declaration: FireLockscreenSyncAsync (the legacy entry point) is
 // defined before the producer, which is the shared implementation.
-bool ProduceLockscreenFrame(const std::filesystem::path& video_path,
-                             LockscreenTrigger trigger, int wait_ms) noexcept;
-
+LockscreenFrameSource ProduceLockscreenFrame(
+    const std::filesystem::path& video_path, LockscreenTrigger trigger,
+    int wait_ms) noexcept;
 namespace {
 
 // Debounce window for repeated syncs of the SAME file. A DIFFERENT file is
@@ -335,12 +335,13 @@ void SetLockscreenLiveFrameFn(LockscreenLiveFrameFn fn) {
   g_live_frame_fn = fn;
 }
 
-bool ProduceLockscreenFrame(const std::filesystem::path& video_path,
-                             LockscreenTrigger trigger, int wait_ms) noexcept {
+LockscreenFrameSource ProduceLockscreenFrame(
+    const std::filesystem::path& video_path, LockscreenTrigger trigger,
+    int wait_ms) noexcept {
   try {
-    if (!ShouldRefreshLockscreen(trigger)) return false;
-    if (video_path.empty()) return false;
-    if (!IsLockscreenSyncEnabled()) return false;
+    if (!ShouldRefreshLockscreen(trigger)) return LockscreenFrameSource::kNone;
+    if (video_path.empty()) return LockscreenFrameSource::kNone;
+    if (!IsLockscreenSyncEnabled()) return LockscreenFrameSource::kNone;
 
     LockscreenLiveFrameFn live = nullptr;
     {
@@ -355,7 +356,7 @@ bool ProduceLockscreenFrame(const std::filesystem::path& video_path,
       std::filesystem::remove(tmp, ec);
       if (live(tmp.u8string()) && WaitForFile(tmp, wait_ms)) {
         if (AtomicReplaceFile(tmp, LockscreenJpgPath())) {
-          return true;
+          return LockscreenFrameSource::kLiveFrame;
         }
       }
       std::filesystem::remove(tmp, ec);
@@ -381,7 +382,7 @@ bool ProduceLockscreenFrame(const std::filesystem::path& video_path,
                              size == g_last_fire_size &&
                              mtime == g_last_fire_mtime;
       if (same_file && now - g_last_fire_ms < kDebounceMs) {
-        return false;
+        return LockscreenFrameSource::kNone;
       }
       g_last_fire_path = video_path.wstring();
       g_last_fire_ms = now;
@@ -397,7 +398,7 @@ bool ProduceLockscreenFrame(const std::filesystem::path& video_path,
       }
       DebugLog(L"K6WP lockscreen: video missing, skipping sync (ec=%lu)",
                static_cast<DWORD>(ec.value()));
-      return false;
+      return LockscreenFrameSource::kNone;
     }
 
     if (!SpawnFrameExtract(video_path, LockscreenOffsetSec(), wait)) {
@@ -405,12 +406,12 @@ bool ProduceLockscreenFrame(const std::filesystem::path& video_path,
         std::lock_guard<std::mutex> lock(g_fire_mutex);
         g_last_fire_path.clear();
       }
-      return false;
+      return LockscreenFrameSource::kNone;
     }
-    return true;
+    return LockscreenFrameSource::kFileExtract;
   } catch (...) {
     DebugLog(L"K6WP lockscreen: unexpected exception, skipping (ec=%lu)", 0);
-    return false;
+    return LockscreenFrameSource::kNone;
   }
 }
 

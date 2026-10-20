@@ -119,6 +119,15 @@ using LockscreenLiveFrameFn = bool (*)(const std::string& path);
 // Thread-safe.
 void SetLockscreenLiveFrameFn(LockscreenLiveFrameFn fn);
 
+// Where the produced frame came from. The Engine logs it, so "the lock
+// screen was refreshed" can be told apart from "the live capture failed and
+// the file-based extract was used instead".
+enum class LockscreenFrameSource {
+  kNone,       // nothing was produced (sync off, no video, debounced)
+  kLiveFrame,  // the picture that was on screen right now
+  kFileExtract // a frame extracted from the video file
+};
+
 // Produces the lock-screen frame for `video_path`:
 //
 //   1. the LIVE frame, when a provider is registered AND the file lands
@@ -130,9 +139,9 @@ void SetLockscreenLiveFrameFn(LockscreenLiveFrameFn fn);
 // `wait_ms` bounds the wait for the live frame; 0 means "do not wait", so
 // the live frame is skipped and the file-based extract is used instead.
 //
-// Never throws. Returns true when a frame was produced or the extract was
-// started.
-bool ProduceLockscreenFrame(const std::filesystem::path& video_path,
-                             LockscreenTrigger trigger, int wait_ms) noexcept;
+// Never throws. Returns where the frame came from.
+LockscreenFrameSource ProduceLockscreenFrame(
+    const std::filesystem::path& video_path, LockscreenTrigger trigger,
+    int wait_ms) noexcept;
 
 }  // namespace k6wp

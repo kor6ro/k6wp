@@ -318,7 +318,18 @@ bool MpvRenderer::ScreenshotToFile(const std::string& path) {
   mpv_set_property_string(mpv_, "screenshot-format", "jpg");
   // "video" captures the decoded frame (not the window), which is what the
   // lock screen wants. The path is quoted: it may contain spaces.
-  const std::string cmd = "screenshot-to-file \"" + path + "\" \"video\"";
+  //
+  // mpv's command parser treats a BACKSLASH as an escape character, so a
+  // raw Windows path ("C:\ProgramData\...") fails with "Broken string
+  // escapes" and the capture is refused. Every backslash is therefore
+  // doubled - mpv un-escapes it back to a single one.
+  std::string escaped;
+  escaped.reserve(path.size() + 8);
+  for (const char c : path) {
+    if (c == '\\') escaped.push_back('\\');
+    escaped.push_back(c);
+  }
+  const std::string cmd = "screenshot-to-file \"" + escaped + "\" \"video\"";
   return mpv_command_string(mpv_, cmd.c_str()) >= 0;
 }
 

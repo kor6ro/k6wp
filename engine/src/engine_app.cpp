@@ -492,7 +492,8 @@ bool EngineApp::Init(int argc, char** argv) {
   // now); the shared helper falls back to the file-based extract when it is
   // not available.
   SetLockscreenLiveFrameFn(&EngineApp::CaptureLiveLockscreenFrame);
-  lockscreen_refresher_.Start(&EngineApp::CaptureLiveLockscreenFrame);
+  lockscreen_refresher_.Start(&EngineApp::CaptureLiveLockscreenFrame,
+                             &EngineApp::Log);
   g_engine_instance = this;
   if (boot_autoplay) {
     headless_owns_decode_.store(

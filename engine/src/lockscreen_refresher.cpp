@@ -18,9 +18,10 @@ constexpr int kLiveFrameWaitMs = 2500;
 
 LockscreenRefresher::~LockscreenRefresher() { Stop(); }
 
-void LockscreenRefresher::Start(CaptureFn capture) {
+void LockscreenRefresher::Start(CaptureFn capture, LogFn log) {
   if (running_.load(std::memory_order_acquire)) return;
   capture_ = capture;
+  log_ = log;
   stop_.store(false, std::memory_order_release);
   try {
     std::thread worker([this] { WorkerMain(); });
@@ -51,8 +52,16 @@ void LockscreenRefresher::RefreshBlocking(const std::string& video_path,
   if (video_path.empty()) return;
   // The caller blocks: the system gives the app a short window before the
   // session ends, and the frame has to be on disk by then.
-  ProduceLockscreenFrame(std::filesystem::u8path(video_path),
-                          LockscreenTrigger::kShutdown, timeout_ms);
+  const LockscreenFrameSource source = ProduceLockscreenFrame(
+      std::filesystem::u8path(video_path), LockscreenTrigger::kShutdown,
+      timeout_ms);
+  if (log_) {
+    log_("lockscreen: the frame was refreshed (source=%s)",
+         source == LockscreenFrameSource::kLiveFrame
+             ? "live-frame"
+             : (source == LockscreenFrameSource::kFileExtract ? "file-extract"
+                                                              : "none"));
+  }
 }
 
 void LockscreenRefresher::WorkerMain() {
@@ -69,8 +78,16 @@ void LockscreenRefresher::WorkerMain() {
       trigger = pending_trigger_;
       pending_valid_ = false;
     }
-    ProduceLockscreenFrame(std::filesystem::u8path(video), trigger,
-                            kLiveFrameWaitMs);
+    const LockscreenFrameSource source = ProduceLockscreenFrame(
+        std::filesystem::u8path(video), trigger, kLiveFrameWaitMs);
+    if (log_) {
+      log_("lockscreen: the frame was refreshed (source=%s)",
+           source == LockscreenFrameSource::kLiveFrame
+               ? "live-frame"
+               : (source == LockscreenFrameSource::kFileExtract
+                      ? "file-extract"
+                      : "none"));
+    }
   }
 }
 

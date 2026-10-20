@@ -1,0 +1,42 @@
+# T0 — Verifikasi lingkungan (LANJUTAN v5.1, data_profile: EMULATED)
+Tanggal: 2026-10-16
+Mesin: Axioo Pongo 725 (laptop hybrid), SATU layar internal
+COMPUTERNAME: KOR6RO-LAPTOP
+Sandbox?: BUKAN — Windows user laptop nyata (tidak ada indikasi sandbox/VM)
+
+OS (PowerShell [System.Environment]::OSVersion.VersionString + registry):
+  Microsoft Windows NT 10.0.26200.0
+  ProductName: Windows 10 Home
+  DisplayVersion: 25H2
+  BuildLabEx: 26100.1.amd64fre.ge_release.240331-1435
+  Catatan: `winver` membuka GUI dialog (tidak ada teks yang dapat ditangkap);
+  build 26200.0 dari VersionString, sementara BuildLabEx melaporkan 26100.1 —
+  dicatat as-is, tidak disamarkan/digabungkan.
+
+GPU (Get-CimInstance Win32_VideoController):
+  1. NVIDIA GeForce RTX 2050 (VideoController1, AdapterRAM 4293918720 ~4 GB,
+     DriverVersion 32.0.16.1664) — discrete
+  2. Intel(R) UHD Graphics (VideoController2, AdapterRAM 2147479552 ~2 GB,
+     DriverVersion 32.0.101.7085) — iGPU
+  Adapter kontroler layar aktif (Win32_DisplayControllerConfiguration):
+  Intel(R) UHD Graphics -> mengemudikan layar internal.
+  Layar aktif: DesktopMonitor2, 1920 x 1080 (monitor_dump: scale_pct=100,
+  orientation=0, refresh_hz=144, is_primary=true). Satu layar internal terkonfirmasi.
+
+engine.log path: %LOCALAPPDATA%\K6WP\engine.log
+  Sumber: engine/src/log_file.cpp TryOpenOnce
+  (%LOCALAPPDATA%\K6WP\engine.log — dibaca dari kode, tidak ditebak).
+  File sudah ada (5,2 MB, terakhir ditulis 10/15/2026 11:51 PM) — isinya
+  dijaga utuh (data lama tidak dihapus); penangkap per skenario diambil sebagai
+  baris placement: baru setelah stempel waktu run ini.
+
+Binary (SUDAH ADA di mesin ini — T1 build step dilewati):
+  build\msvc-dev\engine.exe        (10/15/2026 11:52 PM)
+  build\msvc-dev\monitor_dump.exe  (10/15/2026 11:53 PM)
+  Sumber build bila diperlukan: cmake --preset msvc-dev
+  (BUILD_TESTING=ON, K6WP_BUILD_TOOLS=ON, Visual Studio 18 2026,
+  QT_ROOT=C:\Qt\6.8.3\msvc2022_64). Release: --preset release.
+
+reconcile mode: default "legacy"; env K6WP_RECONCILE_MODE menindih config
+(engine/src/engine_app.cpp:247-258). get_state menampilkan state.reconcile.mode
+(engine/src/engine_app.cpp:1583-1589).

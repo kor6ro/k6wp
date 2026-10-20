@@ -253,8 +253,8 @@ doc — when in doubt, read the code.
 
   | field | type / default | Engine consumer | missing/corrupt behavior |
   | ----- | -------------- | --------------- | ------------------------ |
-  | `lockscreen_sync` | bool, `false` | `IsLockscreenSyncEnabled()` — `EngineApp::MaybeTriggerLockscreenSync` (`engine/src/engine_app.cpp`) and `FireLockscreenSyncAsync` both no-op when false | `false` (best-effort read, never throws) |
-  | `lockscreen_offset_sec` | double `>= 0`, `1.0` | `LockscreenOffsetSec()` — seek offset for the `compressor --lockframe` spawn inside `FireLockscreenSyncAsync` (negative values clamp to `0.0`; unreadable settings fall back to `1.0`) | `1.0` (best-effort read, never throws) |
+  | `lockscreen_sync` | bool, `false` | `IsLockscreenSyncEnabled()` — the shared producer (`shared/lockscreen.cpp`: `ProduceLockscreenFrame`) no-ops when false, so neither the live frame nor the file-based extract runs | `false` (best-effort read, never throws) |
+  | `lockscreen_offset_sec` | double `>= 0`, `1.0` | `LockscreenOffsetSec()` — seek offset for the `compressor --lockframe` spawn inside the file-based extract (negative values clamp to `0.0`; unreadable settings fall back to `1.0`) | `1.0` (best-effort read, never throws) |
 
   Both fields are read through ONE cached view: the file is re-parsed only
   when its mtime/size change, so a single event costs at most one parse (it
