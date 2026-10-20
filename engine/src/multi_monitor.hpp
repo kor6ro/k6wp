@@ -159,6 +159,17 @@ class MultiMonitor {
   // force=true re-issues loadfile on every slot (device-lost recovery).
   bool LoadLoopAll(const std::string& path, bool force = false);
 
+  // Captures the frame that is on screen RIGHT NOW into `path` (UTF-8) -
+  // the live frame the lock screen prefers over a frame extracted from the
+  // start of the video. Tries the live slots in order and returns true as
+  // soon as one renderer accepted the capture.
+  //
+  // The capture is ASYNCHRONOUS (mpv's VO thread writes the file), so a
+  // true return means "accepted", not "written" - the caller waits for the
+  // file. Returns false when there is no live slot or no renderer
+  // accepted it.
+  bool CaptureLiveFrame(const std::string& path);
+
   // Row 15: true when a live slot's GDI device name matches `device`
   // (UTF-8, e.g. \\.\DISPLAY1). The set_display_video resolve predicate:
   // an unknown/absent key returns false and the caller rejects the command

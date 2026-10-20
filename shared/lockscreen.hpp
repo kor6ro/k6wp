@@ -96,4 +96,43 @@ void FireLockscreenSyncAsync(const std::filesystem::path& video_path) noexcept;
 void FireLockscreenSyncForTrigger(const std::filesystem::path& video_path,
                                   LockscreenTrigger trigger) noexcept;
 
+// --- the live frame ----------------------------------------------------------
+//
+// The frame that is on screen RIGHT NOW is a better lock-screen picture than
+// a frame extracted from the start of the video file, so the Engine
+// registers a live-frame provider (the mpv capture) and this helper prefers
+// it. Without a provider (Studio, tests) the file-based extract is used, so
+// the feature works either way.
+//
+// The live capture is ASYNCHRONOUS: mpv's screenshot-to-file is handled by
+// the VO thread and the file lands a moment later. Producing the frame
+// therefore needs a bounded wait, which is why the Engine does it on a
+// background thread (engine/src/lockscreen_refresher.hpp).
+
+// The live-frame seam: writes a JPEG of the picture on screen to `path`
+// (UTF-8) and returns true. `path` is a TEMP file - the helper moves it
+// into place atomically once it lands. Returning false (or not registering
+// a provider at all) falls back to the file-based extract.
+using LockscreenLiveFrameFn = bool (*)(const std::string& path);
+
+// Registers the live-frame provider. nullptr (the default) removes it.
+// Thread-safe.
+void SetLockscreenLiveFrameFn(LockscreenLiveFrameFn fn);
+
+// Produces the lock-screen frame for `video_path`:
+//
+//   1. the LIVE frame, when a provider is registered AND the file lands
+//      within `wait_ms`;
+//   2. otherwise the file-based extract (`compressor --lockframe`).
+//
+// `trigger` decides the debounce behaviour (a session lock / suspend /
+// shutdown bypasses it; a video change / rotation is throttled by it).
+// `wait_ms` bounds the wait for the live frame; 0 means "do not wait", so
+// the live frame is skipped and the file-based extract is used instead.
+//
+// Never throws. Returns true when a frame was produced or the extract was
+// started.
+bool ProduceLockscreenFrame(const std::filesystem::path& video_path,
+                             LockscreenTrigger trigger, int wait_ms) noexcept;
+
 }  // namespace k6wp

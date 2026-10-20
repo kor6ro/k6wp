@@ -7,6 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The engine no longer freezes when the monitor count drops.** The whole
+  slot reconciliation used to run inside the `WM_DISPLAYCHANGE` handler
+  (which the system delivers with `SendMessage`), and the renderer teardown
+  waited without a timeout for an mpv VO thread that can be stuck in
+  `Present()` on a display that just disappeared — the symptom was "the
+  tray icon is there but nothing responds". Now: one debounced reconcile
+  door outside the handler, the blocking renderer teardown moved to a
+  background worker (the renderer graveyard), the injected surface is
+  released instead of destroyed under a live VO, and the slots follow the
+  monitor's stable identity instead of its position index (unplugging a
+  middle monitor used to swap the renderers between monitors). The
+  per-monitor assignment survives an unplug/replug cycle.
+- `wallpaper_surface_live_` is re-synced with the slot census after every
+  reconcile pass: when the last monitor disappears the headless renderer
+  takes the decode over instead of `set_video` being rejected.
+- The shadow reconcile pass computes the topology diff against the PREVIOUS
+  snapshot (it was always empty), and the coverage census no longer runs
+  while the reconcile mutex is held.
+- The lock screen is refreshed when the session locks, when the machine
+  suspends, when the session ends and on a playlist rotation — not only on
+  boot and on a manual video change.
+- The OS wallpaper is restored on shutdown/logoff (the `WM_QUERYENDSESSION`
+  / `WM_ENDSESSION` handlers were missing).
+- The two settings the engine reads are parsed once per event instead of
+  twice, and the lock-screen debounce is keyed on the file's content — a
+  re-compressed wallpaper with the same path is no longer swallowed.
+
+### Added
+
+- **The lock-screen toggle now works end to end.** It runs
+  `K6WP.exe --elevate-lockscreen on|off` and only stays ON when the policy
+  really got registered: there is no longer a state "ON in the settings but
+  no policy" (the engine used to refresh a picture Windows never showed).
+  The first-run wizard offers the feature once (default on), the Studio
+  reports the honest Windows-edition support, and the lock-screen frame is
+  the LIVE picture on screen (falling back to the file-based extract).
+- A hang watchdog: the message loop publishes a heartbeat, and a stuck
+  engine writes a minidump and is restarted (with the existing
+  crash-restart backoff, so it cannot loop).
+- New suites: `reconcile_policy_test` (the pure reconcile decision core),
+  `lockscreen_policy_test` (the trigger, elevation and Windows-edition
+  policies) and the hang-detector checks in `engine_units_test`.
+
+### Changed
+
+- `studio_settings.json` is schema **v4** (adds the Studio-private
+  `lockscreen_offer_shown`). The migration never changes a user's
+  `lockscreen_sync` decision: the feature needs an administrator
+  registration, so flipping it silently would produce exactly the state
+  this release removes. The engine still reads exactly two fields of that
+  file (LOW-16 unchanged).
+
 ## [0.0.1-alpha.2] - 2026-10-17
 
 Second alpha pre-release: display-resilience groundwork plus a studio UI

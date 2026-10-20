@@ -1,6 +1,6 @@
 # Known issues
 
-Five honest limitations, each with where to look. None blocks the
+Eight honest limitations, each with where to look. None blocks the
 manual checklist in docs/manual-test.md.
 
 1. First `get_state` after pipe-up reports `running:false` until the
@@ -44,3 +44,33 @@ manual checklist in docs/manual-test.md.
    alive on the idle surface rather than crashing. The true reboot
    measurement is a manual step (docs/manual-test.md item 6).
    (task-18-coldstart.txt)
+6. The lock-screen picture is applied through the HKLM policy
+   `SOFTWARE\Policies\Microsoft\Windows\Personalization\LockScreenImage`,
+   and Microsoft documents that policy as supported on **Enterprise and
+   Education** only. On **Pro** the Group Policy table marks it as NOT
+   supported (the Intune / Configuration Service Provider path is), and on
+   **Home** it does not work at all. Community reports say the policy
+   sometimes works on Pro, and that the `PersonalizationCSP` path
+   (`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\PersonalizationCSP` →
+   `LockScreenImagePath` / `LockScreenImageUrl` / `LockScreenImageStatus`)
+   is honoured there - but NEITHER is verified in this repository, so the
+   `PersonalizationCSP` fallback is deliberately NOT implemented. The
+   Studio therefore reports the truth: "Aktif" on Enterprise/Education,
+   "Policy terdaftar, tapi edisi Windows X mungkin mengabaikannya" on Pro,
+   "tidak mendukung" on Home (`shared/lockscreen_edition.cpp`,
+   `tests/lockscreen_policy_test.cpp`). The effective check is manual:
+   lock the screen (Win+L) and look.
+7. The lock-screen frame needs an ADMINISTRATOR registration, because only
+   the launcher can write the HKLM policy (`K6WP.exe --elevate-lockscreen
+   on`). A user who declines the UAC prompt gets the feature OFF - the
+   Studio never leaves the toggle in the "on but unregistered" state, so
+   the picture is simply not shown. There is no non-admin path.
+8. A hang in the engine is now recovered from (the watchdog writes a
+   minidump and restarts the engine), but the RECOVERY is a restart, not a
+   resume: the wallpaper comes back with the settings it had, and the
+   per-monitor video assignment is re-applied from `displays.json`. A
+   hang that happens DURING the first seconds after a display change can
+   still cost the user the moment (the frame is re-extracted on the next
+   event). The watchdog cannot detect a hang that looks like idleness: the
+   paused engine waits INFINITE on purpose and is explicitly NOT treated
+   as a hang.

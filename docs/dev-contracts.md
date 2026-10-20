@@ -103,6 +103,43 @@ doc — when in doubt, read the code.
   rejects the frame, never a crash; old Studios never send it, so mixed
   versions degrade gracefully.
 
+- **Slot teardown: the DECISION stays on the message-loop thread, the
+  unbounded WAIT does not** (Bug B, recorded deviation). The contract
+  "structural slot changes (create/destroy window & renderer) happen on the
+  message-loop thread only" still holds for the slot MAP and for the
+  windows: `MultiMonitor::slots_` is only mutated on the message-loop
+  thread, and every desktop window is created and destroyed there
+  (`DesktopInjector::Attach` / `ReleaseSurface` / `DestroyWindow`).
+  What moved off that thread is the *blocking wait* inside the renderer
+  destructor: `mpv_terminate_destroy()` waits for the mpv VO thread, which
+  can be stuck in `Present()` on a display that was just unplugged - with no
+  timeout. That wait now runs on the renderer graveyard's worker thread
+  (`engine/src/renderer_graveyard.hpp`): the slot hands its renderer over
+  and returns immediately, the worker owns the destructor, and the injected
+  window is released (hidden, NOT destroyed) and destroyed on the
+  message-loop thread once the renderer is really gone
+  (`RendererGraveyard::Drain`, called from the reconcile pass). The
+  alternative - waiting on the message-loop thread - is exactly the freeze
+  this fixes. A renderer whose teardown cannot be handed over is LEAKED on
+  purpose (logged as critical) rather than blocking the loop.
+
+- **The display-change reconciliation is DEBOUNCED and never runs inside the
+  `WM_DISPLAYCHANGE` handler** (Bug B). `WM_DISPLAYCHANGE` is delivered
+  with `SendMessage` by the system, so a slow handler stalls the whole
+  display-change broadcast for the session. Every trigger that can change
+  the monitor set or the desktop surface (display change, resume, unlock,
+  `TaskbarCreated`, `SPI_SETDESKWALLPAPER`, monitor-on) now goes through
+  ONE debounced door: `EngineApp::ArmTopologyReconcile(trigger)` arms a
+  400 ms timer and the handler returns; the slot work happens in the timer
+  callback (`RunTopologyReconcile`), outside the `WM_DISPLAYCHANGE` stack.
+  The re-anchor triggers (resume / unlock / Explorer restart) additionally
+  wait until two consecutive monitor enumerations AGREE
+  (`engine/src/reconcile_policy.hpp`: `DecideReconcileAction`,
+  `ReconcileActionNeedsStableTopology`, `TopologyStable`) - right after a
+  wake the enumeration can still be moving, and converging on a
+  half-reported topology tears down slots that are about to come back.
+  The pure decision layer is unit-tested (`tests/reconcile_policy_test.cpp`).
+
 - `get_state.state` fields (`EngineApp::BuildStateJson`,
   `engine/src/engine_app.cpp`): `running`, `paused`, `pid`,
   `wallpaper_mode`, `video` (utf-8 path), `config` (config path in use),
@@ -195,8 +232,17 @@ doc — when in doubt, read the code.
   `cache_dir` (default `%LOCALAPPDATA%\K6WP\cache`).
   (v3 removed the dead `keep_original`/`start_minimized` keys; old files
   carrying them migrate by ignoring those keys.)
-- Same `.bak` contract as §2: v0/v1/v2 → v3 migration and corrupt input both
-  back up to `<file>.bak` first. Empty-string dirs migrate to the env
+- Schema version: **v4** (`kStudioSettingsSchemaVersion`). v4 adds
+  `lockscreen_offer_shown` (bool, default false) — the one-time onboarding
+  offer for the lock screen. The v3 → v4 migration NEVER changes a user's
+  `lockscreen_sync` value: the lock screen needs an administrator policy
+  registration (`K6WP.exe --elevate-lockscreen on`), so flipping the flag
+  silently would produce exactly the "ON in the settings but no policy"
+  state — the Engine would keep refreshing a picture Windows never shows.
+  A v3 file therefore migrates with `lockscreen_sync` untouched and
+  `lockscreen_offer_shown` = false.
+- Same `.bak` contract as §2: v0/v1/v2/v3 → v4 migration and corrupt input
+  both back up to `<file>.bak` first. Empty-string dirs migrate to the env
   default. Directory defaults resolve at load (expanded paths on disk;
   `%LOCALAPPDATA%` literal form only in the example file).
 - Engine-read allowlist (LOW-16, audit-remediation todo 24): the Engine may
@@ -210,10 +256,15 @@ doc — when in doubt, read the code.
   | `lockscreen_sync` | bool, `false` | `IsLockscreenSyncEnabled()` — `EngineApp::MaybeTriggerLockscreenSync` (`engine/src/engine_app.cpp`) and `FireLockscreenSyncAsync` both no-op when false | `false` (best-effort read, never throws) |
   | `lockscreen_offset_sec` | double `>= 0`, `1.0` | `LockscreenOffsetSec()` — seek offset for the `compressor --lockframe` spawn inside `FireLockscreenSyncAsync` (negative values clamp to `0.0`; unreadable settings fall back to `1.0`) | `1.0` (best-effort read, never throws) |
 
+  Both fields are read through ONE cached view: the file is re-parsed only
+  when its mtime/size change, so a single event costs at most one parse (it
+  used to cost two — one per accessor).
+
   Forbidden (Studio-only, Engine must not read): `auto_compress_on_import`,
   `compress_output_dir`, `default_crf`, `default_fps`,
   `default_resolution_mode`, `start_with_windows`, `cache_dir`,
-  `compress_advanced_visible`, `check_updates` (plus the removed v3 keys
+  `compress_advanced_visible`, `check_updates`, `lockscreen_offer_shown`
+  (plus the removed v3 keys
   `keep_original` / `start_minimized`, which are ignored on migration).
   Rationale: `studio_settings.json` is Studio preference state, not playback
   state — the Engine's only legitimate interest is whether to spend a frame
@@ -228,6 +279,8 @@ doc — when in doubt, read the code.
   behavior (`IsLockscreenSyncEnabled()` / `LockscreenOffsetSec()`) is
   unchanged; flipping only the two allowed fields must move the behavior.
   Missing-file and corrupt-file cases must yield the safe defaults above.
+  The v4 field `lockscreen_offer_shown` is part of the forbidden set: the
+  §6 case flips it to true and asserts the Engine still sees sync OFF.
 
 ## 3a. Playlist (`%LOCALAPPDATA%\K6WP\playlist.json`)
 

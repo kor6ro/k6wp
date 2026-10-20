@@ -309,6 +309,19 @@ bool MpvRenderer::pin_active() const {
   return initialized_ && !pin_applied_.empty();
 }
 
+bool MpvRenderer::ScreenshotToFile(const std::string& path) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (!mpv_ || !initialized_ || path.empty()) return false;
+  // The lock screen policy points at a .jpg, so ask mpv for the JPEG
+  // encoder. A build without it refuses the format - the command then
+  // fails and the caller falls back to the file-based extract.
+  mpv_set_property_string(mpv_, "screenshot-format", "jpg");
+  // "video" captures the decoded frame (not the window), which is what the
+  // lock screen wants. The path is quoted: it may contain spaces.
+  const std::string cmd = "screenshot-to-file \"" + path + "\" \"video\"";
+  return mpv_command_string(mpv_, cmd.c_str()) >= 0;
+}
+
 void MpvRenderer::SetHWND(void* hwnd) {
   std::lock_guard<std::mutex> lock(mutex_);
   if (!mpv_) {

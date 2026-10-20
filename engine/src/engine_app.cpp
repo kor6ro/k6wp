@@ -35,6 +35,11 @@ namespace {
 
 std::atomic<HWND> g_message_hwnd{nullptr};
 
+// The live EngineApp instance, so the static lock-screen capture seam (a
+// plain function pointer, no captures) can reach the slot map. The engine
+// is a single resident instance; the pointer is cleared on shutdown.
+EngineApp* g_engine_instance = nullptr;
+
 unsigned long long CurrentThreadCount() {
   const DWORD pid = GetCurrentProcessId();
   HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
@@ -482,6 +487,13 @@ bool EngineApp::Init(int argc, char** argv) {
   } else {
     Log("device-lost: adapter-removed watch unavailable (engine keeps running without it)");
   }
+  // Bug A: the lock-screen frame is produced on a background worker. The
+  // live-frame provider is the mpv capture (the picture on screen right
+  // now); the shared helper falls back to the file-based extract when it is
+  // not available.
+  SetLockscreenLiveFrameFn(&EngineApp::CaptureLiveLockscreenFrame);
+  lockscreen_refresher_.Start(&EngineApp::CaptureLiveLockscreenFrame);
+  g_engine_instance = this;
   if (boot_autoplay) {
     headless_owns_decode_.store(
         !wallpaper_surface_live_.load(std::memory_order_acquire),
@@ -494,12 +506,14 @@ bool EngineApp::Init(int argc, char** argv) {
         Log("warning: renderer could not load '%s', keeping current video",
             boot_video.c_str());
       } else {
-        MaybeTriggerLockscreenSync(boot_video, &EngineApp::Log);
+        lockscreen_refresher_.Request(boot_video,
+                                      LockscreenTrigger::kVideoChanged);
       }
     } else {
       Log("engine: boot autoplay '%s' — slots own decode, headless stays idle",
           boot_video.c_str());
-      MaybeTriggerLockscreenSync(boot_video, &EngineApp::Log);
+      lockscreen_refresher_.Request(boot_video,
+                                    LockscreenTrigger::kVideoChanged);
     }
   } else {
     // No valid video at boot: seed paused state so tray shows off icon
@@ -916,6 +930,12 @@ int EngineApp::Run() {
 void EngineApp::Shutdown() {
   if (shutdown_done_) return;
   shutdown_done_ = true;
+  // Bug A: stop the lock-screen worker and drop the live-frame seam before
+  // the slots are torn down (the seam would otherwise capture into a
+  // half-torn-down slot map).
+  lockscreen_refresher_.Stop();
+  SetLockscreenLiveFrameFn(nullptr);
+  g_engine_instance = nullptr;
   // Bug C1: stop the hang watchdog first - it must not fire while the
   // engine is shutting down on purpose.
   watchdog_.Stop();
@@ -1033,6 +1053,15 @@ void EngineApp::OnDisplayChange(int width, int height) {
   Log("display: OnDisplayChange(%dx%d) - arming the topology reconcile",
       width, height);
   ArmTopologyReconcile("display-change");
+}
+
+bool EngineApp::CaptureLiveLockscreenFrame(const std::string& path) {
+  // The live frame: the picture on screen right now. The capture is
+  // asynchronous (mpv's VO thread writes the file), so the caller waits
+  // for it and falls back to the file-based extract when it does not land.
+  EngineApp* app = g_engine_instance;
+  if (app == nullptr) return false;
+  return app->multi_monitor_.CaptureLiveFrame(path);
 }
 
 void EngineApp::ArmTopologyReconcile(const char* trigger) {
@@ -1230,8 +1259,7 @@ bool EngineApp::HandleSetVideo(const std::string& payload_json, bool rotation) {
   if (!rotation) {
     tray_.PushRecent(utf8_path);  // Todo 35: MRU is for manual picks only
     LogImportant("ipc: set_video live-switched to %s", utf8_path.c_str());
-    MaybeTriggerLockscreenSync(utf8_path, LockscreenTrigger::kVideoChanged,
-                                &EngineApp::Log);
+    lockscreen_refresher_.Request(utf8_path, LockscreenTrigger::kVideoChanged);
   } else {
     // Rotation is not a user action: no MRU feed. The lock screen IS
     // refreshed though: with a playlist running, the lock screen used to
@@ -1239,8 +1267,7 @@ bool EngineApp::HandleSetVideo(const std::string& payload_json, bool rotation) {
     // throttled by the shared debounce (one extract per 5 s per file), so a
     // fast rotation cannot spawn an extract per cycle.
     Log("playlist: rotation live-switched to %s", utf8_path.c_str());
-    MaybeTriggerLockscreenSync(utf8_path, LockscreenTrigger::kRotation,
-                                &EngineApp::Log);
+    lockscreen_refresher_.Request(utf8_path, LockscreenTrigger::kRotation);
   }
   headless_owns_decode_.store(
       !wallpaper_surface_live_.load(std::memory_order_acquire),
@@ -1845,11 +1872,11 @@ void EngineApp::HandlePowerBroadcast(WPARAM wParam, LPARAM lParam) {
       Log("power: PBT_APMSUSPEND received");
       // Bug A: the lock screen must show a CURRENT picture when the machine
       // sleeps - the engine is not running at that point, so the frame has
-      // to be on disk BEFORE the sleep. Fire-and-forget (the shared helper
-      // spawns a detached, below-normal child) so the suspend path is never
-      // delayed.
-      MaybeTriggerLockscreenSync(current_video_utf8_,
-                                 LockscreenTrigger::kSuspend, &EngineApp::Log);
+      // to be on disk BEFORE the sleep. The refresh runs on the background
+      // worker (the live frame is captured asynchronously), so the suspend
+      // path is never delayed.
+      lockscreen_refresher_.Request(current_video_utf8_,
+                                    LockscreenTrigger::kSuspend);
       OnSuspend();
       return;
     case PBT_APMRESUMEAUTOMATIC:
@@ -1901,9 +1928,8 @@ void EngineApp::HandlePowerBroadcast(WPARAM wParam, LPARAM lParam) {
           // screen comes back on (e.g. monitor off/on, wake), so the lockscreen
           // stays static/current instead of stale or missing.
           if (!current_video_utf8_.empty())
-            MaybeTriggerLockscreenSync(current_video_utf8_,
-                                       LockscreenTrigger::kMonitorOn,
-                                       &EngineApp::Log);
+            lockscreen_refresher_.Request(current_video_utf8_,
+                                          LockscreenTrigger::kMonitorOn);
           break;
         case 2:
           Log("power: monitor dimmed (Data=2, ignored)");
@@ -1992,16 +2018,15 @@ LRESULT EngineApp::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
       // The session is about to end (shutdown / logoff). Two things must
       // happen BEFORE the session goes away, because the engine will not be
       // running afterwards:
-      //   1. the lock screen frame must be refreshed - this trigger WAITS
-      //      for the extract (bounded), so the picture on the next lock
+      //   1. the lock screen frame must be refreshed - this refresh WAITS
+      //      for the frame (bounded), so the picture on the next lock
       //      screen is the current one;
       //   2. the OS wallpaper must be restored, so the next logon does not
       //      show a wallpaper the engine is no longer driving.
       // Returning TRUE lets the session end proceed.
       LogImportant("session: WM_QUERYENDSESSION received, refreshing the "
                    "lockscreen and restoring the wallpaper");
-      MaybeTriggerLockscreenSync(current_video_utf8_,
-                                 LockscreenTrigger::kShutdown, &EngineApp::Log);
+      lockscreen_refresher_.RefreshBlocking(current_video_utf8_, 4000);
       os_wallpaper_.Restore();
       return TRUE;
     case WM_ENDSESSION:
@@ -2022,9 +2047,8 @@ LRESULT EngineApp::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
           // Bug A: the lock screen appears NOW, and the engine is the only
           // thing that can refresh the frame. The refresh bypasses the
           // debounce: the picture has to be current, not the last one.
-          MaybeTriggerLockscreenSync(current_video_utf8_,
-                                     LockscreenTrigger::kSessionLock,
-                                     &EngineApp::Log);
+          lockscreen_refresher_.Request(current_video_utf8_,
+                                        LockscreenTrigger::kSessionLock);
           return 0;
         case WTS_SESSION_UNLOCK:
           LogImportant("session: WTS_SESSION_UNLOCK received, resuming decode");

@@ -109,6 +109,22 @@ class MpvRenderer {
     return hwdec_active_.load(std::memory_order_relaxed);
   }
 
+  // Captures the frame that is on screen RIGHT NOW into `path` (UTF-8).
+  //
+  // The lock screen shows a STATIC picture; the best picture is the one the
+  // user is looking at. mpv's `screenshot-to-file` writes the file
+  // ASYNCHRONOUSLY (the VO thread does it), so a successful return only
+  // means "the capture was accepted" - the caller waits for the file.
+  //
+  // The format is taken from mpv's `screenshot-format` (set to "jpg" here,
+  // because the lock screen policy points at a .jpg). A build without a
+  // JPEG encoder refuses the command: the call then returns false and the
+  // caller falls back to the file-based extract.
+  //
+  // Returns false when there is no mpv instance or the command was
+  // refused. Never throws.
+  bool ScreenshotToFile(const std::string& path);
+
   // Registers the engine hidden window for PROPERTY_CHANGE notifications.
   // Called once by EngineApp during Init (Todo 7); until set, the event
   // thread handles property changes inline (pre-P2.4 behavior preserved).

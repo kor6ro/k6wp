@@ -85,6 +85,10 @@ struct RenState {
   int load_loop_calls = 0;
   int load_loop_force_calls = 0;
   int set_fit_calls = 0;
+  // Bug A: the live-frame capture (mpv screenshot-to-file).
+  int screenshot_calls = 0;
+  bool screenshot_ok = true;
+  std::string screenshot_path;
 };
 
 struct Rect4 {
@@ -428,6 +432,16 @@ void MpvRenderer::SetHWND(void* hwnd) {
   ++s.set_hwnd_calls;
   g_set_hwnd_calls.fetch_add(1, std::memory_order_relaxed);
   g_events.push_back("set-hwnd");
+}
+
+// Bug A: the live-frame capture (mpv screenshot-to-file). The stub accepts
+// the capture and records the target path so the test can assert WHICH
+// renderer was asked for the live frame.
+bool MpvRenderer::ScreenshotToFile(const std::string& path) {
+  RenState& s = g_ren[this];
+  s.screenshot_path = path;
+  ++s.screenshot_calls;
+  return s.screenshot_ok;
 }
 
 void MpvRenderer::SetAdapterPin(const std::string& substr) {
@@ -1204,6 +1218,39 @@ void TestReanchorHostMoveReloadsVideo() {
   mm.Shutdown();
 }
 
+// Bug A: the live frame (the picture on screen right now) is the lock
+// screen's preferred source. The capture goes through ONE live slot's
+// renderer; a renderer that refuses the capture (no JPEG encoder, no frame
+// yet) makes the whole capture fail, so the caller falls back to the
+// file-based extract.
+void TestLiveFrameCapture() {
+  ResetStubs();
+  MultiMonitor mm(&QuietLog, MakeRecordingFactory());
+  mm.SetHeadlessHost(kHeadlessHost);
+  Check(mm.Init(MultiMonitorMode::PerMonitor),
+        "liveframe: Init(PerMonitor) returns true");
+
+  const std::string target = "C:\\ProgramData\\K6WP\\lockscreen.live.tmp.jpg";
+  Check(mm.CaptureLiveFrame(target), "liveframe: a live slot accepts the capture");
+  int shots = 0;
+  bool path_ok = false;
+  for (const auto& kv : g_ren) {
+    shots += kv.second.screenshot_calls;
+    if (kv.second.screenshot_calls > 0) {
+      path_ok = kv.second.screenshot_path == target;
+    }
+  }
+  Check(shots == 1, "liveframe: exactly ONE renderer was asked (no storm)");
+  Check(path_ok, "liveframe: the capture target path reached the renderer");
+
+  // Every renderer refuses -> the capture fails and the caller falls back
+  // to the file-based extract.
+  for (auto& kv : g_ren) kv.second.screenshot_ok = false;
+  Check(!mm.CaptureLiveFrame(target),
+        "liveframe: a refused capture reports failure (the caller falls back)");
+  mm.Shutdown();
+}
+
 // Span mode has its own Reanchor branch: same no-op guarantee, same
 // force-reload after a real surface loss.
 void TestSpanReanchorKeepsAndReloads() {
@@ -1291,6 +1338,9 @@ int main(int argc, char** argv) {
   }
   if (sel == "all" || sel == "span-resume") {
     k6wp::TestSpanReanchorKeepsAndReloads();
+  }
+  if (sel == "all" || sel == "liveframe") {
+    k6wp::TestLiveFrameCapture();
   }
   std::cout << k6wp::g_checks << " checks, " << k6wp::g_failures
             << " failures\n";

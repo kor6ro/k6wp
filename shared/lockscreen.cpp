@@ -19,6 +19,12 @@
 #include "studio_settings.hpp"
 
 namespace k6wp {
+
+// Forward declaration: FireLockscreenSyncAsync (the legacy entry point) is
+// defined before the producer, which is the shared implementation.
+bool ProduceLockscreenFrame(const std::filesystem::path& video_path,
+                             LockscreenTrigger trigger, int wait_ms) noexcept;
+
 namespace {
 
 // Debounce window for repeated syncs of the SAME file. A DIFFERENT file is
@@ -274,63 +280,88 @@ bool SpawnFrameExtract(const std::filesystem::path& video_path, double offset,
 }  // namespace
 
 void FireLockscreenSyncAsync(const std::filesystem::path& video_path) noexcept {
-  try {
-    if (video_path.empty()) return;
-    if (!IsLockscreenSyncEnabled()) return;
+  // The plain fire-and-forget path (no live frame, no wait): the legacy
+  // entry point kept for callers that just want a frame on disk.
+  ProduceLockscreenFrame(video_path, LockscreenTrigger::kVideoChanged,
+                          /*wait_ms=*/0);
+}
 
-    std::uintmax_t size = 0;
-    std::uintmax_t mtime = 0;
-    FileStamp(video_path, size, mtime);
+namespace {
 
-    // Reserve the debounce slot for this file. The same file inside the
-    // window is dropped; a different file always proceeds. A reserved slot
-    // is released again on any failure below so a failed attempt cannot
-    // mute the next 5s.
-    {
-      std::lock_guard<std::mutex> lock(g_fire_mutex);
-      const ULONGLONG now = GetTickCount64();
-      const bool same_file = !g_last_fire_path.empty() &&
-                             video_path.wstring() == g_last_fire_path &&
-                             size == g_last_fire_size &&
-                             mtime == g_last_fire_mtime;
-      if (same_file && now - g_last_fire_ms < kDebounceMs) {
-        return;
-      }
-      g_last_fire_path = video_path.wstring();
-      g_last_fire_ms = now;
-      g_last_fire_size = size;
-      g_last_fire_mtime = mtime;
-    }
-    const auto release_slot = [] {
-      std::lock_guard<std::mutex> lock(g_fire_mutex);
-      g_last_fire_path.clear();
-    };
+// The live-frame provider (see SetLockscreenLiveFrameFn). Guarded by its
+// own mutex: the Engine registers it once at start-up, the helper reads it
+// from the message-loop thread and from the refresher thread.
+std::mutex g_live_frame_mutex;
+LockscreenLiveFrameFn g_live_frame_fn = nullptr;
 
+// The temp file the live frame is written to. It sits next to the real one
+// so the final move is a same-volume rename (atomic).
+std::filesystem::path LiveFrameTempPath() {
+  return LockscreenDir() / L"lockscreen.live.tmp.jpg";
+}
+
+// Moves `from` onto `to` atomically (the same pattern the compressor uses
+// for its own output: replace + write-through, so Winlogon never reads a
+// half-written file).
+bool AtomicReplaceFile(const std::filesystem::path& from,
+                        const std::filesystem::path& to) {
+  if (!MoveFileExW(from.c_str(), to.c_str(),
+                   MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+    return false;
+  }
+  return true;
+}
+
+// Waits for `path` to exist and to be non-empty (the live capture lands
+// asynchronously). Bounded.
+bool WaitForFile(const std::filesystem::path& path, int wait_ms) {
+  if (wait_ms <= 0) return false;
+  const ULONGLONG deadline = GetTickCount64() + static_cast<ULONGLONG>(wait_ms);
+  for (;;) {
     std::error_code ec;
-    if (!std::filesystem::exists(video_path, ec)) {
-      release_slot();
-      DebugLog(L"K6WP lockscreen: video missing, skipping sync (ec=%lu)",
-               static_cast<DWORD>(ec.value()));
-      return;
+    if (std::filesystem::exists(path, ec) && !ec) {
+      const auto size = std::filesystem::file_size(path, ec);
+      if (!ec && size > 0) return true;
     }
-
-    if (!SpawnFrameExtract(video_path, LockscreenOffsetSec(),
-                           /*wait_for_completion=*/false)) {
-      release_slot();
-    }
-  } catch (...) {
-    // Gagal hanya log, tidak crash (B-part contract).
-    DebugLog(L"K6WP lockscreen: unexpected exception, skipping (ec=%lu)", 0);
+    if (GetTickCount64() >= deadline) return false;
+    Sleep(25);
   }
 }
 
-void FireLockscreenSyncForTrigger(const std::filesystem::path& video_path,
-                                  LockscreenTrigger trigger) noexcept {
-  try {
-    if (!ShouldRefreshLockscreen(trigger)) return;
-    if (video_path.empty()) return;
-    if (!IsLockscreenSyncEnabled()) return;
+}  // namespace
 
+void SetLockscreenLiveFrameFn(LockscreenLiveFrameFn fn) {
+  std::lock_guard<std::mutex> lock(g_live_frame_mutex);
+  g_live_frame_fn = fn;
+}
+
+bool ProduceLockscreenFrame(const std::filesystem::path& video_path,
+                             LockscreenTrigger trigger, int wait_ms) noexcept {
+  try {
+    if (!ShouldRefreshLockscreen(trigger)) return false;
+    if (video_path.empty()) return false;
+    if (!IsLockscreenSyncEnabled()) return false;
+
+    LockscreenLiveFrameFn live = nullptr;
+    {
+      std::lock_guard<std::mutex> lock(g_live_frame_mutex);
+      live = g_live_frame_fn;
+    }
+
+    // 1. The live frame: the picture on screen right now.
+    if (live != nullptr && wait_ms > 0) {
+      const std::filesystem::path tmp = LiveFrameTempPath();
+      std::error_code ec;
+      std::filesystem::remove(tmp, ec);
+      if (live(tmp.u8string()) && WaitForFile(tmp, wait_ms)) {
+        if (AtomicReplaceFile(tmp, LockscreenJpgPath())) {
+          return true;
+        }
+      }
+      std::filesystem::remove(tmp, ec);
+    }
+
+    // 2. The file-based extract: a frame from the start of the video.
     const bool bypass = LockscreenTriggerBypassesDebounce(trigger);
     const bool wait = LockscreenTriggerWaits(trigger);
 
@@ -350,7 +381,7 @@ void FireLockscreenSyncForTrigger(const std::filesystem::path& video_path,
                              size == g_last_fire_size &&
                              mtime == g_last_fire_mtime;
       if (same_file && now - g_last_fire_ms < kDebounceMs) {
-        return;
+        return false;
       }
       g_last_fire_path = video_path.wstring();
       g_last_fire_ms = now;
@@ -366,7 +397,7 @@ void FireLockscreenSyncForTrigger(const std::filesystem::path& video_path,
       }
       DebugLog(L"K6WP lockscreen: video missing, skipping sync (ec=%lu)",
                static_cast<DWORD>(ec.value()));
-      return;
+      return false;
     }
 
     if (!SpawnFrameExtract(video_path, LockscreenOffsetSec(), wait)) {
@@ -374,10 +405,24 @@ void FireLockscreenSyncForTrigger(const std::filesystem::path& video_path,
         std::lock_guard<std::mutex> lock(g_fire_mutex);
         g_last_fire_path.clear();
       }
+      return false;
     }
+    return true;
   } catch (...) {
     DebugLog(L"K6WP lockscreen: unexpected exception, skipping (ec=%lu)", 0);
+    return false;
   }
+}
+
+void FireLockscreenSyncForTrigger(const std::filesystem::path& video_path,
+                                  LockscreenTrigger trigger) noexcept {
+  // The direct fire-and-forget path: no wait, so the live frame is skipped
+  // and the file-based extract is used. The Engine's refresher thread calls
+  // ProduceLockscreenFrame() with a wait to get the live frame.
+  ProduceLockscreenFrame(video_path, trigger,
+                          LockscreenTriggerWaits(trigger)
+                              ? static_cast<int>(kShutdownWaitMs)
+                              : 0);
 }
 
 }  // namespace k6wp

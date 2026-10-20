@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://k6wp.local/schemas/studio-settings.schema.json",
   "title": "K6WP StudioSettings",
-  "description": "Studio-side preferences for the K6WP wallpaper app. Stored at %LOCALAPPDATA%/K6WP/studio_settings.json. Deliberately separate from config.json, which is pure Engine playback state (video_path/fit/monitor/speed/fps/battery). Version 0 (legacy: missing version or missing fields) is migrated to version 3 by the loader; version 1 migrates with compress_advanced_visible defaulted to false; version 2 migrates with the removed keep_original/start_minimized keys ignored. The three additive Studio UI preferences (closeToTray, playlistSource, performancePreset) may be absent from files written before plan todo 8: the loader defaults them and rewrites the file at the current version — no version bump, same pattern check_updates followed. On migration (or corrupt input) the loader backs up the original bytes to <file>.bak and rewrites the file at the current version.",
+  "description": "Studio-side preferences for the K6WP wallpaper app. Stored at %LOCALAPPDATA%/K6WP/studio_settings.json. Deliberately separate from config.json, which is pure Engine playback state (video_path/fit/monitor/speed/fps/battery). Version 0 (legacy: missing version or missing fields) is migrated to version 4 by the loader; version 1 migrates with compress_advanced_visible defaulted to false; version 2 migrates with the removed keep_original/start_minimized keys ignored; version 3 migrates with lockscreen_offer_shown defaulted to false and the user's lockscreen_sync value UNCHANGED (the lock screen needs an administrator policy registration, so flipping the flag silently would leave the Engine refreshing a picture Windows never shows). The three additive Studio UI preferences (closeToTray, playlistSource, performancePreset) may be absent from files written before plan todo 8: the loader defaults them and rewrites the file at the current version — no version bump, same pattern check_updates followed. On migration (or corrupt input) the loader backs up the original bytes to <file>.bak and rewrites the file at the current version.",
   "type": "object",
   "additionalProperties": false,
   "required": ["version"],
@@ -10,8 +10,8 @@
     "version": {
       "type": "integer",
       "minimum": 0,
-      "maximum": 3,
-      "description": "Schema version. 0 = legacy (missing fields are defaulted on load), 1 = lockscreen sync fields, 2 = compressor advanced-box visibility, 3 = current (dead keep_original/start_minimized keys removed; old files carrying them migrate by ignoring those keys)."
+      "maximum": 4,
+      "description": "Schema version. 0 = legacy (missing fields are defaulted on load), 1 = lockscreen sync fields, 2 = compressor advanced-box visibility, 3 = the Studio UI preferences (closeToTray/playlistSource/performancePreset, additive), 4 = current (adds the Studio-private lockscreen_offer_shown)."
     },
     "auto_compress_on_import": {
       "type": "boolean",
@@ -54,13 +54,18 @@
     "lockscreen_sync": {
       "type": "boolean",
       "default": false,
-      "description": "Bagian B: when true, engine/studio extract a static frame via compressor --lockframe on every video change (debounced, below-normal, fire-and-forget) into %PROGRAMDATA%/K6WP/lockscreen.jpg; the launcher applies it via K6WP.exe --elevate-lockscreen on|off (one-time admin for folder ACL + HKLM LockScreenImage policy)."
+      "description": "Bagian B: when true, the engine refreshes the lock-screen picture (%PROGRAMDATA%/K6WP/lockscreen.jpg) on a video change, a playlist rotation, a session lock, a suspend, a shutdown and a monitor-on (debounced, background worker, atomic write). The picture is only SHOWN by Windows when the HKLM LockScreenImage policy is registered, which needs administrator rights: the Studio toggle runs K6WP.exe --elevate-lockscreen on|off and only leaves this field true when the registration really succeeded."
     },
     "lockscreen_offset_sec": {
       "type": "number",
       "minimum": 0,
       "default": 1.0,
-      "description": "Seek offset in seconds for the lockscreen frame extract. Must be >= 0."
+      "description": "Seek offset in seconds for the lockscreen frame extract (the fallback path). Must be >= 0."
+    },
+    "lockscreen_offer_shown": {
+      "type": "boolean",
+      "default": false,
+      "description": "Studio-private: the one-time onboarding offer for the lock screen has been shown. Never read by the engine."
     },
     "compress_advanced_visible": {
       "type": "boolean",

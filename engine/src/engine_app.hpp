@@ -23,6 +23,7 @@
 #include "crash_restart_guard.hpp"
 #include "device_lost_watch.hpp"
 #include "engine_watchdog.hpp"
+#include "lockscreen_refresher.hpp"
 #include "displays_schema.hpp"
 #include "fullscreen_watch.hpp"
 #include "ipc_server.hpp"
@@ -146,6 +147,10 @@ class EngineApp {
   // transitions (video load, pause/resume, device-lost) that post-mortem
   // diagnostics must never miss after a taskkill.
   static void LogImportant(const char* fmt, ...);
+  // The live-frame seam for the lock screen: captures the frame that is on
+  // screen right now into `path` (UTF-8). Registered with the shared
+  // lock-screen helper, which prefers it over the file-based extract.
+  static bool CaptureLiveLockscreenFrame(const std::string& path);
 
   void HandlePowerBroadcast(WPARAM wParam, LPARAM lParam);
   LRESULT HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -452,6 +457,10 @@ class EngineApp {
   std::atomic<unsigned long long> loop_heartbeat_{0};
   std::atomic<bool> loop_parked_{false};
   EngineWatchdog watchdog_;
+  // Bug A: the lock-screen frame is produced on a background worker (the
+  // live frame comes from mpv's asynchronous screenshot, and waiting for it
+  // must never stall the message loop).
+  LockscreenRefresher lockscreen_refresher_;
   // --- Tray menu actions (Todo 35, all run on the UI thread via WndProc) ----
   void OnTrayTogglePause();                 // Pause/Resume item + dbl-click
   void OnTrayQuickSwitch(std::size_t idx);  // quick-switch submenu index

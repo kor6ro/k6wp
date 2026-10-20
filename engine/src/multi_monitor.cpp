@@ -649,6 +649,16 @@ bool MultiMonitor::LoadLoopAll(const std::string& path, bool force) {
   return any;
 }
 
+bool MultiMonitor::CaptureLiveFrame(const std::string& path) {
+  k6wp::lock_order::RecursiveSlotsGuard guard(slots_mutex_);
+  for (auto& kv : slots_) {
+    if (kv.second.renderer && kv.second.renderer->ScreenshotToFile(path)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 bool MultiMonitor::HasAssignment(const std::string& device) const {
   k6wp::lock_order::RecursiveSlotsGuard guard(slots_mutex_);
   const std::wstring key = WidenDeviceKey(device);

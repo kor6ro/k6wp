@@ -197,3 +197,71 @@ best-effort on the matching hardware.
 5. L-01 — crash-restart give-up (optional). Force repeated crashes and confirm
    `engine.log` shows the crash-restart give-up line once the restart budget is
    exhausted.
+
+## Display resilience + lock screen (Bug B / Bug A)
+
+### Monitor removal (no hang, no lost wallpaper)
+
+The virtual-display driver in `shadow-evidence/` makes these reproducible
+without a second physical monitor. The scripts (`set-display.ps1`,
+`test-disable*.ps1`, `test-sdc*.ps1`, `testmode*.ps1`) and the walkthrough
+live in `docs/runbook-2monitor.md`.
+
+1. **Unplug a secondary monitor.** Start the engine with a video on all
+   screens, then disable the secondary display. The engine must NOT freeze:
+   the tray icon stays, the menu still opens, and the wallpaper on the
+   remaining monitor keeps playing the RIGHT video. `engine.log` must show
+   ONE `display: topology reconcile pass` for the burst (not one per
+   event). There must be no `critical:` line about a stuck teardown.
+2. **Unplug the primary monitor.** Same expectations; the survivor takes
+   over as primary and keeps its own video (the per-monitor assignment must
+   NOT jump to the other monitor).
+3. **Unplug a middle monitor from a 3-monitor setup.** The two survivors
+   must keep their own videos. This is the case the old position-index
+   matching got wrong: the renderers were swapped between monitors.
+4. **Replug the monitor.** The slot comes back and its per-monitor
+   assignment is re-applied (`display: applied <path> to <device>` in the
+   log). The wallpaper on the re-plugged monitor shows that video again.
+5. **Suspend / resume with a monitor gone.** Put the machine to sleep with
+   the secondary disabled, then wake it. The wallpaper must resume on the
+   remaining monitor, and the log must show the re-anchor waiting for a
+   stable enumeration (`display: topology still moving`) before it touches
+   a slot.
+
+### The hang watchdog (C1)
+
+6. **A stuck engine is restarted.** Hard to force on purpose; if a hang can
+   be provoked (e.g. by unplugging a monitor during a heavy decode), the
+   engine must recover on its own within ~20 s: `engine.log` shows the
+   `watchdog: the message loop stopped responding` line, a hang minidump
+   appears in `%LOCALAPPDATA%\K6WP\crashes\engine-hang-*.dmp`, and a fresh
+   engine takes over (the wallpaper comes back). The restart counts against
+   the crash-restart backoff, so it cannot loop forever.
+
+### The lock screen (Bug A)
+
+7. **The toggle really registers the policy.** In Studio → Settings, turn
+   "Samakan bingkai video ke layar kunci" on. A UAC prompt must appear
+   (once). Accept it. The checkbox must STAY on, and the status line under
+   it must say the policy is registered. Then check:
+   `reg query HKLM\SOFTWARE\Policies\Microsoft\Windows\Personalization /v LockScreenImage`
+   must show `%PROGRAMDATA%\K6WP\lockscreen.jpg`. Declining the prompt
+   must leave the checkbox OFF and show a message that says the prompt was
+   declined.
+8. **The picture is fresh at every lock.** With the feature on: press Win+L
+   and look at the lock screen - it must show a frame of the CURRENT
+   wallpaper video. Repeat after a playlist rotation and after a sleep/wake
+   cycle. The picture must never be the very first frame of an old video.
+9. **The frame exists before the engine runs.** Shut the machine down
+   (`shutdown /s /t 0`), then power it on and lock the screen BEFORE the
+   engine starts (the autostart engine only appears after the logon). The
+   lock screen must still show the wallpaper frame - the file was written
+   before the shutdown.
+10. **The edition is reported honestly.** The status line under the toggle
+    must match the machine: "Aktif" on Enterprise/Education, "Policy
+    terdaftar, tapi edisi Windows X mungkin mengabaikannya" on Pro (test it
+    with Win+L - on some Pro builds the policy is ignored), "tidak
+    mendukung" on Home. A Home machine must NOT claim the feature works.
+11. **The atomic write.** While the engine refreshes the frame, copy
+    `%PROGRAMDATA%\K6WP\lockscreen.jpg` repeatedly: every copy must be a
+    complete, openable JPEG (never a truncated file).

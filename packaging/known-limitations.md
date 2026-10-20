@@ -76,6 +76,24 @@ end of this section.
   bars, run `tools/run_2monitor_evidence.ps1` and send back the bundle
   (extended `monitor_dump.exe` JSON + `injected_windows.json` rect census +
   `placement.log`), per `docs/runbook-2monitor.md`.
+- **Monitor removal used to freeze the engine** (2026-10, fixed). The whole
+  slot reconciliation ran inside the `WM_DISPLAYCHANGE` handler, and the
+  renderer teardown (`mpv_terminate_destroy`) waited without a timeout for
+  an mpv VO thread that can be stuck on a display that just disappeared —
+  the symptom was "the tray icon is there but nothing responds". The
+  reconciliation now runs in one debounced door outside the handler, the
+  renderer teardown moved to a background worker, the injected surface is
+  released instead of destroyed under a live VO, and the slots follow the
+  monitor's STABLE identity instead of its position index (unplugging a
+  middle monitor used to swap the renderers between monitors). A hang
+  watchdog now restarts a stuck engine (minidump + restart with the
+  existing backoff). **Code-quoted + unit-tested**; the live unplug run
+  still belongs to the rig artifact above.
+- **`displays.json` assignment keys are still GDI device names**, so a port
+  change renumbers them (the per-monitor video assignment is keyed on
+  `\\.\DISPLAYn`, not on the tiered stable identity). The SLOT matching
+  inside the engine now uses the stable identity, but the on-disk
+  assignment map is unchanged — re-assign after a port change.
 
 ## 3. Hardware variance (NVENC / QSV / AMF / x264, perf)
 

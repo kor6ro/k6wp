@@ -328,6 +328,10 @@ bool MpvRenderer::Create(void* hwnd) {
 
 void MpvRenderer::SetHWND(void* hwnd) { g_ren[this].create_hwnd = hwnd; }
 
+// Bug A: the live-frame capture (mpv screenshot-to-file). The stub refuses
+// the capture, so the lock-screen path falls back to the file-based extract.
+bool MpvRenderer::ScreenshotToFile(const std::string& /*path*/) { return false; }
+
 void MpvRenderer::SetAdapterPin(const std::string& substr) {
   g_ren[this].adapter_pin = substr;
 }

@@ -16,6 +16,7 @@ add_executable(engine
   src/log_file.cpp
   src/os_wallpaper.cpp
   src/lockscreen_glue.cpp
+  src/lockscreen_refresher.cpp  # Bug A: background lock-screen frame worker
   src/working_set_trim.cpp
   src/desktop_inject.cpp
   src/desktop_placement.cpp
