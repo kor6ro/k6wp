@@ -1651,12 +1651,12 @@
 <context>
     <name>k6wp::PreviewWidget</name>
     <message>
-        <location filename="../src/preview_widget.cpp" line="+224"/>
+        <location filename="../src/preview_widget.cpp" line="+226"/>
         <source>Klik untuk jeda/jalan</source>
         <translation>Click to pause/play</translation>
     </message>
     <message>
-        <location line="+11"/>
+        <location line="+40"/>
         <source>backend video gagal dimulai (libmpv hilang atau rusak)</source>
         <translation>the video backend failed to start (libmpv missing or broken)</translation>
     </message>
@@ -1666,7 +1666,7 @@
         <translation>file not found: %1</translation>
     </message>
     <message>
-        <location line="+259"/>
+        <location line="+303"/>
         <source>Memuat pratinjau...</source>
         <translation>Loading preview...</translation>
     </message>

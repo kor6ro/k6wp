@@ -12,6 +12,7 @@
 
 struct mpv_handle;
 class QLabel;
+class QScreen;
 class QTimer;
 class QShowEvent;
 class QHideEvent;
@@ -126,6 +127,13 @@ class PreviewWidget final : public QWidget {
   void StopWorker();
   void UpdateStatusLabel();
   void RefreshHoverBadge();
+  // B8: a screen went away. The preview's native window (and the mpv VO
+  // rendering into it) must not stay on a dead display: the worker is
+  // stopped (bounded - the mpv teardown can block on a lost display) and the
+  // window is moved to a screen that still exists. The preview is restarted
+  // once the geometry settled (see OnScreenSettled).
+  void OnScreenRemoved(QScreen* screen);
+  void OnScreenSettled();
 
   std::string video_path_;
   int start_polls_ = 0;
@@ -150,6 +158,9 @@ class PreviewWidget final : public QWidget {
   // hide/show/change events run on the GUI thread); never armed while
   // paused, so restore never phantom-resumes.
   bool wasPlaying_ = false;
+  // B8: set when a screen removal tore the preview down; the preview is
+  // restarted once the geometry settled (OnScreenSettled).
+  bool restart_after_settle_ = false;
 };
 
 }  // namespace k6wp

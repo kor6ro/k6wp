@@ -4,9 +4,11 @@
 
 #include <QEvent>
 #include <QFile>
+#include <QGuiApplication>
 #include <QLabel>
 #include <QMouseEvent>
 #include <QPixmap>
+#include <QScreen>
 #include <QStyle>
 #include <QTimer>
 
@@ -222,6 +224,35 @@ PreviewWidget::PreviewWidget(QWidget* parent) : QWidget(parent) {
   hover_badge_->setFixedSize(64, 64);
   hover_badge_->hide();
   setToolTip(tr("Klik untuk jeda/jalan"));
+
+  // B8: a screen can disappear while the Studio is open (unplugged, a
+  // projector, a docking station). The preview embeds mpv into a NATIVE
+  // window on that screen, so the worker must not keep rendering into a
+  // window whose display is gone: the mpv teardown can block on a lost
+  // display (the same hazard the engine hit). The preview is stopped and
+  // restarted once the geometry settled.
+  QGuiApplication* gui = qobject_cast<QGuiApplication*>(QCoreApplication::instance());
+  if (gui != nullptr) {
+    connect(gui, &QGuiApplication::screenRemoved, this,
+            &PreviewWidget::OnScreenRemoved);
+    connect(gui, &QGuiApplication::screenAdded, this,
+            [this](QScreen*) { OnScreenSettled(); });
+    // The primary screen can change WITHOUT a screen being removed (the user
+    // picks a different one in the display settings). The window is re-placed
+    // and its native handle may be recreated, so the preview is torn down and
+    // restarted on the settled geometry as well.
+    connect(gui, &QGuiApplication::primaryScreenChanged, this,
+            [this](QScreen*) {
+              if (worker_ == nullptr) return;
+              std::fprintf(stderr,
+                           "[preview] primary screen changed -> restarting the "
+                           "preview\n");
+              std::fflush(stderr);
+              StopWorker();
+              restart_after_settle_ = true;
+              QTimer::singleShot(300, this, &PreviewWidget::OnScreenSettled);
+            });
+  }
 
   status_timer_ = new QTimer(this);
   status_timer_->setInterval(50);
@@ -508,6 +539,50 @@ void PreviewWidget::RefreshHoverBadge() {
                      (height() - badge.height()) / 2);
   hover_badge_->raise();
   hover_badge_->show();
+}
+
+void PreviewWidget::OnScreenRemoved(QScreen* screen) {
+  // The screen is going away. The preview's window (and the mpv VO
+  // rendering into it) must not stay on it.
+  QWidget* top = window();
+  const bool on_removed_screen =
+      screen != nullptr && top != nullptr && top->screen() == screen;
+  if (!on_removed_screen) {
+    // Another window was on the removed screen; ours is fine.
+    return;
+  }
+  std::fprintf(stderr,
+               "[preview] screen removed -> stopping the preview worker\n");
+  std::fflush(stderr);
+  // Stop the worker: the bounded wait in StopWorker() is what keeps a stuck
+  // mpv teardown from freezing the Studio's GUI thread.
+  StopWorker();
+  restart_after_settle_ = true;
+  // Move the window to a screen that still exists (Qt usually does this on
+  // its own, but an explicit move keeps the preview on a live display).
+  if (QScreen* target = QGuiApplication::primaryScreen()) {
+    top->setScreen(target);
+  }
+  // The geometry is not stable yet (the window is being re-placed): restart
+  // the preview after the event loop settled.
+  QTimer::singleShot(300, this, &PreviewWidget::OnScreenSettled);
+}
+
+void PreviewWidget::OnScreenSettled() {
+  if (!restart_after_settle_) return;
+  restart_after_settle_ = false;
+  if (isHidden() || video_path_.empty()) return;
+  // The window may have landed on a screen that disappeared in the meantime.
+  QWidget* top = window();
+  if (top != nullptr && top->screen() == nullptr) {
+    if (QScreen* target = QGuiApplication::primaryScreen()) {
+      top->setScreen(target);
+    }
+  }
+  std::fprintf(stderr, "[preview] geometry settled -> restarting the preview\n");
+  std::fflush(stderr);
+  using_thumbnail_ = false;
+  StartWorkerIfNeeded();
 }
 
 void PreviewWidget::StopWorker() {
