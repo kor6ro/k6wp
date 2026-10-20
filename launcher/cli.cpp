@@ -3,6 +3,8 @@
 #include <cstdio>
 #include <string>
 
+#include "still.hpp"  // ParseStillRes: the shared "WxH" contract
+
 namespace k6wp::launcher {
 
 void PrintUsage(FILE* out) {
@@ -25,19 +27,31 @@ void PrintUsage(FILE* out) {
                 L"engine an IPC quit first so it can restore the OS "
                 L"wallpaper, then escalates per PID.\n"
                 L"  --config <path>      forwarded to engine.exe\n"
-                L"  --video <path>       forwarded to engine.exe\n"
+                L"  --video <path>       forwarded to engine.exe (or the video "
+                L"for --apply-still)\n"
                 L"  --wallpaper-mode <m> forwarded to engine.exe\n"
-                L"  --elevate-lockscreen <on|off>\n"
-                L"                       static lockscreen sync: ACLs "
-                L"%PROGRAMDATA%\\K6WP, backs up and sets the HKLM "
-                L"LockScreenImage policy (UAC prompt, static image only)\n"
+                L"  --apply-still        per-user still helper: apply the first "
+                L"frame of --video as the desktop wallpaper and/or the "
+                L"lock-screen image (no administrator rights, no UAC)\n"
+                L"  --apply-still --restore\n"
+                L"                       put the saved original wallpaper and "
+                L"lock-screen image back\n"
+                L"  --apply-still --wallpaper | --lockscreen\n"
+                L"                       limit the operation to one side\n"
+                L"  --offset-s <n>       frame seek offset (default: the "
+                L"studio setting, 0 = first frame)\n"
+                L"  --res <WxH>          still resolution (default: the "
+                L"primary monitor)\n"
+                L"  --elevate-lockscreen off\n"
+                L"                       legacy cleanup only: removes the old "
+                L"HKLM LockScreenImage policy (UAC prompt)\n"
                 L"  --delay-ms <n>       wait n ms (0..600000) before acting "
                 L"(used by the engine's hang watchdog)\n"
                 L"  --restarted          forwarded to engine.exe so the "
                 L"restart counts against the crash-restart backoff\n"
                 L"  --help, -h           show this help and exit\n"
                 L"Exit codes: 0 ok, 2 bad flag, 3 missing sibling / spawn "
-                L"failure (also: the elevated lockscreen helper failed), 4 the "
+                L"failure (also: the elevated legacy cleanup failed), 4 the "
                 L"elevated helper was still running when its wait budget "
                 L"expired, 5 the UAC prompt was declined.\n",
                 out);
@@ -59,6 +73,46 @@ int ParseArgs(int argc, wchar_t** argv, Options& out) {
     } else if (arg == L"--minimized") {
       out.minimized = true;
       out.engine_extra += L" --minimized";
+    } else if (arg == L"--apply-still") {
+      out.apply_still = true;
+      out.want_studio = false;
+      out.silent = true;
+    } else if (arg == L"--restore") {
+      out.still_restore = true;
+    } else if (arg == L"--wallpaper") {
+      out.still_wallpaper = true;
+    } else if (arg == L"--lockscreen") {
+      out.still_lockscreen = true;
+    } else if (arg == L"--offset-s") {
+      if (i + 1 >= argc) {
+        std::fwprintf(stderr, L"K6WP: error: --offset-s requires a value\n");
+        return kExitBadFlag;
+      }
+      const wchar_t* v = argv[++i];
+      wchar_t* end = nullptr;
+      const double value = wcstod(v, &end);
+      if (end == v || value < 0.0 || value > 3600.0) {
+        std::fwprintf(stderr,
+                      L"K6WP: error: --offset-s expects 0..3600, got %ls\n", v);
+        return kExitBadFlag;
+      }
+      out.still_has_offset = true;
+      out.still_offset_sec = value;
+    } else if (arg == L"--res") {
+      if (i + 1 >= argc) {
+        std::fwprintf(stderr, L"K6WP: error: --res requires WxH\n");
+        return kExitBadFlag;
+      }
+      out.still_res = argv[++i];
+      int width = 0;
+      int height = 0;
+      if (!k6wp::ParseStillRes(out.still_res, width, height)) {
+        std::fwprintf(stderr,
+                      L"K6WP: error: --res expects WxH (e.g. 1920x1080), got "
+                      L"'%ls'\n",
+                      out.still_res.c_str());
+        return kExitBadFlag;
+      }
     } else if (arg == L"--config" || arg == L"--video" ||
                arg == L"--wallpaper-mode") {
       if (i + 1 >= argc) {
@@ -66,20 +120,28 @@ int ParseArgs(int argc, wchar_t** argv, Options& out) {
                       arg.c_str());
         return kExitBadFlag;
       }
+      const std::wstring value = argv[++i];
+      // --video is BOTH the engine passthrough flag and the still helper's
+      // input. The value is captured here; the engine passthrough below still
+      // gets it, and RunApplyStill reads opts.still_video (the helper path
+      // never reaches EnsureEngine).
+      if (arg == L"--video") out.still_video = value;
       // Quote the value; engine ParseCli accepts "--flag value".
-      out.engine_extra += L" " + arg + L" \"" + std::wstring(argv[++i]) + L"\"";
+      out.engine_extra += L" " + arg + L" \"" + value + L"\"";
     } else if (arg == L"--elevate-lockscreen") {
       if (i + 1 >= argc) {
         std::fwprintf(stderr,
-                      L"K6WP: error: --elevate-lockscreen requires on|off\n");
+                      L"K6WP: error: --elevate-lockscreen requires off\n");
         return kExitBadFlag;
       }
       const std::wstring action = argv[++i];
-      if (action != L"on" && action != L"off") {
+      if (action != L"off") {
+        // The "on" direction used the HKLM LockScreenImage policy + ACL grant
+        // and is gone: the lock screen is per-user now (--apply-still).
         std::fwprintf(stderr,
-                      L"K6WP: error: --elevate-lockscreen expects on|off, got "
-                      L"'%ls'\n",
-                      action.c_str());
+                      L"K6WP: error: --elevate-lockscreen expects off (the "
+                      L"policy-based 'on' mode was removed; use --apply-still "
+                      L"for the per-user lock screen)\n");
         return kExitBadFlag;
       }
       out.elevate_lockscreen = true;
@@ -114,9 +176,37 @@ int ParseArgs(int argc, wchar_t** argv, Options& out) {
     } else if (arg.rfind(L"--config=", 0) == 0 ||
                arg.rfind(L"--video=", 0) == 0 ||
                arg.rfind(L"--wallpaper-mode=", 0) == 0) {
+      if (arg.rfind(L"--video=", 0) == 0) {
+        out.still_video = arg.substr(std::wstring(L"--video=").size());
+      }
       out.engine_extra += L" " + arg;
     } else {
       std::fwprintf(stderr, L"K6WP: error: unknown flag '%ls'\n", arg.c_str());
+      return kExitBadFlag;
+    }
+  }
+
+  // --apply-still validation: the selectors/overrides only mean something for
+  // the helper, and apply and restore are mutually exclusive.
+  if (!out.apply_still &&
+      (out.still_restore || out.still_wallpaper || out.still_lockscreen ||
+       out.still_has_offset || !out.still_res.empty())) {
+    std::fwprintf(stderr,
+                  L"K6WP: error: --restore/--wallpaper/--lockscreen/"
+                  L"--offset-s/--res require --apply-still\n");
+    return kExitBadFlag;
+  }
+  if (out.apply_still) {
+    if (out.still_restore && (out.still_has_offset || !out.still_res.empty())) {
+      std::fwprintf(stderr,
+                    L"K6WP: error: --restore cannot be combined with "
+                    L"--offset-s/--res\n");
+      return kExitBadFlag;
+    }
+    if (!out.still_restore && out.still_video.empty()) {
+      std::fwprintf(stderr,
+                    L"K6WP: error: --apply-still requires --video <path> (or "
+                    L"--restore)\n");
       return kExitBadFlag;
     }
   }

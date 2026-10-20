@@ -3,10 +3,11 @@ rem K6WP uninstall helper - portable-ZIP copy (Task 28).
 rem Dev copy lives at tools\uninstall.bat (Todo 36); alignment noted in evidence.
 rem Overlap note (Task 27): dist\K6WP-Setup.exe (packaging\installer.nsi)
 rem Section "Uninstall" covers full removal (verified artifact, do not touch):
-rem K6WP.exe --stop, Run value, OS wallpaper restore from
-rem HKCU\Software\K6WP\WallpaperBackup, app files, shortcuts, HKCU
-rem uninstall key, keep/remove data offer. This .bat is the portable-ZIP
-rem helper with the same keep/remove data semantics, aligned as far as batch can.
+rem K6WP.exe --stop, Run value, per-user wallpaper/lock-screen restore from
+rem %LOCALAPPDATA%\K6WP\original_*, legacy HKLM policy cleanup, app files,
+rem shortcuts, HKCU uninstall key, keep/remove data offer. This .bat is the
+rem portable-ZIP helper with the same keep/remove data semantics, aligned as
+rem far as batch can.
 rem Process stop (K6WP.exe --stop, not taskkill /IM): an image name is not
 rem unique on a developer or IT machine, so `taskkill /IM engine.exe` used to
 rem kill EVERY engine.exe on the box, including another app's. --stop asks the
@@ -16,9 +17,10 @@ rem for images sitting next to THIS K6WP.exe. A colliding engine.exe or
 rem studio.exe in another folder is never touched.
 rem Graceful-first rationale: the EngineApp message window handles WM_CLOSE by
 rem calling RequestShutdown() (engine/src/engine_app.cpp), which posts WM_QUIT
-rem so Run() breaks out and calls Shutdown(): ShutdownWallpaperSurface() +
-rem RestoreOsWallpaper() via SPI_SETDESKWALLPAPER with the path saved at
-rem startup, plus tray icon Remove(). A forced kill skips all of that.
+rem so Run() breaks out and calls Shutdown(): ShutdownWallpaperSurface() plus
+rem RequestStillRestore() (detached K6WP.exe --apply-still --restore, which
+rem reads the persistent original_wallpaper.json / original_lockscreen.*
+rem stores), plus tray icon Remove() and a forced kill skips all of that.
 rem LIVE-TEST NOTE (Task 28, still valid): with only its hidden top-level
 rem message window present, build\release\engine.exe did not honour the
 rem WM_CLOSE that `taskkill /IM` sends, so the forced fallback did the
@@ -64,14 +66,28 @@ if %ERRORLEVEL% EQU 0 (
   echo Autostart entry was not present - already clean.
 )
 
-echo Restoring lockscreen policy backup (if lockscreen sync was ever turned on)...
-echo This needs administrator rights - a UAC prompt will appear. Declining keeps the current lockscreen policy.
+echo Restoring your pre-K6WP desktop wallpaper and lock-screen image (per-user, no admin)...
+if exist "%~dp0K6WP.exe" goto still_run
+echo K6WP.exe not found next to this script - skipping the per-user restore.
+echo To restore manually, run: K6WP.exe --apply-still --restore
+goto still_done
+:still_run
+rem No UAC: the per-user still helper restores the persistent
+rem original_wallpaper.json / original_lockscreen.* stores. A missing store is
+rem a successful no-op, so this is safe to run on a machine that never used
+rem the feature.
+"%~dp0K6WP.exe" --apply-still --restore
+if errorlevel 1 echo WARNING: the wallpaper/lock-screen restore did not complete. Run K6WP.exe --apply-still --restore again before deleting K6WP.
+:still_done
+
+echo Removing a leftover legacy lockscreen policy (only if an old K6WP left one)...
+echo This needs administrator rights - a UAC prompt will appear. Declining keeps the legacy policy.
 if exist "%~dp0K6WP.exe" goto lock_run
-echo K6WP.exe not found next to this script - skipping lockscreen restore.
-echo To restore manually, run: K6WP.exe --elevate-lockscreen off (as administrator).
+echo K6WP.exe not found next to this script - skipping the legacy cleanup.
+echo To clean up manually, run: K6WP.exe --elevate-lockscreen off (as administrator).
 goto lock_done
 :lock_run
-rem Exit codes from K6WP.exe: 0 restored, 5 UAC declined, 4 wait budget
+rem Exit codes from K6WP.exe: 0 cleaned, 5 UAC declined, 4 wait budget
 rem expired, other = the elevated helper failed. `if errorlevel N` is read at
 rem run time, so these tests see the helper's real code.
 "%~dp0K6WP.exe" --elevate-lockscreen off
@@ -80,19 +96,17 @@ if errorlevel 1 goto lock_failed
 goto lock_done
 :lock_declined
 echo.
-echo WARNING: the administrator prompt was declined, so the lockscreen policy was NOT restored.
+echo WARNING: the administrator prompt was declined, so a leftover legacy lockscreen policy was NOT removed.
 echo It may still point at %%PROGRAMDATA%%\K6WP\lockscreen.jpg in
 echo HKLM\SOFTWARE\Policies\Microsoft\Windows\Personalization\LockScreenImage.
-echo That file is not part of this uninstall, so your lockscreen stays on that image.
-echo To restore manually, run: K6WP.exe --elevate-lockscreen off (as administrator).
+echo To clean it up manually, run: K6WP.exe --elevate-lockscreen off (as administrator).
 goto lock_done
 :lock_failed
 echo.
-echo WARNING: K6WP could not restore the lockscreen policy ^(the elevated helper failed or ran out of time^).
+echo WARNING: K6WP could not remove the legacy lockscreen policy ^(the elevated helper failed or ran out of time^).
 echo It may still point at %%PROGRAMDATA%%\K6WP\lockscreen.jpg in
 echo HKLM\SOFTWARE\Policies\Microsoft\Windows\Personalization\LockScreenImage.
-echo That file is not part of this uninstall, so your lockscreen stays on that image.
-echo To restore manually, run: K6WP.exe --elevate-lockscreen off (as administrator).
+echo To clean it up manually, run: K6WP.exe --elevate-lockscreen off (as administrator).
 :lock_done
 
 set /p CLEAN="Also delete K6WP cache and library data in %%LOCALAPPDATA%%\K6WP? [y/N] "

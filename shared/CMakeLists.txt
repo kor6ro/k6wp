@@ -8,9 +8,8 @@ add_library(k6wp_shared STATIC
   ipc_protocol.cpp
   monitor_util.cpp
   autostart.cpp
-  lockscreen.cpp
-  lockscreen_bridge.cpp
-  lockscreen_edition.cpp
+  still.cpp
+  legacy_lockscreen_policy.cpp
   ffmpeg_path.cpp
   proc_util.cpp
   sha1.cpp
@@ -104,13 +103,13 @@ target_link_libraries(stable_key_test PRIVATE k6wp_shared)
 target_include_directories(stable_key_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 add_test(NAME stable_key_test COMMAND stable_key_test)
 
-# lockscreen_policy_test (Bug A): the three pure decision layers of the
-# lock-screen feature - the trigger policy (which event refreshes, which
-# bypasses the debounce, which waits), the elevation classification (the
-# launcher's exit code -> the reason the Studio shows) and the Windows
-# edition classification (how well the LockScreenImage policy is supported).
-add_executable(lockscreen_policy_test ../tests/lockscreen_policy_test.cpp)
-target_link_libraries(lockscreen_policy_test PRIVATE k6wp_shared)
-target_include_directories(lockscreen_policy_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-add_test(NAME lockscreen_policy_test COMMAND lockscreen_policy_test)
+# still_test: the per-user still contract (shared/still.cpp) - paths and the
+# J1 IsStillPath predicate, the J8 refresh policy, the "WxH" parser, the
+# original wallpaper / lock-screen / status JSON stores, the helper spawn
+# seam, and the legacy HKLM policy cleanup classification + seam
+# (shared/legacy_lockscreen_policy.cpp).
+add_executable(still_test ../tests/still_test.cpp)
+target_link_libraries(still_test PRIVATE k6wp_shared)
+target_include_directories(still_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+add_test(NAME still_test COMMAND still_test)
 endif()

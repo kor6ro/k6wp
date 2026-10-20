@@ -33,6 +33,8 @@ Item {
     property int spinWidth: 140
     property int formColSpacing: 12
     property int formRowSpacing: 10
+    // Result text of the one-time legacy-policy cleanup (empty = not run).
+    property string legacyCleanupMessage: ""
     // A few labels are longer than the shared 132px label column
     // ("Mode pengisian (mentah):", "Offset bingkai (detik):", ...); without
     // their own preferred width they overdraw into the control.
@@ -422,6 +424,8 @@ Item {
                     Math.max(0, gpuCombo.modes.indexOf(Settings.gpuAdapter))
         if (offsetBox)
             offsetBox.value = Math.round(Settings.lockscreenOffsetSec)
+        if (wallpaperSyncBox)
+            wallpaperSyncBox.checked = Settings.wallpaperSync
         if (lockscreenSyncBox)
             lockscreenSyncBox.checked = Settings.lockscreenSync
         if (autoCompressBox)
@@ -1071,15 +1075,33 @@ Item {
                 }
 
                 SettingCheck {
-                    id: lockscreenSyncBox
+                    id: wallpaperSyncBox
+                    objectName: "wallpaperSyncBox"
                     Layout.fillWidth: true
-                    text: qsTr("Samakan bingkai video ke layar kunci (gambar statis)")
+                    text: qsTr("Jadikan frame pertama video sebagai wallpaper Windows")
+                    checked: Settings.wallpaperSync
+                    onToggled: Settings.setWallpaperSync(checked)
+                }
+
+                Label {
+                    objectName: "wallpaperStatusLabel"
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    color: Theme.text2
+                    font.pixelSize: Theme.fontS
+                    text: Settings.wallpaperStatus
+                    Accessible.name: text
+                }
+
+                SettingCheck {
+                    id: lockscreenSyncBox
+                    objectName: "lockscreenSyncBox"
+                    Layout.fillWidth: true
+                    text: qsTr("Jadikan frame pertama video sebagai gambar layar kunci")
                     checked: Settings.lockscreenSync
                     onToggled: Settings.setLockscreenSync(checked)
                 }
 
-                // The honest status: whether the policy is really registered
-                // and whether this Windows edition honours it at all.
                 Label {
                     objectName: "lockscreenStatusLabel"
                     Layout.fillWidth: true
@@ -1088,6 +1110,57 @@ Item {
                     font.pixelSize: Theme.fontS
                     text: Settings.lockscreenStatus
                     Accessible.name: text
+                }
+
+                // The two operations are per-user now: no administrator prompt.
+                // The originals are saved once and can always be put back.
+                Label {
+                    objectName: "stillExplanationLabel"
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    color: Theme.text2
+                    font.pixelSize: Theme.fontS
+                    text: qsTr("Wallpaper dan gambar layar kunci asli disimpan dan dapat dikembalikan saat fitur dimatikan, saat K6WP keluar dari tray, atau saat uninstall.")
+                    Accessible.name: text
+                }
+
+                // Cleanup of the old policy mechanism. Shown only when this
+                // machine still carries the HKLM LockScreenImage policy or the
+                // %PROGRAMDATA%\K6WP folder; the button runs the one remaining
+                // elevated path (a single administrator prompt).
+                ColumnLayout {
+                    objectName: "legacyLockscreenCleanupRow"
+                    Layout.fillWidth: true
+                    visible: Settings.legacyLockscreenCleanupNeeded
+                    spacing: 4
+
+                    Label {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        color: Theme.text2
+                        font.pixelSize: Theme.fontS
+                        text: qsTr("Versi lama meninggalkan kebijakan layar kunci di Windows. Bersihkan sekali agar tidak menimpa gambar baru.")
+                        Accessible.name: text
+                    }
+
+                    Button {
+                        objectName: "legacyLockscreenCleanupButton"
+                        text: qsTr("Bersihkan")
+                        onClicked: settingsPage.legacyCleanupMessage =
+                                   Settings.cleanupLegacyLockscreen()
+                        Accessible.name: text
+                    }
+
+                    Label {
+                        objectName: "legacyLockscreenCleanupResult"
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        color: Theme.text2
+                        font.pixelSize: Theme.fontS
+                        visible: text.length > 0
+                        text: settingsPage.legacyCleanupMessage
+                        Accessible.name: text
+                    }
                 }
 
                 // Raw affinity/GPU only reach the renderer on a fresh engine

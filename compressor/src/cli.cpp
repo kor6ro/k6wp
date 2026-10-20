@@ -145,7 +145,7 @@ const char* CliUsage() {
          "  --probe-encoders     List available encoders and exit\n"
          "  --help               Show this help and exit\n"
          "\n"
-         "Lockframe mode (extract single frame as lockscreen image):\n"
+         "Lockframe mode (extract a single frame as a still image):\n"
          "  --lockframe          Enable lockframe mode (output is .jpg)\n"
          "  --offset-s <n>       Seek offset in seconds (default 0)\n"
          "  --res <WxH>          Target resolution (optional, scales frame)\n"

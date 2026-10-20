@@ -14,8 +14,6 @@ add_executable(engine
   src/test_simulator.cpp
   src/tray_actions.cpp
   src/log_file.cpp
-  src/os_wallpaper.cpp
-  src/lockscreen_refresher.cpp  # Bug A: background lock-screen frame worker
   src/working_set_trim.cpp
   src/desktop_inject.cpp
   src/desktop_placement.cpp
@@ -441,5 +439,15 @@ add_executable(lock_order_test
 )
 target_include_directories(lock_order_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 add_test(NAME lock_order_test COMMAND lock_order_test)
+
+# engine_no_winrt_test: parses the PE import table of engine.exe and proves the
+# resident engine never links WinRT (combase.dll / api-ms-win-core-winrt-* /
+# RoGetActivationFactory). The C++/WinRT lock-screen call lives ONLY in the
+# one-shot K6WP.exe helper (launcher/still_apply.cpp), so the same scan is run
+# on K6WP.exe as a positive control. No dumpbin dependency.
+add_executable(engine_no_winrt_test ../tests/engine_no_winrt_test.cpp)
+add_dependencies(engine_no_winrt_test engine)
+add_test(NAME engine_no_winrt_test
+         COMMAND engine_no_winrt_test $<TARGET_FILE:engine>)
 
 endif()

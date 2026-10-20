@@ -23,20 +23,17 @@
 #include "crash_restart_guard.hpp"
 #include "device_lost_watch.hpp"
 #include "engine_watchdog.hpp"
-#include "lockscreen_refresher.hpp"
 #include "displays_schema.hpp"
 #include "fullscreen_watch.hpp"
 #include "ipc_server.hpp"
 #include "mpv_renderer.hpp"
 #include "multi_monitor.hpp"
 #include "cpu_affinity.hpp"
-#include "lockscreen_refresher.hpp"
 #include "occlusion_poke_scheduler.hpp"
 #include "lock_order.hpp"
 #include "topology_snapshot.hpp"
 #include "topology_diff.hpp"
 #include "occlusion_watch.hpp"
-#include "os_wallpaper.hpp"
 #include "pin_verify_schedule.hpp"
 #include "working_set_trim.hpp"
 #include "pause_controller.hpp"
@@ -147,10 +144,6 @@ class EngineApp {
   // transitions (video load, pause/resume, device-lost) that post-mortem
   // diagnostics must never miss after a taskkill.
   static void LogImportant(const char* fmt, ...);
-  // The live-frame seam for the lock screen: captures the frame that is on
-  // screen right now into `path` (UTF-8). Registered with the shared
-  // lock-screen helper, which prefers it over the file-based extract.
-  static bool CaptureLiveLockscreenFrame(const std::string& path);
 
   void HandlePowerBroadcast(WPARAM wParam, LPARAM lParam);
   LRESULT HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -313,8 +306,9 @@ class EngineApp {
   // tick (no dedicated timer — Check runs on the unpaused-loop wake),
   // per-slot PauseSlot only, atomic arm/disarm via ApplyPauseState.
   OcclusionWatch occlusion_watch_;
-  // Todo 15: OS wallpaper captured at Init, restored at Shutdown.
-  OsWallpaperGuard os_wallpaper_{&EngineApp::Log};
+  // Todo 15: the OS wallpaper is NOT captured/restored by the engine any more.
+  // shared/still.cpp owns the persistent original wallpaper store; a shutdown
+  // must not restore it (J3).
   // E-04: DXGI adapter-removed watch. Armed in Init after the live surface is
   // up; its event joins the Run-loop wait array so a real GPU TDR / adapter
   // removal fires the existing OnDeviceLost() path instead of leaving a black
@@ -438,7 +432,9 @@ class EngineApp {
   // until two consecutive monitor enumerations AGREE: right after a wake the
   // enumeration can still be moving, and converging on a half-reported
   // topology tears down slots that are about to come back.
-  void ArmTopologyReconcile(const char* trigger);
+  // reset_signature=false is the retry path: it keeps the first enumeration
+  // so two consecutive equal signatures can settle the door.
+  void ArmTopologyReconcile(const char* trigger, bool reset_signature = true);
   // Drops a pending reconcile pass: the work it would do is already done (or
   // is about to be done by a heavier path). Used by the device-lost
   // recovery, whose full surface rebuild supersedes the re-anchor.
@@ -461,10 +457,19 @@ class EngineApp {
   std::atomic<unsigned long long> loop_heartbeat_{0};
   std::atomic<bool> loop_parked_{false};
   EngineWatchdog watchdog_;
-  // Bug A: the lock-screen frame is produced on a background worker (the
-  // live frame comes from mpv's asynchronous screenshot, and waiting for it
-  // must never stall the message loop).
-  LockscreenRefresher lockscreen_refresher_;
+  // --- per-user still (shared/still.hpp) ------------------------------------
+  // The engine only DECIDES WHEN to spawn `K6WP.exe --apply-still` (one
+  // detached, below-normal child; never waits). The helper owns the wallpaper
+  // and the lock screen. `manual` = boot / user pick / Studio apply: always
+  // refreshes. A playlist rotation is throttled and skipped when the file did
+  // not change (StillRefreshAllowed).
+  void RequestStillRefresh(const std::string& video_utf8, bool manual);
+  // Last still request, for the rotation throttle. Main-thread only.
+  std::string last_still_video_;
+  std::chrono::steady_clock::time_point last_still_request_{};
+  // J3: true once WM_QUERYENDSESSION/WM_ENDSESSION said the session is going
+  // away. A shutdown must NOT restore the wallpaper/lock screen.
+  bool session_ending_ = false;
   // --- Tray menu actions (Todo 35, all run on the UI thread via WndProc) ----
   void OnTrayTogglePause();                 // Pause/Resume item + dbl-click
   void OnTrayQuickSwitch(std::size_t idx);  // quick-switch submenu index

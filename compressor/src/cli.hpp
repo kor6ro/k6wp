@@ -20,7 +20,7 @@ struct CliOptions {
   bool force_long = false;
   bool dry_run = false;
   bool probe_encoders = false;
-  // Lockframe mode: extract a single frame as lockscreen image
+  // Lockframe mode: extract a single frame as a still image
   bool lockframe = false;
   double offset_sec = 0.0;  // --offset-s N (seconds from start)
   int lockframe_q = 2;      // JPEG quality 1-31 (lower=better), default 2

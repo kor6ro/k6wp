@@ -37,8 +37,10 @@ outstanding work and belong under `docs/img/` once they exist.
   shuffle, edited in Studio and driven by the engine from `playlist.json`
   (freezes while paused; tray "Next Wallpaper" advances within it).
 - Tray icon with quick-switch (MRU) and error-status tooltip.
-- Single-instance engine (named mutex), OS-wallpaper save/restore on exit,
-  config migration with `.bak` self-healing.
+- Single-instance engine (named mutex), per-user first-frame still for the
+  desktop wallpaper and lock screen (persistent original stores, restored on
+  tray quit, toggle off, or uninstall), config migration with `.bak`
+  self-healing.
 
 ## Performance
 
@@ -94,7 +96,8 @@ Requirements: Windows 10 1703+ (PerMonitorV2) / Windows 11, 64-bit.
 2. Run it — per-user install, no UAC prompt, installs to `%LOCALAPPDATA%\K6WP`.
 3. Optional autostart checkbox (default on), Start Menu / Desktop shortcuts.
 4. Uninstall via Apps → K6WP → Uninstall (offers to keep or remove your data;
-   restores your previous OS wallpaper).
+   restores your previous wallpaper and lock-screen image, and removes any
+   legacy policy left by an old version).
 
 > The installer is not a prebuilt binary checked into the repo. It is compiled
 > from `packaging/installer.nsi` with NSIS (`makensis`, e.g.
@@ -190,9 +193,9 @@ calls in each module's `CMakeLists.txt`:
   plus the in-place-compress guard), `compress_friendly_error` (the
   technical→friendly error mapping), `widen_utf8_test` (the production
   `Widen()` UTF-8 decode).
-- `launcher/CMakeLists.txt` (2): `lockscreen_backup_test` (launcher
-  lockscreen backup UTF-8 round-trip), `launcher_stop_test` (the uninstaller
-  stop path: own-image matching and the elevated-restore outcome mapping).
+- `launcher/CMakeLists.txt` (2): `lockscreen_backup_test` (legacy backup
+  UTF-8 round-trip) and `launcher_stop_test` (the uninstaller stop path:
+  own-image matching and the elevated-restore outcome mapping).
 
 The Qt-based suites run under `QT_QPA_PLATFORM=offscreen`, so `ctest` works
 headless. Run them all with `ctest --preset msvc-dev` (or the exes directly

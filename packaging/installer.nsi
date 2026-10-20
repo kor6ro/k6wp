@@ -42,11 +42,13 @@
 ; Uninstall (Section "Uninstall"): stops engine/studio/K6WP via
 ; "$INSTDIR\K6WP.exe" --stop (its own IPC quit first, then a per-PID kill
 ; restricted to images inside $INSTDIR - never a machine-wide image-name
-; taskkill), deletes the Run value (idempotent), restores the
+; taskkill), deletes the Run value (idempotent), restores the pre-install
 ; wallpaper backup via SPI_SETDESKWALLPAPER when present, restores the
-; HKLM lockscreen-policy backup via K6WP.exe --elevate-lockscreen off
+; per-user still (desktop wallpaper + lock-screen image) through
+; K6WP.exe --apply-still --restore (no UAC), then removes a leftover legacy
+; HKLM lockscreen policy via K6WP.exe --elevate-lockscreen off
 ; (self-elevating; the call blocks on the elevated worker with a bounded
-; wait, and a declined prompt or a failed restore is reported to the user
+; wait, and a declined prompt or a failed cleanup is reported to the user
 ; with the exact manual command) before the app files are deleted,
 ; removes the app files, asks keep/remove of
 ; %LOCALAPPDATA%\K6WP user data (silent uninstall keeps it), deletes
@@ -504,32 +506,46 @@ Section "Uninstall" SEC_UNINST
   ${EndIf}
   DeleteRegKey HKCU "${BACKUP_SUBKEY}"
 
-  ; --- Restore lockscreen-policy backup when present (LOW-21) ---
-  ; The HKLM LockScreenImage policy needs elevation, which this per-user
-  ; (asInvoker) uninstaller does not have. K6WP.exe self-elevates via a
-  ; runas relaunch for --elevate-lockscreen, so delegate to it while it
-  ; still exists (app files are deleted below).
+  ; --- Restore the per-user still (wallpaper + lock screen) ---
+  ; No UAC: the helper reads the persistent original_wallpaper.json /
+  ; original_lockscreen.* stores under %LOCALAPPDATA%\K6WP. A missing store is
+  ; a successful no-op. Run BEFORE the data folder is optionally removed, and
+  ; while K6WP.exe still exists; the helper is synchronous (it waits for its
+  ; own compressor child), so the restore is finished when ExecWait returns.
+  DetailPrint "Restoring your previous desktop wallpaper and lock-screen image..."
+  ExecWait '"$INSTDIR\K6WP.exe" --apply-still --restore' $0
+  ${If} $0 != 0
+    DetailPrint "The per-user wallpaper/lock-screen restore did not complete (exit code $0)."
+  ${EndIf}
+
+  ; --- Remove a leftover legacy lockscreen policy (LOW-21) ---
+  ; Old builds wrote the machine-wide HKLM LockScreenImage policy. This
+  ; per-user (asInvoker) uninstaller cannot touch HKLM, so it delegates to
+  ; K6WP.exe, which self-elevates via a runas relaunch while the exe still
+  ; exists (app files are deleted below). The cleanup restores the pre-K6WP
+  ; policy value from lockscreen_policy_backup.json when one exists; otherwise
+  ; it deletes the value only when it points at our legacy
+  ; %PROGRAMDATA%\K6WP\lockscreen.jpg.
   ; The wait is the point: K6WP.exe hands back the elevated process HANDLE and
   ; blocks on it with a bounded wait (2 min), so this ExecWait only returns once
   ; the HKLM write is done - or once the helper was terminated. Deleting
   ; K6WP.exe while the worker is still running is impossible from here.
-  ; Exit codes: 0 restored | 5 UAC declined | 4 wait budget expired |
-  ; 3 the helper failed. Anything non-zero leaves the HKLM policy in place
-  ; pointing at %PROGRAMDATA%\K6WP\lockscreen.jpg, which is NOT under $INSTDIR
-  ; and is never removed, so the user is told exactly what to run.
-  DetailPrint "Restoring lockscreen policy backup (UAC prompt expected)..."
+  ; Exit codes: 0 cleaned | 5 UAC declined | 4 wait budget expired |
+  ; 3 the helper failed. Anything non-zero leaves a leftover policy in place,
+  ; so the user is told exactly what to run.
+  DetailPrint "Removing a leftover legacy lockscreen policy (UAC prompt only if one exists)..."
   ExecWait '"$INSTDIR\K6WP.exe" --elevate-lockscreen off' $0
   ${If} $0 != 0
-    DetailPrint "Lockscreen policy was NOT restored (exit code $0)."
+    DetailPrint "The legacy lockscreen policy was NOT removed (exit code $0)."
     Goto lockscreen_warning
   ${EndIf}
   Goto lockscreen_done
   lockscreen_warning:
     IfSilent lockscreen_done 0
     ${If} $0 == 5
-      MessageBox MB_ICONEXCLAMATION "The administrator prompt was declined, so the K6WP lockscreen policy was NOT restored.$\r$\n$\r$\nIt still points at %PROGRAMDATA%\K6WP\lockscreen.jpg (HKLM\SOFTWARE\Policies\Microsoft\Windows\Personalization\LockScreenImage). That file is not part of this uninstall, so your lockscreen stays on that image.$\r$\n$\r$\nTo restore it later, run this in an Administrator Command Prompt:$\r$\n$\r$\nK6WP.exe --elevate-lockscreen off"
+      MessageBox MB_ICONEXCLAMATION "The administrator prompt was declined, so a leftover K6WP lockscreen policy was NOT removed.$\r$\n$\r$\nIf an old K6WP version left one, it still points at %PROGRAMDATA%\K6WP\lockscreen.jpg (HKLM\SOFTWARE\Policies\Microsoft\Windows\Personalization\LockScreenImage).$\r$\n$\r$\nTo clean it up later, run this in an Administrator Command Prompt:$\r$\n$\r$\nK6WP.exe --elevate-lockscreen off"
     ${Else}
-      MessageBox MB_ICONEXCLAMATION "K6WP could not restore the lockscreen policy (exit code $0).$\r$\n$\r$\nIt may still point at %PROGRAMDATA%\K6WP\lockscreen.jpg (HKLM\SOFTWARE\Policies\Microsoft\Windows\Personalization\LockScreenImage). That file is not part of this uninstall, so your lockscreen stays on that image.$\r$\n$\r$\nTo restore it later, run this in an Administrator Command Prompt:$\r$\n$\r$\nK6WP.exe --elevate-lockscreen off"
+      MessageBox MB_ICONEXCLAMATION "K6WP could not remove a leftover legacy lockscreen policy (exit code $0).$\r$\n$\r$\nIf an old K6WP version left one, it may still point at %PROGRAMDATA%\K6WP\lockscreen.jpg (HKLM\SOFTWARE\Policies\Microsoft\Windows\Personalization\LockScreenImage).$\r$\n$\r$\nTo clean it up later, run this in an Administrator Command Prompt:$\r$\n$\r$\nK6WP.exe --elevate-lockscreen off"
     ${EndIf}
   lockscreen_done:
 

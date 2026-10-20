@@ -1,6 +1,6 @@
 {
-  "_comment": "K6WP example studio settings, schema v4. Copy to %LOCALAPPDATA%/K6WP/studio_settings.json to override Studio defaults. Paths below use %LOCALAPPDATA% as a placeholder - replace with the expanded folder on your machine, or leave the file absent to use the built-in defaults (identical values). A v3 file migrates on load: lockscreen_offer_shown is added (false) and lockscreen_sync keeps the value you chose - the lock screen only becomes visible once the administrator registration (K6WP.exe --elevate-lockscreen on) succeeded, which the Studio toggle does for you.",
-  "version": 4,
+  "_comment": "K6WP example studio settings, schema v5. Copy to %LOCALAPPDATA%/K6WP/studio_settings.json to override Studio defaults. Paths below use %LOCALAPPDATA% as a placeholder - replace with the expanded folder on your machine, or leave the file absent to use the built-in defaults (identical values). A pre-v5 file migrates on load: wallpaper_sync is added (true), lockscreen_sync keeps the value you chose (it now means the per-user WinRT lock-screen image, no administrator policy or UAC), and a lockscreen_offset_sec of exactly 1.0 (the old default) becomes 0.0 (the first frame).",
+  "version": 5,
   "auto_compress_on_import": true,
   "compress_output_dir": "%LOCALAPPDATA%/K6WP/wallpapers",
   "default_crf": 22,
@@ -8,8 +8,9 @@
   "default_resolution_mode": "match_monitor",
   "start_with_windows": false,
   "cache_dir": "%LOCALAPPDATA%/K6WP/cache",
-  "lockscreen_sync": false,
-  "lockscreen_offset_sec": 1.0,
+  "wallpaper_sync": true,
+  "lockscreen_sync": true,
+  "lockscreen_offset_sec": 0.0,
   "lockscreen_offer_shown": false,
   "compress_advanced_visible": false
 }

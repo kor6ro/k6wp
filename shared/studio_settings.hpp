@@ -15,13 +15,16 @@ namespace k6wp {
 // no version bump, same pattern check_updates followed when it landed).
 // v4 = the lock-screen onboarding offer (lockscreen_offer_shown).
 //
-// v4 CHANGES NOTHING THE USER DECIDED. A v3 file keeps its `lockscreen_sync`
-// value exactly as it was: the lock-screen feature needs an ADMINISTRATOR
-// policy registration (only the launcher can write it), so flipping the flag
-// silently would produce the "ON but no policy" state - the engine would
-// keep refreshing a jpg that Windows never shows. The v4 field only records
-// that the one-time onboarding offer was shown.
-inline constexpr int kStudioSettingsSchemaVersion = 4;
+// v5 = the PER-USER still mechanism (shared/still.hpp):
+//   * new `wallpaper_sync` - apply the first frame as the desktop wallpaper;
+//   * `lockscreen_sync` keeps its name and its stored value but now means
+//     "apply the per-user lock-screen image" (no administrator policy);
+//   * `lockscreen_offset_sec` default moves 1.0 -> 0.0 (the FIRST frame).
+// A file written by v <= 4 keeps both stored flags exactly as the user left
+// them; only a value of exactly 1.0 for the offset migrates to 0.0, because
+// 1.0 was the old hard-coded default and 0.0 is the new one. A fresh install
+// (no file) defaults BOTH sync flags to true.
+inline constexpr int kStudioSettingsSchemaVersion = 5;
 
 // Studio-side preferences, stored at %LOCALAPPDATA%/K6WP/studio_settings.json.
 // This is deliberately SEPARATE from WallpaperConfig (config.json), which is
@@ -37,19 +40,25 @@ struct StudioSettings {
       "match_monitor";  // match_monitor | source | 720p | 1080p | 2160p
   bool start_with_windows = false;  // RESERVED: autostart is read from HKCU Run, not this field
   std::wstring cache_dir;  // default %LOCALAPPDATA%/K6WP/cache
-  // Bagian B — lock screen sync (static frame only, B5).
-  // When true, engine/studio fire `compressor --lockframe` on every video
-  // change (debounced, below-normal, fire-and-forget); the launcher applies
-  // the resulting %PROGRAMDATA%\K6WP\lockscreen.jpg via
-  // K6WP.exe --elevate-lockscreen on|off. Engine reads this flag read-only
-  // (its only exception to the "Engine never reads this file" rule).
-  bool lockscreen_sync = false;
-  double lockscreen_offset_sec = 1.0;  // frame seek offset in seconds (>= 0)
+  // Per-user still (shared/still.hpp): the FIRST frame of the video becomes
+  // the real Windows desktop wallpaper (SPI_SETDESKWALLPAPER) and/or the
+  // lock-screen image (WinRT LockScreen::SetImageFileAsync). No HKLM policy,
+  // no administrator rights, no UAC. The Engine reads these fields read-only
+  // (LOW-16: exactly three fields - wallpaper_sync, lockscreen_sync and
+  // lockscreen_offset_sec).
+  //
+  // Defaults are TRUE for a fresh install; a file that already carries these
+  // keys keeps the user's stored value.
+  bool wallpaper_sync = true;
+  bool lockscreen_sync = true;
+  // Frame seek offset in seconds (>= 0). Default 0.0 = the FIRST frame. Files
+  // written at schema <= 4 with the old default of exactly 1.0 migrate to
+  // 0.0 (v5 migration).
+  double lockscreen_offset_sec = 0.0;
   // v4 (Studio-private): the one-time onboarding offer for the lock screen
-  // has been shown. The offer lives in the first-run wizard ("Aktifkan layar
-  // kunci otomatis", default checked); this flag records that it was shown
-  // so it is never shown again. The ENGINE never reads it (LOW-16: the
-  // Engine reads exactly two fields of this file).
+  // has been shown. The offer lives in the first-run wizard (both toggles,
+  // default checked); this flag records that it was shown so it is never
+  // shown again. The ENGINE never reads it (LOW-16).
   bool lockscreen_offer_shown = false;
   // Compressor tab: advanced-box expanded state (session UI only, never
   // affects jobs). v1 files migrate it to false.
@@ -105,12 +114,14 @@ void SaveStudioSettings(const std::filesystem::path& path,
 void ValidateStudioSettings(StudioSettings& settings);
 
 // Converts a raw JSON object into StudioSettings. Missing fields are filled
-// with defaults (v0/v1/v2 -> v3 migration; the todo-8 keys default when
-// absent). Keys keep_original and start_minimized were removed in v3 and
-// are ignored when present in old files. Out-of-set playlistSource /
-// performancePreset values normalize to their defaults (old-file tolerance:
-// a bad hand-edited enum must not fail the load). Throws ConfigError on
-// unknown schema version or type-corrupt fields.
+// with defaults (v0..v4 -> v5 migration; the newer keys default when
+// absent). The v5 offset rule: a pre-v5 value of exactly 1.0 migrates to 0.0
+// (the old hard-coded default -> the first frame). Keys keep_original and
+// start_minimized were removed in v3 and are ignored when present in old
+// files. Out-of-set playlistSource / performancePreset values normalize to
+// their defaults (old-file tolerance: a bad hand-edited enum must not fail
+// the load). Throws ConfigError on unknown schema version or type-corrupt
+// fields.
 StudioSettings MigrateStudioSettings(const nlohmann::json& raw);
 
 // %LOCALAPPDATA%/K6WP/studio_settings.json (falls back to

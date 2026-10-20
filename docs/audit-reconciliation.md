@@ -144,10 +144,10 @@ kode | bukti.
 | LOW-13 | tidak tercatat | BARU | Ikon legacy di `packaging/` perlu dipindah ke `attic/` atau dihapus. Fix: todo 10. |
 | LOW-15 | tidak tercatat (dev-contracts.md §1 belum memuat kontrak ack dua-tahap) | BARU | Ack saat ini = hasil eksekusi langsung di worker; semantik "diterima vs selesai" belum terdokumentasi. Fix: todo 11 (dokumentasi di dev-contracts.md §1). |
 | LOW-16 | tidak tercatat | BARU | `studio/src/apply_manager.cpp:120-127` `ResolveEnginePath` fallback `../../build/msvc-dev/engine.exe` di bawah `#ifndef NDEBUG`. Fix: todo 24. |
-| LOW-17 | tidak tercatat | BARU | `launcher/main.cpp::GrantK6wpFolderWriteAccess`; keputusan: dokumentasikan risiko saja, jangan ubah ACL. Fix: todo 31. |
+| LOW-17 | tidak tercatat | SELESAI (v5) | `launcher/main.cpp::GrantK6wpFolderWriteAccess` dan jalur elevated dihapus bersama mekanisme HKLM policy. Tidak ada lagi tulis lintas-user: still per-user di `%LOCALAPPDATA%\K6WP\stills` + WinRT lock screen. `SECURITY.md` LOW-17 diperbarui. |
 | LOW-19 | tidak tercatat | BARU | `studio/src/update_checker.cpp`; kebijakan: update user-initiated, buka browser ke halaman rilis. Fix: todo 31. |
 | LOW-20 | tidak tercatat | BARU | `vendor/VERSIONS.md`; dokumentasikan alasan libmpv dev-channel + jadwal review advisory. Fix: todo 31. |
-| LOW-21 | tidak tercatat | BARU | `packaging/uninstall.bat`, `tools/uninstall.bat`, `packaging/installer.nsi`; perlu verifikasi restore lockscreen policy. Fix: todo 31. |
+| LOW-21 | tidak tercatat | SELESAI (v5) | `packaging/uninstall.bat`, `tools/uninstall.bat`, `packaging/installer.nsi` sekarang memulihkan still per-user (`--apply-still --restore`, tanpa UAC) lalu membersihkan policy HKLM lama lewat `--elevate-lockscreen off` (satu UAC, hanya bila residue terdeteksi). |
 | LOW-22 | tidak tercatat | BARU | `CMakeLists.txt` ~39 (`/W4 /WX-`); baseline warning belum dihitung. Fix: todo 10. |
 | LOW-23 | tidak tercatat | BARU | Header `vcpkg.json` perlu komentar "katalog, bukan instruksi build" atau dihapus. Fix: todo 10. |
 | LOW-24 | tidak tercatat | BARU | `studio/src/main_window.cpp::ApplyVideoPath` tanpa disable/progress saat live-switch. Fix: todo 28. |

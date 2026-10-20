@@ -4,6 +4,8 @@
 #include "lockscreen_policy.hpp"
 #include "win32_raii.hpp"
 
+#include "legacy_lockscreen_policy.hpp"
+
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -11,103 +13,19 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
-#include <aclapi.h>
 #include <shellapi.h>
 
 #include <cstdio>
 #include <filesystem>
-#include <vector>
 
 namespace k6wp::launcher {
 
 namespace {
 
-bool GrantK6wpFolderWriteAccess(const std::wstring& dir,
-                               std::wstring& error_out) {
-  PACL old_dacl = nullptr;
-  PSECURITY_DESCRIPTOR sd = nullptr;
-  DWORD rc = GetNamedSecurityInfoW(dir.c_str(), SE_FILE_OBJECT,
-                                   DACL_SECURITY_INFORMATION, nullptr, nullptr,
-                                   &old_dacl, nullptr, &sd);
-  if (rc != ERROR_SUCCESS) {
-    error_out = L"GetNamedSecurityInfoW: " + FormatSysError(rc);
-    return false;
-  }
-
-  HANDLE token = nullptr;
-  if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
-    error_out =
-        L"OpenProcessToken: " + FormatSysError(GetLastError());
-    LocalFree(sd);
-    return false;
-  }
-  HandleGuard token_guard(token);
-  DWORD token_len = 0;
-  GetTokenInformation(token_guard.get(), TokenUser, nullptr, 0, &token_len);
-  if (token_len == 0) {
-    error_out =
-        L"GetTokenInformation: " + FormatSysError(GetLastError());
-    LocalFree(sd);
-    return false;
-  }
-  std::vector<BYTE> token_buf(token_len);
-  if (!GetTokenInformation(token_guard.get(), TokenUser, token_buf.data(),
-                           token_len, &token_len)) {
-    error_out =
-        L"GetTokenInformation: " + FormatSysError(GetLastError());
-    LocalFree(sd);
-    return false;
-  }
-  const TOKEN_USER* tu =
-      reinterpret_cast<const TOKEN_USER*>(token_buf.data());
-
-  BYTE users_sid[SECURITY_MAX_SID_SIZE] = {};
-  DWORD users_len = sizeof(users_sid);
-  if (!CreateWellKnownSid(WinBuiltinUsersSid, nullptr, users_sid,
-                          &users_len)) {
-    error_out =
-        L"CreateWellKnownSid(Users): " + FormatSysError(GetLastError());
-    LocalFree(sd);
-    return false;
-  }
-
-  EXPLICIT_ACCESSW ea[2] = {};
-  ea[0].grfAccessPermissions = GENERIC_READ | GENERIC_WRITE | DELETE;
-  ea[0].grfAccessMode = GRANT_ACCESS;
-  ea[0].grfInheritance = SUB_CONTAINERS_AND_OBJECTS_INHERIT;
-  ea[0].Trustee.pMultipleTrustee = nullptr;
-  ea[0].Trustee.MultipleTrusteeOperation = NO_MULTIPLE_TRUSTEE;
-  ea[0].Trustee.TrusteeForm = TRUSTEE_IS_SID;
-  ea[0].Trustee.TrusteeType = TRUSTEE_IS_USER;
-  ea[0].Trustee.ptstrName = reinterpret_cast<LPWSTR>(tu->User.Sid);
-  ea[1].grfAccessPermissions = GENERIC_READ | GENERIC_WRITE;
-  ea[1].grfAccessMode = GRANT_ACCESS;
-  ea[1].grfInheritance = SUB_CONTAINERS_AND_OBJECTS_INHERIT;
-  ea[1].Trustee.pMultipleTrustee = nullptr;
-  ea[1].Trustee.MultipleTrusteeOperation = NO_MULTIPLE_TRUSTEE;
-  ea[1].Trustee.TrusteeForm = TRUSTEE_IS_SID;
-  ea[1].Trustee.TrusteeType = TRUSTEE_IS_GROUP;
-  ea[1].Trustee.ptstrName = reinterpret_cast<LPWSTR>(users_sid);
-
-  PACL new_dacl = nullptr;
-  rc = SetEntriesInAclW(2, ea, old_dacl, &new_dacl);
-  LocalFree(sd);
-  if (rc != ERROR_SUCCESS) {
-    error_out = L"SetEntriesInAclW: " + FormatSysError(rc);
-    return false;
-  }
-  rc = SetNamedSecurityInfoW(const_cast<LPWSTR>(dir.c_str()), SE_FILE_OBJECT,
-                             DACL_SECURITY_INFORMATION, nullptr, nullptr,
-                             new_dacl, nullptr);
-  LocalFree(new_dacl);
-  if (rc != ERROR_SUCCESS) {
-    error_out = L"SetNamedSecurityInfoW: " + FormatSysError(rc);
-    return false;
-  }
-  return true;
-}
-
-int RelaunchElevated(const std::wstring& action) {
+// Runs `K6WP.exe --elevate-lockscreen off --elevated` through the UAC prompt
+// and waits for it, bounded. This is the ONE elevation left in the product
+// and it only removes what the old HKLM policy mechanism left behind.
+int RelaunchElevated() {
   wchar_t exe_path[MAX_PATH] = {};
   const DWORD len = GetModuleFileNameW(nullptr, exe_path, MAX_PATH);
   if (len == 0 || len >= MAX_PATH) {
@@ -115,8 +33,7 @@ int RelaunchElevated(const std::wstring& action) {
                   FormatSysError(GetLastError()).c_str());
     return kExitSpawnFailure;
   }
-  const std::wstring params =
-      L"--elevate-lockscreen " + action + L" --elevated";
+  const std::wstring params = L"--elevate-lockscreen off --elevated";
   SHELLEXECUTEINFOW sei{};
   sei.cbSize = sizeof(sei);
   sei.fMask = SEE_MASK_NOCLOSEPROCESS;
@@ -140,7 +57,7 @@ int RelaunchElevated(const std::wstring& action) {
                                                 kElevatedWorkerWaitMs);
   DWORD exit_code = 0;
   const bool have_exit_code = wait_result == WAIT_OBJECT_0 &&
-                             GetExitCodeProcess(worker.get(), &exit_code) != 0;
+                              GetExitCodeProcess(worker.get(), &exit_code) != 0;
   const ElevatedWaitOutcome outcome = ClassifyElevatedWait(
       true, ERROR_SUCCESS, wait_result, have_exit_code ? exit_code : 1);
   if (outcome == ElevatedWaitOutcome::kTimedOut) {
@@ -153,13 +70,24 @@ int RelaunchElevated(const std::wstring& action) {
                   L"%lums; terminated it.\n",
                   static_cast<unsigned long>(kElevatedWorkerWaitMs));
   } else if (outcome == ElevatedWaitOutcome::kRestored) {
-    std::fwprintf(stderr, L"K6WP: elevated lockscreen helper finished.\n");
+    std::fwprintf(stderr, L"K6WP: legacy lockscreen cleanup finished.\n");
   } else {
     std::fwprintf(stderr,
-                  L"K6WP: error: the elevated helper failed (exit code %lu).\n",
+                  L"K6WP: error: the elevated cleanup failed (exit code %lu).\n",
                   static_cast<unsigned long>(exit_code));
   }
   return LockscreenExitCodeFor(outcome);
+}
+
+// Removes the two files the old mechanism owned, then the folder - but only
+// when it is empty afterwards. A user who put anything else in
+// %PROGRAMDATA%\K6WP keeps that folder (remove() on a non-empty directory
+// fails harmlessly).
+void RemoveLegacyFolder(const std::filesystem::path& dir) {
+  std::error_code ec;
+  std::filesystem::remove(dir / kLockscreenFileName, ec);
+  std::filesystem::remove(dir / kLockscreenBackupName, ec);
+  std::filesystem::remove(dir, ec);
 }
 
 }  // namespace
@@ -202,26 +130,36 @@ std::wstring DescribeLockscreenRestore(int exit_code) {
   if (exit_code == kExitOk) return std::wstring();
   std::wstring out;
   if (exit_code == kExitElevateDeclined) {
-    out = L"The administrator prompt was declined, so the lockscreen policy "
-          L"was NOT restored. ";
+    out = L"The administrator prompt was declined, so the legacy lockscreen "
+          L"policy was NOT removed. ";
   } else if (exit_code == kExitElevateTimeout) {
     out = L"The administrator helper was stopped before it could report "
-          L"success, so the lockscreen policy may be half-restored. ";
+          L"success, so the legacy lockscreen policy may be half-removed. ";
   } else {
-    out = L"The lockscreen policy could not be restored. ";
+    out = L"The legacy lockscreen policy could not be removed. ";
   }
   out += L"It may still point at %PROGRAMDATA%\\K6WP\\lockscreen.jpg "
-        L"(HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\Personalization\\"
-        L"LockScreenImage), which stays on this machine after the uninstall. "
-        L"To restore it manually, run: K6WP.exe --elevate-lockscreen off "
-        L"(from an administrator command prompt).";
+         L"(HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\Personalization\\"
+         L"LockScreenImage), which stays on this machine after the uninstall. "
+         L"To remove it manually, run: K6WP.exe --elevate-lockscreen off "
+         L"(from an administrator command prompt).";
   return out;
 }
 
 int RunElevateLockscreen(const Options& opts) {
-  const bool turn_on = opts.elevate_action == L"on";
   if (!opts.elevated_worker && !IsElevated()) {
-    return RelaunchElevated(opts.elevate_action);
+    // Nothing to clean -> no UAC prompt. The check is read-only and mirrors
+    // the Studio's "Bersihkan" detection; a policy pointing elsewhere is left
+    // alone (and never prompts either).
+    const k6wp::LegacyLockscreenState legacy =
+        k6wp::ReadLegacyLockscreenState();
+    if (!legacy.cleanup_needed()) {
+      std::fwprintf(stderr,
+                    L"K6WP: no legacy lockscreen policy left; nothing to "
+                    L"clean up.\n");
+      return 0;
+    }
+    return RelaunchElevated();
   }
   if (!IsElevated()) {
     std::fwprintf(stderr, L"K6WP: error: --elevate-lockscreen requires "
@@ -236,16 +174,11 @@ int RunElevateLockscreen(const Options& opts) {
                   L"K6WP folder.\n");
     return 3;
   }
-  std::error_code ec;
-  std::filesystem::create_directories(dir, ec);
-  if (ec) {
-    std::fwprintf(stderr, L"K6WP: error: cannot create %ls.\n",
-                  dir.c_str());
-    return 3;
-  }
   const std::filesystem::path image = dir / kLockscreenFileName;
   const std::filesystem::path backup = dir / kLockscreenBackupName;
 
+  std::error_code ec;
+  const bool dir_exists = std::filesystem::exists(dir, ec);
   std::wstring current;
   bool present = false;
   if (!ReadLockscreenPolicy(current, present)) {
@@ -254,40 +187,25 @@ int RunElevateLockscreen(const Options& opts) {
     return 3;
   }
 
-  if (turn_on) {
-    if (!std::filesystem::exists(backup, ec)) {
-      if (!WriteLockscreenBackup(backup, present, current)) {
-        std::fwprintf(stderr, L"K6WP: error: cannot write %ls.\n",
-                      backup.c_str());
-        return 3;
-      }
-    }
-    std::wstring acl_error;
-    if (!GrantK6wpFolderWriteAccess(dir.wstring(), acl_error)) {
-      std::fwprintf(stderr, L"K6WP: error: cannot ACL %ls (%ls).\n",
-                    dir.c_str(), acl_error.c_str());
-      return 3;
-    }
-    if (!WriteLockscreenPolicy(image.wstring())) {
-      std::fwprintf(stderr, L"K6WP: error: cannot write the LockScreenImage "
-                            L"policy (%ls).\n",
-                    FormatSysError(GetLastError()).c_str());
-      return 3;
-    }
-    std::fwprintf(stderr, L"K6WP: lockscreen sync ON (%ls).\n",
-                  image.c_str());
-    return 0;
-  }
-
   if (present && _wcsicmp(current.c_str(), image.c_str()) != 0) {
+    // Someone else's policy: never touch it, and leave the folder alone (it
+    // may belong to that policy's owner).
     std::fwprintf(stderr, L"K6WP: LockScreenImage points elsewhere, leaving "
                           L"it untouched.\n");
     return 0;
   }
+
   const bool backup_exists = std::filesystem::exists(backup, ec);
   bool had_value = false;
   std::wstring old_value;
   const bool backup_ok = ReadLockscreenBackup(backup, had_value, old_value);
+  if (backup_exists && !backup_ok) {
+    // The backup exists but could not be read: removing the policy now would
+    // destroy the only record of the user's pre-K6WP wallpaper with no way back.
+    std::fwprintf(stderr, L"K6WP: error: lockscreen backup is unreadable; "
+                          L"refusing to remove the policy.\n");
+    return 3;
+  }
   if (backup_ok && had_value && !old_value.empty()) {
     if (!WriteLockscreenPolicy(old_value)) {
       std::fwprintf(stderr, L"K6WP: error: cannot restore the LockScreenImage "
@@ -295,20 +213,17 @@ int RunElevateLockscreen(const Options& opts) {
                     FormatSysError(GetLastError()).c_str());
       return 3;
     }
-  } else if (backup_exists && !backup_ok) {
-    // The backup exists but could not be read: removing the policy now would
-    // destroy the only record of the user's pre-K6WP wallpaper with no way back.
-    std::fwprintf(stderr, L"K6WP: error: lockscreen backup is unreadable; "
-                          L"refusing to remove the policy.\n");
-    return 3;
-  } else if (!DeleteLockscreenPolicy()) {
+  } else if (present && !DeleteLockscreenPolicy()) {
     std::fwprintf(stderr, L"K6WP: error: cannot remove the LockScreenImage "
                           L"policy (%ls).\n",
                   FormatSysError(GetLastError()).c_str());
     return 3;
   }
-  std::filesystem::remove(backup, ec);
-  std::fwprintf(stderr, L"K6WP: lockscreen sync OFF.\n");
+
+  if (dir_exists) {
+    RemoveLegacyFolder(dir);
+  }
+  std::fwprintf(stderr, L"K6WP: legacy lockscreen policy cleaned up.\n");
   return 0;
 }
 

@@ -442,8 +442,8 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+25"/>
-        <source>Aktifkan layar kunci otomatis (gambar statis dari video)</source>
+        <location line="+23"/>
+        <source>Jadikan frame pertama video sebagai wallpaper dan gambar layar kunci</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -501,7 +501,7 @@
 <context>
     <name>SettingsPage</name>
     <message>
-        <location filename="../qml/SettingsPage.qml" line="+640"/>
+        <location filename="../qml/SettingsPage.qml" line="+644"/>
         <source>Bahasa antarmuka:</source>
         <translation type="unfinished">Interface language:</translation>
     </message>
@@ -526,7 +526,7 @@
         <translation type="unfinished">Fill screen:</translation>
     </message>
     <message>
-        <location line="-441"/>
+        <location line="-443"/>
         <source>Bagian dibuka. Aktifkan untuk menutup.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -536,7 +536,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+322"/>
+        <location line="+324"/>
         <source>Umum</source>
         <translation type="unfinished"></translation>
     </message>
@@ -669,7 +669,32 @@
         <translation type="unfinished">Center (original size)</translation>
     </message>
     <message>
-        <location line="+136"/>
+        <location line="+107"/>
+        <source>Jadikan frame pertama video sebagai wallpaper Windows</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+19"/>
+        <source>Jadikan frame pertama video sebagai gambar layar kunci</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+23"/>
+        <source>Wallpaper dan gambar layar kunci asli disimpan dan dapat dikembalikan saat fitur dimatikan, saat K6WP keluar dari tray, atau saat uninstall.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+19"/>
+        <source>Versi lama meninggalkan kebijakan layar kunci di Windows. Bersihkan sekali agar tidak menimpa gambar baru.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>Bersihkan</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+31"/>
         <source>Perubahan inti CPU / GPU berlaku setelah wallpaper dimuat ulang.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -709,7 +734,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-609"/>
+        <location line="-678"/>
         <source>Layar:</source>
         <translation type="unfinished">Screen:</translation>
     </message>
@@ -729,12 +754,11 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+7"/>
         <source>Samakan bingkai video ke layar kunci (gambar statis)</source>
-        <translation type="unfinished">Sync the video frame to the lock screen (still image)</translation>
+        <translation type="obsolete">Sync the video frame to the lock screen (still image)</translation>
     </message>
     <message>
-        <location line="+80"/>
+        <location line="+156"/>
         <source>Folder output:</source>
         <translation type="unfinished">Output folder:</translation>
     </message>
@@ -875,7 +899,7 @@
         <translation type="unfinished">Clear cache...</translation>
     </message>
     <message>
-        <location line="-543"/>
+        <location line="-612"/>
         <source>Mode hemat baterai:</source>
         <translation type="unfinished">Battery saver mode:</translation>
     </message>
@@ -906,12 +930,12 @@
     </message>
     <message>
         <location line="+4"/>
-        <location line="+185"/>
+        <location line="+254"/>
         <source>CRF:</source>
         <translation type="unfinished">CRF:</translation>
     </message>
     <message>
-        <location line="-173"/>
+        <location line="-242"/>
         <source>CRF</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1367,7 +1391,7 @@
 <context>
     <name>k6wp::ApplyManager</name>
     <message>
-        <location filename="../src/apply_manager.cpp" line="+321"/>
+        <location filename="../src/apply_manager.cpp" line="+320"/>
         <source>Apply: engine mati saat sinkron layar — klik Start Engine dulu</source>
         <translation>Apply: engine stopped during screen sync - click Start Engine first</translation>
     </message>
@@ -1707,7 +1731,7 @@
 <context>
     <name>k6wp::SettingsBridge</name>
     <message>
-        <location filename="../src/settings_bridge.cpp" line="+147"/>
+        <location filename="../src/settings_bridge.cpp" line="+149"/>
         <source>Pengaturan studio rusak, kembali ke bawaan: %1</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1749,58 +1773,91 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+33"/>
-        <source>Gambar layar kunci diarahkan ke wallpaper lain, jadi K6WP tidak mengubahnya.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+5"/>
+        <location line="+34"/>
+        <location line="+29"/>
         <source>Nonaktif.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+2"/>
-        <source>Belum terdaftar di Windows - aktifkan lagi untuk meminta izin administrator.</source>
+        <location line="-32"/>
+        <source>Nonaktif. Sisa kebijakan layar kunci versi lama masih ada di Windows; bersihkan agar Windows memakai gambar biasa.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <location line="+29"/>
+        <source>Menunggu frame pertama dari video aktif.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-26"/>
+        <source>Gambar layar kunci belum bisa dipasang: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>Gambar sudah dipasang, tetapi Windows masih memakai mode %1 yang dapat menimpanya. Matikan mode itu di Pengaturan Windows.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+5"/>
-        <source>Aktif - gambar video ikut ke layar kunci.</source>
+        <location line="+22"/>
+        <source>Belum diterapkan pada video aktif.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-19"/>
+        <source>Aktif. Sisa kebijakan versi lama masih ada; bersihkan agar tidak saling menimpa.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Aktif - frame pertama video menjadi gambar layar kunci.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+12"/>
+        <source>Wallpaper belum bisa diganti: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>Aktif - frame pertama video menjadi wallpaper Windows.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+20"/>
+        <source>Pembantu K6WP tidak bisa dijalankan, jadi wallpaper belum diganti.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+24"/>
+        <source>Pembantu K6WP tidak bisa dijalankan, jadi gambar layar kunci belum diganti.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+21"/>
+        <source>Sisa kebijakan layar kunci versi lama berhasil dibersihkan.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+2"/>
-        <source>Policy terdaftar, tapi edisi Windows %1 mungkin mengabaikannya. Coba kunci layar (Win+L) untuk memastikan.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+4"/>
-        <source>Policy terdaftar, tapi edisi Windows %1 tidak mendukung gambar layar kunci.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+6"/>
-        <source>Policy terdaftar. Coba kunci layar (Win+L) untuk memastikan.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+37"/>
-        <source>Jendela administrator dibatalkan, jadi gambar layar kunci tidak diaktifkan.</source>
+        <source>Jendela administrator dibatalkan, jadi sisa kebijakan lama belum dibersihkan.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+3"/>
-        <source>Bantuan administrator tidak selesai tepat waktu, jadi gambar layar kunci mungkin belum aktif.</source>
+        <source>Pembersihan belum selesai tepat waktu. Coba lagi.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+3"/>
-        <source>Tidak bisa menjalankan K6WP.exe untuk mengatur gambar layar kunci.</source>
+        <location line="+2"/>
+        <source>Tidak bisa menjalankan K6WP.exe untuk membersihkan sisa kebijakan lama.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+6"/>
-        <source>Gambar layar kunci tidak dapat diubah.</source>
+        <location line="+5"/>
+        <source>Sisa kebijakan lama belum bisa dibersihkan.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

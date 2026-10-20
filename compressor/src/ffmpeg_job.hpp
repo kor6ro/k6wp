@@ -39,7 +39,9 @@ bool BuildFfmpegCmdline(const FfmpegJobOptions& opts, std::wstring& cmdline,
 ///   -vf scale=W:H,fps=FPS -an -c:v <enc> + per-encoder quality flags,
 ///   -pix_fmt yuv420p -profile:v high, MP4 output, `-progress - -nostats`.
 /// Lockframe mode (opts.lockframe): `-ss <offset> -frames:v 1 -q:v <quality>`
-/// JPEG output, written via a .tmp file and atomically moved with MoveFileEx.
+/// JPEG output, written via a `<stem>.tmp.jpg` file (the image extension must
+/// stay last so ffmpeg's image2 muxer can infer the format) and atomically
+/// moved with MoveFileExW.
 /// Emits progress NDJSON to stdout roughly every 500ms:
 ///   {"progress":0-100,"eta_s":N}
 /// On success returns 0 (after emitting {"progress":100,"eta_s":0}).

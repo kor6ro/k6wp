@@ -21,7 +21,6 @@
 #include <QString>
 
 #include "ipc_client.hpp"
-#include "lockscreen.hpp"
 #include "engine_status_controller.hpp"
 
 namespace k6wp {

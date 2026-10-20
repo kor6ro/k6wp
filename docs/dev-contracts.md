@@ -237,39 +237,52 @@ doc — when in doubt, read the code.
   `match_monitor/source/720p/1080p/2160p` (default `match_monitor`),
   `start_with_windows` false (RESERVED: autostart state comes from the HKCU
   `Run` value via `IsAutostart()`; this field is persisted but not read by
-  production code), `lockscreen_sync` false,
-  `lockscreen_offset_sec` 1.0 (>= 0), `compress_advanced_visible` false
+  production code), `wallpaper_sync` true, `lockscreen_sync` true,
+  `lockscreen_offset_sec` 0.0 (>= 0), `compress_advanced_visible` false
   (Compressor-tab advanced-box state, UI-only),
   `cache_dir` (default `%LOCALAPPDATA%\K6WP\cache`).
   (v3 removed the dead `keep_original`/`start_minimized` keys; old files
   carrying them migrate by ignoring those keys.)
-- Schema version: **v4** (`kStudioSettingsSchemaVersion`). v4 adds
-  `lockscreen_offer_shown` (bool, default false) — the one-time onboarding
-  offer for the lock screen. The v3 → v4 migration NEVER changes a user's
-  `lockscreen_sync` value: the lock screen needs an administrator policy
-  registration (`K6WP.exe --elevate-lockscreen on`), so flipping the flag
-  silently would produce exactly the "ON in the settings but no policy"
-  state — the Engine would keep refreshing a picture Windows never shows.
-  A v3 file therefore migrates with `lockscreen_sync` untouched and
-  `lockscreen_offer_shown` = false.
-- Same `.bak` contract as §2: v0/v1/v2/v3 → v4 migration and corrupt input
+- Schema version: **v5** (`kStudioSettingsSchemaVersion`). v5 replaces the
+  elevated HKLM `LockScreenImage` policy mechanism with a per-user still:
+  - adds `wallpaper_sync` (bool, default true) — the first frame becomes the
+    real desktop wallpaper;
+  - keeps `lockscreen_sync` but changes its MEANING: it now selects the
+    per-user WinRT lock-screen image (no policy, no UAC). A stored value is
+    never flipped by the migration — a user who had it ON keeps it ON, a user
+    who had it OFF keeps it OFF;
+  - moves the `lockscreen_offset_sec` default from 1.0 to 0.0 (the FIRST
+    frame). A v4-or-older file whose value is EXACTLY 1.0 — the old
+    hard-coded default — is migrated to 0.0; any other value is preserved.
+  `lockscreen_offer_shown` (bool, default false) stays as the one-time
+  onboarding flag. A fresh install (no file yet) defaults BOTH sync flags to
+  true.
+- Same `.bak` contract as §2: v0/v1/v2/v3/v4 → v5 migration and corrupt input
   both back up to `<file>.bak` first. Empty-string dirs migrate to the env
   default. Directory defaults resolve at load (expanded paths on disk;
   `%LOCALAPPDATA%` literal form only in the example file).
 - Engine-read allowlist (LOW-16, audit-remediation todo 24): the Engine may
-  observe EXACTLY these two fields, both read-only through
-  `shared/lockscreen.cpp` (which links into the engine via `k6wp_shared`).
-  Every other field in this file is Studio-private — the Engine must never
-  branch on it.
+  observe EXACTLY these three fields, all read-only through
+  `shared/still.cpp` (which links into the engine via `k6wp_shared`). Every
+  other field in this file is Studio-private — the Engine must never branch
+  on it.
 
   | field | type / default | Engine consumer | missing/corrupt behavior |
   | ----- | -------------- | --------------- | ------------------------ |
-  | `lockscreen_sync` | bool, `false` | `IsLockscreenSyncEnabled()` — the shared producer (`shared/lockscreen.cpp`: `ProduceLockscreenFrame`) no-ops when false, so neither the live frame nor the file-based extract runs | `false` (best-effort read, never throws) |
-  | `lockscreen_offset_sec` | double `>= 0`, `1.0` | `LockscreenOffsetSec()` — seek offset for the `compressor --lockframe` spawn inside the file-based extract (negative values clamp to `0.0`; unreadable settings fall back to `1.0`) | `1.0` (best-effort read, never throws) |
+  | `wallpaper_sync` | bool, `true` | part of `ReadStillSettingsCached()` — when false the helper skips the desktop-wallpaper side (and `RequestStillApply` no-ops entirely when both flags are off) | `false` (missing/corrupt file disables both flags; the Studio re-enables on the next toggle) |
+  | `lockscreen_sync` | bool, `true` | part of `ReadStillSettingsCached()` — when false the helper skips the WinRT lock-screen side (and `RequestStillApply` no-ops entirely when both flags are off) | `false` (same file-level failure as above) |
+  | `lockscreen_offset_sec` | double `>= 0`, `0.0` | passed to `compressor --lockframe --offset-s`; negative values clamp to `0.0` | `0.0` (best-effort read, never throws) |
 
-  Both fields are read through ONE cached view: the file is re-parsed only
-  when its mtime/size change, so a single event costs at most one parse (it
-  used to cost two — one per accessor).
+  All three fields are read through ONE cached view: the file is re-parsed
+  only when its mtime/size change, so a single event costs at most one parse.
+
+  Note the asymmetry between "file missing" and "key missing": a file that
+  EXISTS at v5 and carries the keys has its stored flags honored; a missing
+  or unreadable file yields both flags OFF (`readable = false`) so the
+  Engine never applies a still the user did not confirm. The "default true"
+  column describes a fresh install, where the Studio writes a v5 file with
+  both keys set by the onboarding choice (default checked) — the Engine
+  itself never invents the opt-in.
 
   Forbidden (Studio-only, Engine must not read): `auto_compress_on_import`,
   `compress_output_dir`, `default_crf`, `default_fps`,
@@ -278,20 +291,21 @@ doc — when in doubt, read the code.
   (plus the removed v3 keys
   `keep_original` / `start_minimized`, which are ignored on migration).
   Rationale: `studio_settings.json` is Studio preference state, not playback
-  state — the Engine's only legitimate interest is whether to spend a frame
-  extract on each video change and at which offset. Widening this allowlist
-  (e.g. the Engine honoring a Studio compression default) would couple the
-  resident render loop to UI preferences; any such widening updates this
-  table AND `tests/studio_logic_test.cpp` §6 first.
+  state — the Engine's only legitimate interest is whether to spend a still
+  extract on each video change, which OS surfaces to touch, and at which
+  offset. Widening this allowlist (e.g. the Engine honoring a Studio
+  compression default) would couple the resident render loop to UI
+  preferences; any such widening updates this table AND
+  `tests/studio_logic_test.cpp` §6 first.
 - Contract test: `tests/studio_logic_test.cpp` §6 (`studio/CMakeLists.txt`,
   `BUILD_TESTING` block) pins the allowlist behaviorally — it points
   `LOCALAPPDATA` at a scratch dir, writes settings where every forbidden
   field carries a non-default sentinel, and asserts the Engine-visible
-  behavior (`IsLockscreenSyncEnabled()` / `LockscreenOffsetSec()`) is
-  unchanged; flipping only the two allowed fields must move the behavior.
-  Missing-file and corrupt-file cases must yield the safe defaults above.
-  The v4 field `lockscreen_offer_shown` is part of the forbidden set: the
-  §6 case flips it to true and asserts the Engine still sees sync OFF.
+  behavior (`ReadStillSettingsCached()`) is unchanged; flipping only the
+  three allowed fields must move the behavior. Missing-file and corrupt-file
+  cases must yield the safe defaults above. The Studio-private
+  `lockscreen_offer_shown` is part of the forbidden set: the §6 case flips it
+  to true and asserts the Engine still sees the same three fields.
 
 ## 3a. Playlist (`%LOCALAPPDATA%\K6WP\playlist.json`)
 
@@ -415,7 +429,7 @@ doc — when in doubt, read the code.
 
 | Suite | Source | Gate | Last verified |
 | ----- | ------ | ---- | ------------- |
-| `config_test` (294 checks) | `tests/config_test.cpp` | `BUILD_TESTING=ON` (`shared/CMakeLists.txt`) | Todo 14: 250 checks, 0 failures (`build/msvc-dev/config_test.exe`); plan row 36 (2026-10-05): 294 checks, 0 failures — refreshed to freshly-read number |
+| `config_test` (311 checks) | `tests/config_test.cpp` | `BUILD_TESTING=ON` (`shared/CMakeLists.txt`) | 2026-10-20: 311 checks, 0 failures — v5 studio-settings defaults + the 17b v4→v5 migration cases (offset 1.0→0.0 only, stored flags preserved) |
 | `ipc_test` (129 checks) | `tests/ipc_test.cpp` | `BUILD_TESTING=ON` (`shared/CMakeLists.txt`) | 2026-09-18: 81 checks, 0 failures (`build/msvc-dev/ipc_test.exe`) → quit adds 19 (100 checks, 0 failures); plan row 36 (2026-10-05): 129 checks, 0 failures — refreshed to freshly-read number |
 | `sha1_test` (6 checks) | `tests/sha1_test.cpp` | `BUILD_TESTING=ON` (`shared/CMakeLists.txt`) | Todo 25: 6 checks, 0 failures — shared SHA1 vectors |
 | `proc_util_test` (13 checks) | `tests/proc_util_test.cpp` | `BUILD_TESTING=ON` (`shared/CMakeLists.txt`) | Todo 16: 13 checks, 0 failures — RunCaptured spawn/timeout/kill |
@@ -427,11 +441,12 @@ doc — when in doubt, read the code.
 | `studio_async_test` (16 checks) | `tests/studio_async_test.cpp` | `BUILD_TESTING=ON` (`studio/CMakeLists.txt`) | Todo 18: 16 checks, 0 failures — off-GUI-thread IPC/cancel/retry over fake pipe (`QT_QPA_PLATFORM=offscreen`, `QCoreApplication`) |
 | `thumbnailer_test` (34 checks) | `tests/thumbnailer_test.cpp` | `BUILD_TESTING=ON` (`studio/CMakeLists.txt`) | Todo 4: 24 checks, 0 failures — safe seek + aspect-preserving scale/pad; plan row 36 (2026-10-05): 34 checks, 0 failures — refreshed to freshly-read number |
 | `library_crud_test` (45 checks) | `tests/library_crud_test.cpp` | `BUILD_TESTING=ON` (`studio/CMakeLists.txt`) | Todo 21: 42 checks, 0 failures — ReferenceInPlace + shared-manager contract; plan row 36 (2026-10-05): 45 checks, 0 failures — refreshed to freshly-read number |
-| `studio_logic_test` (328 checks) | `tests/studio_logic_test.cpp` | `BUILD_TESTING=ON` (`studio/CMakeLists.txt`) | Todo 22: 17 checks, 0 failures — ApplyManager non-GUI logic (unwired refusals, WriteConfig round-trip, SyncMonitor dedup over fake pipe) + Todo 24: +17 (engine-read settings contract §6, dev-fallback gate §7); plan row 19 (e138ff1) added the Display-model checks: plan row 36 (2026-10-05): 328 checks, 0 failures — refreshed to freshly-read number |
+| `studio_logic_test` (550 checks) | `tests/studio_logic_test.cpp` | `BUILD_TESTING=ON` (`studio/CMakeLists.txt`) | 2026-10-20: 550 checks, 0 failures — includes §6 three-field LOW-16 contract, §24 v5 migration, §29 wallpaper/lockscreen toggles, status parsing and legacy-cleanup button logic |
 | `fake_pipe_test` (14 checks) | `tests/fake_pipe_test.cpp` | `BUILD_TESTING=ON` (`studio/CMakeLists.txt`) | Todo 22: 14 checks, 0 failures — Qt-free IpcClient round-trips over in-process fake pipe (`--no-server` proves the kNotRunning path) |
 | `playlist_test` (43 checks) | `tests/playlist_test.cpp` | `BUILD_TESTING=ON` (`shared/CMakeLists.txt`) | playlist.json io/validation/migration + `SelectNextIndex` / `PlaylistIndexForPath` (43 checks, 0 failures) |
 | `playlist_bridge_test` (26 checks) | `tests/playlist_bridge_test.cpp` | `BUILD_TESTING=ON` (`studio/CMakeLists.txt`) | PlaylistBridge CRUD/persist round-trip over a scratch playlist.json (26 checks, 0 failures) |
-| `lockscreen_backup_test` (34 checks) | `tests/lockscreen_backup_test.cpp` | `BUILD_TESTING=ON` (root `CMakeLists.txt`) | Todo 19/22: 34 checks, 0 failures — lockscreen backup escape/decode round-trip (needs `/utf-8`: literals are UTF-8 without BOM) |
+| `lockscreen_backup_test` (34 checks) | `tests/lockscreen_backup_test.cpp` | `BUILD_TESTING=ON` (`launcher/CMakeLists.txt`) | Todo 19/22: 34 checks, 0 failures — lockscreen backup escape/decode round-trip (needs `/utf-8`: literals are UTF-8 without BOM) |
+| `still_test` (99 checks) | `tests/still_test.cpp` | `BUILD_TESTING=ON` (`shared/CMakeLists.txt`) | 2026-10-20: 99 checks, 0 failures — still paths + J1 `IsStillPath`, J8 throttle policy, `WxH` parser, original wallpaper/lock-screen/status stores, helper-spawn seam, legacy cleanup classification + ACL-residue folder |
 | `monitor_util_test` (41 checks) | `tests/monitor_util_test.cpp` | `BUILD_TESTING=ON` (`shared/CMakeLists.txt`) | 2026-10-05: 41 checks, 0 failures — `ListMonitors`/`GetPrimaryMonitor` + `MonitorInfo` device_name/geometry (multi-monitor plan row 1) |
 | `displays_schema_test` (73 checks) | `tests/displays_schema_test.cpp` | `BUILD_TESTING=ON` (`shared/CMakeLists.txt`) | 2026-10-05: 73 checks, 0 failures — displays.json io/migrate/validate, `.bak` contract, `DetectKeyCollision` (plan row 5) |
 | `multi_monitor_factory_test` (106 checks) | `tests/multi_monitor_factory_test.cpp` | `BUILD_TESTING=ON` (`engine/CMakeLists.txt`) | 2026-10-05: 106 checks, 0 failures — injectable `SlotFactory` seam, per-slot Attach rects, headless fallback (plan row 6) |
@@ -441,6 +456,7 @@ doc — when in doubt, read the code.
 | `multi_monitor_placement_test` (86 checks) | `tests/multi_monitor_placement_test.cpp` | `BUILD_TESTING=ON` (`engine/CMakeLists.txt`) | 2026-10-05: 86 checks, 0 failures — negative origins, portrait, shared host, `DetectKeyCollision` (plan row 12) |
 | `engine_state_test` (75 checks) | `tests/engine_state_test.cpp` | `BUILD_TESTING=ON` (`engine/CMakeLists.txt`) | 2026-10-05: 75 PASS lines, 0 failures — plan row 15 appended the display get_state checks (`display_capability` / `display_assignments` / `display_coverage`, additive defaults); plan row 17 appended the boot-time assignment-convergence checks (absent-monitor retention, missing-file degraded state) |
 | `engine_units_test` (62 checks) | `tests/engine_units_test.cpp` | `BUILD_TESTING=ON` (`engine/CMakeLists.txt`) | 2026-10-05: 62 PASS lines, 0 failures — plan row 16 appended the second-file watcher checks (`CheckSecondForChange`, no callback after Stop) |
+| `engine_no_winrt_test` (10 checks) | `tests/engine_no_winrt_test.cpp` | `BUILD_TESTING=ON` (`engine/CMakeLists.txt`) | 2026-10-20: 10 checks, 0 failures — pure PE import-table guard: `engine.exe` links no `combase.dll` / `api-ms-win-core-winrt-*` / `Ro*`, with `K6WP.exe` as the positive control |
 | `display_assignment_test` (48 checks) | `tests/display_assignment_test.cpp` | `BUILD_TESTING=ON` (`engine/CMakeLists.txt`) | 2026-10-05: 38 checks, 0 failures — per-monitor assignment lifecycle + legacy regression (plan row 18); plan rows 33/34 grew the suite: plan row 36 (2026-10-05): 48 checks, 0 failures — refreshed to freshly-read number |
 | `monitor_dump` | `shared/monitor_dump.cpp` | always built (QA tool, prints monitor list as JSON) | — |
 | `tray_menu_test` (13 checks) | `tests/tray_menu_test.cpp` | `BUILD_TESTING=ON` (`engine/CMakeLists.txt`) | plan row 37 (2026-10-06): 13 checks, 0 failures — tray quick-switch submenu handle balance (`build\msvc-dev\tray_menu_test.exe`) |

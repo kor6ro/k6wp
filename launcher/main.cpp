@@ -6,14 +6,17 @@
 //   K6WP.exe --engine                 : ensure engine resident, open nothing
 //   K6WP.exe --engine --silent        : autostart path (engine only)
 //   K6WP.exe --minimized --silent     : alias of --engine --silent
+//   K6WP.exe --apply-still ...        : one-shot still helper (wallpaper +
+//                                       lock screen, per user, no UAC)
 //   K6WP.exe --stop                   : uninstall helper - stop THIS folder's
 //                                       K6WP processes (see "uninstall support")
 //   K6WP.exe --help                   : list modes
 //
-// Exit codes: 0 ok | 2 bad flag | 3 missing sibling / spawn failure (also: the
-// elevated lockscreen worker itself failed) | 4 the elevated lockscreen worker
-// outlived its bounded wait | 5 the UAC prompt was declined. 3/4/5 are what the
-// uninstallers read to decide what to tell the user (Defect C).
+// Exit codes: 0 ok | 2 bad flag | 3 missing sibling / spawn failure / a still
+// helper step failed (also: the elevated legacy cleanup failed) | 4 the
+// elevated legacy cleanup outlived its bounded wait | 5 the UAC prompt was
+// declined. 3/4/5 are what the uninstallers read to decide what to tell the
+// user (Defect C).
 //
 // Design notes (owner decision F1): this dispatcher links NO Qt so the
 // resident path stays free of the Qt import cost (RAM budget < 80MB).
@@ -44,6 +47,7 @@
 #include "lockscreen_policy.hpp"
 #include "lockscreen_sync.hpp"
 #include "process_stop.hpp"
+#include "still_apply.hpp"
 
 #include <cstdio>
 #include <filesystem>
@@ -252,6 +256,12 @@ int Run(int argc, wchar_t** argv) {
   if (parse_rc != 0) {
     PrintUsage(stderr);
     return kExitBadFlag;
+  }
+
+  // --apply-still: the per-user still helper. It owns the wallpaper + lock
+  // screen work and must never touch the engine/studio paths below.
+  if (opts.apply_still) {
+    return RunApplyStill(opts);
   }
 
   if (opts.elevate_lockscreen) {

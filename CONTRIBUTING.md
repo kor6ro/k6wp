@@ -78,7 +78,8 @@ Sources of truth: `docs/dev-contracts.md` (IPC, config schema, contract tests),
 - Pilihan bahasa disimpan di `studio_ui.ini` (key `ui/language`) di
   `%LOCALAPPDATA%\K6WP`, **bukan** field `StudioSettings`. Alasannya: `main.cpp`
   harus membaca bahasa sebelum bridge/QML ada, dan `StudioSettings` di
-  `shared/` dibaca engine (`shared/lockscreen.cpp` untuk `lockscreen_sync`)
+  `shared/` dibaca engine (`shared/still.cpp` untuk tiga field LOW-16:
+  `wallpaper_sync`, `lockscreen_sync`, `lockscreen_offset_sec`)
   sehingga menambah field di sana berarti migrasi schema bersama.
 - Jebakan yang sudah pernah menyesatkan: `tr()` di kelas yang **tidak** punya
   `Q_OBJECT` resolve ke context `QObject`, sedangkan `lupdate` mencatatnya

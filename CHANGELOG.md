@@ -5,7 +5,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.0.1-alpha.3] - 2026-10-20
+
+Third alpha pre-release. The elevated lock-screen mechanism is replaced by a
+per-user **still** helper (the first frame of the active video becomes the
+real Windows wallpaper and the lock-screen image, no UAC), and the
+display-resilience regressions found after alpha.2 are fixed.
 
 ### Fixed
 
@@ -21,45 +26,115 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   monitor's stable identity instead of its position index (unplugging a
   middle monitor used to swap the renderers between monitors). The
   per-monitor assignment survives an unplug/replug cycle.
+- **The adapter-removed watch re-arms after every event.** The DXGI event was
+  registered on one `IDXGIFactory7`; once the adapter it watched disappeared
+  that factory was no longer current and delivered no further events, so the
+  SECOND adapter change went unnoticed and the wallpaper stayed black. The
+  watch now registers the same event handle on a fresh factory after every
+  signal (`DeviceLostWatch::Rearm`), and a device-lost burst cancels the
+  pending topology reconcile (one surface rebuild per burst instead of a
+  rebuild plus a re-anchor).
 - `wallpaper_surface_live_` is re-synced with the slot census after every
   reconcile pass: when the last monitor disappears the headless renderer
   takes the decode over instead of `set_video` being rejected.
 - The shadow reconcile pass computes the topology diff against the PREVIOUS
   snapshot (it was always empty), and the coverage census no longer runs
   while the reconcile mutex is held.
-- The lock screen is refreshed when the session locks, when the machine
-  suspends, when the session ends and on a playlist rotation — not only on
-  boot and on a manual video change.
-- The OS wallpaper is restored on shutdown/logoff (the `WM_QUERYENDSESSION`
-  / `WM_ENDSESSION` handlers were missing).
 - The two settings the engine reads are parsed once per event instead of
-  twice, and the lock-screen debounce is keyed on the file's content — a
-  re-compressed wallpaper with the same path is no longer swallowed.
+  twice.
+- The debounced topology door no longer loops after a wallpaper change: the
+  "wait for two equal enumerations" retry kept invalidating the first
+  signature, so a `setting-change` re-anchor re-armed every ~400 ms forever
+  (the per-user still made this visible on every apply). The retry now keeps
+  the signature; the first genuinely different enumeration starts a fresh
+  proof.
+- **The Studio preview survives the screen it runs on disappearing** (Bug B):
+  when a screen is unplugged, a projector or a dock is removed, the preview
+  now stops its mpv worker with the bounded wait, moves the window to a
+  screen that still exists and restarts the preview once the geometry has
+  settled. The same path covers a primary-screen change.
+- **`compressor --lockframe` no longer fails with EINVAL** while writing the
+  temporary JPEG: the temp name keeps the image extension
+  (`<stem>.tmp.jpg`, not `<out>.jpg.tmp`) so ffmpeg's image2 muxer can infer
+  the format.
+- The still helper asks for the **physical primary resolution**
+  (`EnumDisplaySettingsW`) instead of the DPI-virtualized `GetSystemMetrics`
+  size, so the extracted still matches the real monitor pixels on displays
+  with a scale factor other than 100%.
 
 ### Added
 
-- **The lock-screen toggle now works end to end.** It runs
-  `K6WP.exe --elevate-lockscreen on|off` and only stays ON when the policy
-  really got registered: there is no longer a state "ON in the settings but
-  no policy" (the engine used to refresh a picture Windows never showed).
-  The first-run wizard offers the feature once (default on), the Studio
-  reports the honest Windows-edition support, and the lock-screen frame is
-  the LIVE picture on screen (falling back to the file-based extract).
+- **Per-user wallpaper + lock-screen still.** The first frame of the active
+  video is extracted to a unique file under `%LOCALAPPDATA%\K6WP\stills` and
+  applied as the real Windows desktop wallpaper
+  (`SPI_SETDESKWALLPAPER`) and as the lock-screen image (WinRT
+  `LockScreen::SetImageFileAsync`) — no HKLM policy, no ACL grant, no
+  administrator rights, no UAC. The engine spawns one detached
+  below-normal-priority helper (`K6WP.exe --apply-still`) and never waits;
+  the helper writes `still_status.json`, which is the only status source the
+  Studio reads.
+- The previous wallpaper is captured once to a persistent
+  `original_wallpaper.json` (our own stills are never captured, J1), and the
+  previous lock-screen image + rotating-mode registry values are saved to
+  `original_lockscreen.*`, so both can be restored exactly.
+- Stills use unique timestamped names and are pruned to the two newest files,
+  so the stills directory cannot grow without bound; only one helper runs at
+  a time (bounded named mutex), so concurrent applies cannot interleave their
+  files or stores.
+- Two Studio toggles ("Jadikan frame pertama video sebagai wallpaper
+  Windows" / "…sebagai gambar layar kunci"), a one-time onboarding offer
+  (default checked), and a read-only legacy-policy notice with one
+  "Bersihkan" button.
 - A hang watchdog: the message loop publishes a heartbeat, and a stuck
   engine writes a minidump and is restarted (with the existing
   crash-restart backoff, so it cannot loop).
 - New suites: `reconcile_policy_test` (the pure reconcile decision core),
-  `lockscreen_policy_test` (the trigger, elevation and Windows-edition
-  policies) and the hang-detector checks in `engine_units_test`.
+  `still_test` (paths, throttle policy, three-field settings, original
+  stores, status JSON, legacy cleanup classification) and the hang-detector
+  checks in `engine_units_test`. `engine_no_winrt_test` parses the PE import
+  table and fails if `engine.exe` ever links WinRT/COM.
 
 ### Changed
 
-- `studio_settings.json` is schema **v4** (adds the Studio-private
-  `lockscreen_offer_shown`). The migration never changes a user's
-  `lockscreen_sync` decision: the feature needs an administrator
-  registration, so flipping it silently would produce exactly the state
-  this release removes. The engine still reads exactly two fields of that
-  file (LOW-16 unchanged).
+- `studio_settings.json` is schema **v5**: adds `wallpaper_sync` (default
+  true), keeps `lockscreen_sync` with its new per-user meaning (stored
+  values preserved), and moves the `lockscreen_offset_sec` default from 1.0
+  to 0.0 (only a value of exactly 1.0 — the old hard-coded default — is
+  migrated). A fresh install defaults both toggles to true. The engine reads
+  exactly three fields of that file (LOW-16).
+- The old elevated path is gone: `--elevate-lockscreen on`,
+  `GrantK6wpFolderWriteAccess`, `%PROGRAMDATA%\K6WP\lockscreen.jpg` and the
+  HKLM policy writes were removed. `--elevate-lockscreen off` remains
+  cleanup-only (one UAC, deletes only our own legacy policy/ACL/files) and
+  is what the uninstallers call.
+- `compressor --lockframe` without `--out` now writes to
+  `%LOCALAPPDATA%\K6WP\lockframe.jpg` instead of the old
+  `%PROGRAMDATA%\K6WP\lockscreen.jpg` (the still helper always passes an
+  explicit unique output path).
+- The lock screen is no longer refreshed on lock, suspend or session end:
+  the still is applied on boot with a video, on a manual pick, on a
+  throttled playlist rotation, and on a Studio apply. Shutdown/logoff never
+  restores the original wallpaper (the store stays for the next explicit
+  restore); tray Quit and `K6WP.exe --apply-still --restore`
+  (`--wallpaper` / `--lockscreen` for one side only) put the originals back.
+- The installer and uninstallers are per-user and UAC-free:
+  `RequestExecutionLevel user`, `InstallDir $LOCALAPPDATA\K6WP`, HKCU-only
+  registry writes, and the uninstall path calls the cleanup-only
+  `--elevate-lockscreen off` for legacy residue.
+
+### Known limitations
+
+- Bundles remain unsigned — SmartScreen / AV may warn.
+- The still is per-user and applies only while K6WP is running with an active
+  video; it is intentionally not refreshed on lock or suspend. Windows can
+  re-encode the lock-screen image (size and hash differ from the still file —
+  compare visually, not by hash).
+- If Windows Spotlight or a rotating lock-screen mode is re-enabled by the
+  user or another tool, the lock screen can show something else; the helper
+  saves, disables and restores the rotating/slideshow values it changes.
+- The still is a single image sized to the primary display (multi-monitor
+  phase 1); the physical second-monitor case is still untested, as are older
+  Windows builds without the WinRT `LockScreen` API.
 
 ## [0.0.1-alpha.2] - 2026-10-17
 

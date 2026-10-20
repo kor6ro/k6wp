@@ -411,18 +411,21 @@ int main(int argc, char* argv[]) {
   // auto_compress_on_import true). v3 removed keep_original/start_minimized.
   // NOTE: the studio_settings schema version is asserted through
   // k6wp::kStudioSettingsSchemaVersion, so a deliberate bump (v4: the
-  // lock-screen onboarding offer) does not have to touch every scenario.
-  // The v4->v5 bump was engine-config only, so the engine-config version
-  // assertions below stay at 5.
+  // lock-screen onboarding offer; v5: the per-user still) does not have to
+  // touch every scenario.
   {
     const k6wp::StudioSettings s = k6wp::DefaultStudioSettings();
     Check(s.version == k6wp::kStudioSettingsSchemaVersion,
           "16. version == the current studio schema version");
     Check(s.lockscreen_offer_shown == false,
           "16. lockscreen_offer_shown default false (the offer is shown once)");
-    Check(s.lockscreen_sync == false,
-          "16. lockscreen_sync default false (the policy needs an "
-          "administrator registration, so it is never silently ON)");
+    Check(s.wallpaper_sync == true,
+          "16. wallpaper_sync default true (fresh install: first frame is "
+          "the wallpaper)");
+    Check(s.lockscreen_sync == true,
+          "16. lockscreen_sync default true (fresh install: per-user, no UAC)");
+    Check(s.lockscreen_offset_sec == 0.0,
+          "16. lockscreen_offset_sec default 0.0 (the first frame)");
     Check(s.auto_compress_on_import == true,
           "16. auto_compress_on_import default true");
     Check(s.default_crf == 22, "16. default_crf == 22");
@@ -470,6 +473,75 @@ int main(int argc, char* argv[]) {
     } catch (const std::exception& e) {
       Check(false,
             std::string("17. rewritten v3 stable (threw: ") + e.what() + ")");
+    }
+  }
+  // 17b. v5 still migration: an old file (v <= 4) keeps BOTH stored sync
+  // decisions; `wallpaper_sync` is filled with the new true default; only an
+  // offset of exactly 1.0 (the old hard-coded default) moves to 0.0. Any
+  // other offset is a real user choice and survives untouched.
+  {
+    const auto p = dir / "studio_v4_still.json";
+    const nlohmann::json j = {
+        {"version", 4},
+        {"auto_compress_on_import", true},
+        {"compress_output_dir", "C:\\K6WP\\wallpapers"},
+        {"default_crf", 22},
+        {"default_fps", 30},
+        {"default_resolution_mode", "match_monitor"},
+        {"start_with_windows", false},
+        {"cache_dir", "C:\\K6WP\\cache"},
+        {"lockscreen_sync", true},
+        {"lockscreen_offset_sec", 1.0},
+        {"lockscreen_offer_shown", true},
+        {"compress_advanced_visible", false},
+        {"check_updates", true},
+    };
+    WriteJson(p, j);
+    const std::string original = ReadText(p);
+    try {
+      const k6wp::StudioSettings s = k6wp::LoadStudioSettings(p);
+      Check(s.version == k6wp::kStudioSettingsSchemaVersion,
+            "17b. v4 file migrates to the current studio schema version");
+      Check(s.lockscreen_sync == true,
+            "17b. v4 file keeps lockscreen_sync ON (never silently opted out)");
+      Check(s.wallpaper_sync == true,
+            "17b. v4 file -> wallpaper_sync defaults true");
+      Check(s.lockscreen_offset_sec == 0.0,
+            "17b. v4 file old 1.0 offset -> 0.0 (first frame)");
+      Check(s.lockscreen_offer_shown == true,
+            "17b. v4 offer flag survives");
+      const std::string rewritten = ReadText(p);
+      Check(rewritten.find("\"wallpaper_sync\"") != std::string::npos,
+            "17b. rewrite persists wallpaper_sync");
+    } catch (const std::exception& e) {
+      Check(false,
+            std::string("17b. v4 still migration loads (threw: ") + e.what() +
+                ")");
+    }
+    Check(std::filesystem::exists(BakPath(p)),
+          "17b. .bak backup written for the v4 file");
+    Check(ReadText(BakPath(p)) == original, "17b. .bak holds original bytes");
+  }
+  {
+    const auto p = dir / "studio_v4_offset_custom.json";
+    const nlohmann::json j = {
+        {"version", 4},
+        {"lockscreen_sync", false},
+        {"lockscreen_offset_sec", 2.5},
+    };
+    WriteJson(p, j);
+    try {
+      const k6wp::StudioSettings s = k6wp::LoadStudioSettings(p);
+      Check(s.lockscreen_sync == false,
+            "17b. v4 explicit lockscreen_sync OFF stays OFF");
+      Check(s.lockscreen_offset_sec == 2.5,
+            "17b. v4 non-default offset is preserved (only 1.0 migrates)");
+      Check(s.wallpaper_sync == true,
+            "17b. v4 file without wallpaper_sync defaults true");
+    } catch (const std::exception& e) {
+      Check(false,
+            std::string("17b. custom-offset v4 file loads (threw: ") +
+                e.what() + ")");
     }
   }
   // 18. Studio corrupt JSON -> ConfigError + .bak, and the caller-side

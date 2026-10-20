@@ -4,7 +4,7 @@
 #include "gpu_pin.hpp"
 #include "ipc_marshal.hpp"
 #include "links.hpp"
-#include "lockscreen.hpp"
+#include "still.hpp"
 #include "log_file.hpp"
 #include "thirdparty/json.hpp"
 #include "lock_order.hpp"
@@ -34,11 +34,6 @@ namespace k6wp {
 namespace {
 
 std::atomic<HWND> g_message_hwnd{nullptr};
-
-// The live EngineApp instance, so the static lock-screen capture seam (a
-// plain function pointer, no captures) can reach the slot map. The engine
-// is a single resident instance; the pointer is cleared on shutdown.
-EngineApp* g_engine_instance = nullptr;
 
 unsigned long long CurrentThreadCount() {
   const DWORD pid = GetCurrentProcessId();
@@ -161,10 +156,10 @@ bool EngineApp::Init(int argc, char** argv) {
     return false;
   }
 
-  // Todo 15: snapshot the active OS wallpaper path BEFORE the engine touches
-  // the desktop (adjacent to the Todo 14 mutex block; that block is untouched).
-  // Never fatal: an unreadable path logs + Init proceeds WITHOUT restore.
-  os_wallpaper_.Save();
+  // Todo 15 / v5: the engine no longer snapshots or restores the OS wallpaper.
+  // The per-user still helper owns it through the PERSISTENT store in
+  // shared/still.cpp (original_wallpaper.json), and a shutdown must not
+  // restore it (J3).
 
   hinstance_ = GetModuleHandleW(nullptr);
   if (!RegisterWindowClass()) return false;
@@ -487,14 +482,9 @@ bool EngineApp::Init(int argc, char** argv) {
   } else {
     Log("device-lost: adapter-removed watch unavailable (engine keeps running without it)");
   }
-  // Bug A: the lock-screen frame is produced on a background worker. The
-  // live-frame provider is the mpv capture (the picture on screen right
-  // now); the shared helper falls back to the file-based extract when it is
-  // not available.
-  SetLockscreenLiveFrameFn(&EngineApp::CaptureLiveLockscreenFrame);
-  lockscreen_refresher_.Start(&EngineApp::CaptureLiveLockscreenFrame,
-                             &EngineApp::Log);
-  g_engine_instance = this;
+  // Per-user still: the boot video is a MANUAL trigger (always refreshes).
+  // The helper no-ops when both settings are off, so the engine calls it
+  // unconditionally. No WinRT here: the child process owns it.
   if (boot_autoplay) {
     headless_owns_decode_.store(
         !wallpaper_surface_live_.load(std::memory_order_acquire),
@@ -506,16 +496,12 @@ bool EngineApp::Init(int argc, char** argv) {
       if (!renderer_ || !renderer_->LoadLoop(boot_video)) {
         Log("warning: renderer could not load '%s', keeping current video",
             boot_video.c_str());
-      } else {
-        lockscreen_refresher_.Request(boot_video,
-                                      LockscreenTrigger::kVideoChanged);
       }
     } else {
       Log("engine: boot autoplay '%s' — slots own decode, headless stays idle",
           boot_video.c_str());
-      lockscreen_refresher_.Request(boot_video,
-                                    LockscreenTrigger::kVideoChanged);
     }
+    RequestStillRefresh(boot_video, /*manual=*/true);
   } else {
     // No valid video at boot: seed paused state so tray shows off icon
     // (Step 3.1: the user owner bit — a later set_video does not clear it,
@@ -943,12 +929,6 @@ int EngineApp::Run() {
 void EngineApp::Shutdown() {
   if (shutdown_done_) return;
   shutdown_done_ = true;
-  // Bug A: stop the lock-screen worker and drop the live-frame seam before
-  // the slots are torn down (the seam would otherwise capture into a
-  // half-torn-down slot map).
-  lockscreen_refresher_.Stop();
-  SetLockscreenLiveFrameFn(nullptr);
-  g_engine_instance = nullptr;
   // Bug C1: stop the hang watchdog first - it must not fire while the
   // engine is shutting down on purpose.
   watchdog_.Stop();
@@ -986,7 +966,6 @@ void EngineApp::Shutdown() {
   // (never TerminateThread); no join runs from inside an mpv callback.
   StopHeadlessRenderer();
   ShutdownWallpaperSurface();
-  os_wallpaper_.Restore();
   tray_.Remove();  // NIM_DELETE while message_hwnd_ is still valid
   fullscreen_watch_.Stop();
   occlusion_watch_.SetNotifyWindow(nullptr);
@@ -1004,6 +983,13 @@ void EngineApp::Shutdown() {
   if (class_registered_) {
     UnregisterClassW(kWindowClassName, hinstance_);
     class_registered_ = false;
+  }
+  // Normal exit (tray Quit / restart / user closed the app): put the saved
+  // originals back through the one-shot helper, detached - never wait. A
+  // session end must NOT restore (J3): WM_QUERYENDSESSION/WM_ENDSESSION set
+  // session_ending_, and the next logon keeps the desktop Windows saved.
+  if (!session_ending_) {
+    RequestStillRestore(/*wallpaper=*/true, /*lockscreen=*/true);
   }
   Log("engine shutdown complete");
   FlushEngineLog();  // last drain: the line above must reach disk
@@ -1068,22 +1054,50 @@ void EngineApp::OnDisplayChange(int width, int height) {
   ArmTopologyReconcile("display-change");
 }
 
-bool EngineApp::CaptureLiveLockscreenFrame(const std::string& path) {
-  // The live frame: the picture on screen right now. The capture is
-  // asynchronous (mpv's VO thread writes the file), so the caller waits
-  // for it and falls back to the file-based extract when it does not land.
-  EngineApp* app = g_engine_instance;
-  if (app == nullptr) return false;
-  return app->multi_monitor_.CaptureLiveFrame(path);
+void EngineApp::RequestStillRefresh(const std::string& video_utf8, bool manual) {
+  if (video_utf8.empty()) return;
+  // Throttle policy (pure, unit-tested in tests/still_test.cpp): a manual
+  // trigger always refreshes; a playlist rotation only when the video actually
+  // changed AND the interval elapsed. The old mechanism could spawn one
+  // frame extract per rotation tick; this keeps the child count bounded even
+  // when a short playlist spins fast.
+  constexpr unsigned long long kStillRotationMinIntervalMs = 5000;
+  const auto now = std::chrono::steady_clock::now();
+  unsigned long long elapsed_ms = kStillRotationMinIntervalMs;
+  if (!last_still_video_.empty()) {
+    elapsed_ms = static_cast<unsigned long long>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            now - last_still_request_)
+            .count());
+  }
+  const bool same_file = last_still_video_ == video_utf8;
+  if (!StillRefreshAllowed(manual, same_file, elapsed_ms,
+                           kStillRotationMinIntervalMs)) {
+    Log("still: rotation refresh skipped (%s, %llums since the last request)",
+        same_file ? "same file" : "throttled", elapsed_ms);
+    return;
+  }
+  last_still_video_ = video_utf8;
+  last_still_request_ = now;
+  // The helper decides whether anything is enabled (both settings off = no-op)
+  // and spawns exactly ONE detached, below-normal child. This call never
+  // waits and never touches the OS itself.
+  if (!RequestStillApply(std::filesystem::u8path(video_utf8))) {
+    Log("still: helper not started (settings off or K6WP.exe missing)");
+  }
 }
 
-void EngineApp::ArmTopologyReconcile(const char* trigger) {
+void EngineApp::ArmTopologyReconcile(const char* trigger,
+                                     bool reset_signature) {
   if (trigger == nullptr) trigger = "manual";
   topology_reconcile_trigger_ = trigger;
   topology_reconcile_armed_ = true;
   // Every new burst needs its own "the enumeration has settled" proof, so
-  // the previous signature is forgotten here.
-  topology_signature_valid_ = false;
+  // the previous signature is forgotten here. The retry from
+  // RunTopologyReconcile passes false: it MUST keep the first signature,
+  // otherwise the "two consecutive equal enumerations" check can never
+  // succeed and the door loops forever (~400 ms apart).
+  if (reset_signature) topology_signature_valid_ = false;
   // True debounce: reset the quiet period on every burst trigger so the
   // work runs ~400 ms after the LAST trigger, not the first.
   KillTimer(message_hwnd_, kTopologyReconcileTimerId);
@@ -1129,7 +1143,7 @@ void EngineApp::RunTopologyReconcile() {
       Log("display: topology still moving (trigger=%s), waiting for a stable "
           "enumeration",
           trigger.c_str());
-      ArmTopologyReconcile(trigger.c_str());
+      ArmTopologyReconcile(trigger.c_str(), /*reset_signature=*/false);
       return;
     }
   }
@@ -1282,16 +1296,15 @@ bool EngineApp::HandleSetVideo(const std::string& payload_json, bool rotation) {
   if (!rotation) {
     tray_.PushRecent(utf8_path);  // Todo 35: MRU is for manual picks only
     LogImportant("ipc: set_video live-switched to %s", utf8_path.c_str());
-    lockscreen_refresher_.Request(utf8_path, LockscreenTrigger::kVideoChanged);
   } else {
-    // Rotation is not a user action: no MRU feed. The lock screen IS
-    // refreshed though: with a playlist running, the lock screen used to
-    // keep showing the frame of the FIRST video forever. The refresh is
-    // throttled by the shared debounce (one extract per 5 s per file), so a
-    // fast rotation cannot spawn an extract per cycle.
+    // Rotation is not a user action: no MRU feed. The still is refreshed
+    // too (otherwise it would keep showing the first video forever), but
+    // RequestStillRefresh throttles it and skips an unchanged file.
     Log("playlist: rotation live-switched to %s", utf8_path.c_str());
-    lockscreen_refresher_.Request(utf8_path, LockscreenTrigger::kRotation);
   }
+  // Manual pick / Studio apply = always refresh. Playlist rotation = at most
+  // every kStillRotationMinIntervalMs and only when the file changed.
+  RequestStillRefresh(utf8_path, /*manual=*/!rotation);
   headless_owns_decode_.store(
       !wallpaper_surface_live_.load(std::memory_order_acquire),
       std::memory_order_release);
@@ -1893,13 +1906,10 @@ void EngineApp::HandlePowerBroadcast(WPARAM wParam, LPARAM lParam) {
   switch (wParam) {
     case PBT_APMSUSPEND:
       Log("power: PBT_APMSUSPEND received");
-      // Bug A: the lock screen must show a CURRENT picture when the machine
-      // sleeps - the engine is not running at that point, so the frame has
-      // to be on disk BEFORE the sleep. The refresh runs on the background
-      // worker (the live frame is captured asynchronously), so the suspend
-      // path is never delayed.
-      lockscreen_refresher_.Request(current_video_utf8_,
-                                    LockscreenTrigger::kSuspend);
+      // v5: no lock-screen refresh here. The still is applied on boot / video
+      // change / rotation / Studio apply only; sleeping must not spawn a
+      // helper (the engine is about to pause, and the picture is already on
+      // disk).
       OnSuspend();
       return;
     case PBT_APMRESUMEAUTOMATIC:
@@ -1947,12 +1957,8 @@ void EngineApp::HandlePowerBroadcast(WPARAM wParam, LPARAM lParam) {
           SetPauseOwner(kPauseScreenOff, false);
           // Bug B: the re-anchor goes through the debounced door.
           ArmTopologyReconcile("monitor-on");
-          // Re-extract the lockscreen frame onto the live surface after the
-          // screen comes back on (e.g. monitor off/on, wake), so the lockscreen
-          // stays static/current instead of stale or missing.
-          if (!current_video_utf8_.empty())
-            lockscreen_refresher_.Request(current_video_utf8_,
-                                          LockscreenTrigger::kMonitorOn);
+          // v5: no still refresh on monitor-on (the helper must never be
+          // called from the display/power path).
           break;
         case 2:
           Log("power: monitor dimmed (Data=2, ignored)");
@@ -2010,20 +2016,19 @@ LRESULT EngineApp::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
         ArmTopologyReconcile("setting-change");
         // P3: arm reconcile with setting-change trigger
         ArmReconcile("setting-change");
-        // E-01 (audit remediation): the engine never writes the desktop
-        // wallpaper itself (the lockscreen sync writes HKLM policy + a jpg),
-        // so any SPI_SETDESKWALLPAPER here is an EXTERNAL change (Windows
-        // Settings, slideshow). The boot snapshot would then be stale and
-        // OsWallpaperGuard::Restore() on exit would clobber the user's new
-        // wallpaper. Refresh the snapshot (and the tray "valid" flag) only
-        // when the live wallpaper actually differs from what we captured.
+        // J1: our own helper sets the wallpaper and sends
+        // SPI_SETDESKWALLPAPER, which lands here. The original-wallpaper store
+        // must keep the user's pre-K6WP value, so capture only when the live
+        // wallpaper is NOT one of our stills (CaptureOriginalWallpaper has that
+        // guard built in). An external change (Windows Settings, slideshow) is
+        // still recorded.
         wchar_t current[MAX_PATH] = {};
         if (SystemParametersInfoW(SPI_GETDESKWALLPAPER, MAX_PATH, current, 0)) {
-          if (os_wallpaper_.saved().empty() ||
-              _wcsicmp(current, os_wallpaper_.saved().c_str()) != 0) {
-            os_wallpaper_.Save();
-            Log("wallpaper: external change detected, snapshot refreshed ('%ls')",
-                os_wallpaper_.saved().c_str());
+          if (k6wp::IsStillPath(std::filesystem::path(current))) {
+            Log("wallpaper: SPI_SETDESKWALLPAPER from our still, original store kept");
+          } else if (k6wp::CaptureOriginalWallpaper()) {
+            Log("wallpaper: external change detected, original store refreshed ('%ls')",
+                current);
           }
         }
         UpdateTrayErrorStatus();
@@ -2038,28 +2043,21 @@ LRESULT EngineApp::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
       return 0;
     }
     case WM_QUERYENDSESSION:
-      // The session is about to end (shutdown / logoff). Two things must
-      // happen BEFORE the session goes away, because the engine will not be
-      // running afterwards:
-      //   1. the lock screen frame must be refreshed - this refresh WAITS
-      //      for the frame (bounded), so the picture on the next lock
-      //      screen is the current one;
-      //   2. the OS wallpaper must be restored, so the next logon does not
-      //      show a wallpaper the engine is no longer driving.
-      // Returning TRUE lets the session end proceed.
-      LogImportant("session: WM_QUERYENDSESSION received, refreshing the "
-                   "lockscreen and restoring the wallpaper");
-      lockscreen_refresher_.RefreshBlocking(current_video_utf8_, 4000);
-      os_wallpaper_.Restore();
+      // J3: the session is ending (shutdown / logoff). The engine will not be
+      // running afterwards, and the desktop the user returns to is the one
+      // Windows persists - so this path must NOT restore the wallpaper or the
+      // lock screen, and must NOT spawn a helper. Only record the state so
+      // Shutdown() stays out of the restore path too.
+      session_ending_ = true;
+      LogImportant("session: WM_QUERYENDSESSION received (no restore on "
+                   "shutdown)");
       return TRUE;
     case WM_ENDSESSION:
-      // wParam != 0: the session really ended. The wallpaper restore above
-      // already ran; this is the belt-and-braces pass (the message can also
-      // arrive without a preceding WM_QUERYENDSESSION, e.g. a forced
-      // logoff).
+      // wParam != 0: the session really ended. Belt-and-braces for a forced
+      // logoff that never sent WM_QUERYENDSESSION.
       if (wParam != 0) {
-        LogImportant("session: WM_ENDSESSION received, restoring the wallpaper");
-        os_wallpaper_.Restore();
+        session_ending_ = true;
+        LogImportant("session: WM_ENDSESSION received (no restore on shutdown)");
       }
       return 0;
     case WM_WTSSESSION_CHANGE:
@@ -2067,11 +2065,9 @@ LRESULT EngineApp::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
         case WTS_SESSION_LOCK:
           LogImportant("session: WTS_SESSION_LOCK received, pausing decode");
           SetPauseOwner(kPauseSessionLock, true);
-          // Bug A: the lock screen appears NOW, and the engine is the only
-          // thing that can refresh the frame. The refresh bypasses the
-          // debounce: the picture has to be current, not the last one.
-          lockscreen_refresher_.Request(current_video_utf8_,
-                                        LockscreenTrigger::kSessionLock);
+          // v5: locking the session does NOT refresh the still. The picture
+          // was applied on the last manual/rotation trigger; spawning a child
+          // while the session locks would race the lock screen itself.
           return 0;
         case WTS_SESSION_UNLOCK:
           LogImportant("session: WTS_SESSION_UNLOCK received, resuming decode");

@@ -41,7 +41,10 @@
 // Exit 0 = the payload is safe to show a user; nonzero = it is not.
 
 #include <cctype>
+#include <chrono>
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
 #include <string>
 
 #include "../src/ffmpeg_job.cpp"
@@ -168,6 +171,38 @@ int main() {
       (Contains(t, "tidak ditemukan") || Contains(t, "not found"));
   Check(matched_by_studio,
         "6. Studio's ffmpeg-not-found rule recognises this payload");
+
+  // ---- 7: the lockframe temp path keeps the image extension ----
+  // ffmpeg's image2 muxer infers the format from the filename. The old temp
+  // name "<out>.jpg.tmp" made ffmpeg exit -22 (EINVAL) before writing a byte,
+  // so the whole still pipeline failed; the temp must end in ".jpg".
+  // BuildFfmpegCmdline requires the input to exist (it is about to run
+  // ffmpeg), so use a throwaway file instead of a hard-coded C:\tmp path.
+  const auto lock_in = std::filesystem::temp_directory_path() /
+      ("k6wp_lockframe_" +
+       std::to_string(std::chrono::steady_clock::now()
+                          .time_since_epoch()
+                          .count()) +
+       ".mp4");
+  {
+    std::ofstream touch(lock_in, std::ios::binary);
+    touch << 'x';
+  }
+  k6wp::compressor::FfmpegJobOptions lock;
+  lock.in = lock_in.wstring();
+  lock.out = L"C:\\tmp\\still_1.jpg";
+  lock.lockframe = true;
+  lock.quality = 2;
+  std::wstring lock_cmd;
+  std::string lock_error;
+  Check(k6wp::compressor::BuildFfmpegCmdline(lock, lock_cmd, lock_error),
+        "7. lockframe cmdline builds");
+  Check(lock_cmd.find(L"still_1.tmp.jpg") != std::wstring::npos,
+        "7. lockframe temp ends in .jpg (image2 can infer the format)");
+  Check(lock_cmd.find(L"still_1.jpg.tmp") == std::wstring::npos,
+        "7. lockframe temp is not .jpg.tmp (ffmpeg EINVAL)");
+  std::error_code remove_ec;
+  std::filesystem::remove(lock_in, remove_ec);
 
   std::printf("RESULT: %d checks, %d failures\n", g_checks, g_failures);
   return g_failures == 0 ? 0 : 1;

@@ -75,14 +75,20 @@ std::filesystem::path DefaultWallpapersDir() {
   return std::filesystem::temp_directory_path(ec) / "K6WP" / "wallpapers";
 }
 
-std::filesystem::path DefaultLockscreenPath() {
-  wchar_t buf[MAX_PATH];
-  const DWORD n = GetEnvironmentVariableW(L"PROGRAMDATA", buf, MAX_PATH);
-  if (n > 0 && n < MAX_PATH) {
-    return std::filesystem::path(buf) / L"K6WP" / L"lockscreen.jpg";
+std::filesystem::path DefaultStillPath() {
+  // Per-user only: the old mechanism wrote %PROGRAMDATA%\K6WP\lockscreen.jpg,
+  // which no longer exists in the normal flow. This default is a safety net for
+  // a manual `compressor --lockframe` without --out; the still helper always
+  // passes an explicit unique --out under %LOCALAPPDATA%\K6WP\stills.
+  char* buf = nullptr;
+  std::size_t len = 0;
+  if (_dupenv_s(&buf, &len, "LOCALAPPDATA") == 0 && buf != nullptr) {
+    std::string local(buf);
+    std::free(buf);
+    return std::filesystem::path(local) / "K6WP" / "lockframe.jpg";
   }
   std::error_code ec;
-  return std::filesystem::temp_directory_path(ec) / L"K6WP" / L"lockscreen.jpg";
+  return std::filesystem::temp_directory_path(ec) / "K6WP" / "lockframe.jpg";
 }
 
 bool IsOptimal(const k6wp::compressor::VideoProps& props, int target_w,
@@ -168,10 +174,10 @@ int main(int argc, char** argv) {
     return 0;
   }
 
-  // Lockframe mode: extract single frame as lockscreen image
+  // Lockframe mode: extract a single frame as a still image
   if (opts.lockframe) {
     if (opts.out.empty()) {
-      opts.out = DefaultLockscreenPath();
+      opts.out = DefaultStillPath();
     }
     {
       std::error_code ec;

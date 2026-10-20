@@ -24,6 +24,7 @@ bool NeedsSettingsMigration(const nlohmann::json& raw) {
       "default_fps",             "default_resolution_mode",
       "start_with_windows",      "cache_dir",
       "lockscreen_sync",         "lockscreen_offset_sec",
+      "wallpaper_sync",
       "compress_advanced_visible", "check_updates",
       "closeToTray",             "playlistSource",
       "performancePreset",
@@ -91,8 +92,11 @@ StudioSettings DefaultStudioSettings() {
   s.default_fps = 30;
   s.default_resolution_mode = "match_monitor";
   s.start_with_windows = false;
-  s.lockscreen_sync = false;
-  s.lockscreen_offset_sec = 1.0;
+  // Fresh install: both still toggles are on (the onboarding offer is
+  // pre-checked, this is what it writes).
+  s.wallpaper_sync = true;
+  s.lockscreen_sync = true;
+  s.lockscreen_offset_sec = 0.0;
   s.lockscreen_offer_shown = false;
   s.compress_advanced_visible = false;
   s.check_updates = true;
@@ -166,6 +170,7 @@ void SaveStudioSettings(const std::filesystem::path& path,
   j["default_fps"] = copy.default_fps;
   j["default_resolution_mode"] = copy.default_resolution_mode;
   j["start_with_windows"] = copy.start_with_windows;
+  j["wallpaper_sync"] = copy.wallpaper_sync;
   j["lockscreen_sync"] = copy.lockscreen_sync;
   j["lockscreen_offset_sec"] = copy.lockscreen_offset_sec;
   j["lockscreen_offer_shown"] = copy.lockscreen_offer_shown;
@@ -233,7 +238,7 @@ StudioSettings MigrateStudioSettings(const nlohmann::json& raw) {
       throw ConfigError("unsupported studio settings schema version: " +
                         std::to_string(version));
     }
-    // v0/v1/v2 -> v3: missing fields are filled with defaults below.
+    // Missing fields (v0..v4) are filled with defaults below.
     // Always persist as the current version.
     s.version = kStudioSettingsSchemaVersion;
     s.auto_compress_on_import =
@@ -253,15 +258,22 @@ StudioSettings MigrateStudioSettings(const nlohmann::json& raw) {
     // them; they are deliberately not read (ignored on migration).
     s.start_with_windows =
         raw.value("start_with_windows", defaults.start_with_windows);
+    // v5: the per-user still. A missing `wallpaper_sync` (v <= 4) becomes the
+    // new default (true). `lockscreen_sync` KEEPS its stored value: a user who
+    // had it ON keeps it ON under the new per-user mechanism, and a user who
+    // had it OFF is never opted in silently.
+    s.wallpaper_sync = raw.value("wallpaper_sync", defaults.wallpaper_sync);
     s.lockscreen_sync = raw.value("lockscreen_sync", defaults.lockscreen_sync);
     s.lockscreen_offset_sec =
         raw.value("lockscreen_offset_sec", defaults.lockscreen_offset_sec);
+    // v5 offset migration: 1.0 was the old hard-coded default, 0.0 (the FIRST
+    // frame) is the new one. Only an exactly-1.0 value from an old file moves;
+    // any other user choice is preserved.
+    if (version <= 4 && s.lockscreen_offset_sec == 1.0) {
+      s.lockscreen_offset_sec = 0.0;
+    }
     // v4 (Studio-private): the one-time onboarding offer flag. A v3 file has
-    // no such key -> false (the offer was never shown). The user's
-    // `lockscreen_sync` decision above is NEVER changed by the migration:
-    // enabling the lock screen needs an administrator policy registration,
-    // so flipping the flag silently would leave the engine refreshing a
-    // picture Windows never shows.
+    // no such key -> false (the offer was never shown).
     s.lockscreen_offer_shown =
         raw.value("lockscreen_offer_shown", defaults.lockscreen_offer_shown);
     s.compress_advanced_visible = raw.value("compress_advanced_visible",

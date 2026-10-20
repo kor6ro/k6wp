@@ -48,10 +48,11 @@ claimed result.
    above the video, and the engine log shows one `attached ... to
    Progman, layered=YES` line per monitor plus `TOOLWINDOW=YES`.
    (task-9-fullscreen-cover.txt, task-10-zorder.txt)
-9. OS wallpaper restored on exit. Note your static desktop wallpaper,
-   run the engine, Exit via the tray menu, and confirm the original
-   wallpaper is back (engine saves on start, restores on shutdown).
-   (task-15-wallpaper-restore.txt)
+9. Wallpaper restore on explicit exit. Start from a fresh data folder, note
+   your static desktop wallpaper A, run the engine with the wallpaper still
+   on, then Exit via the tray menu. A must be back (the engine spawns the
+   per-user restore on a normal exit). A shutdown/logoff deliberately does
+   NOT restore (T6). (task-15-wallpaper-restore.txt)
 10. Drag-drop import. Drag one or more video files (plus a non-video file
     as a negative control) onto the Studio window or library. Expect the
     videos added to the library, the first valid one selected, the
@@ -198,7 +199,7 @@ best-effort on the matching hardware.
    `engine.log` shows the crash-restart give-up line once the restart budget is
    exhausted.
 
-## Display resilience + lock screen (Bug B / Bug A)
+## Display resilience + per-user still (Bug B / Bug A)
 
 ### Monitor removal (no hang, no lost wallpaper)
 
@@ -238,30 +239,60 @@ live in `docs/runbook-2monitor.md`.
    engine takes over (the wallpaper comes back). The restart counts against
    the crash-restart backoff, so it cannot loop forever.
 
-### The lock screen (Bug A)
+### The per-user still (T1–T10)
 
-7. **The toggle really registers the policy.** In Studio → Settings, turn
-   "Samakan bingkai video ke layar kunci" on. A UAC prompt must appear
-   (once). Accept it. The checkbox must STAY on, and the status line under
-   it must say the policy is registered. Then check:
-   `reg query HKLM\SOFTWARE\Policies\Microsoft\Windows\Personalization /v LockScreenImage`
-   must show `%PROGRAMDATA%\K6WP\lockscreen.jpg`. Declining the prompt
-   must leave the checkbox OFF and show a message that says the prompt was
-   declined.
-8. **The picture is fresh at every lock.** With the feature on: press Win+L
-   and look at the lock screen - it must show a frame of the CURRENT
-   wallpaper video. Repeat after a playlist rotation and after a sleep/wake
-   cycle. The picture must never be the very first frame of an old video.
-9. **The frame exists before the engine runs.** Shut the machine down
-   (`shutdown /s /t 0`), then power it on and lock the screen BEFORE the
-   engine starts (the autostart engine only appears after the logon). The
-   lock screen must still show the wallpaper frame - the file was written
-   before the shutdown.
-10. **The edition is reported honestly.** The status line under the toggle
-    must match the machine: "Aktif" on Enterprise/Education, "Policy
-    terdaftar, tapi edisi Windows X mungkin mengabaikannya" on Pro (test it
-    with Win+L - on some Pro builds the policy is ignored), "tidak
-    mendukung" on Home. A Home machine must NOT claim the feature works.
-11. **The atomic write.** While the engine refreshes the frame, copy
-    `%PROGRAMDATA%\K6WP\lockscreen.jpg` repeatedly: every copy must be a
-    complete, openable JPEG (never a truncated file).
+These replace the old HKLM-policy checks. Run them on a fresh data folder
+(move `%LOCALAPPDATA%\K6WP` aside) with at least one video imported. "Status"
+means `%LOCALAPPDATA%\K6WP\still_status.json` — Studio's Settings page shows
+the same result. Inspect `wallpaper_ok`, `lockscreen_ok`, `error` and
+`lockscreen_mode_hint`.
+
+1. **T1 — boot apply.** Start the engine with a video configured. Within a
+   few seconds the desktop wallpaper must be the video's FIRST frame
+   (`offset 0`, not one second in). Status: `ok=true`, both sides true. If in
+   doubt compare with
+   `compressor.exe --lockframe --offset-s 0 --res <W>x<H>` output.
+2. **T2 — manual pick.** Pick another video in Studio (and once from the tray
+   MRU). Wallpaper and lock screen must both change, with no UAC; the status
+   `ts` advances and `error` is empty.
+3. **T3 — playlist rotation.** Enable the playlist with a 1-minute interval
+   and wait for a rotation. The still must refresh for the new video. The
+   5-second rotation throttle itself is unit-tested (`still_test`); the log
+   line `still: rotation refresh skipped` must NOT appear for a normal
+   1-minute rotation, and a manual pick must never be throttled.
+4. **T4 — the two toggles are per-user and reversible.** Turn the wallpaper
+   toggle off: the original wallpaper returns immediately, no UAC. Turn it
+   back on: a fresh still is applied. Repeat for the lock-screen toggle: the
+   previous image and the rotating-mode registry values return, then a still
+   is applied again. Verify `HKCU\...\ContentDeliveryManager\
+   RotatingLockScreenEnabled` and `HKCU\...\Lock Screen\SlideshowEnabled` are
+   restored to their pre-K6WP values.
+5. **T5 — Win+L shows the still.** Lock the screen: it must show a frame of
+   the CURRENT video. The status hint must be `picture` (not `spotlight` or
+   `slideshow`). Unlock, rotate the playlist, lock again.
+6. **T6 — shutdown/logoff does NOT restore (J3).** With a still active, sign
+   out or shut down. At the next logon the desktop must still show the still
+   until the engine re-applies, and `original_wallpaper.json` must still
+   exist. A tray Quit, by contrast, DOES restore (item 9).
+7. **T7 — J1 original store.** With sync on, set a different wallpaper by
+   hand in Windows Settings. The engine log must record the external change
+   and update the store; a later toggle-off must restore THAT wallpaper, never
+   our still. Re-apply a still afterwards; the store must never contain a
+   `%LOCALAPPDATA%\K6WP\stills` path.
+8. **T8 — unique stills + prune.** Trigger ~5 applies. The `stills` folder
+   must hold at most two `still_*.jpg`, each a complete, openable JPEG (no
+   truncated file, filenames never reused). The active wallpaper must never
+   point at a missing file.
+9. **T9 — no admin in the normal flow.** Set UAC to "always notify", apply a
+   video and flip both toggles: no prompt may appear. Check that
+   `reg query HKLM\SOFTWARE\Policies\Microsoft\Windows\Personalization /v
+   LockScreenImage` is unchanged (or absent) and that
+   `%PROGRAMDATA%\K6WP\lockscreen.jpg` is not recreated.
+10. **T10 — legacy cleanup.** Seed a fake old install: create
+    `%PROGRAMDATA%\K6WP\lockscreen.jpg` and, from an elevated prompt, set the
+    HKLM policy to that path. Restart Studio → Settings shows the read-only
+    legacy notice and a "Bersihkan" button. Click it: exactly one UAC.
+    Accept: the policy/backup/our files are gone. Decline: everything remains
+    and the message says so. A policy pointing somewhere else must never be
+    offered (and `K6WP.exe --elevate-lockscreen off` must exit 0 with no
+    prompt).

@@ -1,13 +1,14 @@
 #pragma once
 
-// Exit codes of `K6WP.exe --elevate-lockscreen on|off`.
+// Exit codes of `K6WP.exe --elevate-lockscreen off` (legacy policy cleanup).
 //
 // Single source of truth: the launcher (launcher/exit_codes.hpp) and the
-// Studio (shared/lockscreen_bridge.hpp) must agree on the numbers, because
-// the Studio maps the launcher's exit code onto the lock-screen toggle.
+// Studio (shared/legacy_lockscreen_policy.hpp) must agree on the numbers,
+// because the Studio maps the launcher's exit code onto the "Bersihkan"
+// result message.
 //
 // 4 and 5 exist so a declined UAC prompt is distinguishable from a broken
-// policy write: the Studio tells the user WHICH happened instead of
+// registry cleanup: the Studio tells the user WHICH happened instead of
 // showing a generic failure.
 
 namespace k6wp {

@@ -8,7 +8,7 @@
 // IDXGIFactory7::RegisterAdaptersChangedEvent, whose event handle the engine
 // joins into its message-loop wait array. When the event signals, the engine
 // reuses the existing device-lost path (OnDeviceLost -> flag ->
-// RecreateDevice). windows.h lives in the .cpp only (the os_wallpaper split),
+// RecreateDevice). windows.h lives in the .cpp only (the header split),
 // so this header exposes std types + opaque void* handles. Every COM failure
 // path logs through the ctor LogFn and leaves the watch inactive — Start()
 // never throws, and an unavailable watch just means the engine runs without

@@ -172,11 +172,11 @@ FocusScope {
         // plus an explicit apply()).
         Settings.setStartWithWindows(startWithWindowsBox.checked)
         Settings.setAutoCompressOnImport(autoCompressBox.checked)
-        // The lock-screen offer: default checked. setLockscreenSync runs the
-        // administrator registration and only leaves the toggle ON when it
-        // really succeeded - a declined prompt simply keeps it off.
-        if (lockscreenOfferBox.checked)
-            Settings.setLockscreenSync(true)
+        // The still offer: default checked. It is per-user now - no
+        // administrator prompt - and turns on BOTH the wallpaper and the
+        // lock-screen image. The two Pengaturan toggles can split them later.
+        Settings.setWallpaperSync(lockscreenOfferBox.checked)
+        Settings.setLockscreenSync(lockscreenOfferBox.checked)
         Settings.setLockscreenOfferShown(true)
         Settings.apply()
         // Durable first-run marker: creates studio_settings.json, which is
@@ -405,11 +405,9 @@ FocusScope {
                 }
             }
 
-            // Lock-screen offer (Bug A): shown ONCE, default checked. Turning
-            // it on needs an administrator registration (the launcher writes
-            // the HKLM policy Windows reads the lock screen from), so
-            // Settings.setLockscreenSync asks for it and only leaves the
-            // toggle ON when the registration really succeeded.
+            // Still offer: shown ONCE, default checked, per-user (no
+            // administrator prompt). Applies the first frame of every video as
+            // the Windows wallpaper AND the lock-screen image.
             CheckBox {
                 id: lockscreenOfferBox
                 objectName: "onboardingLockscreenOffer"
@@ -418,7 +416,7 @@ FocusScope {
                 focusPolicy: Qt.StrongFocus
                 visible: !Settings.lockscreenOfferShown
                 checked: true
-                text: qsTr("Aktifkan layar kunci otomatis (gambar statis dari video)")
+                text: qsTr("Jadikan frame pertama video sebagai wallpaper dan gambar layar kunci")
                 Accessible.name: text
                 Keys.onReturnPressed: {
                     toggle()

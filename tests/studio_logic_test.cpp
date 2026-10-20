@@ -18,9 +18,10 @@
 //     sends again — all on the ONE kept connection (LOW-6: IpcClient does
 //     not Disconnect per Send, so the server sees 1 accept + 2 requests,
 //     never 2 accepts + drain-to-disconnect).
-//  6. Engine-read settings contract (LOW-16): only lockscreen_sync +
-//     lockscreen_offset_sec are Engine-visible (LOCALAPPDATA redirected at
-//     a scratch dir; forbidden-field flips must not move the behavior).
+//  6. Engine-read settings contract (LOW-16): only wallpaper_sync,
+//     lockscreen_sync + lockscreen_offset_sec are Engine-visible
+//     (LOCALAPPDATA redirected at a scratch dir; forbidden-field flips must
+//     not move the behavior).
 //  7. Dev-fallback gate (LOW-16): IsDevEngineFallbackEnabled() needs _DEBUG
 //     AND K6WP_DEV=1; `--probe-resolve` prints gate + path for QA evidence.
 //  16. Studio import path (LibraryGridModel): the ffmpeg thumbnail spawn and
@@ -49,7 +50,7 @@
 #include "ipc_protocol.hpp"
 #include "library_format.hpp"
 #include "library_grid_model.hpp"
-#include "lockscreen.hpp"
+#include "still.hpp"
 #include "monitor_util.hpp"
 #include "qml_shell.hpp"
 #include "settings_bridge.hpp"
@@ -103,6 +104,10 @@ void Check(bool cond, const std::string& name) {
 
 bool HasSubstr(const std::string& hay, const std::string& needle) {
   return hay.find(needle) != std::string::npos;
+}
+
+bool HasSubstrW(const std::wstring& hay, const std::wstring& needle) {
+  return hay.find(needle) != std::wstring::npos;
 }
 
 bool HasSubstrQ(const QString& hay, const char* needle) {
@@ -430,16 +435,35 @@ void QmlShell::SetImportTarget(LibraryGridModel*) {}
 void QmlShell::syncPreviewGeometry(int, int, int, int) {}
 void QmlShell::loadPreview(const QString&) {}
 void QmlShell::setPreviewPaused(bool) {}
-// Bug A: the lock-screen toggle drives the launcher's policy registration
-// through the shared test seam, so the suite can exercise "the registration
-// succeeded" and "the user declined the UAC prompt" without a prompt.
-LockscreenElevationResult StubElevationOk(bool enable, int /*timeout_ms*/) {
-  LockscreenElevationResult r;
-  r.ran = true;
-  r.exit_code = enable ? kExitOk : kExitOk;
-  return r;
+// Bug A -> per-user still: the two toggles drive the K6WP.exe helper through
+// the shared spawn seam, so the suite can exercise "the helper started" and
+// "the helper could not start" without a process (or a UAC prompt). The
+// legacy cleanup button uses its own seam for the same reason.
+bool g_still_spawn_ok = true;
+std::wstring g_still_spawn_args;
+int g_still_spawn_calls = 0;
+
+bool StubStillSpawn(const std::wstring& args) {
+  ++g_still_spawn_calls;
+  g_still_spawn_args = args;
+  return g_still_spawn_ok;
+}
+
+LegacyCleanupOutcome g_legacy_outcome = LegacyCleanupOutcome::kCleaned;
+int g_legacy_timeout = 0;
+
+LegacyCleanupOutcome StubLegacyCleanup(int timeout_ms) {
+  g_legacy_timeout = timeout_ms;
+  return g_legacy_outcome;
 }
 }  // namespace k6wp
+
+// The section-29 toggles drive these flags directly.
+using k6wp::g_legacy_outcome;
+using k6wp::g_legacy_timeout;
+using k6wp::g_still_spawn_args;
+using k6wp::g_still_spawn_calls;
+using k6wp::g_still_spawn_ok;
 
 int main(int argc, char** argv) {
   setvbuf(stdout, nullptr, _IONBF, 0);
@@ -591,9 +615,10 @@ int main(int argc, char** argv) {
   }
 
   // 6. Engine-read settings contract (LOW-16, dev-contracts.md §3): the
-  // Engine may observe exactly lockscreen_sync + lockscreen_offset_sec
-  // (shared/lockscreen.cpp). Point LOCALAPPDATA at a scratch dir so no real
-  // profile is touched, then prove every other field is behavior-invisible.
+  // Engine may observe exactly wallpaper_sync + lockscreen_sync +
+  // lockscreen_offset_sec (shared/still.cpp). Point LOCALAPPDATA at a
+  // scratch dir so no real profile is touched, then prove every other field
+  // is behavior-invisible.
   {
     wchar_t old_local[MAX_PATH] = {};
     const DWORD old_n =
@@ -607,14 +632,15 @@ int main(int argc, char** argv) {
     Check(!ec, "contract scratch dir created");
     Check(SetEnvironmentVariableW(L"LOCALAPPDATA", scratch.wstring().c_str()) != 0,
           "contract LOCALAPPDATA redirected");
-    auto write_settings = [&](bool sync, double offset, int crf, int fps,
-                              const std::string& mode, bool auto_comp,
-                              bool start_win, bool advanced, bool updates,
-                              bool offer_shown = false) {
+    auto write_settings = [&](bool wallpaper, bool lockscreen, double offset,
+                              int crf, int fps, const std::string& mode,
+                              bool auto_comp, bool start_win, bool advanced,
+                              bool updates, bool offer_shown = false) {
       k6wp::StudioSettings s = k6wp::DefaultStudioSettings();
       s.compress_output_dir = (scratch / L"K6WP" / L"wallpapers").wstring();
       s.cache_dir = (scratch / L"K6WP" / L"cache").wstring();
-      s.lockscreen_sync = sync;
+      s.wallpaper_sync = wallpaper;
+      s.lockscreen_sync = lockscreen;
       s.lockscreen_offset_sec = offset;
       s.default_crf = crf;
       s.default_fps = fps;
@@ -626,48 +652,88 @@ int main(int argc, char** argv) {
       s.lockscreen_offer_shown = offer_shown;
       k6wp::SaveStudioSettings(k6wp::DefaultStudioSettingsPath(), s);
     };
-    // A: every forbidden field non-default, sync OFF -> engine sees OFF/1.0.
-    write_settings(false, 1.0, 28, 24, "720p", false, true, true, false);
-    Check(!k6wp::IsLockscreenSyncEnabled(),
-          "contract forbidden fields do not enable sync");
-    Check(k6wp::LockscreenOffsetSec() == 1.0,
+    // A: every forbidden field non-default, both sync OFF -> engine sees OFF.
+    write_settings(false, false, 1.0, 28, 24, "720p", false, true, true, false);
+    k6wp::StillSettings view = k6wp::ReadStillSettingsCached();
+    Check(view.readable, "contract settings readable");
+    Check(!view.wallpaper_sync,
+          "contract forbidden fields do not enable wallpaper");
+    Check(!view.lockscreen_sync,
+          "contract forbidden fields do not enable the lock screen");
+    Check(view.lockscreen_offset_sec == 1.0,
           "contract offset default visible");
     // B: flip ONLY forbidden fields -> engine-visible behavior identical.
     // The v4 field lockscreen_offer_shown is forbidden too: it is
     // Studio-private (the onboarding offer flag) and must never reach the
     // Engine.
-    write_settings(false, 1.0, 16, 1, "source", true, false, false, true,
+    write_settings(false, false, 1.0, 16, 1, "source", true, false, false, true,
                    /*offer_shown=*/true);
-    Check(!k6wp::IsLockscreenSyncEnabled(),
-          "contract forbidden flip keeps sync off");
-    Check(k6wp::LockscreenOffsetSec() == 1.0,
+    view = k6wp::ReadStillSettingsCached();
+    Check(!view.wallpaper_sync && !view.lockscreen_sync,
+          "contract forbidden flip keeps both sides off");
+    Check(view.lockscreen_offset_sec == 1.0,
           "contract forbidden flip keeps offset");
-    // C: flip the two allowed fields -> behavior follows them.
-    write_settings(true, 2.5, 16, 1, "source", true, false, false, true);
-    Check(k6wp::IsLockscreenSyncEnabled(),
+    // C: flip the three allowed fields -> behavior follows them.
+    write_settings(true, true, 2.5, 16, 1, "source", true, false, false, true);
+    view = k6wp::ReadStillSettingsCached();
+    Check(view.wallpaper_sync,
+          "contract wallpaper_sync=true visible");
+    Check(view.lockscreen_sync,
           "contract lockscreen_sync=true visible");
-    Check(k6wp::LockscreenOffsetSec() == 2.5,
+    Check(view.lockscreen_offset_sec == 2.5,
           "contract lockscreen_offset_sec visible");
     // C2: the Studio-private v4 field must not leak into the Engine's view.
-    write_settings(false, 1.0, 16, 1, "source", true, false, false, true,
+    write_settings(false, false, 1.0, 16, 1, "source", true, false, false, true,
                    /*offer_shown=*/true);
-    Check(!k6wp::IsLockscreenSyncEnabled(),
+    view = k6wp::ReadStillSettingsCached();
+    Check(!view.wallpaper_sync && !view.lockscreen_sync,
           "contract lockscreen_offer_shown never reaches the Engine");
     // D: settings file missing -> safe defaults (never throws).
     std::filesystem::remove(k6wp::DefaultStudioSettingsPath(), ec);
-    Check(!k6wp::IsLockscreenSyncEnabled(),
-          "contract missing file sync defaults false");
-    Check(k6wp::LockscreenOffsetSec() == 1.0,
-          "contract missing file offset defaults 1.0");
+    view = k6wp::ReadStillSettingsCached();
+    Check(!view.readable && !view.wallpaper_sync && !view.lockscreen_sync,
+          "contract missing file disables both sides");
+    Check(view.lockscreen_offset_sec == 0.0,
+          "contract missing file offset defaults 0.0 (first frame)");
     // E: corrupt file -> same safe defaults (never throws).
     {
       std::ofstream bad(k6wp::DefaultStudioSettingsPath(), std::ios::binary);
       bad << "{not valid json";
     }
-    Check(!k6wp::IsLockscreenSyncEnabled(),
-          "contract corrupt file sync defaults false");
-    Check(k6wp::LockscreenOffsetSec() == 1.0,
-          "contract corrupt file offset defaults 1.0");
+    view = k6wp::ReadStillSettingsCached();
+    Check(!view.readable && !view.wallpaper_sync && !view.lockscreen_sync,
+          "contract corrupt file disables both sides");
+    Check(view.lockscreen_offset_sec == 0.0,
+          "contract corrupt file offset defaults 0.0");
+    // F: a v4 file (old mechanism) migrates through the same Engine read:
+    // the stored lockscreen_sync decision survives, wallpaper_sync defaults
+    // on, and only the old 1.0 offset moves to the first frame.
+    {
+      nlohmann::json old_file = {
+          {"version", 4},
+          {"auto_compress_on_import", true},
+          {"compress_output_dir", (scratch / L"K6WP" / L"wallpapers").string()},
+          {"default_crf", 22},
+          {"default_fps", 30},
+          {"default_resolution_mode", "match_monitor"},
+          {"start_with_windows", false},
+          {"cache_dir", (scratch / L"K6WP" / L"cache").string()},
+          {"lockscreen_sync", true},
+          {"lockscreen_offset_sec", 1.0},
+          {"lockscreen_offer_shown", true},
+          {"compress_advanced_visible", false},
+          {"check_updates", true},
+      };
+      std::ofstream out(k6wp::DefaultStudioSettingsPath(), std::ios::binary);
+      out << old_file.dump(2);
+    }
+    view = k6wp::ReadStillSettingsCached();
+    Check(view.readable && view.lockscreen_sync,
+          "contract v4 file keeps the stored lockscreen_sync (never flipped)");
+    Check(view.wallpaper_sync,
+          "contract v4 file -> wallpaper_sync defaults on (v5)");
+    Check(view.lockscreen_offset_sec == 0.0,
+          "contract v4 file -> old 1.0 offset migrates to 0.0");
     if (old_n > 0 && old_n < MAX_PATH) {
       (void)SetEnvironmentVariableW(L"LOCALAPPDATA", old_local);
     } else {
@@ -2460,6 +2526,10 @@ int main(int argc, char** argv) {
       Check(s.lockscreen_sync == false,
             "todo8 old file -> the user's lockscreen_sync decision is kept "
             "(never silently flipped by a migration)");
+      Check(s.wallpaper_sync == true,
+            "todo8 old file -> wallpaper_sync defaults true (v5)");
+      Check(s.lockscreen_offset_sec == 0.0,
+            "todo8 old file -> the old 1.0 offset migrates to 0.0 (v5)");
       Check(s.close_to_tray == false,
             "todo8 old file -> close_to_tray defaults false");
       Check(s.playlist_source == "all",
@@ -2473,7 +2543,8 @@ int main(int argc, char** argv) {
                                     std::istreambuf_iterator<char>());
         Check(HasSubstr(rewritten, "\"closeToTray\"") &&
                   HasSubstr(rewritten, "\"playlistSource\"") &&
-                  HasSubstr(rewritten, "\"performancePreset\""),
+                  HasSubstr(rewritten, "\"performancePreset\"") &&
+                  HasSubstr(rewritten, "\"wallpaper_sync\""),
               "todo8 self-heal rewrite writes the new keys");
       }
     }
@@ -3048,6 +3119,19 @@ int main(int argc, char** argv) {
                            std::istreambuf_iterator<char>());
       };
 
+      // The still toggles ask the helper to render the ACTIVE video: seed
+      // config.json (the engine's playback store) so the toggle path has one.
+      // The helper spawn itself goes through the shared seam below.
+      {
+        k6wp::WallpaperConfig cfg;
+        cfg.video_path = L"C:\\media\\wallpaper.mp4";
+        k6wp::SaveConfig(k6wp::DefaultConfigPath(), cfg);
+      }
+      k6wp::SetStillSpawnFn(&k6wp::StubStillSpawn);
+      g_still_spawn_ok = true;
+      g_still_spawn_calls = 0;
+      g_still_spawn_args.clear();
+
       // --- closeToTray: toggle true WITHOUT apply() -> JSON on disk ------
       {
         k6wp::SettingsBridge bridge;
@@ -3100,29 +3184,152 @@ int main(int argc, char** argv) {
         }
       }
 
-      // --- lockscreenSync: toggle true WITHOUT apply() -> JSON on disk ----
-      // The toggle is HONEST (Bug A): it only turns ON when the HKLM policy
-      // registration really succeeded, so the test drives the elevation
-      // through the shared test seam.
+      // --- wallpaperSync / lockscreenSync: per-user still toggles ----------
+      // Each toggle persists immediately, then asks the helper to apply (ON)
+      // or restore (OFF). The helper spawn goes through the shared seam; a
+      // spawn failure must revert the toggle so it never claims a state the
+      // OS does not have. This replaces the old UAC-policy registration.
       {
         k6wp::SettingsBridge bridge;
-        Check(!bridge.lockscreenSync(),
-              "writethrough lockscreenSync starts false (default)");
-        bridge.setLockscreenSync(true);  // NO apply() call
-        Check(!bridge.lockscreenSync(),
-              "writethrough a REFUSED lockscreen registration leaves the "
-              "toggle off (no 'ON but no policy' state)");
+        Check(bridge.wallpaperSync() && bridge.lockscreenSync(),
+              "writethrough both still toggles start true (fresh install)");
+
+        // OFF -> persisted false + a wallpaper-only restore request.
+        g_still_spawn_args.clear();
+        bridge.setWallpaperSync(false);  // NO apply() call
+        Check(!bridge.wallpaperSync(),
+              "writethrough setWallpaperSync(false) updates the property");
+        Check(HasSubstrW(g_still_spawn_args, L"--restore") &&
+                  HasSubstrW(g_still_spawn_args, L"--wallpaper") &&
+                  !HasSubstrW(g_still_spawn_args, L"--lockscreen"),
+              "writethrough wallpaper OFF asks for a wallpaper-only restore");
+        {
+          const std::string text = read_json();
+          Check(HasSubstr(text, "\"wallpaper_sync\": false") ||
+                    HasSubstr(text, "\"wallpaper_sync\":false"),
+                "writethrough wallpaperSync=false is on disk WITHOUT apply()");
+        }
+
+        // ON with a helper that cannot start -> refused, property stays OFF.
+        g_still_spawn_ok = false;
+        g_still_spawn_args.clear();
+        bridge.setWallpaperSync(true);  // NO apply() call
+        Check(!bridge.wallpaperSync(),
+              "writethrough a failed helper spawn leaves wallpaper OFF");
         Check(!bridge.lastError().isEmpty(),
-              "writethrough a refused registration reports an error");
-        k6wp::SetLockscreenElevationFn(&k6wp::StubElevationOk);
+              "writethrough a failed helper spawn reports an error");
+        Check(HasSubstrW(g_still_spawn_args, L"--apply-still") &&
+                  HasSubstrW(g_still_spawn_args, L"--video"),
+              "writethrough wallpaper ON asks the helper to apply");
+        {
+          const std::string text = read_json();
+          Check(HasSubstr(text, "\"wallpaper_sync\": false") ||
+                    HasSubstr(text, "\"wallpaper_sync\":false"),
+                "writethrough a refused wallpaper toggle stays false on disk");
+        }
+
+        // ON with a working helper -> property + JSON true.
+        g_still_spawn_ok = true;
+        g_still_spawn_args.clear();
+        bridge.setWallpaperSync(true);
+        Check(bridge.wallpaperSync(),
+              "writethrough setWallpaperSync(true) updates the property");
+        Check(HasSubstrW(g_still_spawn_args, L"--apply-still"),
+              "writethrough wallpaper ON reaches the helper");
+        {
+          const std::string text = read_json();
+          Check(HasSubstr(text, "\"wallpaper_sync\": true") ||
+                    HasSubstr(text, "\"wallpaper_sync\":true"),
+                "writethrough wallpaperSync=true is on disk WITHOUT apply()");
+        }
+        {
+          k6wp::SettingsBridge again;
+          Check(again.wallpaperSync(),
+                "writethrough wallpaperSync persists through reload (no apply)");
+        }
+      }
+
+      // Lock screen: same contract, its own side selector.
+      {
+        k6wp::SettingsBridge bridge;
+        Check(bridge.lockscreenSync(),
+              "writethrough lockscreenSync starts true (fresh install)");
+        g_still_spawn_args.clear();
+        bridge.setLockscreenSync(false);  // NO apply() call
+        Check(!bridge.lockscreenSync(),
+              "writethrough setLockscreenSync(false) updates the property");
+        Check(HasSubstrW(g_still_spawn_args, L"--restore") &&
+                  HasSubstrW(g_still_spawn_args, L"--lockscreen") &&
+                  !HasSubstrW(g_still_spawn_args, L"--wallpaper"),
+              "writethrough lockscreen OFF asks for a lockscreen-only restore");
+
+        g_still_spawn_ok = false;
         bridge.setLockscreenSync(true);  // NO apply() call
-        k6wp::SetLockscreenElevationFn(nullptr);
+        Check(!bridge.lockscreenSync(),
+              "writethrough a failed helper spawn leaves lockscreen OFF");
+        Check(!bridge.lastError().isEmpty(),
+              "writethrough a refused lockscreen toggle reports an error");
+
+        g_still_spawn_ok = true;
+        bridge.setLockscreenSync(true);
         Check(bridge.lockscreenSync(),
               "writethrough setLockscreenSync(true) updates the property");
-        const std::string text = read_json();
-        Check(HasSubstr(text, "\"lockscreen_sync\": true") ||
-                  HasSubstr(text, "\"lockscreen_sync\":true"),
-              "writethrough lockscreenSync=true is on disk WITHOUT apply()");
+        {
+          const std::string text = read_json();
+          Check(HasSubstr(text, "\"lockscreen_sync\": true") ||
+                    HasSubstr(text, "\"lockscreen_sync\":true"),
+                "writethrough lockscreenSync=true is on disk WITHOUT apply()");
+        }
+      }
+
+      // Honest status from still_status.json (the helper is the only writer).
+      {
+        k6wp::SettingsBridge bridge;
+        k6wp::StillStatus status;
+        status.ts = 1700000000;
+        status.ok = true;
+        status.wallpaper_ok = true;
+        status.lockscreen_ok = true;
+        status.lockscreen_mode_hint = "picture";
+        k6wp::WriteStillStatus(status);
+        Check(bridge.wallpaperStatus().contains(QStringLiteral("Aktif")),
+              "status wallpaper ON + ok -> Aktif");
+        Check(bridge.lockscreenStatus().contains(QStringLiteral("Aktif")),
+              "status lockscreen ON + picture -> Aktif");
+
+        status.ok = false;
+        status.error = "frame extract failed (compressor exit 1)";
+        k6wp::WriteStillStatus(status);
+        Check(bridge.wallpaperStatus().contains(QStringLiteral("frame extract")),
+              "status failure surfaces the helper error (wallpaper)");
+        Check(bridge.lockscreenStatus().contains(QStringLiteral("frame extract")),
+              "status failure surfaces the helper error (lockscreen)");
+
+        status.ok = true;
+        status.lockscreen_ok = false;
+        status.lockscreen_mode_hint = "spotlight";
+        status.error.clear();
+        k6wp::WriteStillStatus(status);
+        Check(bridge.lockscreenStatus().contains(QStringLiteral("spotlight")),
+              "status spotlight hint is shown (J4)");
+      }
+
+      // Legacy cleanup (one UAC): the bridge maps the seam outcome to an
+      // honest message and never claims success on a decline.
+      {
+        k6wp::SetLegacyCleanupFn(&k6wp::StubLegacyCleanup);
+        g_legacy_outcome = k6wp::LegacyCleanupOutcome::kCleaned;
+        g_legacy_timeout = 0;
+        k6wp::SettingsBridge bridge;
+        Check(bridge.cleanupLegacyLockscreen().contains(
+                  QStringLiteral("berhasil")),
+              "legacy cleanup: cleaned result says berhasil");
+        Check(g_legacy_timeout > 0, "legacy cleanup: bounded wait passed");
+        g_legacy_outcome = k6wp::LegacyCleanupOutcome::kDeclined;
+        Check(bridge.cleanupLegacyLockscreen().contains(
+                  QStringLiteral("dibatalkan")),
+              "legacy cleanup: declined prompt says dibatalkan");
+        k6wp::SetLegacyCleanupFn(nullptr);
       }
 
       // --- autoCompressOnImport: toggle false WITHOUT apply() -> JSON ------
@@ -3155,6 +3362,8 @@ int main(int argc, char** argv) {
 
       // QA-HAPPY dump: the on-disk JSON after all toggles, for evidence.
       {
+        k6wp::SetStillSpawnFn(nullptr);
+        g_still_spawn_ok = true;
         const std::string text = read_json();
         std::printf("QA-HAPPY writethrough studio_settings.json:\n%s\n",
                     text.c_str());

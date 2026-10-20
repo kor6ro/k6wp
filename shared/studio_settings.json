@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://k6wp.local/schemas/studio-settings.schema.json",
   "title": "K6WP StudioSettings",
-  "description": "Studio-side preferences for the K6WP wallpaper app. Stored at %LOCALAPPDATA%/K6WP/studio_settings.json. Deliberately separate from config.json, which is pure Engine playback state (video_path/fit/monitor/speed/fps/battery). Version 0 (legacy: missing version or missing fields) is migrated to version 4 by the loader; version 1 migrates with compress_advanced_visible defaulted to false; version 2 migrates with the removed keep_original/start_minimized keys ignored; version 3 migrates with lockscreen_offer_shown defaulted to false and the user's lockscreen_sync value UNCHANGED (the lock screen needs an administrator policy registration, so flipping the flag silently would leave the Engine refreshing a picture Windows never shows). The three additive Studio UI preferences (closeToTray, playlistSource, performancePreset) may be absent from files written before plan todo 8: the loader defaults them and rewrites the file at the current version — no version bump, same pattern check_updates followed. On migration (or corrupt input) the loader backs up the original bytes to <file>.bak and rewrites the file at the current version.",
+  "description": "Studio-side preferences for the K6WP wallpaper app. Stored at %LOCALAPPDATA%/K6WP/studio_settings.json. Deliberately separate from config.json, which is pure Engine playback state (video_path/fit/monitor/speed/fps/battery). Version 0 (legacy: missing version or missing fields) is migrated to version 5 by the loader; version 1 migrates with compress_advanced_visible defaulted to false; version 2 migrates with the removed keep_original/start_minimized keys ignored; version 3 migrates with lockscreen_offer_shown defaulted to false; version 4 migrates to the per-user still mechanism: wallpaper_sync defaulted to true, lockscreen_sync KEPT exactly as stored, and a lockscreen_offset_sec of exactly 1.0 (the old hard-coded default) moved to 0.0 (the first frame). A fresh install defaults BOTH sync flags to true. The three additive Studio UI preferences (closeToTray, playlistSource, performancePreset) may be absent from files written before plan todo 8: the loader defaults them and rewrites the file at the current version — no version bump, same pattern check_updates followed. On migration (or corrupt input) the loader backs up the original bytes to <file>.bak and rewrites the file at the current version.",
   "type": "object",
   "additionalProperties": false,
   "required": ["version"],
@@ -10,8 +10,8 @@
     "version": {
       "type": "integer",
       "minimum": 0,
-      "maximum": 4,
-      "description": "Schema version. 0 = legacy (missing fields are defaulted on load), 1 = lockscreen sync fields, 2 = compressor advanced-box visibility, 3 = the Studio UI preferences (closeToTray/playlistSource/performancePreset, additive), 4 = current (adds the Studio-private lockscreen_offer_shown)."
+      "maximum": 5,
+      "description": "Schema version. 0 = legacy (missing fields are defaulted on load), 1 = lockscreen sync fields, 2 = compressor advanced-box visibility, 3 = the Studio UI preferences (closeToTray/playlistSource/performancePreset, additive), 4 = the Studio-private lockscreen_offer_shown, 5 = current (adds wallpaper_sync and moves the offset default to 0.0)."
     },
     "auto_compress_on_import": {
       "type": "boolean",
@@ -51,16 +51,21 @@
       "type": "string",
       "description": "Compressor cache directory. Default %LOCALAPPDATA%/K6WP/cache. Must not be empty."
     },
+    "wallpaper_sync": {
+      "type": "boolean",
+      "default": true,
+      "description": "Per-user still: when true, the first frame of the active video becomes the real Windows desktop wallpaper (SPI_SETDESKWALLPAPER). The original wallpaper is saved once to %LOCALAPPDATA%/K6WP/original_wallpaper.json so it can be restored. No administrator rights. Engine-readable (LOW-16)."
+    },
     "lockscreen_sync": {
       "type": "boolean",
-      "default": false,
-      "description": "Bagian B: when true, the engine refreshes the lock-screen picture (%PROGRAMDATA%/K6WP/lockscreen.jpg) on a video change, a playlist rotation, a session lock, a suspend, a shutdown and a monitor-on (debounced, background worker, atomic write). The picture is only SHOWN by Windows when the HKLM LockScreenImage policy is registered, which needs administrator rights: the Studio toggle runs K6WP.exe --elevate-lockscreen on|off and only leaves this field true when the registration really succeeded."
+      "default": true,
+      "description": "Per-user still: when true, the first frame of the active video becomes the Windows lock-screen image (WinRT LockScreen::SetImageFileAsync). No HKLM policy, no administrator rights, no UAC. A fresh install defaults to true; a file that already carries this key keeps the user's stored value. Engine-readable (LOW-16)."
     },
     "lockscreen_offset_sec": {
       "type": "number",
       "minimum": 0,
-      "default": 1.0,
-      "description": "Seek offset in seconds for the lockscreen frame extract (the fallback path). Must be >= 0."
+      "default": 0.0,
+      "description": "Seek offset in seconds for the still frame extract. 0 = the FIRST frame. Must be >= 0. A pre-v5 file with the old default of exactly 1.0 migrates to 0.0. Engine-readable (LOW-16)."
     },
     "lockscreen_offer_shown": {
       "type": "boolean",

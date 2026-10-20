@@ -31,7 +31,8 @@
 #include "autostart.hpp"
 #include "cache_dir_policy.hpp"
 #include "config_schema.hpp"
-#include "lockscreen_edition.hpp"
+#include "legacy_lockscreen_policy.hpp"
+#include "still.hpp"
 
 namespace k6wp {
 
@@ -40,11 +41,12 @@ namespace {
 std::atomic<bool> g_close_to_tray{false};
 std::function<void(bool)> g_close_to_tray_listener;
 
-// How long the Studio waits for `K6WP.exe --elevate-lockscreen` (which
-// self-elevates through UAC and then waits for the human at the prompt). The
-// launcher's own budget for the elevated worker is 2 minutes; the Studio
-// waits a little longer so the launcher can report ITS timeout first.
-constexpr int kLockscreenElevationTimeoutMs = 150000;
+// How long the Studio waits for `K6WP.exe --elevate-lockscreen off` (the
+// legacy cleanup, which self-elevates through UAC and then waits for the
+// human at the prompt). The launcher's own budget for the elevated worker is
+// 2 minutes; the Studio waits a little longer so the launcher can report ITS
+// timeout first.
+constexpr int kLegacyCleanupTimeoutMs = 150000;
 }  // namespace
 
 void SetCloseToTrayEnabled(bool on) {
@@ -289,85 +291,132 @@ void SettingsBridge::setLockscreenOfferShown(bool shown) {
 }
 
 QString SettingsBridge::lockscreenStatus() const {
-  const LockscreenPolicyStatus status = ReadLockscreenPolicyStatus();
-  const QString edition = QString::fromStdString(status.edition_id);
-  if (status.policy_foreign) {
-    // The launcher refuses to overwrite a policy that points elsewhere
-    // (the user's own wallpaper): say so instead of pretending it works.
-    return tr("Gambar layar kunci diarahkan ke wallpaper lain, jadi K6WP tidak "
-              "mengubahnya.");
-  }
-  if (!status.policy_registered) {
-    if (!studio_.lockscreen_sync) {
-      return tr("Nonaktif.");
+  const LegacyLockscreenState legacy = ReadLegacyLockscreenState();
+  if (!studio_.lockscreen_sync) {
+    if (legacy.cleanup_needed()) {
+      return tr("Nonaktif. Sisa kebijakan layar kunci versi lama masih ada di "
+                "Windows; bersihkan agar Windows memakai gambar biasa.");
     }
-    return tr("Belum terdaftar di Windows - aktifkan lagi untuk meminta izin "
-              "administrator.");
+    return tr("Nonaktif.");
   }
-  switch (status.support) {
-    case LockscreenEditionSupport::kSupported:
-      return tr("Aktif - gambar video ikut ke layar kunci.");
-    case LockscreenEditionSupport::kUncertain:
-      return tr("Policy terdaftar, tapi edisi Windows %1 mungkin "
-                "mengabaikannya. Coba kunci layar (Win+L) untuk memastikan.")
-          .arg(edition);
-    case LockscreenEditionSupport::kUnsupported:
-      return tr("Policy terdaftar, tapi edisi Windows %1 tidak mendukung "
-                "gambar layar kunci.")
-          .arg(edition);
-    case LockscreenEditionSupport::kUnknown:
-      break;
+  StillStatus status;
+  if (!ReadStillStatus(status)) {
+    return tr("Menunggu frame pertama dari video aktif.");
   }
-  return tr("Policy terdaftar. Coba kunci layar (Win+L) untuk memastikan.");
+  if (!status.ok) {
+    return tr("Gambar layar kunci belum bisa dipasang: %1")
+        .arg(QString::fromStdString(status.error));
+  }
+  const QString hint = QString::fromStdString(status.lockscreen_mode_hint);
+  if (hint == QLatin1String("spotlight") ||
+      hint == QLatin1String("slideshow")) {
+    return tr("Gambar sudah dipasang, tetapi Windows masih memakai mode %1 "
+              "yang dapat menimpanya. Matikan mode itu di Pengaturan Windows.")
+        .arg(hint);
+  }
+  if (!status.lockscreen_ok) {
+    return tr("Belum diterapkan pada video aktif.");
+  }
+  if (legacy.cleanup_needed()) {
+    return tr("Aktif. Sisa kebijakan versi lama masih ada; bersihkan agar tidak "
+              "saling menimpa.");
+  }
+  return tr("Aktif - frame pertama video menjadi gambar layar kunci.");
 }
 
-void SettingsBridge::setLockscreenSync(bool on) {
-  // Bug A: the toggle must be HONEST. Turning it on only writes
-  // studio_settings.json; the lock screen actually shows the frame because
-  // Windows is pointed at %PROGRAMDATA%\K6WP\lockscreen.jpg through an HKLM
-  // policy, and only the launcher can write that (it needs administrator
-  // rights). So the toggle now runs `K6WP.exe --elevate-lockscreen on|off`
-  // and only stays ON when the policy really got registered.
-  //
-  // There must never be a state "ON in the settings but no policy": the
-  // engine would keep refreshing a jpg that Windows never shows.
-  const LockscreenElevationResult result =
-      RunLockscreenElevation(on, kLockscreenElevationTimeoutMs);
-  if (!result.ok()) {
-    // The policy state did not change: the toggle keeps the value it had.
-    const QString reason = LockscreenElevationErrorText(result);
-    SetLastError(reason);
-    AppendLog(on ? QStringLiteral("Layar kunci tidak diaktifkan: %1").arg(reason)
-                 : QStringLiteral("Layar kunci tidak dinonaktifkan: %1")
-                       .arg(reason));
-    // Re-emit so the QML checkbox snaps back to the persisted truth.
-    emit changed();
-    return;
+QString SettingsBridge::wallpaperStatus() const {
+  if (!studio_.wallpaper_sync) {
+    return tr("Nonaktif.");
   }
-  studio_.lockscreen_sync = on;
+  StillStatus status;
+  if (!ReadStillStatus(status)) {
+    return tr("Menunggu frame pertama dari video aktif.");
+  }
+  if (!status.ok) {
+    return tr("Wallpaper belum bisa diganti: %1")
+        .arg(QString::fromStdString(status.error));
+  }
+  if (!status.wallpaper_ok) {
+    return tr("Belum diterapkan pada video aktif.");
+  }
+  return tr("Aktif - frame pertama video menjadi wallpaper Windows.");
+}
+
+bool SettingsBridge::legacyLockscreenCleanupNeeded() const {
+  return ReadLegacyLockscreenState().cleanup_needed();
+}
+
+void SettingsBridge::setWallpaperSync(bool on) {
+  if (studio_.wallpaper_sync == on) return;
+  studio_.wallpaper_sync = on;
   PersistStudioSettingsNow();
-  AppendLog(on ? QStringLiteral("Layar kunci aktif (gambar statis)")
-               : QStringLiteral("Layar kunci nonaktif"));
+  if (on) {
+    // Per-user: nothing to elevate. The helper applies the frame of the
+    // current video; without a video the engine applies it on the next
+    // boot/manual trigger.
+    const std::wstring video = config_.video_path;
+    if (!video.empty() && !RequestStillApply(std::filesystem::path(video))) {
+      // The helper could not be started: do not claim success.
+      studio_.wallpaper_sync = false;
+      PersistStudioSettingsNow();
+      SetLastError(tr("Pembantu K6WP tidak bisa dijalankan, jadi wallpaper "
+                      "belum diganti."));
+      AppendLog(QStringLiteral("Wallpaper tidak diaktifkan: pembantu gagal "
+                               "dijalankan"));
+      emit changed();
+      return;
+    }
+    AppendLog(QStringLiteral("Wallpaper dari video aktif"));
+  } else {
+    RequestStillRestore(/*wallpaper=*/true, /*lockscreen=*/false);
+    AppendLog(QStringLiteral("Wallpaper kembali ke gambar asli"));
+  }
   emit changed();
 }
 
-QString SettingsBridge::LockscreenElevationErrorText(
-    const LockscreenElevationResult& result) const {
-  switch (ClassifyLockscreenElevation(result)) {
-    case LockscreenElevationFailure::kDeclined:
-      return tr("Jendela administrator dibatalkan, jadi gambar layar kunci tidak "
-                "diaktifkan.");
-    case LockscreenElevationFailure::kTimedOut:
-      return tr("Bantuan administrator tidak selesai tepat waktu, jadi gambar "
-                "layar kunci mungkin belum aktif.");
-    case LockscreenElevationFailure::kSpawnFailed:
-      return tr("Tidak bisa menjalankan K6WP.exe untuk mengatur gambar layar "
-                "kunci.");
-    case LockscreenElevationFailure::kUnknown:
-    case LockscreenElevationFailure::kNone:
+void SettingsBridge::setLockscreenSync(bool on) {
+  if (studio_.lockscreen_sync == on) return;
+  studio_.lockscreen_sync = on;
+  PersistStudioSettingsNow();
+  if (on) {
+    const std::wstring video = config_.video_path;
+    if (!video.empty() && !RequestStillApply(std::filesystem::path(video))) {
+      studio_.lockscreen_sync = false;
+      PersistStudioSettingsNow();
+      SetLastError(tr("Pembantu K6WP tidak bisa dijalankan, jadi gambar layar "
+                      "kunci belum diganti."));
+      AppendLog(QStringLiteral("Layar kunci tidak diaktifkan: pembantu gagal "
+                               "dijalankan"));
+      emit changed();
+      return;
+    }
+    AppendLog(QStringLiteral("Layar kunci dari video aktif"));
+  } else {
+    RequestStillRestore(/*wallpaper=*/false, /*lockscreen=*/true);
+    AppendLog(QStringLiteral("Layar kunci kembali ke gambar asli"));
+  }
+  emit changed();
+}
+
+QString SettingsBridge::cleanupLegacyLockscreen() {
+  const LegacyCleanupOutcome outcome = RunLegacyCleanup(kLegacyCleanupTimeoutMs);
+  switch (outcome) {
+    case LegacyCleanupOutcome::kCleaned:
+      AppendLog(QStringLiteral("Sisa kebijakan layar kunci lama dibersihkan"));
+      emit changed();
+      return tr("Sisa kebijakan layar kunci versi lama berhasil dibersihkan.");
+    case LegacyCleanupOutcome::kDeclined:
+      return tr("Jendela administrator dibatalkan, jadi sisa kebijakan lama "
+                "belum dibersihkan.");
+    case LegacyCleanupOutcome::kTimedOut:
+      return tr("Pembersihan belum selesai tepat waktu. Coba lagi.");
+    case LegacyCleanupOutcome::kSpawnFailed:
+      return tr("Tidak bisa menjalankan K6WP.exe untuk membersihkan sisa "
+                "kebijakan lama.");
+    case LegacyCleanupOutcome::kWorkerFailed:
       break;
   }
-  return tr("Gambar layar kunci tidak dapat diubah.");
+  return tr("Sisa kebijakan lama belum bisa dibersihkan.");
 }
 
 void SettingsBridge::setLockscreenOffsetSec(double seconds) {

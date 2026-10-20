@@ -28,7 +28,7 @@
 #include <QtQml/qqmlregistration.h>
 
 #include "config_schema.hpp"
-#include "lockscreen_bridge.hpp"
+#include "legacy_lockscreen_policy.hpp"
 #include "studio_settings.hpp"
 #include "ui_language.hpp"
 
@@ -105,16 +105,19 @@ class SettingsBridge : public QObject {
   Q_PROPERTY(QString defaultResolutionMode READ defaultResolutionMode WRITE setDefaultResolutionMode NOTIFY changed)
   Q_PROPERTY(bool startWithWindows READ startWithWindows WRITE setStartWithWindows NOTIFY changed)
   Q_PROPERTY(QString cacheDir READ cacheDir WRITE setCacheDir NOTIFY changed)
+  Q_PROPERTY(bool wallpaperSync READ wallpaperSync WRITE setWallpaperSync NOTIFY changed)
   Q_PROPERTY(bool lockscreenSync READ lockscreenSync WRITE setLockscreenSync NOTIFY changed)
-  // True once the one-time onboarding offer for the lock screen was shown.
+  // True once the one-time onboarding offer for the still toggles was shown.
   // Studio-private (the Engine never reads it - LOW-16).
   Q_PROPERTY(bool lockscreenOfferShown READ lockscreenOfferShown WRITE setLockscreenOfferShown NOTIFY changed)
-  // The HONEST lock-screen status: "Aktif", "Policy terdaftar tapi edisi
-  // Windows ini mungkin mengabaikannya", "Tidak didukung di edisi ini", ...
-  // The Windows edition decides whether the LockScreenImage policy is
-  // officially supported (Enterprise/Education: yes, Pro: not officially,
-  // Home: no) - the Studio must not promise more than Windows delivers.
+  // The HONEST status of the per-user still, read from
+  // %LOCALAPPDATA%\K6WP\still_status.json (the helper is the only writer).
   Q_PROPERTY(QString lockscreenStatus READ lockscreenStatus NOTIFY changed)
+  Q_PROPERTY(QString wallpaperStatus READ wallpaperStatus NOTIFY changed)
+  // True when the old HKLM LockScreenImage policy / %PROGRAMDATA% folder is
+  // still on this machine. The "Bersihkan" button calls the only elevated
+  // path left (one UAC prompt).
+  Q_PROPERTY(bool legacyLockscreenCleanupNeeded READ legacyLockscreenCleanupNeeded NOTIFY changed)
   Q_PROPERTY(double lockscreenOffsetSec READ lockscreenOffsetSec WRITE setLockscreenOffsetSec NOTIFY changed)
   Q_PROPERTY(bool compressAdvancedVisible READ compressAdvancedVisible WRITE setCompressAdvancedVisible NOTIFY changed)
   Q_PROPERTY(bool checkUpdates READ checkUpdates WRITE setCheckUpdates NOTIFY changed)
@@ -143,10 +146,12 @@ class SettingsBridge : public QObject {
   QString defaultResolutionMode() const { return QString::fromStdString(studio_.default_resolution_mode); }
   bool startWithWindows() const { return autostart_on_; }
   QString cacheDir() const { return QString::fromStdWString(studio_.cache_dir); }
+  bool wallpaperSync() const { return studio_.wallpaper_sync; }
   bool lockscreenSync() const { return studio_.lockscreen_sync; }
   bool lockscreenOfferShown() const { return studio_.lockscreen_offer_shown; }
-  // The honest, human-readable lock-screen status (see the property doc).
   QString lockscreenStatus() const;
+  QString wallpaperStatus() const;
+  bool legacyLockscreenCleanupNeeded() const;
   double lockscreenOffsetSec() const { return studio_.lockscreen_offset_sec; }
   bool compressAdvancedVisible() const { return studio_.compress_advanced_visible; }
   bool checkUpdates() const { return studio_.check_updates; }
@@ -225,14 +230,13 @@ class SettingsBridge : public QObject {
   Q_INVOKABLE void setDefaultResolutionMode(const QString& mode);
   Q_INVOKABLE void setStartWithWindows(bool on);
   Q_INVOKABLE void setCacheDir(const QString& dir);
+  Q_INVOKABLE void setWallpaperSync(bool on);
   Q_INVOKABLE void setLockscreenSync(bool on);
+  // Runs the one-UAC cleanup of the legacy HKLM policy. Returns an honest
+  // result string for the UI; never throws.
+  Q_INVOKABLE QString cleanupLegacyLockscreen();
   // Records that the one-time onboarding offer was shown (Studio-private).
   Q_INVOKABLE void setLockscreenOfferShown(bool shown);
-  // Maps a failed lock-screen elevation onto an HONEST user-facing message
-  // (the Studio copy; the classification itself is shared and unit-tested).
-  // Never leaks the word "engine" (glossary §5).
-  QString LockscreenElevationErrorText(
-      const LockscreenElevationResult& result) const;
   Q_INVOKABLE void setLockscreenOffsetSec(double seconds);
   Q_INVOKABLE void setCompressAdvancedVisible(bool on);
   Q_INVOKABLE void setCheckUpdates(bool on);

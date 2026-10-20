@@ -180,8 +180,10 @@ bool BuildFfmpegCmdline(const FfmpegJobOptions& opts, std::wstring& cmdline,
   std::filesystem::path actual_out = opts.out;
   std::filesystem::path tmp_out;
   if (opts.lockframe) {
+    // The temp name must keep the image extension (".jpg"): ffmpeg's image2
+    // muxer infers the format from it, and "<out>.jpg.tmp" fails with EINVAL.
     tmp_out = opts.out;
-    tmp_out += L".tmp";
+    tmp_out.replace_extension(L".tmp" + opts.out.extension().wstring());
     actual_out = tmp_out;
   }
 
@@ -269,7 +271,7 @@ int RunFfmpegJob(const FfmpegJobOptions& opts, std::string& error) {
   std::filesystem::path tmp_out;
   if (opts.lockframe) {
     tmp_out = opts.out;
-    tmp_out += L".tmp";
+    tmp_out.replace_extension(L".tmp" + opts.out.extension().wstring());
   }
 
   SECURITY_ATTRIBUTES sa{};

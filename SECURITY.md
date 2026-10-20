@@ -24,26 +24,24 @@ personal paths). Expect an initial acknowledgement within 72 hours.
   physical-access attacks, bundled third-party CVEs in ffmpeg/libmpv/Qt
   (report those upstream, but feel free to flag them here too).
 
-## K6WP folder ACL risk (LOW-17, documented risk, behavior unchanged)
+## K6WP folder ACL risk (LOW-17, resolved by removal)
 
-`GrantK6wpFolderWriteAccess` (`launcher/main.cpp`, used by the
-`--elevate-lockscreen on` path) grants `GENERIC_READ | GENERIC_WRITE |
-DELETE` to the current user plus `GENERIC_READ | GENERIC_WRITE` to the
-local `Users` group on `%PROGRAMDATA%\K6WP`, inherited by contained
-objects. This is deliberate: the unelevated `compressor --lockframe`
-refresh rewrites `lockscreen.jpg` in that folder on every cycle, so a
-tight ACL would break the sync it was set up to enable.
+The old elevated mechanism granted `GENERIC_READ | GENERIC_WRITE | DELETE`
+to the current user plus `GENERIC_READ | GENERIC_WRITE` to the local
+`Users` group on `%PROGRAMDATA%\K6WP`
+(`GrantK6wpFolderWriteAccess`), because the unelevated `compressor
+--lockframe` refresh rewrote `lockscreen.jpg` there on every cycle — a file
+the machine-wide `HKLM\...\Personalization LockScreenImage` policy pointed
+at. That residual risk (one local user defacing another user's lock screen)
+no longer exists: the feature is per-user now.
 
-Known residual risk: any local interactive user can overwrite
-`lockscreen.jpg`, which the `HKLM\...\Personalization LockScreenImage`
-policy points at, so one user can swap another user's lockscreen image
-(defacement, no privilege gain). The `DELETE` right additionally lets a
-user remove the folder contents, including the policy backup JSON (worst
-case: uninstall falls back to deleting the policy instead of restoring
-the previous value). The folder never holds executables or scripts that
-an elevated component runs (image + JSON only), so this cannot be turned
-into code execution. Decision: document only. Do NOT tighten the ACL
-without also moving the lockframe refresh into an elevated writer.
+The still pipeline writes only under `%LOCALAPPDATA%\K6WP\stills` (which
+already inherits the per-user profile ACL), and the lock-screen image is
+applied through the per-user WinRT `LockScreen::SetImageFileAsync` API.
+There is no cross-user write path and no HKLM write in the normal flow.
+`GrantK6wpFolderWriteAccess` and the `--elevate-lockscreen on` path were
+deleted; `--elevate-lockscreen off` remains as a cleanup-only shim that
+removes a leftover legacy policy/ACL/`lockscreen.jpg` (see LOW-21 below).
 
 ## Update policy (LOW-19, user-initiated)
 
@@ -63,21 +61,31 @@ release page and the user downloads the new build by hand. Any future
 change that fetches binaries or runs installers must revisit this
 section first.
 
-## Lockscreen Policy Restore on Uninstall (LOW-21)
+## Legacy lockscreen policy cleanup (LOW-21)
 
-`--elevate-lockscreen on` backs the previous `HKLM\...\Personalization
-LockScreenImage` value up to
-`%PROGRAMDATA%\K6WP\lockscreen_policy_backup.json`, and
-`--elevate-lockscreen off` restores that value (or deletes the policy
-when there was none) before removing the backup file. The uninstall
-paths now invoke that `off` step so a stale policy never keeps pointing
-at a folder the uninstall just removed:
+K6WP no longer WRITES the machine-wide
+`HKLM\SOFTWARE\Policies\Microsoft\Windows\Personalization\LockScreenImage`
+policy. Builds before the per-user still change could have left that value
+pointing at `%PROGRAMDATA%\K6WP\lockscreen.jpg`, plus the permissive
+`%PROGRAMDATA%\K6WP` ACL and a `lockscreen_policy_backup.json`. The
+cleanup-only entry point removes exactly that residue:
+
+`K6WP.exe --elevate-lockscreen off` (self-elevates through a `runas`
+relaunch) deletes the policy value ONLY when it points at our legacy path,
+deletes `%PROGRAMDATA%\K6WP` when it contains nothing but our legacy files,
+and removes the backup file. A policy pointing elsewhere is left untouched.
+The Studio detects the residue read-only (no UAC) and offers a single
+"Bersihkan" button; declining the UAC prompt leaves everything as-is. The
+`on` argument is rejected (`kExitBadFlag`); there is no way to re-create
+the policy.
+
+The uninstall paths invoke the same `off` step so a stale policy never
+keeps pointing at a folder the uninstall just removed:
 
 - `packaging/uninstall.bat` (portable) and `tools/uninstall.bat` (dev):
   echo what is happening, then run the sibling `K6WP.exe
-  --elevate-lockscreen off`, which self-elevates through a `runas`
-  relaunch. A UAC prompt is expected; declining keeps the current policy
-  and the uninstall continues.
+  --elevate-lockscreen off`. A UAC prompt is expected; declining keeps
+  the current policy and the uninstall continues.
 - `packaging/installer.nsi` Section `Uninstall`: `ExecWait` on
   `$INSTDIR\K6WP.exe --elevate-lockscreen off` before the app files are
   deleted (the exe must still exist), with a `DetailPrint` line so the
