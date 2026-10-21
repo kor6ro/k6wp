@@ -1,4 +1,4 @@
-﻿# Refactor ledger
+# Refactor ledger
 
 One row per task. Every verdict follows §9 of the refactor brief:
 `VERDICT: ACCEPT | REVERT | DEFER — criterion — before/after — evidence label`.
