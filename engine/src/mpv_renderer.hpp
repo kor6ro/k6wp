@@ -132,6 +132,24 @@ class MpvRenderer {
   // Returns false when there is no instance or mpv refuses the command.
   bool SeekTo(double seconds);
 
+  // Reads an integer property from the live mpv instance. Used by the
+  // hidden QA counter dump to measure frame drops / mistimed frames, so the
+  // pacing change can be judged on QUALITY and not only on CPU/GPU numbers.
+  // Returns false when the property is unavailable (an older mpv) or the
+  // value is not an integer.
+  bool GetInt64Property(const std::string& name, long long& out) const;
+
+  // Reads a property as TEXT, whatever its type (int, double, flag, string).
+  // mpv converts a numeric property to a string, so one reader covers every
+  // counter - including the double-valued ones (playback-time) that an
+  // int-only reader would report as unavailable.
+  bool GetPropertyValue(const std::string& name, std::string& out) const;
+
+  // Writes the mpv property list (the names of every readable property) to
+  // `path`. Used once by the QA tooling to discover which counters this
+  // mpv build exposes.
+  bool DumpPropertyList(const std::wstring& path) const;
+
   // Registers the engine hidden window for PROPERTY_CHANGE notifications.
   // Called once by EngineApp during Init (Todo 7); until set, the event
   // thread handles property changes inline (pre-P2.4 behavior preserved).

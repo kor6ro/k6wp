@@ -35,6 +35,7 @@ Baseline = Phase 0 median (`docs/bench/phase0.json`).
 
 | # | Metric | State | Baseline | Noise band | **Gate** | Meaning |
 |---|---|---|---|---|---|---|
+| 0 | **max engine thread CPU** | playback | 10.2 % of one core (vsync) | — | **≤ 25 % of one core** | **C2 gate — the process aggregate hides a spinning thread. No engine thread may exceed 25 % of one core during playback.** The measured vsync build peaks at 13.4 %; the desync build hit 58 %. 25 % leaves ~2× headroom over the good build while still catching a busy-wait |
 | 1 | private bytes | idle | 23.84 MB | 2.3 % | **≤ 24.7 MB** (+3.5 %) | no regression at rest |
 | 2 | private bytes | 1080p | 162.48 MB | 4.0 % | **≤ 168.8 MB** (+4 %) | no regression while playing |
 | 3 | private bytes | 4K/16ref | 387.89 MB | 0.2 % | **≤ 401.4 MB** (+3.5 %) | no regression on the heavy case |
@@ -56,6 +57,29 @@ Baseline = Phase 0 median (`docs/bench/phase0.json`).
 | 19 | Engine startup | — | (see `bench_startup`) | — | **< 2000 ms** | existing budget, unchanged |
 | 20 | Visual parity | — | luma 128.48 / stddev 66.69 / motion 84.87 | — | **luma ±12, stddev ±12, motion > 0** | the picture must not change |
 | 21 | Resume → visible motion | — | 1114–1657 ms | — | **≤ 2500 ms** | the wallpaper must come back promptly |
+| 22 | **Playback rate** | playback, 60 s | 0.98 (vsync) | — | **0.97 – 1.03** | **the wallpaper must run at real time.** The measured desync baseline was **0.70–0.75**: the wallpaper ran a quarter slow, a visible quality defect. A rate below 0.97 fails |
+| 23 | **VO delayed frames** | playback, 60 s | 0 (vsync) | — | **≤ 5** | frames must not be delivered late (the desync build showed 184–197) |
+| 24 | **VO frame drops** | playback, 60 s | 0 | — | **0** | no dropped frames |
+| 25 | **Decoder frame drops** | playback, 60 s | 0 | — | **0** | no dropped frames |
+
+### C4 — the honest RAM metric
+
+**Private bytes + GPU shared memory.** The working set is NOT evidence: the
+engine trims its own working set two seconds after start
+(`engine/src/working_set_trim.cpp:50`), so the working set measures the trim,
+not the memory in use. It is still recorded, but it never decides a verdict.
+
+### C5 — the GPU gate is paired
+
+The GPU numbers drift up to **1.5×** between sessions on this host (the same
+binary measured 22.6 % and 35.6 % GPU on two different days). Therefore:
+
+- A GPU gate is **always** an A/B comparison of the two builds measured
+  **alternately (ABAB) inside one session** — never a candidate number
+  compared against a stored baseline.
+- `tools/bench_ab.ps1` and `tools/bench_pacing.ps1` both alternate the arms.
+- `tools/build_ab.ps1` verifies the two binaries really differ (SHA-256)
+  before any comparison runs — a "comparison" of a build with itself is void.
 
 ## Where the budget says "improve", not just "do not regress"
 

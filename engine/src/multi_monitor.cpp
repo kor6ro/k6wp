@@ -666,6 +666,45 @@ void MultiMonitor::SeekAllTo(double seconds) {
   }
 }
 
+bool MultiMonitor::ReadLiveCounter(const std::string& name,
+                                   long long& out) const {
+  k6wp::lock_order::RecursiveSlotsGuard guard(slots_mutex_);
+  for (const auto& kv : slots_) {
+    if (kv.second.renderer) {
+      long long value = 0;
+      if (kv.second.renderer->GetInt64Property(name, value)) {
+        out = value;
+        return true;
+      }
+      // The property is unavailable on this mpv build: keep looking, but do
+      // NOT report a value from a different slot.
+      return false;
+    }
+  }
+  return false;
+}
+
+bool MultiMonitor::ReadLiveCounterText(const std::string& name,
+                                       std::string& out) const {
+  k6wp::lock_order::RecursiveSlotsGuard guard(slots_mutex_);
+  for (const auto& kv : slots_) {
+    if (kv.second.renderer) {
+      return kv.second.renderer->GetPropertyValue(name, out);
+    }
+  }
+  return false;
+}
+
+bool MultiMonitor::DumpLivePropertyList(const std::wstring& path) const {
+  k6wp::lock_order::RecursiveSlotsGuard guard(slots_mutex_);
+  for (const auto& kv : slots_) {
+    if (kv.second.renderer) {
+      return kv.second.renderer->DumpPropertyList(path);
+    }
+  }
+  return false;
+}
+
 bool MultiMonitor::HasAssignment(const std::string& device) const {
   k6wp::lock_order::RecursiveSlotsGuard guard(slots_mutex_);
   const std::wstring key = WidenDeviceKey(device);

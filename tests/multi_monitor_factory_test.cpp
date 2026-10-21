@@ -445,7 +445,9 @@ bool MpvRenderer::ScreenshotToFile(const std::string& path) {
 }
 
 bool MpvRenderer::SeekTo(double /*seconds*/) { return false; }
-
+bool MpvRenderer::GetInt64Property(const std::string& /*name*/, long long& /*out*/) const { return false; }
+bool MpvRenderer::GetPropertyValue(const std::string& /*name*/, std::string& /*out*/) const { return false; }
+bool MpvRenderer::DumpPropertyList(const std::wstring& /*path*/) const { return false; }
 void MpvRenderer::SetAdapterPin(const std::string& substr) {
   g_ren[this].adapter_pin = substr;
   g_events.push_back("setpin");

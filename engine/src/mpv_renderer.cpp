@@ -344,6 +344,46 @@ bool MpvRenderer::SeekTo(double seconds) {
   return mpv_command_string(mpv_, cmd) >= 0;
 }
 
+bool MpvRenderer::GetInt64Property(const std::string& name,
+                                   long long& out) const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (!mpv_ || !initialized_) return false;
+  int64_t value = 0;
+  if (mpv_get_property(mpv_, name.c_str(), MPV_FORMAT_INT64, &value) < 0) {
+    return false;
+  }
+  out = static_cast<long long>(value);
+  return true;
+}
+
+bool MpvRenderer::GetPropertyValue(const std::string& name,
+                                   std::string& out) const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (!mpv_ || !initialized_) return false;
+  char* raw = mpv_get_property_string(mpv_, name.c_str());
+  if (!raw) return false;
+  out = raw;
+  mpv_free(raw);
+  return true;
+}
+
+bool MpvRenderer::DumpPropertyList(const std::wstring& path) const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (!mpv_ || !initialized_) return false;
+  char* raw = mpv_get_property_string(mpv_, "property-list");
+  if (!raw) return false;
+  std::FILE* f = _wfopen(path.c_str(), L"wb");
+  if (!f) {
+    mpv_free(raw);
+    return false;
+  }
+  std::fputs(raw, f);
+  std::fputc('\n', f);
+  std::fclose(f);
+  mpv_free(raw);
+  return true;
+}
+
 void MpvRenderer::SetHWND(void* hwnd) {
   std::lock_guard<std::mutex> lock(mutex_);
   if (!mpv_) {

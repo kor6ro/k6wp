@@ -38,6 +38,20 @@ struct CliOptions {
   // Seek position (seconds) the capture seeks to before the first frame, so
   // two builds are compared on the SAME source frame. Negative = no seek.
   double capture_frames_seek = -1.0;
+  // Hidden QA: write the mpv property list (every readable property name)
+  // to this path, so the tooling can discover which counters this mpv build
+  // exposes.
+  std::wstring dump_mpv_properties_path;
+  // Hidden QA: sample the live mpv frame-quality counters into a CSV, so a
+  // pacing change can be judged on DROPS / MISTIMED FRAMES and not only on
+  // CPU/GPU numbers. The file is written when the last sample is taken.
+  std::wstring dump_mpv_counters_path;
+  int dump_mpv_counters_count = 0;  // how many samples (0 = the flag is off)
+  int dump_mpv_counters_interval_ms = 0;  // delay between samples
+  // Hidden QA: force the playback frame-rate cap at start-up. The engine
+  // otherwise applies the cap only on the DC power path, so a pacing
+  // experiment needs a deterministic cap.
+  int fps_cap_override = 0;  // 0 = no override
 };
 
 const char* WallpaperModeToString(WallpaperMode mode);

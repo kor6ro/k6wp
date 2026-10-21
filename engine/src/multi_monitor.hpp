@@ -175,6 +175,18 @@ class MultiMonitor {
   // frame. No-op with no live slots.
   void SeekAllTo(double seconds);
 
+  // Reads an integer mpv property from the FIRST live slot (the counters
+  // are per-mpv-instance; with one monitor there is one slot). Used by the
+  // hidden QA counter dump to measure frame drops / mistimed frames.
+  // Returns false with no live slot or when the property is unavailable.
+  bool ReadLiveCounter(const std::string& name, long long& out) const;
+
+  // Reads a property as TEXT from the FIRST live slot, whatever its type.
+  bool ReadLiveCounterText(const std::string& name, std::string& out) const;
+
+  // Writes the mpv property list of the first live slot to `path`.
+  bool DumpLivePropertyList(const std::wstring& path) const;
+
   // Row 15: true when a live slot's GDI device name matches `device`
   // (UTF-8, e.g. \\.\DISPLAY1). The set_display_video resolve predicate:
   // an unknown/absent key returns false and the caller rejects the command

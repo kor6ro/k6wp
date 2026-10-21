@@ -480,6 +480,26 @@ bool EngineApp::Init(int argc, char** argv) {
                    capture_frames_prefix_.c_str(), capture_frames_count_,
                    capture_frames_interval_ms_, capture_frames_seek_);
     }
+    // Hidden QA flags: the live mpv counter dump and the frame-rate cap.
+    if (!options_.dump_mpv_counters_path.empty()) {
+      dump_mpv_counters_path_ = options_.dump_mpv_counters_path;
+      dump_mpv_counters_count_ = options_.dump_mpv_counters_count;
+      dump_mpv_counters_interval_ms_ = options_.dump_mpv_counters_interval_ms;
+      dump_mpv_counters_done_ = 0;
+      dump_mpv_counters_next_ms_ = 3000;  // let the first frames settle
+      LogImportant("test: dump-mpv-counters armed path='%s' count=%d interval=%d",
+                   dump_mpv_counters_path_.c_str(), dump_mpv_counters_count_,
+                   dump_mpv_counters_interval_ms_);
+    }
+    if (options_.fps_cap_override > 0) {
+      LogImportant("test: fps-cap override %d applied to the renderers",
+                   options_.fps_cap_override);
+    }
+    if (!options_.dump_mpv_properties_path.empty()) {
+      // The property list is written once the live surface exists, so the
+      // list comes from the mpv instance that actually renders.
+      dump_mpv_properties_path_ = options_.dump_mpv_properties_path;
+    }
   }
   const bool boot_autoplay =
       !boot_video.empty() &&
@@ -581,6 +601,25 @@ void EngineApp::InitWallpaperSurface(const std::string& video_utf8) {
   Log("engine: wallpaper surface init (slots=%llu live=%s)",
       static_cast<unsigned long long>(multi_monitor_.slot_count()),
       wallpaper_surface_live_.load(std::memory_order_acquire) ? "yes" : "no");
+  // Hidden QA: write the mpv property list of the live instance, so the
+  // tooling can discover which counters this mpv build exposes.
+  if (!dump_mpv_properties_path_.empty()) {
+    const bool ok = wallpaper_surface_live_.load(std::memory_order_acquire)
+                        ? multi_monitor_.DumpLivePropertyList(
+                              dump_mpv_properties_path_)
+                        : false;
+    LogImportant("test: dump-mpv-properties ok=%d path='%ls'", ok ? 1 : 0,
+                 dump_mpv_properties_path_.c_str());
+  }
+  // Hidden QA: a forced frame-rate cap, so a pacing experiment is measured
+  // at a KNOWN cap (the engine otherwise caps only on the DC power path).
+  if (options_.fps_cap_override > 0) {
+    if (wallpaper_surface_live_.load(std::memory_order_acquire)) {
+      multi_monitor_.ApplyFpsCapAll(options_.fps_cap_override);
+    } else if (renderer_) {
+      renderer_->SetFpsCap(options_.fps_cap_override);
+    }
+  }
   ApplyFitMode(config_watcher_.GetConfig().fit_mode);
   if (!video_utf8.empty()) {
     if (!multi_monitor_.LoadLoopAll(video_utf8)) {
@@ -669,6 +708,14 @@ DWORD EngineApp::ComputeWaitTimeoutMs() const {
   // paused - so without this the capture would never run in a paused
   // engine. Only the hidden QA flag can turn this on.
   if (CaptureFramesPending()) return 500;
+  // Phase 1.2 QA: the counter dump needs the same bounded wait, so the
+  // samples land on a fixed cadence instead of the 1500 ms loop tick.
+  if (DumpMpvCountersPending()) {
+    const int interval = dump_mpv_counters_interval_ms_ > 0
+                              ? dump_mpv_counters_interval_ms_
+                              : 1000;
+    return static_cast<DWORD>(interval < 500 ? interval : 500);
+  }
   if (SlotsPaused()) return INFINITE;
   return 1500;
 }
@@ -718,6 +765,81 @@ void EngineApp::CaptureFramesStep(long long elapsed_ms) {
                capture_frames_done_, want, accepted ? 1 : 0, target.c_str());
   capture_frames_next_ms_ = elapsed_ms +
       (capture_frames_interval_ms_ > 0 ? capture_frames_interval_ms_ : 1000);
+}
+
+// The live mpv counters sampled by the hidden QA dump. They are the
+// QUALITY side of a pacing change: a cheaper CPU must not come from
+// dropping or mistiming frames.
+//
+// The names are the ones THIS mpv build actually exposes (discovered with
+// --dump-mpv-properties): vo-drop-frame-count does not exist in mpv
+// 0.41, the VO drop counter is "frame-drop-count". estimated-frame-number
+// is the frame index the VO consumed, so its delta over the window is the
+// number of frames DISPLAYED - that is what proves both modes decode and
+// present the same number of frames.
+const char* const EngineApp::kMpvCounterNames[] = {
+    "frame-drop-count",         // frames the VO dropped
+    "decoder-frame-drop-count", // frames the decoder dropped
+    "mistimed-frame-count",    // frames presented at the wrong time
+    "vo-delayed-frame-count",  // frames presented late
+    "estimated-frame-number",  // frame index consumed (delta = frames shown)
+    "estimated-frame-count",   // frames in the file
+    "estimated-vf-fps",        // the video's frame rate
+    "playback-time",           // media position (seconds)
+    "vf",                      // the active filter chain (the fps cap)
+};
+
+// One sample of the live mpv counters. The CSV is written when the last
+// sample is taken (so a killed engine still leaves the samples it took).
+void EngineApp::DumpMpvCountersStep(long long elapsed_ms) {
+  if (dump_mpv_counters_path_.empty()) return;
+  if (dump_mpv_counters_done_ >= dump_mpv_counters_count_) return;
+  // The interval applies to EVERY sample, not just the first one.
+  if (elapsed_ms < dump_mpv_counters_next_ms_) return;
+  if (dump_mpv_counters_done_ == 0) {
+    // The header is written with the first sample. _wfopen: the path may
+    // contain non-ASCII characters (the temp dir can).
+    std::FILE* f = _wfopen(dump_mpv_counters_path_.c_str(), L"wb");
+    if (!f) {
+      LogImportant("test: dump-mpv-counters could not write '%ls'",
+                   dump_mpv_counters_path_.c_str());
+      dump_mpv_counters_count_ = 0;
+      return;
+    }
+    std::fputs("sample,elapsed_ms", f);
+    for (int i = 0; i < kMpvCounterCount; ++i) {
+      std::fprintf(f, ",%s", kMpvCounterNames[i]);
+    }
+    std::fputs("\n", f);
+    std::fclose(f);
+  }
+  std::FILE* f = _wfopen(dump_mpv_counters_path_.c_str(), L"ab");
+  if (!f) {
+    dump_mpv_counters_count_ = 0;
+    return;
+  }
+  std::fprintf(f, "%d,%lld", dump_mpv_counters_done_, elapsed_ms);
+  for (int i = 0; i < kMpvCounterCount; ++i) {
+    std::string text;
+    bool ok = wallpaper_surface_live_.load(std::memory_order_acquire)
+                  ? multi_monitor_.ReadLiveCounterText(kMpvCounterNames[i], text)
+                  : false;
+    if (!ok) {
+      if (std::shared_ptr<MpvRenderer> renderer = AcquireRenderer()) {
+        ok = renderer->GetPropertyValue(kMpvCounterNames[i], text);
+      }
+    }
+    std::fprintf(f, ",%s", ok ? text.c_str() : "na");
+  }
+  std::fputs("\n", f);
+  std::fclose(f);
+  dump_mpv_counters_done_++;
+  dump_mpv_counters_next_ms_ = elapsed_ms +
+      (dump_mpv_counters_interval_ms_ > 0 ? dump_mpv_counters_interval_ms_ : 1000);
+  if (dump_mpv_counters_done_ >= dump_mpv_counters_count_) {
+    LogImportant("test: dump-mpv-counters finished: %d samples -> '%ls'",
+                 dump_mpv_counters_done_, dump_mpv_counters_path_.c_str());
+  }
 }
 
 void EngineApp::ApplyFitMode(const std::string& fit_mode) {
@@ -838,6 +960,10 @@ int EngineApp::Run() {
     // the log line says "accepted" and the caller waits for the file.
     if (!capture_frames_prefix_.empty() && elapsed_ms >= capture_frames_next_ms_) {
       CaptureFramesStep(elapsed_ms);
+    }
+    // Hidden QA: the live mpv counter dump (see DumpMpvCountersStep).
+    if (DumpMpvCountersPending()) {
+      DumpMpvCountersStep(elapsed_ms);
     }
 
     const TestSimulator::Fired fired = sim_.Tick(elapsed_ms);

@@ -191,6 +191,11 @@ function Get-ProcessSeries {
     if ($null -eq $prevCpu) { $prevCpu = 0.0 }
     $prevT = [DateTime]::UtcNow
     $start = [DateTime]::UtcNow
+    # Per-thread CPU: the PROCESS aggregate hides a single spinning thread
+    # (that is exactly how a 55 %-of-a-core busy-wait stayed invisible), so
+    # the hottest thread is tracked separately (C2).
+    $threadPrev = @{}
+    foreach ($t in $p.Threads) { $threadPrev[[string]$t.Id] = $t.TotalProcessorTime.TotalMilliseconds }
     while (([DateTime]::UtcNow - $start).TotalSeconds -lt $Seconds) {
         Start-Sleep -Milliseconds $IntervalMs
         try {
@@ -205,11 +210,29 @@ function Get-ProcessSeries {
                 $pct = (($cpu - $prevCpu) / $dt / $cores) * 100.0
                 if ($pct -lt 0) { $pct = 0.0 }
             }
+            # The hottest single thread over this interval, as a percentage
+            # of ONE core (not of the machine).
+            $hotPct = 0.0
+            $hotTid = 0
+            foreach ($t in $p.Threads) {
+                $k = [string]$t.Id
+                $nowMs = $t.TotalProcessorTime.TotalMilliseconds
+                if ($threadPrev.ContainsKey($k)) {
+                    $d = $nowMs - $threadPrev[$k]
+                    if ($dt -gt 0) {
+                        $pctCore = ($d / 1000.0 / $dt) * 100.0
+                        if ($pctCore -gt $hotPct) { $hotPct = $pctCore; $hotTid = $t.Id }
+                    }
+                }
+                $threadPrev[$k] = $nowMs
+            }
             $out.Add([pscustomobject]@{
                 t_ms = [int](([DateTime]::UtcNow - $start).TotalMilliseconds)
                 private_mb = [math]::Round($p.PrivateMemorySize64 / 1MB, 2)
                 ws_mb = [math]::Round($p.WorkingSet64 / 1MB, 2)
                 cpu_pct = [math]::Round($pct, 3)
+                max_thread_cpu_pct = [math]::Round($hotPct, 2)
+                hot_tid = $hotTid
                 threads = $p.Threads.Count
                 handles = $p.HandleCount
             })

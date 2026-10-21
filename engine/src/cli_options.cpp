@@ -193,6 +193,58 @@ int ParseCli(int argc, char** argv, CliOptions& out) {
         std::fprintf(stderr, "error: --capture-frames-seek must be >= 0\n");
         return 2;
       }
+    } else if (flag == "--dump-mpv-properties") {
+      const auto value = take_value("--dump-mpv-properties");
+      if (!value) return 2;
+      out.dump_mpv_properties_path = std::filesystem::u8path(*value).wstring();
+    } else if (flag == "--dump-mpv-counters") {
+      const auto value = take_value("--dump-mpv-counters");
+      if (!value) return 2;
+      out.dump_mpv_counters_path = std::filesystem::u8path(*value).wstring();
+      out.dump_mpv_counters_count = 60;
+      out.dump_mpv_counters_interval_ms = 1000;
+    } else if (flag == "--dump-mpv-counters-count") {
+      const auto value = take_value("--dump-mpv-counters-count");
+      if (!value) return 2;
+      try {
+        out.dump_mpv_counters_count = std::stoi(*value);
+      } catch (...) {
+        std::fprintf(stderr, "error: --dump-mpv-counters-count expects an integer, got '%s'\n",
+                     value->c_str());
+        return 2;
+      }
+      if (out.dump_mpv_counters_count < 0) {
+        std::fprintf(stderr, "error: --dump-mpv-counters-count must be >= 0\n");
+        return 2;
+      }
+    } else if (flag == "--dump-mpv-counters-interval-ms") {
+      const auto value = take_value("--dump-mpv-counters-interval-ms");
+      if (!value) return 2;
+      try {
+        out.dump_mpv_counters_interval_ms = std::stoi(*value);
+      } catch (...) {
+        std::fprintf(stderr, "error: --dump-mpv-counters-interval-ms expects an integer, got '%s'\n",
+                     value->c_str());
+        return 2;
+      }
+      if (out.dump_mpv_counters_interval_ms < 0) {
+        std::fprintf(stderr, "error: --dump-mpv-counters-interval-ms must be >= 0\n");
+        return 2;
+      }
+    } else if (flag == "--fps-cap") {
+      const auto value = take_value("--fps-cap");
+      if (!value) return 2;
+      try {
+        out.fps_cap_override = std::stoi(*value);
+      } catch (...) {
+        std::fprintf(stderr, "error: --fps-cap expects an integer, got '%s'\n",
+                     value->c_str());
+        return 2;
+      }
+      if (out.fps_cap_override < 0) {
+        std::fprintf(stderr, "error: --fps-cap must be >= 0\n");
+        return 2;
+      }
     } else if (flag == "--capture-frames-count") {
       const auto value = take_value("--capture-frames-count");
       if (!value) return 2;

@@ -265,7 +265,9 @@ void MpvRenderer::SetHWND(void* /*hwnd*/) {}
 // the capture, so the lock-screen path falls back to the file-based extract.
 bool MpvRenderer::ScreenshotToFile(const std::string& /*path*/) { return false; }
 bool MpvRenderer::SeekTo(double /*seconds*/) { return false; }
-
+bool MpvRenderer::GetInt64Property(const std::string& /*name*/, long long& /*out*/) const { return false; }
+bool MpvRenderer::GetPropertyValue(const std::string& /*name*/, std::string& /*out*/) const { return false; }
+bool MpvRenderer::DumpPropertyList(const std::wstring& /*path*/) const { return false; }
 void MpvRenderer::SetAdapterPin(const std::string& /*substr*/) {}
 
 bool MpvRenderer::pin_active() const { return false; }

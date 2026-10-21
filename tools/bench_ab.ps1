@@ -65,6 +65,7 @@ $metrics = @(
     @{ name = 'private_mb';        dir = 'lower'; unit = 'MB' }
     @{ name = 'ws_mb';             dir = 'lower'; unit = 'MB' }
     @{ name = 'cpu_pct';           dir = 'lower'; unit = '%' }
+    @{ name = 'max_thread_cpu_pct'; dir = 'lower'; unit = '% of 1 core' }
     @{ name = 'gpu_total_pct';     dir = 'lower'; unit = '%' }
     @{ name = 'gpu_decode_pct';    dir = 'lower'; unit = '%' }
     @{ name = 'gpu_3d_pct';        dir = 'lower'; unit = '%' }

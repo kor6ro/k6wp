@@ -117,6 +117,7 @@ try {
                 $priv = @($series | ForEach-Object { $_.private_mb })
                 $ws = @($series | ForEach-Object { $_.ws_mb })
                 $cpu = @($series | ForEach-Object { $_.cpu_pct })
+                $hotThread = @($series | ForEach-Object { $_.max_thread_cpu_pct })
                 $gpuTotal = @($gpuRows | ForEach-Object { $_.gpu_total_pct } | Where-Object { $null -ne $_ })
                 $gpuDecode = @($gpuRows | ForEach-Object { $_.gpu_decode_pct } | Where-Object { $null -ne $_ })
                 $gpu3d = @($gpuRows | ForEach-Object { $_.gpu_3d_pct } | Where-Object { $null -ne $_ })
@@ -133,6 +134,9 @@ try {
                     private_mb = (Get-Stats $priv)
                     ws_mb = (Get-Stats $ws)
                     cpu_pct = (Get-Stats $cpu)
+                    # The hottest single thread, as a percentage of ONE core.
+                    # The process aggregate hides a spinning thread (C2).
+                    max_thread_cpu_pct = (Get-Stats $hotThread)
                     gpu_total_pct = (Get-Stats $gpuTotal)
                     gpu_decode_pct = (Get-Stats $gpuDecode)
                     gpu_3d_pct = (Get-Stats $gpu3d)
@@ -165,7 +169,7 @@ foreach ($state in $states) {
     $rows = @($results | Where-Object { $_.state -eq $state.name })
     if ($rows.Count -eq 0) { continue }
     $metric = @{}
-    foreach ($key in @('private_mb', 'ws_mb', 'cpu_pct', 'gpu_total_pct', 'gpu_decode_pct', 'gpu_3d_pct', 'gpu_shared_mb', 'wakeups_per_sec')) {
+    foreach ($key in @('private_mb', 'ws_mb', 'cpu_pct', 'max_thread_cpu_pct', 'gpu_total_pct', 'gpu_decode_pct', 'gpu_3d_pct', 'gpu_shared_mb', 'wakeups_per_sec')) {
         $vals = @($rows | ForEach-Object { $_.$key.median } | Where-Object { $null -ne $_ })
         $metric[$key] = Get-Stats $vals
     }
@@ -176,6 +180,7 @@ foreach ($state in $states) {
         private_mb = $metric.private_mb
         ws_mb = $metric.ws_mb
         cpu_pct = $metric.cpu_pct
+        max_thread_cpu_pct = $metric.max_thread_cpu_pct
         gpu_total_pct = $metric.gpu_total_pct
         gpu_decode_pct = $metric.gpu_decode_pct
         gpu_3d_pct = $metric.gpu_3d_pct

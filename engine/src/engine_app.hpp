@@ -268,6 +268,24 @@ class EngineApp {
     return !capture_frames_prefix_.empty() &&
            capture_frames_done_ < (capture_frames_count_ > 0 ? capture_frames_count_ : 3);
   }
+  // Hidden QA: the live mpv frame-quality counters sampled over time, so a
+  // pacing change can be judged on DROPS / MISTIMED FRAMES and not only on
+  // CPU/GPU numbers. The counters are per-mpv-instance; with one monitor
+  // there is one live slot.
+  void DumpMpvCountersStep(long long elapsed_ms);
+  bool DumpMpvCountersPending() const {
+    return dump_mpv_counters_count_ > 0 && dump_mpv_counters_done_ < dump_mpv_counters_count_;
+  }
+  std::wstring dump_mpv_counters_path_;
+  std::wstring dump_mpv_properties_path_;
+  int dump_mpv_counters_count_ = 0;
+  int dump_mpv_counters_interval_ms_ = 0;
+  int dump_mpv_counters_done_ = 0;
+  long long dump_mpv_counters_next_ms_ = 0;
+  // The counters read at every sample. A property this mpv build does not
+  // expose is simply reported as unavailable.
+  static const char* const kMpvCounterNames[];
+  static constexpr int kMpvCounterCount = 9;
   int init_exit_code_ = 2;
   std::atomic<bool> device_lost_{false};
   // Config file watcher (Todo 11): started in Init() from CliOptions

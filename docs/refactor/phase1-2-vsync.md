@@ -8,7 +8,144 @@ Baseline: `build/ab/engine-baseline.exe` (desync) vs `build/ab/engine-candidate.
 Evidence: `docs/bench/ab-vsync.json`, `docs/bench/ab-vsync-4k.json`,
 `docs/bench/frames/frames.json`.
 
-## The finding
+## The mpv options, before and after (C1)
+
+Every option the engine sets on the mpv instance, verbatim. Only ONE line
+changed; everything else is identical in both builds, so the comparison is
+attributable.
+
+| mpv option | baseline (`display-desync`) | candidate (`display-vsync`) |
+|---|---|---|
+| `wid` | the injected HWND as a decimal string | same |
+| `vo` | `gpu-next,gpu` | same |
+| `hwdec` | `d3d11va` | same |
+| `d3d11-adapter` | the pinned adapter (empty = default) | same |
+| `audio` | `no` | same |
+| `loop-file` | `inf` | same |
+| `keep-open` | `yes` | same |
+| `idle` | `yes` | same |
+| `demuxer-max-bytes` | `16MiB` | same |
+| `demuxer-max-back-bytes` | `4MiB` | same |
+| `ad-queue-enable` / `ad-queue-max-bytes` / `ad-queue-max-samples` / `ad-queue-max-secs` | `no` / `1M` / `4` / `1` | same |
+| `vd-lavc-threads` | `4` | same |
+| `scale` / `cscale` / `dscale` | `bilinear` | same |
+| `dither` | `no` | same |
+| `interpolation` | `no` | same |
+| `deinterlace` | `no` | same |
+| `framedrop` | `vo` | same |
+| **`video-sync`** | **`display-desync`** | **`display-vsync`** ← THE ONLY CHANGE |
+| `gpu-api` | `d3d11` | same |
+| `d3d11-flip` | `no` | same |
+| `swapchain-depth` | `2` | same |
+| `osc` | `no` | same |
+| `sub-auto` | `no` | same |
+| `audio-file-auto` | `no` | same |
+| `hwdec-codecs` | `all` | same |
+| `gpu-shader-cache-dir` | `%LOCALAPPDATA%\K6WP\shadercache` | same |
+| `osd-level` | `0` | same |
+| `terminal` | `no` | same |
+| `load-scripts` | `no` | same |
+| `ytdl` | `no` | same |
+| `input-default-bindings` / `input-vo-keyboard` / `input-cursor` | `no` | same |
+
+Forbidden options (`hwdec-extra-frames`, `vd-queue-enable=yes`) are **not**
+set in either build, and the decode stays on the iGPU in both.
+
+**C2 note (for the Rust port):** port the set ABOVE — the measured one — and
+specifically `video-sync=display-vsync`. Do **not** copy `display-desync`
+because it is what the pre-refactor code had: it is the option that caused
+the busy-wait and the slow-motion playback.
+
+## C1 — the quality proof
+
+The change was accepted on CPU/GPU numbers. That is not enough: a cheaper
+CPU can also mean dropped or late frames, or a wallpaper that runs in slow
+motion. So the pacing was measured with the **live mpv counters** over
+**60 s per mode**, at the **fps cap 24 and 30**, at the **display's 144 Hz**
+and at **60 Hz** (`tools/bench_pacing.ps1`, ABAB-paired inside one session).
+
+The counters (discovered with `--dump-mpv-properties`: `vo-drop-frame-count`
+does **not** exist in mpv 0.41, the VO drop counter is `frame-drop-count`):
+
+| counter | meaning |
+|---|---|
+| `frame-drop-count` | frames the VO dropped |
+| `decoder-frame-drop-count` | frames the decoder dropped |
+| `mistimed-frame-count` | frames presented at the wrong time |
+| `vo-delayed-frame-count` | frames presented late |
+| `estimated-frame-number` | frame index consumed (delta = frames decoded) |
+| `estimated-vf-fps`, `playback-time`, `vf` | the rate, the media clock, the active filter chain |
+
+### 144 Hz (the display's native rate), 60 s per run
+
+| fps cap | metric | desync | vsync |
+|---|---|---|---|
+| 24 | max engine thread CPU | 55.3 % of a core | **10.2 %** |
+| 24 | process CPU | 4.0 % | **1.1 %** |
+| 24 | GPU total | 34.9 % | **22.1 %** |
+| 24 | GPU decode | 10.5 % | 14.4 % |
+| 24 | GPU 3D | 24.4 % | **7.8 %** |
+| 24 | **frames decoded** | 1322 | **1775** |
+| 24 | **decoded fps** | 21.8 | **29.4** |
+| 24 | **playback rate (media clock ÷ wall clock)** | **0.73** | **0.98** |
+| 24 | **VO frame drops** | 0 | 0 |
+| 24 | **decoder frame drops** | 0 | 0 |
+| 24 | **VO delayed frames** | 184 | **0** |
+| 30 | max engine thread CPU | 56.9 % | **11.3 %** |
+| 30 | **playback rate** | **0.72** | **0.98** |
+| 30 | **VO delayed frames** | 195 | **0** |
+| 30 | **VO / decoder frame drops** | 0 / 0 | 0 / 0 |
+
+### 60 Hz, 60 s per run
+
+| fps cap | metric | desync | vsync |
+|---|---|---|---|
+| 24 | max engine thread CPU | 54.7 % | **7.1 %** |
+| 24 | **playback rate** | **0.73** | **0.98** |
+| 24 | **decoded fps** | 22.1 | 29.5 |
+| 24 | **VO delayed frames** | 197 | **0** |
+| 30 | max engine thread CPU | 58.3 % | **13.4 %** |
+| 30 | **playback rate** | **0.70** | **0.98** |
+| 30 | **VO delayed frames** | 193 | **0** |
+| 30 | **VO / decoder frame drops** | 0 / 0 | 0 / 0 |
+
+### What the counters say
+
+1. **The candidate drops NOTHING.** `frame-drop-count` = 0 and
+   `decoder-frame-drop-count` = 0 in every run of both builds.
+2. **The candidate delivers every frame ON TIME.** `vo-delayed-frame-count` =
+   0 in every candidate run, against 184–197 in the desync runs.
+3. **The candidate plays the video at the RIGHT SPEED; the baseline did
+   not.** The media clock advanced 0.98 × wall-clock in the candidate and
+   **0.70–0.75 ×** in the baseline. The baseline was playing the wallpaper
+   **a quarter slow** — the desync busy-wait was not merely burning a core,
+   it was distorting the playback rate. That is a visible quality defect
+   (a slow-motion wallpaper) that the CPU/GPU numbers alone would never
+   have revealed.
+4. **Therefore the GPU decode increase is NOT extra work for the same
+   result.** The candidate decodes 29.3–29.5 frames/s — the source rate of
+   the 30 fps clip — while the baseline decoded only 21.5–22.4 frames/s
+   *because it was running slow*. The +35 % decode utilization is the
+   candidate doing the work the video actually contains. The frame-drop
+   counters prove no frames were skipped to achieve it: both builds dropped
+   **zero** frames, so the decoder delivered every frame it decoded.
+
+### Verdict
+
+**ACCEPT — the change is a quality improvement, not a trade-off.** No
+regression on any quality counter, and the baseline's slow-motion defect is
+fixed. Label: **live-proven (one machine)** — the numbers come from this
+host, this clip, this display.
+
+### Still UNPROVEN
+
+- Multi-monitor, mixed-DPI, and hardware other than this iGPU+dGPU pair
+  (single monitor, one rig).
+- A 30/50/59.94 Hz display (only 60 Hz and 144 Hz exist here).
+- The behaviour when the display's vblank is unavailable (e.g. a
+  virtual display driver): the VO would block in the present. The VO
+  keeping the GPU busy (the decode work is sustained across every sample)
+  is evidence it does not stall here, but it is not proof on other hardware.
 
 `engine/src/mpv_renderer.cpp` set `video-sync=display-desync` (a P1.1 change
 from `display-vsync`). mpv's *desync* mode has no vblank to sleep on, so it
