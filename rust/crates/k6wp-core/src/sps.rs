@@ -51,6 +51,33 @@ impl Codec {
     }
 }
 
+/// The input limits (G2: the parser processes UNTRUSTED input).
+///
+/// Every count that comes FROM THE FILE is capped before it is used as a
+/// loop bound or an allocation size, and every arithmetic operation on a
+/// file-derived value is checked. A malformed file must produce an error
+/// or an "unknown" answer - never a panic, a huge allocation or an endless
+/// loop.
+mod limits {
+    /// The most bytes read from a file (the parameter sets live in the
+    /// header; a file whose header is further out falls back).
+    pub const MAX_INPUT_BYTES: u64 = 64 * 1024 * 1024;
+    /// The most entries any container table may declare.
+    pub const MAX_TABLE_ENTRIES: usize = 1 << 20;
+    /// The most samples the sample table may declare.
+    pub const MAX_SAMPLES: usize = 1 << 20;
+    /// The most entries in a parameter-set array.
+    pub const MAX_PARAM_SETS: usize = 256;
+    /// The most pictures in a picture-ordering cycle.
+    pub const MAX_PIC_ORDER_CYCLE: u32 = 4096;
+    /// The most CPB entries in an HRD.
+    pub const MAX_CPB_ENTRIES: u32 = 32;
+    /// The most sub-layers in an HEVC profile_tier_level.
+    pub const MAX_SUB_LAYERS: u32 = 7;
+    /// The most entries a box tree may hold on the stack.
+    pub const MAX_BOX_STACK: usize = 64;
+}
+
 /// What one SPS says.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct SpsInfo {
@@ -359,7 +386,7 @@ fn parse_h264_sps(nal: &[u8]) -> Option<SpsInfo> {
             bits.bit()?; // delta_pic_order_always_zero_flag
             bits.se()?; // offset_for_non_ref_pic
             bits.se()?; // offset_for_top_to_bottom_field
-            let cycle = bits.ue()?;
+            let cycle = bits.ue()?.min(limits::MAX_PIC_ORDER_CYCLE);
             for _ in 0..cycle {
                 bits.se()?; // offset_for_ref_frame
             }
@@ -489,7 +516,7 @@ fn skip_hrd(bits: &mut Bits) {
     let cpb_cnt_minus1 = bits.ue().unwrap_or(0);
     bits.bits(4); // bit_rate_scale
     bits.bits(4); // cpb_size_scale
-    for _ in 0..=cpb_cnt_minus1 {
+    for _ in 0..=cpb_cnt_minus1.min(limits::MAX_CPB_ENTRIES) {
         bits.ue(); // bit_rate_value_minus1
         bits.ue(); // cpb_size_value_minus1
         bits.bit(); // cbr_flag
@@ -515,7 +542,7 @@ fn parse_hevc_sps(nal: &[u8]) -> Option<SpsInfo> {
     }
     let mut bits = Bits::new(&payload);
     let _vps_id = bits.bits(4)?;
-    let max_sub_layers_minus1 = bits.bits(3)?;
+    let max_sub_layers_minus1 = bits.bits(3)?.min(limits::MAX_SUB_LAYERS);
     bits.bit()?; // sps_temporal_id_nesting_flag
     skip_profile_tier_level(&mut bits, max_sub_layers_minus1)?;
 
@@ -671,7 +698,12 @@ fn find_parameter_set_boxes(data: &[u8]) -> Vec<(Codec, Vec<Vec<u8>>)> {
 fn find_box_payloads(data: &[u8], four_cc: &[u8; 4]) -> Vec<Vec<u8>> {
     let mut out = Vec::new();
     let mut stack: Vec<(usize, usize)> = vec![(0, data.len())];
+    let mut visited = 0usize;
     while let Some((start, end)) = stack.pop() {
+        visited += 1;
+        if visited > limits::MAX_BOX_STACK * 16 {
+            break;
+        }
         let mut pos = start;
         while pos + 8 <= end {
             let size =
@@ -705,10 +737,12 @@ fn find_box_payloads(data: &[u8], four_cc: &[u8; 4]) -> Vec<Vec<u8>> {
             } else {
                 (8usize, size as usize)
             };
-            let body_end = if body_start == 0 || pos + body_start > end {
-                break;
-            } else {
-                pos + body_start
+            let body_end = match body_start
+                .checked_add(pos)
+                .filter(|body_end| *body_end <= end)
+            {
+                Some(body_end) => body_end,
+                None => break,
             };
             if &kind == four_cc {
                 out.push(data[pos + header..body_end].to_vec());
@@ -754,7 +788,9 @@ fn stsd_extension_boxes(payload: &[u8]) -> Vec<([u8; 4], Vec<u8>)> {
     if payload.len() < 8 {
         return out;
     }
-    let entry_count = u32::from_be_bytes([payload[4], payload[5], payload[6], payload[7]]) as usize;
+    let entry_count = (u32::from_be_bytes([payload[4], payload[5], payload[6], payload[7]])
+        as usize)
+        .min(limits::MAX_TABLE_ENTRIES);
     let mut pos = 8usize;
     for _ in 0..entry_count {
         if pos + 8 > payload.len() {
@@ -809,7 +845,7 @@ fn parse_avcc(payload: &[u8]) -> Option<Vec<Vec<u8>>> {
     }
     let length_size = (payload[4] & 0x03) + 1;
     // numOfSPS is 5 bits (the high 3 bits are reserved).
-    let count = (payload[5] & 0x1F) as usize;
+    let count = ((payload[5] & 0x1F) as usize).min(limits::MAX_PARAM_SETS);
     let mut pos = 6usize;
     let mut nals = Vec::new();
     for _ in 0..count {
@@ -833,7 +869,7 @@ fn parse_hvcc(payload: &[u8]) -> Option<Vec<Vec<u8>>> {
     if payload.len() < 23 {
         return None;
     }
-    let num_arrays = payload[22] as usize;
+    let num_arrays = (payload[22] as usize).min(limits::MAX_PARAM_SETS);
     let mut pos = 23usize;
     let mut nals = Vec::new();
     for _ in 0..num_arrays {
@@ -842,7 +878,8 @@ fn parse_hvcc(payload: &[u8]) -> Option<Vec<Vec<u8>>> {
         }
         let array_completeness = payload[pos] & 0x80 != 0;
         let nal_unit_type = payload[pos] & 0x3F;
-        let count = u16::from_be_bytes([payload[pos + 1], payload[pos + 2]]) as usize;
+        let count = (u16::from_be_bytes([payload[pos + 1], payload[pos + 2]]) as usize)
+            .min(limits::MAX_PARAM_SETS);
         pos += 3;
         for _ in 0..count {
             if pos + 2 > payload.len() {
@@ -990,7 +1027,8 @@ fn parse_stsz(payload: &[u8]) -> Vec<u32> {
         return Vec::new();
     }
     let sample_size = u32::from_be_bytes([payload[4], payload[5], payload[6], payload[7]]);
-    let count = u32::from_be_bytes([payload[8], payload[9], payload[10], payload[11]]) as usize;
+    let count = (u32::from_be_bytes([payload[8], payload[9], payload[10], payload[11]]) as usize)
+        .min(limits::MAX_SAMPLES);
     if sample_size != 0 {
         // Every sample has the same size.
         return vec![sample_size; count];
@@ -1016,7 +1054,8 @@ fn parse_chunk_offsets(payload: &[u8], width: usize) -> Vec<u64> {
     if payload.len() < 8 {
         return Vec::new();
     }
-    let count = u32::from_be_bytes([payload[4], payload[5], payload[6], payload[7]]) as usize;
+    let count = (u32::from_be_bytes([payload[4], payload[5], payload[6], payload[7]]) as usize)
+        .min(limits::MAX_TABLE_ENTRIES);
     let mut out = Vec::with_capacity(count);
     for i in 0..count {
         let at = 8 + i * width;
@@ -1053,7 +1092,8 @@ fn parse_stsc(payload: &[u8]) -> Vec<(u32, u32)> {
     if payload.len() < 8 {
         return Vec::new();
     }
-    let count = u32::from_be_bytes([payload[4], payload[5], payload[6], payload[7]]) as usize;
+    let count = (u32::from_be_bytes([payload[4], payload[5], payload[6], payload[7]]) as usize)
+        .min(limits::MAX_TABLE_ENTRIES);
     let mut out = Vec::with_capacity(count);
     for i in 0..count {
         let at = 8 + i * 12;
@@ -1127,7 +1167,18 @@ fn is_sps_nal(nal: &[u8]) -> bool {
 /// plus the in-band ones - the decoder switches to the in-band SPS, so the
 /// largest DPB in the file is the one that matters) and the largest DPB.
 pub fn probe_dpb(path: &Path) -> Result<DpbReport, SpsError> {
-    let data = std::fs::read(path).map_err(|e| SpsError::Io(e.to_string()))?;
+    // The file is read CAPPED: a 40 GB video must not be pulled into
+    // memory to look at its header.
+    let file = std::fs::File::open(path).map_err(|e| SpsError::Io(e.to_string()))?;
+    let mut data = Vec::new();
+    let mut read = std::io::Read::take(file, limits::MAX_INPUT_BYTES);
+    std::io::Read::read_to_end(&mut read, &mut data).map_err(|e| SpsError::Io(e.to_string()))?;
+    Ok(probe_dpb_bytes(&data))
+}
+
+/// The probe over bytes already in memory - the testable core (and what
+/// the fuzzing drives).
+pub fn probe_dpb_bytes(data: &[u8]) -> DpbReport {
     let scanned = &data[..data.len().min(MAX_SCAN_BYTES)];
 
     let mut nals = container_sps_nals(scanned);
@@ -1135,6 +1186,9 @@ pub fn probe_dpb(path: &Path) -> Result<DpbReport, SpsError> {
 
     let mut sps: Vec<SpsInfo> = Vec::new();
     for nal in &nals {
+        if nal.is_empty() {
+            continue;
+        }
         let info = match is_sps_nal(nal) {
             _ if (nal[0] & 0x1F) == 7 => parse_h264_sps(nal),
             _ => parse_hevc_sps(nal),
@@ -1152,14 +1206,20 @@ pub fn probe_dpb(path: &Path) -> Result<DpbReport, SpsError> {
     }
 
     if sps.is_empty() {
-        return Err(SpsError::NoSps);
+        // Nothing usable: the caller must FALL BACK to ffmpeg's
+        // trace_headers - never guess.
+        return DpbReport {
+            sps,
+            max_dpb: None,
+            needs_fallback: true,
+        };
     }
     let max_dpb = sps.iter().filter_map(|s| s.dpb_size()).max();
-    Ok(DpbReport {
+    DpbReport {
         sps,
         max_dpb,
         needs_fallback: false,
-    })
+    }
 }
 
 #[cfg(test)]
