@@ -16,6 +16,24 @@ but are hidden from user-facing help and UI. User-facing silent start is
 | `--capture-frames-count` | `--capture-frames-count <n>` | how many frames to write (default 3) |
 | `--capture-frames-interval-ms` | `--capture-frames-interval-ms <n>` | delay between frames (default 1000) |
 | `--capture-frames-seek` | `--capture-frames-seek <sec>` | seek to this position and pause before the first frame, so the captured frame is deterministic |
+| `--fps-cap` | `--fps-cap <n>` | force the playback frame-rate cap at start-up (the engine otherwise caps only on the DC power path) |
+| `--dump-mpv-counters` | `--dump-mpv-counters <path>` | sample the live mpv frame-quality counters into a CSV (drops, mistimed, delayed, frames consumed, playback rate) |
+| `--dump-mpv-counters-count` | `--dump-mpv-counters-count <n>` | how many samples to take (default 60) |
+| `--dump-mpv-counters-interval-ms` | `--dump-mpv-counters-interval-ms <n>` | delay between samples (default 1000) |
+| `--dump-mpv-properties` | `--dump-mpv-properties <path>` | write the mpv property list (every readable property name) — used to discover which counters a given mpv build exposes |
+| `--unload-after-pause-ms` | `--unload-after-pause-ms <n>` | unload the decode pipeline N ms after the engine enters the paused state (drives the SAME code path the `pause_unload_after_sec` config uses) |
+| `--dump-media-props` | `--dump-media-props <path>` | write the media metadata the live mpv instance reports (duration, codec, size, fps, has_audio) as JSON — the read side of the ffprobe→libmpv parity check |
+
+The `--dump-mpv-counters` family exists because a pacing change has to be
+judged on QUALITY and not only on CPU/GPU numbers: the counters say whether
+frames were dropped, delivered late, or played at the wrong speed. Note
+that `vo-drop-frame-count` does **not** exist in mpv 0.41 — the VO drop
+counter is `frame-drop-count`.
+
+The `--dump-media-props` flag is the read side of the ffprobe→libmpv
+parity experiment (`docs/refactor/phase1-3-bundle.md`): the same five
+fields ffprobe reports must come out of the live mpv instance, or the
+97 MB ffprobe binary cannot be dropped from the install.
 
 The `--capture-frames` family exists because a screen capture of the desktop
 only proves what the COMPOSITE shows: an always-on-top overlay, a covered
