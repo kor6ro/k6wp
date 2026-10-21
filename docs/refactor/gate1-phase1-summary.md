@@ -96,14 +96,31 @@ Single monitor, one rig, one Windows build. **Not** proven here:
    compress job takes a little longer (the DPB probe is 39 ms) and the
    output is a lossy re-encode (Δluma 0.04, Δstddev 0.06).
 
-## A precondition for the test gate
+## The test gate and a live engine — MEASURED (G3)
 
-**Run `ctest` with NO engine running.** A running engine holds the
-singleton mutex (`Local\K6WP-Engine-Singleton`), so a test that starts an
-engine gets "another instance is already running" and waits for a pipe
-answer that never comes — the suite hung for 30 minutes when the live
-session's engine was up, and passed 49/49 in 69 s with it stopped. Stop the
-engine before the test gate (and restart it afterwards).
+**The suite passes WITH a live engine running.** The earlier note in this
+document ("run ctest with NO engine running") was written from the hang
+that the pipe-name collision caused, and it was fixed rather than worked
+around: the pipe tests now claim a **unique pipe name per test process**
+(the `K6WP_ENGINE_PIPE` override, the process id in the name) and the
+engine's singleton mutex has the same override (`K6WP_ENGINE_MUTEX`), so a
+test can never talk to - or be blocked by - the user's engine.
+
+The measured result on this host, **with the live session's engine
+running**:
+
+| run | result | time |
+|---|---|---|
+| the suite, the engine up | **49/49 pass** | 73.6 s |
+| the suite, the engine up (a later run) | **49/49 pass** | 51.2 s |
+
+Before the fix the same situation hung for **30 minutes** (the test bound
+a fake pipe server on the live engine's name, the bind failed, and the
+client waited for an answer that never came). Every test now also has a
+**300 s timeout** (a hung test can no longer hang the suite without a
+bound), so even a future collision fails fast instead of hanging.
+
+**So: no precondition. Run the suite with the engine up or down.**
 
 ## Gate 1: PASS
 
