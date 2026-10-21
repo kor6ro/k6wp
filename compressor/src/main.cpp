@@ -1,5 +1,6 @@
 #include "cache_manager.hpp"
 #include "cli.hpp"
+#include "dpb_probe.hpp"
 #include "encoder_detect.hpp"
 #include "ffmpeg_job.hpp"
 #include "ffmpeg_path.hpp"
@@ -103,6 +104,32 @@ bool IsOptimal(const k6wp::compressor::VideoProps& props, int target_w,
     if (std::abs(props.fps - target_fps) > 1.0) return false;
   }
   return true;
+}
+
+// Task 1.4 (D3): the copy path must not carry a deep reference list into
+// the wallpaper.
+//
+// The ENCODE path already pins the DPB (the encoder legs use ref=2), so a
+// re-encoded file never has a deep DPB. The COPY path was the leak: an
+// already-optimal source was copied byte-for-byte, so its SPS kept its
+// num_ref_frames (16 for a 4K clip) and the DECODER's surface pool scaled
+// with it - 467 MB of GPU shared memory on playback.
+//
+// So a source whose DPB is deeper than kMaxRefFramesForCopy is NOT
+// optimal: it is re-encoded (with the same CRF / resolution / FPS) so the
+// pinned-DPB encode path runs.
+//
+// A DPB that cannot be read (0 = unknown) is treated as NOT optimal: an
+// unknown DPB must never take the copy path, because the copy path is the
+// one that can leak the deep pool.
+bool IsDpbAcceptable(const std::filesystem::path& in) {
+  const int refs = k6wp::compressor::ProbeMaxRefFrames(in);
+  if (refs <= 0) {
+    std::fprintf(stderr,
+                 "{\"note\":\"dpb unknown\"}\n");
+    return false;
+  }
+  return refs <= k6wp::compressor::kMaxRefFramesForCopy;
 }
 
 }  // namespace
@@ -269,7 +296,8 @@ int main(int argc, char** argv) {
 
   const k6wp::compressor::VideoProps props =
       k6wp::compressor::ProbeVideoProps(opts.in);
-  if (IsOptimal(props, opts.res_w, opts.res_h, opts.fps)) {
+  if (IsOptimal(props, opts.res_w, opts.res_h, opts.fps) &&
+      IsDpbAcceptable(opts.in)) {
     std::error_code ec;
     std::filesystem::copy_file(opts.in, opts.out,
                                std::filesystem::copy_options::overwrite_existing,

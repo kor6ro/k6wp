@@ -1,0 +1,94 @@
+﻿{
+    "tool":  "bench_dpb_ab",
+    "phase":  1,
+    "date":  "2026-10-21T13:18:06+07:00",
+    "label":  "live-proven (one machine)",
+    "method":  "ABAB alternating inside one session; C4 metrics (private bytes + GPU shared); the playback rate and the frame counters travel with every number",
+    "file_a":  "C:\\Users\\axioo\\Desktop\\k6wp\\tools\\..\\tests\\corpus\\highdpb_4k.mp4",
+    "file_b":  "C:\\Users\\axioo\\Desktop\\k6wp\\tools\\..\\build\\dpb-4k.mp4",
+    "runs":  3,
+    "a":  {
+              "private_mb":  386.79,
+              "gpu_shared_mb":  467.73,
+              "playback_rate":  0.99
+          },
+    "b":  {
+              "private_mb":  228.2,
+              "gpu_shared_mb":  432.53,
+              "playback_rate":  0.99
+          },
+    "results":  [
+                    {
+                        "tag":  "A",
+                        "file":  "highdpb_4k.mp4",
+                        "private_mb":  386.79,
+                        "gpu_shared_mb":  467.73,
+                        "gpu_total_pct":  73.55,
+                        "cpu_pct":  1.89,
+                        "max_thread_cpu_pct":  11.6,
+                        "playback_rate":  0.9875,
+                        "delivered_fps":  29.62,
+                        "vo_delayed":  0
+                    },
+                    {
+                        "tag":  "B",
+                        "file":  "dpb-4k.mp4",
+                        "private_mb":  229.45,
+                        "gpu_shared_mb":  432.89,
+                        "gpu_total_pct":  63.8,
+                        "cpu_pct":  1.88,
+                        "max_thread_cpu_pct":  10.04,
+                        "playback_rate":  0.9907,
+                        "delivered_fps":  29.72,
+                        "vo_delayed":  0
+                    },
+                    {
+                        "tag":  "A",
+                        "file":  "highdpb_4k.mp4",
+                        "private_mb":  387.07,
+                        "gpu_shared_mb":  467.73,
+                        "gpu_total_pct":  72.33,
+                        "cpu_pct":  2.36,
+                        "max_thread_cpu_pct":  12.36,
+                        "playback_rate":  0.9945,
+                        "delivered_fps":  29.83,
+                        "vo_delayed":  0
+                    },
+                    {
+                        "tag":  "B",
+                        "file":  "dpb-4k.mp4",
+                        "private_mb":  228.12,
+                        "gpu_shared_mb":  432.53,
+                        "gpu_total_pct":  64.8,
+                        "cpu_pct":  2.18,
+                        "max_thread_cpu_pct":  10.81,
+                        "playback_rate":  0.9866,
+                        "delivered_fps":  29.6,
+                        "vo_delayed":  0
+                    },
+                    {
+                        "tag":  "A",
+                        "file":  "highdpb_4k.mp4",
+                        "private_mb":  386.3,
+                        "gpu_shared_mb":  467.38,
+                        "gpu_total_pct":  71.69,
+                        "cpu_pct":  1.74,
+                        "max_thread_cpu_pct":  10.8,
+                        "playback_rate":  0.9893,
+                        "delivered_fps":  29.68,
+                        "vo_delayed":  0
+                    },
+                    {
+                        "tag":  "B",
+                        "file":  "dpb-4k.mp4",
+                        "private_mb":  228.2,
+                        "gpu_shared_mb":  432.53,
+                        "gpu_total_pct":  65.28,
+                        "cpu_pct":  1.74,
+                        "max_thread_cpu_pct":  10.02,
+                        "playback_rate":  0.9928,
+                        "delivered_fps":  29.78,
+                        "vo_delayed":  0
+                    }
+                ]
+}

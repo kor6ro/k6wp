@@ -23,10 +23,6 @@
 # Usage:
 #   powershell -NoProfile -ExecutionPolicy Bypass -File tools\bench_baseline_v2.ps1 `
 #     -EngineExe <engine.exe> -Runs 5 -OutJson docs\bench\phase1-baseline-v2.json
-$ErrorActionPreference = 'Stop'
-$script:Here = Split-Path -Parent $MyInvocation.MyCommand.Path
-. (Join-Path $script:Here 'bench_lib.ps1')
-
 [CmdletBinding()]
 param(
     [string]$EngineExe = '',
@@ -36,6 +32,8 @@ param(
     [string]$Label = 'live-proven (one machine)'
 )
 $ErrorActionPreference = 'Stop'
+$script:Here = Split-Path -Parent $MyInvocation.MyCommand.Path
+. (Join-Path $script:Here 'bench_lib.ps1')
 if ([string]::IsNullOrWhiteSpace($EngineExe)) { $EngineExe = Join-Path $script:Here '..\build\release\engine.exe' }
 if ([string]::IsNullOrWhiteSpace($CorpusDir)) { $CorpusDir = Join-Path $script:Here '..\tests\corpus' }
 if ([string]::IsNullOrWhiteSpace($OutJson)) { $OutJson = Join-Path $script:Here '..\docs\bench\phase1-baseline-v2.json' }

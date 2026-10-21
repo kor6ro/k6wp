@@ -31,7 +31,29 @@ Two metrics are exempt from the band rule and are called out explicitly:
 
 ## Protected metrics and gates
 
-Baseline = Phase 0 median (`docs/bench/phase0.json`).
+Baseline = **Phase 1 baseline v2** (`docs/bench/phase1-baseline-v2.json`, the
+engine at commit `340da84` — after the pacing fix, before the long-pause
+unload). Baseline v1 (`docs/bench/phase0.json`) is **archived**: it was taken
+before the pacing fix, so its playback rate was 0.70–0.75 and its CPU/GPU
+numbers are **not comparable** — a 1.2-vs-v1 delta must never be quoted as
+a release claim.
+
+**Every CPU/GPU comparison carries the playback rate and the frame counters**
+(`vo-delayed`, drops). A run whose playback rate is outside **0.97–1.03** is
+**invalid** and cannot decide a gate. The **normalized** metrics
+(`cpu_pct_per_fps`, `gpu_pct_per_fps` = the percentage divided by the frames
+actually delivered per second) are the ones that stay comparable when the
+rate moves; the baseline v2 values are:
+
+| state | cpu_pct | max thread | gpu_total | rate | fps delivered | cpu/fps | gpu/fps |
+|---|---|---|---|---|---|---|---|
+| idle | 0 % | 0 % | — | — | — | — | — |
+| playback 1080p | 1.74 % | 10.8 % | 21.6 % | 1.00 | 29.98 | 0.06 | 0.72 |
+| playback 4K/16-ref | 1.69 % | 9.3 % | 72.4 % | 0.98 | 29.54 | 0.06 | 2.46 |
+| paused 30 s | 0 % | 0 % | 0 % | 0.05 | 1.43 | 0 | 0 |
+
+The 4K state recorded **one of five runs at 0.9694**, marginally under the
+0.97 bound; the median is 0.98. It is recorded, not smoothed.
 
 | # | Metric | State | Baseline | Noise band | **Gate** | Meaning |
 |---|---|---|---|---|---|---|
@@ -99,6 +121,10 @@ parity gate. A phase that hits its parity gate but misses its target is
 | 1.2 | GPU 3D, playback 1080p | 12.47 % | ≤ 15.0 % | lower | **9.39 %** (−62.7 %) |
 | 1.2 | rendered-frame parity | — | pixel diff 0 | 0 | **0.000** (byte-identical) |
 | 1.3 | install size, mpv group | 114.77 MB | ≤ 114.77 MB | **≤ 60 MB** (lean libmpv build) | DEFER — no build toolchain here (`docs/refactor/phase1-3-bundle.md`) |
+| 1.3 | install size, ffprobe | 96.98 MB | ≤ 96.98 MB | **0 MB** (probe with libmpv) | **DEFER (D4)**: the field D3 needs is not in libmpv, and the ffprobe spawn is 30 ms — the swap is not justified. The ZIP target ≤ 115 MB is **NOT met**; the ZIP stays 148.13 MB |
+| 1.4 | private bytes, playback 4K/16-ref | 387.23 MB (v2) | ≤ 400 MB | **≤ 240 MB** (the DPB-pinned re-encode) | **228.2 MB** (−41 %, `docs/bench/dpb-ab.json`) |
+| 1.4 | GPU shared, playback 4K/16-ref | 468.08 MB (v2) | ≤ 482 MB | **≤ 440 MB** | **432.5 MB** (−7.5 %) |
+| 1.4 | visual parity of the re-encode | — | Δluma ≤ 12, Δstddev ≤ 12 | same | **Δluma 0.04, Δstddev 0.06**, same-frame pixel diff 0.528, and the re-encoded file still animates live (diff 2.16) |
 | 1.3 | **install size, ffprobe** | 96.98 MB | ≤ 96.98 MB | **0 MB** (probe with libmpv) | pending — the biggest single lever |
 | 2.3 | Studio private bytes | 337.53 MB | ≤ 348 MB | **≤ 150 MB** (Slint, no Qt) | pending |
 | 2.7 | install size, qt group | 48.0 MB + 8.1 MB payload | ≤ 56.1 MB | **0 MB** | pending — **NOT a ZIP-size lever** (see below) |

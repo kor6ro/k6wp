@@ -139,6 +139,27 @@ matrix allows it (the current UI offers more than H.264).
 
 The deferred levers are **upside, not part of the gate**.
 
+## The D4 verdict (added after the Phase 1.2 brief)
+
+The swap was **not applied**, and the reason is measured, not assumed:
+
+1. **The field task 1.4 needs (`num_ref_frames`) is NOT in libmpv.** The
+   whole mpv property list was enumerated: there is no DPB / refs property.
+   The same is true of ffprobe (its stream keys carry no refs/dpb field) and
+   of ffmpeg's normal output. The value comes from ffmpeg's own
+   `trace_headers` bitstream filter instead — so the swap cannot serve task
+   1.4, and the brief's fallback applies: **ffprobe stays**, the DPB comes
+   from the SPS route.
+2. **The cost does not argue for it either.** The ffprobe spawn is **30 ms**
+   (the brief assumed ~150 ms — it is 5× that) and the new DPB probe is
+   **39 ms**. Both are negligible against an encode, and an mpv-instance
+   probe would be heavier than a 30 ms spawn, not lighter.
+
+**Consequence, recorded as-is:** the **ZIP target ≤ 115 MB is NOT met** by
+this lever — the ZIP stays **148.13 MB**. The 97 MB ffprobe opportunity
+stays documented here (with its proven parity evidence) and can be
+re-decided if the bundle win is wanted at the cost of an mpv-based probe.
+
 ## What Phase 2 (Slint, no Qt) is actually for
 
 Not the ZIP: it is **Studio RAM (337.53 MB → ≤ 150 MB), Studio startup

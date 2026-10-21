@@ -1,5 +1,5 @@
 # compressor - ffmpeg compress CLI (exe).
-add_executable(compressor src/main.cpp src/cli.cpp src/encoder_detect.cpp src/ffmpeg_job.cpp src/cache_manager.cpp src/video_probe.cpp app.rc)
+add_executable(compressor src/main.cpp src/cli.cpp src/encoder_detect.cpp src/ffmpeg_job.cpp src/cache_manager.cpp src/video_probe.cpp src/dpb_probe.cpp app.rc)
 
 target_include_directories(compressor PRIVATE "${CMAKE_SOURCE_DIR}/packaging")
 target_link_libraries(compressor PRIVATE k6wp_shared)

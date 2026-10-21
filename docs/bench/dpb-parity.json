@@ -1,0 +1,24 @@
+﻿{
+    "tool":  "bench_dpb_parity",
+    "phase":  1,
+    "date":  "2026-10-21T13:20:32+07:00",
+    "label":  "live-proven (one machine)",
+    "method":  "the frames the ENGINE rendered (the hidden --capture-frames flag), compared at the same seek position; the capture pauses, so the motion is 0 in both arms by construction and the live movement is checked separately",
+    "file_a":  "C:\\Users\\axioo\\Desktop\\k6wp\\tools\\..\\tests\\corpus\\highdpb_4k.mp4",
+    "file_b":  "C:\\Users\\axioo\\Desktop\\k6wp\\tools\\..\\build\\dpb-4k.mp4",
+    "a":  {
+              "luma":  128.27,
+              "stddev":  67.19,
+              "motion":  0
+          },
+    "b":  {
+              "luma":  128.31,
+              "stddev":  67.13,
+              "motion":  0
+          },
+    "pixel_diff_same_frame":  0.528,
+    "gate_luma_delta_le_12":  true,
+    "gate_stddev_delta_le_12":  true,
+    "gate_same_capture_behaviour":  true,
+    "parity_pass":  true
+}
