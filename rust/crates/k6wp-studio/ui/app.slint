@@ -1,0 +1,75 @@
+// The K6WP Studio shell (Phase 2).
+//
+// The shape follows the Qt Studio: a header with the version, a library
+// list, and a status line. The Slint version drops the QML/Qt runtime,
+// which is the point of the phase (Studio RAM 337 MB -> <= 150 MB,
+// startup 1290 ms -> <= 700 ms).
+
+import { Button, ScrollView, VerticalBox, HorizontalBox } from "std-widgets.slint";
+
+export struct LibraryRow {
+    name: string,
+    path: string,
+    duration-s: float,
+}
+
+export component AppWindow inherits Window {
+    in-out property <[LibraryRow]> library: [];
+    in-out property <string> version: "";
+
+    title: "K6WP Studio";
+    preferred-width: 960px;
+    preferred-height: 640px;
+    min-width: 640px;
+    min-height: 420px;
+
+    VerticalBox {
+        padding: 12px;
+        spacing: 10px;
+
+        HorizontalBox {
+            spacing: 8px;
+            Text {
+                text: "K6WP Studio";
+                font-size: 20px;
+            }
+            Rectangle { horizontal-stretch: 1; }
+            Text {
+                text: "v" + root.version;
+                color: #808080;
+            }
+        }
+
+        ScrollView {
+            vertical-stretch: 1;
+            VerticalBox {
+                spacing: 4px;
+                for row in root.library: Rectangle {
+                    height: 44px;
+                    background: #1e1e1e;
+                    border-radius: 6px;
+                    HorizontalBox {
+                        padding: 8px;
+                        spacing: 12px;
+                        Text {
+                            text: row.name;
+                            horizontal-stretch: 1;
+                        }
+                        Text {
+                            text: row.duration-s + "s";
+                            color: #909090;
+                        }
+                    }
+                }
+            }
+        }
+
+        HorizontalBox {
+            alignment: end;
+            Button {
+                text: "Settings";
+                clicked => { }
+            }
+        }
+    }
+}

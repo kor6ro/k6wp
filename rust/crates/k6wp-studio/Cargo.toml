@@ -1,0 +1,17 @@
+[package]
+name = "k6wp-studio"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "The K6WP Studio: the wallpapers, the library and the settings, in Slint."
+
+[dependencies]
+slint = { workspace = true }
+
+[build-dependencies]
+slint-build = "1"
+
+[[bin]]
+name = "k6wp-studio"
+path = "src/main.rs"

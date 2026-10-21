@@ -1,0 +1,24 @@
+# The K6WP Rust workspace (Phase 2: the Studio in Slint, no Qt).
+#
+# The workspace is deliberately small: one crate per deliverable, so the
+# engine (Phase 3) and the Studio can evolve independently while sharing
+# the protocol and the settings crates.
+[workspace]
+resolver = "2"
+members = ["crates/k6wp-studio"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.80"
+license = "GPL-2.0-or-later"
+
+[workspace.dependencies]
+slint = "1"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

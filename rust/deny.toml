@@ -1,0 +1,69 @@
+# cargo-deny configuration (Phase 2).
+#
+# The Rust tree is new code in a GPL project, so the dependency policy is
+# written down instead of being implicit:
+#
+#   - only crates.io and the RustSec advisory database are allowed;
+#   - every licence must be known - a missing or ambiguous licence is an
+#     ERROR, not a warning (the product ships GPL-2.0-or-later, and Slint
+#     is GPL-3.0-or-later, so the combined work is GPL-3.0-or-later; see
+#     LICENSES/ and the owner's legal review note);
+#   - no duplicate versions of the same crate;
+#   - every crate must have a source (no git dependencies that pin a
+#     branch, no unpinned git sources).
+
+[graph]
+targets = [
+    "x86_64-pc-windows-msvc",
+]
+all-features = false
+
+[advisories]
+version = 2
+ignore = []
+
+[licenses]
+version = 2
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CC0-1.0",
+    "ISC",
+    "MIT",
+    "MIT-0",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "Zlib",
+    # The GUI framework: Slint is GPL-3.0-or-later (or a commercial
+    # licence). The repository is GPL-2.0-or-later, so the combined work
+    # is GPL-3.0-or-later - flagged for the owner's legal review.
+    # The product's own licence (the repository is GPL-2.0-or-later).
+    "GPL-2.0-or-later",
+    "GPL-2.0-only",
+    "GPL-3.0",
+    "GPL-3.0-only",
+    "GPL-3.0-or-later",
+]
+confidence-threshold = 0.8
+exceptions = []
+
+[bans]
+# The duplicate versions are upstream-driven (the Slint tree pins its own
+# windows-sys / hashbrown / syn versions), not a choice of this workspace.
+# They are reported as warnings so a NEW duplicate is visible in the log.
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = false
+deny = []
+skip = []
+skip-tree = []
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

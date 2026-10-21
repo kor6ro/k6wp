@@ -71,3 +71,6 @@ tests/__pycache__/
 # Local promo-video Remotion project (untracked; proposed move to its own
 # repository, see docs/refactor/repo-hygiene.md). Never commit node_modules.
 video/
+
+# The Rust workspace build output (Phase 2).
+rust/target/
