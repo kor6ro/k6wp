@@ -179,6 +179,8 @@ SlotFactory MakeRecordingFactory() {
 
 // ---- link-level stubs: DesktopInjector (desktop_inject.cpp NOT linked) ----
 
+void DesktopInjector::HideVoChildren() {}
+
 DesktopInjector::DesktopInjector(LogFn log) {
   g_inj[this].log = log;
   ++g_inj_ctors;

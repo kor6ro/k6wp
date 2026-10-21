@@ -256,6 +256,8 @@ void SetupMonitors() {
 // Member definitions live at namespace scope (C2888: never inside the
 // anonymous namespace) but read the recording state above.
 
+void DesktopInjector::HideVoChildren() {}
+
 DesktopInjector::DesktopInjector(LogFn log) {
   g_inj[this].log = log;
   ++g_inj_ctors;

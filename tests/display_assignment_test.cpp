@@ -552,6 +552,8 @@ namespace k6wp {
 // unique_ptr<Impl>. desktop_inject.cpp (the real Impl) is NOT linked.
 struct DesktopInjector::Impl {};
 
+void DesktopInjector::HideVoChildren() {}
+
 DesktopInjector::DesktopInjector(LogFn /*log*/) {
   g_mm_inj[this] = MmInjState{};
 }

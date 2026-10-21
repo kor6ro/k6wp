@@ -193,6 +193,8 @@ void CleanupFixtureFiles() {
 
 // ---- link-level stubs: DesktopInjector (desktop_inject.cpp NOT linked) ----
 
+void DesktopInjector::HideVoChildren() {}
+
 DesktopInjector::DesktopInjector(LogFn /*log*/) { g_inj[this] = InjState{}; }
 
 DesktopInjector::~DesktopInjector() { g_inj.erase(this); }

@@ -126,6 +126,22 @@ class DesktopInjector {
   // owns it and will destroy it in Detach()/destructor.
   void* injected_hwnd() const;
 
+  // Task 1.1 (D2): hide the VO window that mpv created INSIDE our own
+  // injected surface.
+  //
+  // The injected surface is a WS_EX_LAYERED window: where it paints nothing
+  // it is TRANSPARENT, so the shell's own wallpaper (the per-user still -
+  // the video's first frame) shows through instead of a black rectangle.
+  // Hiding mpv's child window is what makes it paint nothing.
+  //
+  // The child belongs to THIS process, and the call is made with
+  // SWP_ASYNCWINDOWPOS, so no window-position message is delivered
+  // synchronously: nothing can block on the shell's (Explorer's) UI thread.
+  // The shell's own windows are never touched.
+  //
+  // Idempotent; a no-op when nothing is attached. Never throws.
+  void HideVoChildren();
+
   // Hands the injected window over to the CALLER without destroying it and
   // stops tracking it (injected_hwnd() returns nullptr afterwards).
   //

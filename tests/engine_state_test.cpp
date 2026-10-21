@@ -156,6 +156,8 @@ struct DesktopInjector::Impl {};
 
 // ---- link-level stubs: DesktopInjector (desktop_inject.cpp NOT linked) ----
 
+void DesktopInjector::HideVoChildren() {}
+
 DesktopInjector::DesktopInjector(LogFn /*log*/) { g_mm_inj[this] = MmInjState{}; }
 
 DesktopInjector::~DesktopInjector() { g_mm_inj.erase(this); }

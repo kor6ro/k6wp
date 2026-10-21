@@ -954,6 +954,25 @@ void* DesktopInjector::injected_hwnd() const {
   return impl_ ? impl_->injected : nullptr;
 }
 
+void DesktopInjector::HideVoChildren() {
+  if (!impl_ || !impl_->injected) return;
+  // mpv creates its VO window as a CHILD of the window we handed it as
+  // "wid" (the class is "mpv"). That child belongs to THIS process, so
+  // hiding it is a local operation - and SWP_ASYNCWINDOWPOS keeps the
+  // window-position messages out of the synchronous path, so no call can
+  // block on the shell's UI thread (the earlier ShowWindow-based attempt
+  // hung the engine on Explorer's thread).
+  //
+  // The surface itself is NOT touched: it stays where it is, layered and
+  // transparent, so the shell's wallpaper shows through it.
+  for (HWND child = GetWindow(impl_->injected, GW_CHILD); child != nullptr;
+       child = GetWindow(child, GW_CHILD)) {
+    ::SetWindowPos(child, nullptr, 0, 0, 0, 0,
+                   SWP_HIDEWINDOW | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
+                       SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
+  }
+}
+
 void* DesktopInjector::ReleaseSurface() {
   if (!impl_ || !impl_->injected) return nullptr;
   HWND wnd = impl_->injected;

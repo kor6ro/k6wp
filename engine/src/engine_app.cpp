@@ -1507,20 +1507,20 @@ void EngineApp::MaybeUnloadAfterPause(long long elapsed_ms) {
 void EngineApp::UnloadDecodeNow(long long elapsed_ms) {
   int slots = 0;
   if (wallpaper_surface_live_.load(std::memory_order_acquire)) {
-    // The unload releases the video decoder AND its GPU surfaces. mpv's
-    // "stop" also clears the VO surface, so the picture is gone until the
-    // video is decoded again - which is why the unload only runs for the
-    // owners that make the wallpaper INVISIBLE (see PauseHidesWallpaper).
-    //
-    // Two alternatives were measured and REJECTED:
-    //  - loading a still IMAGE in the video's place: the image decoder kept
-    //    the video's resources alive (the private bytes only fell to
-    //    164 MB instead of 69 MB) and the resume jumped to 300 MB;
-    //  - hiding the injected surface so the shell's own wallpaper shows
-    //    through: ShowWindow on a window parented to the shell's WorkerW
-    //    blocks on Explorer's UI thread and HUNG the engine.
-    slots = multi_monitor_.UnloadAllVideos();
+    // Task 1.1 (D2): the FULL unload.
+    //  1. mpv's VO child inside OUR surface is hidden with an ASYNCHRONOUS
+    //     SetWindowPos: the layered surface then paints nothing, so the
+    //     shell's own wallpaper (the per-user still) shows through it.
+    //     No black frame, and nothing can block on Explorer's UI thread
+    //     (the earlier ShowWindow attempt hung the engine there).
+    //  2. The mpv handle AND the surface window go to the renderer
+    //     graveyard: the teardown is on the background worker, never on the
+    //     message loop, and the WHOLE instance goes - not just its file.
+    slots = multi_monitor_.UnloadAllSlots();
   } else if (std::shared_ptr<MpvRenderer> renderer = AcquireRenderer()) {
+    // The headless fallback (no live surface): the shared renderer cannot
+    // be handed to the graveyard (other holders may still use it), so only
+    // its file is released.
     if (renderer->UnloadVideo()) slots = 1;
   }
   unloaded_at_ms_ = elapsed_ms;
@@ -1530,7 +1530,29 @@ void EngineApp::UnloadDecodeNow(long long elapsed_ms) {
 void EngineApp::ReloadDecodeNow(long long elapsed_ms) {
   int slots = 0;
   if (wallpaper_surface_live_.load(std::memory_order_acquire)) {
-    slots = multi_monitor_.ReloadAllVideos();
+    // A fresh surface + a fresh renderer for every slot, with the video
+    // re-issued. The new surface is empty until the video's first frame
+    // arrives - but the shell's wallpaper is underneath the whole time, so
+    // there is no black frame.
+    slots = multi_monitor_.ReattachAllSlots();
+    // The slot's own video is re-issued by the re-attach, but the ENGINE's
+    // current video is the authority (a set_video while Unloaded was
+    // deferred, and the config may name a different file).
+    std::string video;
+    {
+      k6wp::lock_order::LeafGuard video_guard(video_mutex_);
+      video = current_video_utf8_;
+    }
+    if (!video.empty()) {
+      multi_monitor_.LoadLoopAll(video);
+      multi_monitor_.ApplyFitModeAll(config_watcher_.GetConfig().fit_mode);
+    }
+    // A pause owner may still be active (e.g. the fullscreen bit is set
+    // while the user bit was cleared): the fresh renderers start playing,
+    // so the mask has to be re-applied.
+    if (pause_.mask() != 0) {
+      multi_monitor_.PauseAll();
+    }
   } else if (std::shared_ptr<MpvRenderer> renderer = AcquireRenderer()) {
     if (renderer->ReloadVideo()) slots = 1;
   }
@@ -1747,12 +1769,23 @@ bool EngineApp::HandleSetVideo(const std::string& payload_json, bool rotation) {
   // fallback only when no live surface exists. Thread-safe: MpvRenderer
   // serializes all mpv calls under one mutex.
   if (wallpaper_surface_live_.load(std::memory_order_acquire)) {
-    if (!multi_monitor_.LoadLoopAll(utf8_path)) {
+    if (DecodeStateNow() == DecodeState::kUnloaded) {
+      // Task 1.1 (D2): the slots have NO renderer while Unloaded (the whole
+      // mpv instance was destroyed). The choice is RECORDED and applied at
+      // the resume - the user's video change must not be lost.
+      {
+        k6wp::lock_order::LeafGuard video_guard(video_mutex_);
+        current_video_utf8_ = utf8_path;
+      }
+      Log("ipc: set_video deferred (the decode pipeline is unloaded) -> '%s'",
+          utf8_path.c_str());
+    } else if (!multi_monitor_.LoadLoopAll(utf8_path)) {
       Log("ipc: set_video rejected (decode failed for '%s', keeping old video)",
           utf8_path.c_str());
       return false;
+    } else {
+      multi_monitor_.ApplyFitModeAll(config_watcher_.GetConfig().fit_mode);
     }
-    multi_monitor_.ApplyFitModeAll(config_watcher_.GetConfig().fit_mode);
     // Slot threads self-wake: LoadLoop issues mpv commands that generate
     // events. The headless thread is woken explicitly below (fast drain).
   } else if (!renderer_ || !renderer_->LoadLoop(utf8_path)) {

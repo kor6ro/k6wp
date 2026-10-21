@@ -98,19 +98,73 @@ path. Results:
 | **the user pause is not unloaded** | state `paused`, the surface still carries the picture (luma 127.97) |
 | **a fullscreen app in and out** | unload on the way in, reload on the way out, 5 cycles in a row |
 
-## The cost: a black surface during the resume
+## The cost: a black surface during the resume — SOLVED (D2)
 
-**This is a real, measured cost and it is NOT hidden:** mpv's `"stop"` clears
+**The first implementation had a real, measured cost:** mpv's `"stop"` clears
 the VO surface, so between the unload and the first decoded frame the
-wallpaper surface is **black**. The measured window is the resume latency:
-**~840 ms**.
+wallpaper surface was **black** (the measured resume latency was 840 ms).
 
-It is only visible in the fullscreen case (the app exits → the desktop is
-exposed → ~0.8 s of black wallpaper). In the screen-off, session-lock and
-suspend cases the wallpaper is not visible at that moment anyway.
+**D2 removed it.** The mechanism:
 
-**The opt-out is one config value**: `pause_unload_after_sec = 0` turns the
-unload off entirely (the default is 30 s).
+1. **Hide mpv's VO child window inside OUR OWN surface** with
+   `SetWindowPos(child, nullptr, 0, 0, 0, 0, SWP_HIDEWINDOW | SWP_NOMOVE |
+   SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS)`.
+   The injected surface is a `WS_EX_LAYERED` window: where it paints nothing
+   it is **transparent**, so the shell's own wallpaper (the per-user still —
+   the video's first frame) shows through it instead of a black rectangle.
+   The child belongs to **this** process and the call is **asynchronous**, so
+   no window-position message is delivered synchronously and **nothing can
+   block on Explorer's UI thread**. The shell's own windows are never
+   touched.
+2. **Destroy the whole mpv instance**, not just its file: the mpv handle
+   AND the surface window go to the renderer graveyard (destroyed on the
+   background worker, never on the message loop).
+3. **The resume** creates a fresh surface + a fresh renderer (the same
+   machinery the re-anchor uses) and re-issues the video. The new surface is
+   empty until the first frame arrives — but the shell's wallpaper is
+   underneath the whole time, so **there is no black frame there either**.
+
+### The D2 gate (n=5, `tools/bench_unload_d2.ps1`)
+
+| gate | result |
+|---|---|
+| **no black frame** (the screen sampled across a REAL fullscreen exit, 170 samples) | **0 black samples**, min luma 67.4 |
+| **the static wallpaper underneath is visible while Unloaded** | **the injected surface is GONE** (0 surfaces) → the shell's wallpaper shows |
+| **no Explorer UI hang** (a `WM_NULL` with a 2 s timeout to the taskbar = Explorer's UI thread) | responsive before, during and after every run |
+| **the animation is back after the resume** | yes, every run |
+| **an explicit user pause still shows the picture** | yes (luma 78.4) |
+
+The resume latency: **median ~835 ms** (n=5: 772–1155 ms) — unchanged by
+the D2 mechanism.
+
+### The memory, after the full destroy
+
+| phase | private bytes | GPU shared | threads |
+|---|---|---|---|
+| playing | 161.7 MB | 151.6 MB | 37 |
+| **unloaded** | **60.1 MB** | **0 MB** | **19** |
+| resumed | ~139 MB | 151.6 MB | 38 |
+
+**private −102 MB (−63 %)** — better than the 69 MB residue of the
+mpv-`stop` variant, because the whole instance goes instead of only its
+file. The remaining 60 MB is the engine itself (24 MB at idle) plus the
+**idle headless mpv instance** the engine keeps as its fallback (~36 MB) —
+see the follow-up note below.
+
+### The trade-offs D2 introduces (recorded honestly)
+
+- **The video restarts from its first frame** after the resume: the renderer
+  is new. That is consistent with what is shown underneath (the per-user
+  still IS the video's first frame), so the transition reads as "the
+  wallpaper starts over" rather than a glitch. It is still a behaviour
+  change against the frozen-frame behaviour of the pause.
+- **The still underneath is the video's FIRST frame**, so a video that was
+  paused at frame N shows frame 0 while Unloaded. (The still is refreshed
+  by the product's own still machinery on a video change.)
+- **The idle headless mpv instance (~36 MB) is still held** while Unloaded.
+  Destroying it would need the exclusive-ownership handoff the graveyard
+  provides, and the headless renderer is shared (`shared_ptr`) — a
+  follow-up, not a D2 change.
 
 ## Two alternatives that were measured and REJECTED
 
@@ -121,11 +175,12 @@ Both were implemented, measured, and removed again — the numbers are why.
    the image decoder kept the VIDEO's resources alive — the private bytes
    only fell to **164.5 MB** instead of 69 MB — and the resume jumped to
    **300 MB**. It did not free the memory, which is the whole point.
-2. **Hiding the injected surface** so the shell's own wallpaper (the
-   per-user still) shows through: `ShowWindow` on a window parented to the
+2. **Hiding the injected SURFACE with `ShowWindow`** so the shell's own
+   wallpaper shows through: `ShowWindow` on a window parented to the
    shell's WorkerW blocks on Explorer's UI thread and **HUNG the engine**
-   (the IPC stopped answering). Cross-process parenting makes a synchronous
-   show/hide unsafe here.
+   (the IPC stopped answering). The D2 mechanism replaces it with an
+   **asynchronous** `SetWindowPos` on **our own child window**, which
+   cannot block.
 
 ## Configuration (schema v6)
 

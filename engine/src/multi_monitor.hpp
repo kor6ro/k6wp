@@ -180,6 +180,28 @@ class MultiMonitor {
   // instance stay. Returns the number of slots that accepted the unload.
   int UnloadAllVideos();
 
+  // Task 1.1 (D2): the FULL unload - the mpv handle and the surface window
+  // are handed to the renderer graveyard (destroyed on the background
+  // worker, never on the message loop), after mpv's VO child window inside
+  // our own surface has been hidden with an ASYNCHRONOUS SetWindowPos.
+  //
+  // The hide is what removes the black frame: the layered surface paints
+  // nothing once its child is hidden, so the shell's own wallpaper (the
+  // per-user still) shows through. The destroy is what gives the RAM
+  // back: the whole mpv instance goes, not just its file.
+  //
+  // Returns the number of slots that were unloaded.
+  int UnloadAllSlots();
+
+  // The counterpart of UnloadAllSlots: a fresh surface + a fresh renderer
+  // for every slot, with the slot's video re-issued. This is the same
+  // machinery the re-anchor uses (ReplaceSlotSurfaceLocked), so the
+  // "WorkerW still holds our own stale surface" case is already handled
+  // (see WorkerWAcceptsChildClasses).
+  //
+  // Returns the number of slots that were re-attached.
+  int ReattachAllSlots();
+
   // Re-loads the file in every live slot that is in the Unloaded state.
   // Returns the number of slots that accepted the reload.
   int ReloadAllVideos();

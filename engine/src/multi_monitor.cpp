@@ -693,6 +693,42 @@ int MultiMonitor::UnloadAllVideos() {
   return count;
 }
 
+int MultiMonitor::UnloadAllSlots() {
+  k6wp::lock_order::RecursiveSlotsGuard guard(slots_mutex_);
+  int count = 0;
+  for (auto& kv : slots_) {
+    Slot& slot = kv.second;
+    if (!slot.injector) continue;
+    // 1. Hide mpv's VO child inside OUR surface (asynchronous, local).
+    //    The layered surface then paints nothing and the shell's wallpaper
+    //    shows through it: no black frame, no flash.
+    slot.injector->HideVoChildren();
+    // 2. Hand the mpv handle AND the surface window to the graveyard: the
+    //    teardown happens on the background worker, never on the message
+    //    loop, and the whole instance goes (the RAM, not just the file).
+    ReleaseSlotMediaLocked(slot);
+    ++count;
+  }
+  return count;
+}
+
+int MultiMonitor::ReattachAllSlots() {
+  k6wp::lock_order::RecursiveSlotsGuard guard(slots_mutex_);
+  int count = 0;
+  for (auto& kv : slots_) {
+    Slot& slot = kv.second;
+    if (!slot.injector) continue;
+    // A fresh surface + a fresh renderer + the slot's video re-issued.
+    // ReplaceSlotSurfaceLocked is the same path the re-anchor uses.
+    if (ReplaceSlotSurfaceLocked(slot, slot.info.x, slot.info.y,
+                                 slot.info.width, slot.info.height,
+                                 /*reassert=*/true)) {
+      ++count;
+    }
+  }
+  return count;
+}
+
 int MultiMonitor::ReloadAllVideos() {
   k6wp::lock_order::RecursiveSlotsGuard guard(slots_mutex_);
   int count = 0;

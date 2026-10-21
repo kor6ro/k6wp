@@ -327,6 +327,12 @@ class EngineApp {
   void MaybeUnloadAfterPause(long long elapsed_ms);
   void UnloadDecodeNow(long long elapsed_ms);
   void ReloadDecodeNow(long long elapsed_ms);
+  // The current state of the decode pipeline (Active / Paused / Unloaded).
+  // Readable from any thread.
+  DecodeState DecodeStateNow() const {
+    std::lock_guard<std::mutex> lock(decode_state_mutex_);
+    return decode_state_;
+  }
   // Hidden QA: write the media metadata mpv reports for the loaded file.
   void DumpMediaProps();
   bool dump_media_props_pending_ = false;
