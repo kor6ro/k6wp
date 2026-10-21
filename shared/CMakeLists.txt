@@ -137,3 +137,9 @@ add_test(NAME os_version_test COMMAND os_version_test)
 add_test(NAME golden_test COMMAND golden_dump --check
          "${CMAKE_SOURCE_DIR}/tests/golden/shared_behavior.json")
 endif()
+# E5: EVERY test gets a hard timeout. A hung test must never hang the
+# suite without a bound (the per-test timeout is enforced by ctest).
+get_property(_k6wp_tests_in_dir DIRECTORY PROPERTY TESTS)
+foreach(_k6wp_t IN LISTS _k6wp_tests_in_dir)
+  set_tests_properties(${_k6wp_t} PROPERTIES TIMEOUT 300)
+endforeach()

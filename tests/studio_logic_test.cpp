@@ -120,7 +120,7 @@ bool EngineAlive() {
   // fake-server sections below race the real engine for the name. A short
   // retry makes the skip decision stable in a shared session.
   for (int i = 0; i < 5; ++i) {
-    const std::wstring name = k6wp::CurrentSessionPipeName();
+    const std::wstring name = k6wp::RealSessionPipeName();
     HANDLE h =
         CreateFileW(name.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr,
                     OPEN_EXISTING, 0, nullptr);
@@ -466,6 +466,9 @@ using k6wp::g_still_spawn_calls;
 using k6wp::g_still_spawn_ok;
 
 int main(int argc, char** argv) {
+  // E5: this process owns its pipe name, so it can never touch the
+  // user's live engine (and two test processes never collide).
+  k6wp::UseUniquePipeNameForTest("studio-logic");
   setvbuf(stdout, nullptr, _IONBF, 0);
   if (RunFakeChildIfRequested(argc, argv)) {
     return 0;
@@ -874,7 +877,12 @@ int main(int argc, char** argv) {
     std::atomic<bool> cancel{false};
     k6wp::IpcClient client;
     if (skip_server) {
-      Check(k6wp::WaitForEngineReady(client, cancel, 8000),
+      // This section talks to the USER's live engine, so it needs the real
+      // pipe name back (the test claimed a unique one for its fake servers).
+      k6wp::UseRealPipeNameForTest();
+      const bool ready = k6wp::WaitForEngineReady(client, cancel, 8000);
+      k6wp::UseUniquePipeNameForTest("studio-logic");
+      Check(ready,
             "readywait live engine -> true");
     } else {
       Check(!k6wp::WaitForEngineReady(client, cancel, 1000),

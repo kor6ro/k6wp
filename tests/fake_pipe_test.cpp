@@ -58,7 +58,7 @@ bool HasSubstr(const std::string& hay, const std::string& needle) {
 // real engine for the name.
 bool EngineAlive() {
   for (int i = 0; i < 5; ++i) {
-    const std::wstring name = k6wp::CurrentSessionPipeName();
+    const std::wstring name = k6wp::RealSessionPipeName();
     HANDLE h =
         CreateFileW(name.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr,
                     OPEN_EXISTING, 0, nullptr);
@@ -101,6 +101,9 @@ bool WriteOne(HANDLE pipe, const std::string& msg) {
 }  // namespace
 
 int main(int argc, char** argv) {
+  // E5: this process owns its pipe name, so it can never touch the
+  // user's live engine (and two test processes never collide).
+  k6wp::UseUniquePipeNameForTest("fake");
   setvbuf(stdout, nullptr, _IONBF, 0);
   const bool no_server =
       argc > 1 && std::string(argv[1]) == "--no-server";

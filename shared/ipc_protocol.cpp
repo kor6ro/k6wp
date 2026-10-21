@@ -153,12 +153,56 @@ std::wstring PipeNameForSession(unsigned long session_id) {
   return std::wstring(PipeNameBase) + L"-" + std::to_wstring(session_id);
 }
 
-std::wstring CurrentSessionPipeName() {
+std::wstring RealSessionPipeName() {
   DWORD session_id = 0;
   if (!ProcessIdToSessionId(GetCurrentProcessId(), &session_id)) {
     session_id = 0;
   }
   return PipeNameForSession(session_id);
+}
+
+std::wstring CurrentSessionPipeName() {
+  // E5: the pipe name can be OVERRIDED with an environment variable.
+  //
+  // The per-session name is fixed for the whole logon session, so a test
+  // that talks to a live engine would talk to the USER'S engine (and a
+  // test that starts an engine would die on the singleton mutex). With
+  // the override, a test can use its own unique pipe and never collide
+  // with the live session.
+  //
+  // The variable is read on EVERY call (not cached in a static): a static
+  // would be initialized before main() runs, i.e. before the test can set
+  // the variable - and the client and the fake server would then disagree
+  // about the name (the client would talk to the live engine while the
+  // server waits forever for a connection that never comes).
+  wchar_t buffer[256] = {};
+  const DWORD n = ::GetEnvironmentVariableW(L"K6WP_ENGINE_PIPE", buffer,
+                                            static_cast<DWORD>(
+                                                std::size(buffer)));
+  if (n > 0 && n < std::size(buffer)) {
+    return std::wstring(buffer, n);
+  }
+  return RealSessionPipeName();
+}
+
+void UseUniquePipeNameForTest(const char* tag) {
+  std::wstring name;
+  if (tag != nullptr && tag[0] != '\0') {
+    const int n = MultiByteToWideChar(CP_UTF8, 0, tag, -1, nullptr, 0);
+    if (n > 0) {
+      std::wstring wide(static_cast<size_t>(n - 1), L'\0');
+      MultiByteToWideChar(CP_UTF8, 0, tag, -1, wide.data(), n);
+      name = wide;
+    }
+  }
+  if (name.empty()) name = L"x";
+  const std::wstring full = std::wstring(PipeNameBase) + L"-test-" + name +
+                            L"-" + std::to_wstring(GetCurrentProcessId());
+  ::SetEnvironmentVariableW(L"K6WP_ENGINE_PIPE", full.c_str());
+}
+
+void UseRealPipeNameForTest() {
+  ::SetEnvironmentVariableW(L"K6WP_ENGINE_PIPE", nullptr);
 }
 
 PSECURITY_ATTRIBUTES MakeCurrentUserOnlySA() {

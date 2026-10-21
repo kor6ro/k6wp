@@ -58,3 +58,9 @@ target_link_libraries(widen_utf8_test PRIVATE k6wp_shared)
 target_include_directories(widen_utf8_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 add_test(NAME widen_utf8_test COMMAND widen_utf8_test)
 endif()
+# E5: EVERY test gets a hard timeout. A hung test must never hang the
+# suite without a bound (the per-test timeout is enforced by ctest).
+get_property(_k6wp_tests_in_dir DIRECTORY PROPERTY TESTS)
+foreach(_k6wp_t IN LISTS _k6wp_tests_in_dir)
+  set_tests_properties(${_k6wp_t} PROPERTIES TIMEOUT 300)
+endforeach()

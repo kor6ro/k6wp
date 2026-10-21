@@ -176,7 +176,7 @@ std::string ReadBytes(const std::filesystem::path& p) {
 // never hijack the real endpoint).
 bool EngineAlive() {
   for (int i = 0; i < 5; ++i) {
-    const std::wstring name = k6wp::CurrentSessionPipeName();
+    const std::wstring name = k6wp::RealSessionPipeName();
     HANDLE h = CreateFileW(name.c_str(), GENERIC_READ | GENERIC_WRITE, 0,
                            nullptr, OPEN_EXISTING, 0, nullptr);
     if (h != INVALID_HANDLE_VALUE) {
@@ -670,17 +670,18 @@ MonitorInfo GetPrimaryMonitor() noexcept {
 }  // namespace k6wp
 
 int main() {
+  // E5: this process owns its pipe name, so it can never touch the
+  // user's live engine (and two test processes never collide).
+  k6wp::UseUniquePipeNameForTest("display");
   setvbuf(stdout, nullptr, _IONBF, 0);
 
   if (EngineAlive()) {
+    // Informational only (E5): this test binds its OWN pipe name, so it can
+    // never collide with the live engine - it does not have to be stopped.
     std::printf(
-        "FAIL a live engine answers %s; stop it (IPC quit) before running "
-        "display_assignment_test\n",
+        "info a live engine answers %s; this test uses its own pipe name, "
+        "so it runs alongside it\n",
         "the session pipe");
-    ++g_failures;
-    ++g_checks;
-    std::printf("checks=%d failures=%d\n", g_checks, g_failures);
-    return 1;
   }
 
   // =====================================================================

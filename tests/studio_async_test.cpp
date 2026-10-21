@@ -61,7 +61,7 @@ bool HasSubstr(const std::string& hay, const std::string& needle) {
 // True when a live engine answers the session pipe (then the fake-server
 // tests must SKIP — never hijack the real endpoint).
 bool EngineAlive() {
-  const std::wstring name = k6wp::CurrentSessionPipeName();
+  const std::wstring name = k6wp::RealSessionPipeName();
   HANDLE h =
       CreateFileW(name.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr,
                   OPEN_EXISTING, 0, nullptr);
@@ -118,6 +118,9 @@ T WaitForWatcher(QFutureWatcher<T>* watcher, int timeout_ms) {
 }  // namespace
 
 int main(int argc, char** argv) {
+  // E5: this process owns its pipe name, so it can never touch the
+  // user's live engine (and two test processes never collide).
+  k6wp::UseUniquePipeNameForTest("studio-async");
   setvbuf(stdout, nullptr, _IONBF, 0);
   // QCoreApplication, not QApplication: this test creates no widgets and
   // must not load a QPA platform plugin (only qwindows is deployed; the

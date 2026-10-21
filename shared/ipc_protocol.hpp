@@ -39,7 +39,41 @@ std::wstring PipeNameForSession(unsigned long session_id);
 // ProcessIdToSessionId(GetCurrentProcessId(), ...) and returns
 // PipeNameForSession(that session). Falls back to session 0 when the lookup
 // fails (never throws, never empty).
+//
+// E5: the K6WP_ENGINE_PIPE environment variable OVERRIDES the name (read
+// once, on the first call). A test that talks to a live engine - or that
+// starts one - uses its own unique name, so it can never collide with the
+// user's live session (the per-session name is fixed for the whole logon
+// session, and the singleton mutex would kill the test's engine).
 std::wstring CurrentSessionPipeName();
+
+// The per-session pipe name WITHOUT the K6WP_ENGINE_PIPE override.
+//
+// A test uses this to ask "is the USER's engine alive?" - the live engine
+// always serves the real name, even when the test process has claimed a
+// unique one for itself.
+std::wstring RealSessionPipeName();
+
+// E5: a pipe name that can NEVER collide with the live session's engine.
+//
+// The fake-server tests bind a named pipe. With the live engine's name the
+// bind FAILS (the name is taken) and the test then waits forever for an
+// answer that never comes - a suite that can hang without a bound.
+//
+// The name is set through the ENVIRONMENT (K6WP_ENGINE_PIPE), so BOTH ends
+// agree: the fake server binds CurrentSessionPipeName() and the shared
+// IpcClient connects to it. The process id makes it unique per test
+// process, so two test processes never collide either.
+//
+// Call this BEFORE the first pipe use in the test process (the name is
+// resolved once and cached).
+void UseUniquePipeNameForTest(const char* tag);
+
+// Gives the pipe name back to the real per-session one (drops the
+// K6WP_ENGINE_PIPE override). A test that must TALK to the user's live
+// engine (a "is the engine ready" check) calls this for that section, and
+// UseUniquePipeNameForTest() again afterwards.
+void UseRealPipeNameForTest();
 
 // Maximum serialized payload size (64 KiB). Payloads larger than this are
 // rejected by Encode (throws IpcError) and by Decode (returns false).

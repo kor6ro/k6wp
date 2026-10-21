@@ -94,3 +94,9 @@ add_subdirectory(engine)      # resident wallpaper engine (exe)
 add_subdirectory(compressor)  # ffmpeg compress CLI (exe)
 add_subdirectory(studio)      # Qt6 Widgets studio UI (exe)
 add_subdirectory(launcher)    # Qt-free Win32 dispatcher K6WP.exe (Todo 7)
+# E5: EVERY test gets a hard timeout. A hung test must never hang the
+# suite without a bound (the per-test timeout is enforced by ctest).
+get_property(_k6wp_tests_in_dir DIRECTORY PROPERTY TESTS)
+foreach(_k6wp_t IN LISTS _k6wp_tests_in_dir)
+  set_tests_properties(${_k6wp_t} PROPERTIES TIMEOUT 300)
+endforeach()

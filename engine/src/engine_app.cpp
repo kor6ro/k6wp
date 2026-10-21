@@ -142,14 +142,29 @@ bool EngineApp::Init(int argc, char** argv) {
   // or tray icon exists and held for the process lifetime via the RAII
   // member (released automatically at teardown, never in Shutdown()). A
   // duplicate logs + exits 0 without binding a second pipe.
+  //
+  // E5: the mutex NAME can be overridden with K6WP_ENGINE_MUTEX, so a test
+  // can start its own engine beside the user's live one (the fixed name
+  // would make the test's engine exit immediately, and the test would then
+  // wait forever for a pipe answer that never comes).
+  const std::wstring mutex_name = [] {
+    wchar_t buffer[256] = {};
+    const DWORD n = ::GetEnvironmentVariableW(L"K6WP_ENGINE_MUTEX", buffer,
+                                              static_cast<DWORD>(
+                                                  std::size(buffer)));
+    if (n == 0 || n >= std::size(buffer)) {
+      return std::wstring(kSingletonMutexName);
+    }
+    return std::wstring(buffer, n);
+  }();
   singleton_mutex_.handle =
-      CreateMutexW(nullptr, FALSE, kSingletonMutexName);
+      CreateMutexW(nullptr, FALSE, mutex_name.c_str());
   if (singleton_mutex_.handle == nullptr) {
     Log("warning: CreateMutexW(%ls) failed (error %lu), continuing without singleton guard",
-        kSingletonMutexName, GetLastError());
+        mutex_name.c_str(), GetLastError());
   } else if (GetLastError() == ERROR_ALREADY_EXISTS) {
     Log("engine: another instance is already running (mutex %ls held), exiting",
-        kSingletonMutexName);
+        mutex_name.c_str());
     CloseHandle(singleton_mutex_.handle);
     singleton_mutex_.handle = nullptr;
     init_exit_code_ = 0;
