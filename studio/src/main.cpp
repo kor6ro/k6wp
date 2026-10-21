@@ -1,5 +1,6 @@
 #include <QApplication>
 #include <QIcon>
+#include <QMessageBox>
 #include <QQuickStyle>
 #include <QTranslator>
 
@@ -15,6 +16,7 @@
 
 #include "qml_shell.hpp"
 #include "ui_language.hpp"
+#include "os_version.hpp"
 
 namespace {
 // Step 2.1: Studio-owned singleton. MUST differ from the launcher's
@@ -97,6 +99,17 @@ int main(int argc, char* argv[]) {
   // value explicitly.
   (void)SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_APPLICATION_DIR |
                                  LOAD_LIBRARY_SEARCH_SYSTEM32);
+  // C6: the minimum-OS check comes FIRST - before the singleton mutex and
+  // before any QApplication/window is created.
+  {
+    const k6wp::OsVersion os = k6wp::GetOsVersion();
+    if (!k6wp::IsSupportedOsVersion(os)) {
+      const std::string message = k6wp::MinOsErrorMessage(os);
+      QMessageBox::critical(nullptr, QObject::tr("K6WP - unsupported Windows"),
+                            QString::fromStdString(message));
+      return k6wp::kExitUnsupportedOs;
+    }
+  }
   // Singleton gate BEFORE any QApplication/window is created.
   HANDLE mutex = CreateMutexW(nullptr, FALSE, kStudioAppMutex);
   if (mutex == nullptr) {

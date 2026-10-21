@@ -41,6 +41,7 @@
 
 #include "win32_raii.hpp"
 #include "lockscreen_backup.hpp"
+#include "os_version.hpp"
 #include "process_paths.hpp"
 #include "cli.hpp"
 #include "exit_codes.hpp"
@@ -247,6 +248,21 @@ void FocusExistingStudio() {
 // ---- elevated lockscreen helper (see lockscreen_sync.cpp) ------------------
 
 int Run(int argc, wchar_t** argv) {
+  // C6: the minimum-OS check comes FIRST - before the arguments are parsed
+  // and before anything is spawned. An unsupported Windows must fail with a
+  // clear message and a distinct exit code, not with a mysterious failure
+  // later on.
+  {
+    const k6wp::OsVersion os = k6wp::GetOsVersion();
+    if (!k6wp::IsSupportedOsVersion(os)) {
+      const std::string message = k6wp::MinOsErrorMessage(os);
+      const std::wstring wide = k6wp::MinOsErrorMessageWide(os);
+      std::fwprintf(stderr, L"%s\n", wide.c_str());
+      ::MessageBoxW(nullptr, wide.c_str(), L"K6WP - unsupported Windows",
+                    MB_OK | MB_ICONERROR);
+      return k6wp::kExitUnsupportedOs;
+    }
+  }
   Options opts;
   const int parse_rc = ParseArgs(argc, argv, opts);
   if (parse_rc == 1 || opts.show_help) {

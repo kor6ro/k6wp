@@ -62,6 +62,9 @@ constexpr wchar_t kProgmanClass[] = L"Progman";
 constexpr wchar_t kDefViewClass[] = L"SHELLDLL_DefView";
 constexpr wchar_t kWorkerWClass[] = L"WorkerW";
 constexpr wchar_t kInjectedClass[] = L"K6WP.DesktopInject.1";
+// The same class name as UTF-8, for the pure host-resolution helper (whose
+// signature is std::string-based so it can be unit-tested without windows.h).
+constexpr const char* kInjectedClassUtf8 = "K6WP.DesktopInject.1";
 constexpr UINT kSpawnWorkerW = 0x052C;
 // Documented spawn parameters for 0x052C. The (0, 0) form previously used here
 // is a no-op on 24H2, so Strategy B never found the WorkerW it asked for.
@@ -134,12 +137,21 @@ BOOL CALLBACK EnumProgmanChildProc(HWND hwnd, LPARAM lParam) {
 // and is therefore invisible - the wallpaper vanished a fraction of a
 // second after every start.
 bool WorkerWAcceptsSurface(HWND workerw) {
-  HWND child = GetWindow(workerw, GW_CHILD);
-  while (child) {
-    if (!IsClass(child, kInjectedClass)) return false;
-    child = GetWindow(child, GW_CHILD);
+  // The decision itself is the PURE helper (desktop_placement.cpp), so it
+  // can be unit-tested without creating windows.
+  std::vector<std::string> classes;
+  for (HWND child = GetWindow(workerw, GW_CHILD); child != nullptr;
+       child = GetWindow(child, GW_CHILD)) {
+    wchar_t wide[256];
+    if (GetClassNameW(child, wide, 256) == 0) continue;
+    char narrow[256];
+    if (WideCharToMultiByte(CP_UTF8, 0, wide, -1, narrow, sizeof(narrow),
+                            nullptr, nullptr) == 0) {
+      continue;
+    }
+    classes.emplace_back(narrow);
   }
-  return true;
+  return WorkerWAcceptsChildClasses(classes, kInjectedClassUtf8);
 }
 
 DesktopWindows FindDesktopWindows() {
@@ -774,8 +786,7 @@ SharedHost ResolveSharedHost(InjectMode mode, LogFn log) {
       insert_after = d.def_view;
       layered = true;
       LogShared(log, "desktop-inject: 24H2 path -> existing wallpaper WorkerW 0x%p (Progman child, reused)",
-                existing);
-    } else {
+                existing);    } else {
       const SpawnWorkerWResult spawn = SpawnWorkerWViaProgman(d.progman, log);
       if (spawn.workerw) {
         target = spawn.workerw;

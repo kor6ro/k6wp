@@ -153,6 +153,28 @@ desktop or a paused engine all make a screen grab record the plain desktop,
 which silently turns the gate into a no-op). The capture seeks and pauses
 first, so the frame is the same source frame on every run.
 
+**Added after the first freeze (Phase 1.2 QA).** `--dump-mpv-counters <path>`,
+`--dump-mpv-counters-count <n>`, `--dump-mpv-counters-interval-ms <n>`,
+`--dump-mpv-properties <path>` and `--fps-cap <n>` are hidden QA flags used
+to measure the mpv frame-quality counters (drops, mistimed frames, delayed
+frames, frames consumed, playback rate) and to force a deterministic frame
+rate. They exist because the pacing change had to be proved on QUALITY and
+not only on CPU/GPU numbers.
+
+### 1.x Minimum-OS gate (C6, added after the first freeze)
+
+| Item | Value | Citation |
+|---|---|---|
+| Minimum supported build | **19041** (Windows 10 22H2); Windows 11 is a later build of the same kernel | `shared/os_version.hpp:35` |
+| Version read | `RtlGetVersion` (ntdll) — immune to the "version lie" the shims apply to `GetVersionEx` | `shared/os_version.cpp:20-24` |
+| Decision | `IsSupportedOsVersion()` — a build ≥ 19041 is supported; an UNREADABLE version is **not** supported | `shared/os_version.cpp:60-68` |
+| Message | names the requirement, the detected version, and what to do | `shared/os_version.cpp:70-90` |
+| Exit code | **6** (`kExitUnsupportedOs`) — distinct from the flag error (2) | `shared/os_version.hpp:56` |
+| Where it runs | the ENGINE (before the CLI is parsed), the LAUNCHER (`K6WP.exe`, first thing in `Run`), the STUDIO (before the singleton mutex) | `engine/src/main.cpp:212-224`, `launcher/main.cpp:249-262`, `studio/src/main.cpp:94-107` |
+| Manifest | the `supportedOS` ladder (Vista → 10/11) so the shim reports the real version; the manifest alone does **not** refuse to run | `engine/app.manifest.in:30-46` |
+| Installer | the NSIS `.onInit` reads `CurrentBuildNumber` and aborts below 19041 | `packaging/installer.nsi:194-217` |
+| Test | `tests/os_version_test.cpp` — every boundary (19040/19041/19045/22000/26100, Win7/8/8.1, unreadable) + the live probe | `shared/CMakeLists.txt` |
+
 **Unknown `--flag` → stderr `error: unknown flag '<arg>'` + the full usage text on stderr → exit 2** (`engine/src/cli_options.cpp:177-185`).
 **Bare positional argument (no `--` prefix) → warning `warning: ignoring unknown argument '<arg>'` and it is SKIPPED (exit code unaffected)** (`engine/src/cli_options.cpp:46-49`). This is a deliberate compat difference from the launcher, which rejects the same input with exit 2.
 

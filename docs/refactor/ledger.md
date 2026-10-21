@@ -38,6 +38,8 @@ Evidence labels: **live-proven** (observed on this machine), **test-proven**
 | The wallpaper WorkerW host resolution rejected a WorkerW that held our own stale surface, so every re-anchor fell back to the invisible layered-Progman branch and the wallpaper disappeared right after start | **fixed** | `engine/src/desktop_inject.cpp` — `WorkerWAcceptsSurface()`; the log now shows a single injection into the wallpaper WorkerW |
 | A `WM_TIMER` cannot wake the parked message loop (`QS_ALLINPUT` does not include timer messages) | documented | `engine/src/engine_app.cpp` — the QA capture uses the loop cadence with a bounded wait instead |
 | `Copy-Item` preserves the source mtime, so restoring a source from a `.bak` made MSBuild skip the recompile — an A/B compared a build with itself | **fixed** | `tools/build_ab.ps1` touches the source and verifies the two binaries differ by SHA-256 before the A/B runs |
+| C6: the minimum OS was never enforced — no version check existed anywhere in the source | **fixed** | `shared/os_version.{hpp,cpp}` (RtlGetVersion, build ≥ 19041), the engine/launcher/Studio all refuse with a clear message + exit code 6, the manifest declares the supportedOS ladder, the NSIS installer refuses to install, `tests/os_version_test.cpp` covers every boundary (49/49 ctest) |
+| C7: the WorkerW host-resolution rule had no regression test | **fixed** | the decision is now the PURE `k6wp::WorkerWAcceptsChildClasses` (desktop_placement) with 6 cases in `workerw_span_test`; the test was verified to FAIL when the rule is reverted (not vacuous) |
 
 ## Phase 2 — Studio in Rust + Slint
 

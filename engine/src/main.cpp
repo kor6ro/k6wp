@@ -26,6 +26,7 @@
 #include "engine_app.hpp"
 #include "log_file.hpp"
 #include "monitor_util.hpp"
+#include "os_version.hpp"
 
 // --- Crash minidump (release hardening) --------------------------------------
 // Installed via SetUnhandledExceptionFilter in wWinMain. On an unhandled
@@ -208,6 +209,22 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     k6wp::AppendEngineLogLine(priority_error.c_str(), true);
   } else {
     k6wp::AppendEngineLogLine("priority: BELOW_NORMAL_PRIORITY_CLASS set", true);
+  }
+  // C6: the minimum-OS check. An unsupported Windows must be refused with a
+  // CLEAR message and a distinct exit code, before anything else starts
+  // (no tray icon, no pipe, no wallpaper). The check runs before the
+  // command line is parsed: the OS does not depend on the arguments.
+  {
+    const k6wp::OsVersion os = k6wp::GetOsVersion();
+    if (!k6wp::IsSupportedOsVersion(os)) {
+      const std::string message = k6wp::MinOsErrorMessage(os);
+      const std::wstring wide = k6wp::MinOsErrorMessageWide(os);
+      k6wp::AppendEngineLogLine(("os: unsupported - " + message).c_str(), true);
+      k6wp::FlushEngineLog();
+      ::MessageBoxW(nullptr, wide.c_str(), L"K6WP - unsupported Windows",
+                    MB_OK | MB_ICONERROR);
+      return k6wp::kExitUnsupportedOs;
+    }
   }
   int wargc = 0;
   LPWSTR* wargv = CommandLineToArgvW(GetCommandLineW(), &wargc);

@@ -16,6 +16,7 @@
 
 #include <iostream>
 #include <string>
+#include <vector>
 
 #include "desktop_placement.hpp"
 
@@ -70,12 +71,45 @@ void TestNullHandle() {
         "span: nullptr WorkerW -> false (no crash)");
 }
 
+// --- C7: the WorkerW host-resolution rule ----------------------------------
+//
+// Regression guard for the bug where a re-anchor pass resolved the host
+// BEFORE the old surface was released: the wallpaper WorkerW still held our
+// OWN stale injected window, the "is it empty" test failed, and the engine
+// fell back to the layered-Progman-child branch - which sits below the
+// shell's DefView and is therefore INVISIBLE. The wallpaper vanished a
+// fraction of a second after every start.
+void TestWorkerWHostResolution() {
+  const std::string own = "K6WP.DesktopInject.1";
+  const std::string foreign = "SHELLDLL_DefView";
+
+  // The shell's wallpaper WorkerW: empty -> it IS the host we want.
+  Check(k6wp::WorkerWAcceptsChildClasses({}, own),
+        "workerw: an empty WorkerW hosts the surface");
+
+  // The re-anchor case: our own stale surface is still parented in it.
+  // This is the case the bug got wrong.
+  Check(k6wp::WorkerWAcceptsChildClasses({own}, own),
+        "workerw: a WorkerW holding ONLY our own stale surface still hosts it");
+
+  // Two of our own surfaces (a double attach) - still ours.
+  Check(k6wp::WorkerWAcceptsChildClasses({own, own}, own),
+        "workerw: a WorkerW holding only our own surfaces still hosts it");
+
+  // A foreign child means it is NOT the wallpaper WorkerW.
+  Check(!k6wp::WorkerWAcceptsChildClasses({foreign}, own),
+        "workerw: a WorkerW holding a foreign child is rejected");
+  Check(!k6wp::WorkerWAcceptsChildClasses({own, foreign}, own),
+        "workerw: our own surface plus a foreign child is rejected");
+}
+
 }  // namespace
 
 int main() {
   TestSpansExact();
   TestSpansNarrow();
   TestNullHandle();
+  TestWorkerWHostResolution();
   std::cout << "workerw_span_test: " << g_checks << " checks, " << g_failures
             << " failures\n";
   return g_failures == 0 ? 0 : 1;

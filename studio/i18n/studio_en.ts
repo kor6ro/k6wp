@@ -464,6 +464,14 @@
     </message>
 </context>
 <context>
+    <name>QObject</name>
+    <message>
+        <location filename="../src/main.cpp" line="+108"/>
+        <source>K6WP - unsupported Windows</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>QuickSettingsPanel</name>
     <message>
         <location filename="../qml/QuickSettingsPanel.qml" line="+93"/>

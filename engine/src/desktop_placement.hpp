@@ -14,6 +14,9 @@
 // the caller logs the CoverageReason token. Call sites are owned by rows 7
 // and 9 — this module changes none.
 
+#include <string>
+#include <vector>
+
 namespace k6wp {
 
 // Axis-aligned rect, virtual-screen or client coordinates depending on the
@@ -76,5 +79,28 @@ const char* CoverageReason(CoverageVerdict verdict);
 // desktop_inject.cpp, which also null-guards the handle.
 bool WorkerWSpansRect(const PlacementRect& worker_rect,
                       const PlacementRect& virtual_rect);
+
+// C7: may this WorkerW host the injected wallpaper surface?
+//
+// The shell's wallpaper WorkerW is the ONLY host that puts the surface above
+// the wallpaper layer and below the icons. The 24H2 path therefore prefers
+// it - but only when it is "free".
+//
+// The bug this rule encodes: a re-anchor pass resolves the host BEFORE the
+// old surface is released, so at that moment the WorkerW still holds OUR
+// OWN stale injected window. Treating "not empty" as "not the wallpaper
+// WorkerW" made the engine fall back to the layered-Progman-child branch,
+// which sits BELOW the shell's DefView and is therefore INVISIBLE: the
+// wallpaper vanished a fraction of a second after every start.
+//
+// So a WorkerW qualifies when it is empty OR when its only children are our
+// own injected surfaces. A child of any other class means it is NOT the
+// wallpaper WorkerW.
+//
+// child_classes: the class names of the WorkerW's direct children, in
+//                enumeration order. own_class: the class name of our
+//                injected surface.
+bool WorkerWAcceptsChildClasses(const std::vector<std::string>& child_classes,
+                                 const std::string& own_class);
 
 }  // namespace k6wp

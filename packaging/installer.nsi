@@ -193,6 +193,27 @@ VIAddVersionKey "LegalCopyright" "${APP_NAME}"
 
 Function .onInit
   SetShellVarContext current
+  ; --- C6: minimum-OS gate -----------------------------------------------
+  ; K6WP requires Windows 10 22H2 (build 19041) or Windows 11. The
+  ; manifest's supportedOS list only tells the compatibility shim what to
+  ; report; it does NOT refuse to install. This check does.
+  ;
+  ; The build number is read from the registry (CurrentBuildNumber) so the
+  ; check is the same rule the runtime check (shared/os_version.cpp,
+  ; RtlGetVersion) applies: build >= 19041.
+  ReadRegStr $0 "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion" "CurrentBuildNumber"
+  ${If} $0 == ""
+    ; No build number (or a non-string value): refuse rather than guess.
+    MessageBox MB_OK|MB_ICONSTOP "K6WP requires Windows 10 22H2 (build 19041) or Windows 11, 64-bit.$\r$\n$\r$\nThis system's Windows build could not be detected, so the installation was stopped."
+    Abort
+  ${EndIf}
+  ${If} $0 != ""
+    IntCmp $0 19041 0 done done
+    ; $0 < 19041 -> too old
+    MessageBox MB_OK|MB_ICONSTOP "K6WP requires Windows 10 22H2 (build 19041) or Windows 11, 64-bit.$\r$\n$\r$\nDetected build $0. Update Windows, then run the installer again."
+    Abort
+    done:
+  ${EndIf}
 FunctionEnd
 
 Function un.onInit

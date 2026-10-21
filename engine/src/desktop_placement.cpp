@@ -75,4 +75,12 @@ bool WorkerWSpansRect(const PlacementRect& worker_rect,
          worker_rect.bottom >= virtual_rect.bottom;
 }
 
+bool WorkerWAcceptsChildClasses(const std::vector<std::string>& child_classes,
+                                 const std::string& own_class) {
+  for (const std::string& cls : child_classes) {
+    if (cls != own_class) return false;
+  }
+  return true;
+}
+
 }  // namespace k6wp

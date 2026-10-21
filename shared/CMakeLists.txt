@@ -15,6 +15,7 @@ add_library(k6wp_shared STATIC
   sha1.cpp
   compress_args.cpp
   settings_io.cpp
+  os_version.cpp
 )
 
 target_include_directories(k6wp_shared PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
@@ -119,6 +120,15 @@ add_executable(still_test ../tests/still_test.cpp)
 target_link_libraries(still_test PRIVATE k6wp_shared)
 target_include_directories(still_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 add_test(NAME still_test COMMAND still_test)
+
+# os_version_test (C6): the minimum-OS rule (Windows 10 22H2 / build 19041
+# or Windows 11). The decision function is pure, so every boundary is
+# covered without a machine of that vintage; the live check (RtlGetVersion)
+# is exercised by the shipped binaries, not here.
+add_executable(os_version_test ../tests/os_version_test.cpp)
+target_link_libraries(os_version_test PRIVATE k6wp_shared)
+target_include_directories(os_version_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+add_test(NAME os_version_test COMMAND os_version_test)
 
 # golden_test - CI gate for the frozen shared/ behaviour. Regenerates the
 # golden document and fails when it drifts from the committed copy, so a
