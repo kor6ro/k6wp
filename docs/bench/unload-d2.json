@@ -1,7 +1,7 @@
 ﻿{
     "tool":  "bench_unload_d2",
     "phase":  1,
-    "date":  "2026-10-21T12:37:31+07:00",
+    "date":  "2026-10-22T02:48:31+07:00",
     "label":  "live-proven (one machine)",
     "engine":  "C:\\Users\\axioo\\Desktop\\k6wp\\build\\release\\engine.exe",
     "unload_after_ms":  3000,
@@ -15,17 +15,17 @@
     "user_pause":  {
                        "run":  "user-pause",
                        "decode_state":  "paused",
-                       "luma":  78.37,
+                       "luma":  78.49,
                        "picture_present":  true,
                        "surfaces":  1
                    },
     "results":  [
                     {
                         "run":  1,
-                        "samples":  34,
+                        "samples":  33,
                         "black_samples":  0,
-                        "min_luma":  67.45,
-                        "median_luma":  67.62,
+                        "min_luma":  67.42,
+                        "median_luma":  67.6,
                         "injected_surfaces_while_unloaded":  0,
                         "wallpaper_visible_while_unloaded":  true,
                         "explorer_before":  null,
@@ -36,10 +36,10 @@
                     },
                     {
                         "run":  2,
-                        "samples":  35,
+                        "samples":  34,
                         "black_samples":  0,
-                        "min_luma":  67.46,
-                        "median_luma":  67.62,
+                        "min_luma":  67.42,
+                        "median_luma":  67.68,
                         "injected_surfaces_while_unloaded":  0,
                         "wallpaper_visible_while_unloaded":  true,
                         "explorer_before":  null,
@@ -50,23 +50,9 @@
                     },
                     {
                         "run":  3,
-                        "samples":  33,
-                        "black_samples":  0,
-                        "min_luma":  67.38,
-                        "median_luma":  67.61,
-                        "injected_surfaces_while_unloaded":  0,
-                        "wallpaper_visible_while_unloaded":  true,
-                        "explorer_before":  null,
-                        "explorer_during":  null,
-                        "explorer_after":  null,
-                        "explorer_responsive":  true,
-                        "animating_after_resume":  true
-                    },
-                    {
-                        "run":  4,
                         "samples":  34,
                         "black_samples":  0,
-                        "min_luma":  67.41,
+                        "min_luma":  67.38,
                         "median_luma":  67.62,
                         "injected_surfaces_while_unloaded":  0,
                         "wallpaper_visible_while_unloaded":  true,
@@ -77,10 +63,24 @@
                         "animating_after_resume":  true
                     },
                     {
-                        "run":  5,
-                        "samples":  34,
+                        "run":  4,
+                        "samples":  33,
                         "black_samples":  0,
-                        "min_luma":  67.42,
+                        "min_luma":  67.38,
+                        "median_luma":  67.63,
+                        "injected_surfaces_while_unloaded":  0,
+                        "wallpaper_visible_while_unloaded":  true,
+                        "explorer_before":  null,
+                        "explorer_during":  null,
+                        "explorer_after":  null,
+                        "explorer_responsive":  true,
+                        "animating_after_resume":  true
+                    },
+                    {
+                        "run":  5,
+                        "samples":  35,
+                        "black_samples":  0,
+                        "min_luma":  67.38,
                         "median_luma":  67.58,
                         "injected_surfaces_while_unloaded":  0,
                         "wallpaper_visible_while_unloaded":  true,
@@ -93,7 +93,7 @@
                     {
                         "run":  "user-pause",
                         "decode_state":  "paused",
-                        "luma":  78.37,
+                        "luma":  78.49,
                         "picture_present":  true,
                         "surfaces":  1
                     }

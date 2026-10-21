@@ -37,6 +37,7 @@
 #include "pin_verify_schedule.hpp"
 #include "working_set_trim.hpp"
 #include "pause_controller.hpp"
+#include "unload_state.hpp"
 #include "ipc_command_marshal.hpp"
 #include "playlist.hpp"
 #include "playlist_controller.hpp"
@@ -307,8 +308,6 @@ class EngineApp {
   // teardown needs no graveyard round trip and no re-injection: a resume is
   // a loadfile. (The spec's "destroy the renderer in the background" wording
   // is the harder variant; the measurement decides which one is needed -
-  // see docs/refactor/phase1-1.md.)
-  enum class DecodeState { kActive, kPaused, kUnloaded };
   DecodeState decode_state_ = DecodeState::kActive;
   // When the current pause started (engine clock, ms). 0 = not paused.
   long long pause_started_ms_ = 0;

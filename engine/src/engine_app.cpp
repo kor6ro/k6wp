@@ -1462,38 +1462,27 @@ void EngineApp::ApplyPauseState(const char* owner) {
 // locked, the machine suspending. An EXPLICIT user pause keeps the frozen
 // picture (that is what "pause" means), so there is no visible change.
 bool EngineApp::PauseHidesWallpaper(int mask) const {
-  // kPauseFullscreen | kPauseScreenOff | kPauseSessionLock | kPauseSuspend.
-  // kUser (an explicit pause) and kPower (the DC static mode) are NOT in
-  // the set: in both cases the wallpaper is on screen.
-  constexpr int kInvisibleOwners =
-      PauseController::kFullscreen | PauseController::kScreenOff |
-      PauseController::kSessionLock | PauseController::kSuspend;
-  return (mask & kInvisibleOwners) != 0;
+  // The rule itself is pure and lives in pause_controller.hpp (the unload
+  // state machine, the tray and the golden fixtures all read it from
+  // there, so there is exactly one definition).
+  return k6wp::PauseHidesWallpaper(mask);
 }
 
 void EngineApp::OnPauseStateChanged(bool paused) {
   std::unique_lock<std::mutex> lock(decode_state_mutex_);
-  if (paused) {
-    if (decode_state_ == DecodeState::kActive) {
-      decode_state_ = DecodeState::kPaused;
-      pause_started_ms_ = NowMs();
-    }
-    return;
-  }
-  // The mask is clear: the engine is active again. If the file was unloaded,
-  // bring it back now (a resume must not wait for the next tick).
-  if (decode_state_ == DecodeState::kUnloaded) {
+  // The decision itself is pure (unload_state.hpp) - the golden fixtures
+  // pin it, and the engine does exactly what it says.
+  const UnloadDecision decision = UnloadOnPauseChanged(
+      UnloadMachine{decode_state_, pause_started_ms_, unload_after_pause_ms_},
+      paused, NowMs());
+  decode_state_ = decision.state;
+  pause_started_ms_ = decision.pause_started_ms;
+  if (decision.reload_due) {
     // The reload itself talks to mpv, so it is done outside the lock.
     const long long now = NowMs();
     lock.unlock();
     ReloadDecodeNow(now);
-    lock.lock();
-    decode_state_ = DecodeState::kActive;
-    pause_started_ms_ = 0;
-    return;
   }
-  decode_state_ = DecodeState::kActive;
-  pause_started_ms_ = 0;
 }
 
 // Task 1.1: the deadline check. Runs from the message loop.
@@ -1503,18 +1492,14 @@ void EngineApp::OnPauseStateChanged(bool paused) {
 // start of Run()) - mixing the two would make the deadline unreachable.
 void EngineApp::MaybeUnloadAfterPause(long long elapsed_ms) {
   (void)elapsed_ms;
-  if (unload_after_pause_ms_ <= 0) return;
   bool due = false;
   {
     std::lock_guard<std::mutex> lock(decode_state_mutex_);
-    if (decode_state_ != DecodeState::kPaused) return;
-    if (pause_started_ms_ <= 0) return;
-    if (NowMs() - pause_started_ms_ < unload_after_pause_ms_) return;
-    // Only the owners that make the wallpaper invisible qualify (see
-    // PauseHidesWallpaper): an explicit user pause keeps the picture.
-    if (!PauseHidesWallpaper(pause_.mask())) return;
-    decode_state_ = DecodeState::kUnloaded;
-    due = true;
+    const UnloadDecision decision = UnloadOnTick(
+        UnloadMachine{decode_state_, pause_started_ms_, unload_after_pause_ms_},
+        pause_.mask(), NowMs());
+    decode_state_ = decision.state;
+    due = decision.unload_due;
   }
   if (due) UnloadDecodeNow(NowMs());
 }

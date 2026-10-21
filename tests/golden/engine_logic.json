@@ -1,0 +1,2139 @@
+{
+  "cases": [
+    {
+      "input": {
+        "child": {
+          "bottom": 1080,
+          "left": 0,
+          "right": 1920,
+          "top": 0
+        },
+        "monitor": {
+          "bottom": 1080,
+          "left": 0,
+          "right": 1920,
+          "top": 0
+        }
+      },
+      "module": "desktop_placement",
+      "name": "exact_cover",
+      "output": {
+        "verdict": "placement: covered"
+      }
+    },
+    {
+      "input": {
+        "child": {
+          "bottom": 1000,
+          "left": 0,
+          "right": 1920,
+          "top": 0
+        },
+        "monitor": {
+          "bottom": 1080,
+          "left": 0,
+          "right": 1920,
+          "top": 0
+        }
+      },
+      "module": "desktop_placement",
+      "name": "clipped_bottom",
+      "output": {
+        "verdict": "placement: CLIPPED-bottom"
+      }
+    },
+    {
+      "input": {
+        "child": {
+          "bottom": 1080,
+          "left": 0,
+          "right": 1000,
+          "top": 0
+        },
+        "monitor": {
+          "bottom": 1080,
+          "left": 0,
+          "right": 1920,
+          "top": 0
+        }
+      },
+      "module": "desktop_placement",
+      "name": "clipped_right",
+      "output": {
+        "verdict": "placement: CLIPPED-right"
+      }
+    },
+    {
+      "input": {
+        "child": {
+          "bottom": 200,
+          "left": 100,
+          "right": 200,
+          "top": 100
+        },
+        "monitor": {
+          "bottom": 1080,
+          "left": 0,
+          "right": 1920,
+          "top": 0
+        }
+      },
+      "module": "desktop_placement",
+      "name": "smaller_than_monitor",
+      "output": {
+        "verdict": "placement: CLIPPED-left"
+      }
+    },
+    {
+      "input": {
+        "child": {
+          "bottom": 1080,
+          "left": -1920,
+          "right": 0,
+          "top": 0
+        },
+        "monitor": {
+          "bottom": 1080,
+          "left": -1920,
+          "right": 0,
+          "top": 0
+        }
+      },
+      "module": "desktop_placement",
+      "name": "negative_origin",
+      "output": {
+        "verdict": "placement: covered"
+      }
+    },
+    {
+      "input": {
+        "child": {
+          "bottom": 1080,
+          "left": -1920,
+          "right": -100,
+          "top": 0
+        },
+        "monitor": {
+          "bottom": 1080,
+          "left": -1920,
+          "right": 0,
+          "top": 0
+        }
+      },
+      "module": "desktop_placement",
+      "name": "negative_origin_clipped",
+      "output": {
+        "verdict": "placement: CLIPPED-right"
+      }
+    },
+    {
+      "input": {
+        "child": {
+          "bottom": 1920,
+          "left": 0,
+          "right": 1080,
+          "top": 0
+        },
+        "monitor": {
+          "bottom": 1920,
+          "left": 0,
+          "right": 1080,
+          "top": 0
+        }
+      },
+      "module": "desktop_placement",
+      "name": "portrait",
+      "output": {
+        "verdict": "placement: covered"
+      }
+    },
+    {
+      "input": {
+        "child": {
+          "bottom": 1000,
+          "left": 0,
+          "right": 1080,
+          "top": 0
+        },
+        "monitor": {
+          "bottom": 1920,
+          "left": 0,
+          "right": 1080,
+          "top": 0
+        }
+      },
+      "module": "desktop_placement",
+      "name": "portrait_clipped",
+      "output": {
+        "verdict": "placement: CLIPPED-bottom"
+      }
+    },
+    {
+      "input": {
+        "child": {
+          "bottom": 1080,
+          "left": 2000,
+          "right": 3000,
+          "top": 0
+        },
+        "monitor": {
+          "bottom": 1080,
+          "left": 0,
+          "right": 1920,
+          "top": 0
+        }
+      },
+      "module": "desktop_placement",
+      "name": "disjoint_right",
+      "output": {
+        "verdict": "placement: OUT-OF-BOUNDS"
+      }
+    },
+    {
+      "input": {
+        "child_classes": [],
+        "own_class": "K6WP.DesktopInject.1"
+      },
+      "module": "workerw_host",
+      "name": "empty",
+      "output": {
+        "accepted": true
+      }
+    },
+    {
+      "input": {
+        "child_classes": [
+          "K6WP.DesktopInject.1"
+        ],
+        "own_class": "K6WP.DesktopInject.1"
+      },
+      "module": "workerw_host",
+      "name": "own_only",
+      "output": {
+        "accepted": true
+      }
+    },
+    {
+      "input": {
+        "child_classes": [
+          "K6WP.DesktopInject.1",
+          "K6WP.DesktopInject.1"
+        ],
+        "own_class": "K6WP.DesktopInject.1"
+      },
+      "module": "workerw_host",
+      "name": "own_twice",
+      "output": {
+        "accepted": true
+      }
+    },
+    {
+      "input": {
+        "child_classes": [
+          "SHELLDLL_DefView"
+        ],
+        "own_class": "K6WP.DesktopInject.1"
+      },
+      "module": "workerw_host",
+      "name": "foreign",
+      "output": {
+        "accepted": false
+      }
+    },
+    {
+      "input": {
+        "child_classes": [
+          "K6WP.DesktopInject.1",
+          "SHELLDLL_DefView"
+        ],
+        "own_class": "K6WP.DesktopInject.1"
+      },
+      "module": "workerw_host",
+      "name": "own_and_foreign",
+      "output": {
+        "accepted": false
+      }
+    },
+    {
+      "input": {
+        "child_classes": [
+          "SHELLDLL_DefView",
+          "K6WP.DesktopInject.1"
+        ],
+        "own_class": "K6WP.DesktopInject.1"
+      },
+      "module": "workerw_host",
+      "name": "foreign_then_own",
+      "output": {
+        "accepted": false
+      }
+    },
+    {
+      "input": {
+        "attempts_done": 0,
+        "first_pass_ms": 0,
+        "now_ms": 0
+      },
+      "module": "retry_schedule",
+      "name": "first_due",
+      "output": {
+        "due": true,
+        "exhausted": false,
+        "next_delay_ms": 0
+      }
+    },
+    {
+      "input": {
+        "attempts_done": 0,
+        "first_pass_ms": 0,
+        "now_ms": 100
+      },
+      "module": "retry_schedule",
+      "name": "first_not_due",
+      "output": {
+        "due": true,
+        "exhausted": false,
+        "next_delay_ms": 0
+      }
+    },
+    {
+      "input": {
+        "attempts_done": 1,
+        "first_pass_ms": 0,
+        "now_ms": 250
+      },
+      "module": "retry_schedule",
+      "name": "second_due",
+      "output": {
+        "due": true,
+        "exhausted": false,
+        "next_delay_ms": 0
+      }
+    },
+    {
+      "input": {
+        "attempts_done": 1,
+        "first_pass_ms": 0,
+        "now_ms": 200
+      },
+      "module": "retry_schedule",
+      "name": "second_not_due",
+      "output": {
+        "due": false,
+        "exhausted": false,
+        "next_delay_ms": 50
+      }
+    },
+    {
+      "input": {
+        "attempts_done": 2,
+        "first_pass_ms": 0,
+        "now_ms": 1000
+      },
+      "module": "retry_schedule",
+      "name": "third_due",
+      "output": {
+        "due": true,
+        "exhausted": false,
+        "next_delay_ms": 0
+      }
+    },
+    {
+      "input": {
+        "attempts_done": 3,
+        "first_pass_ms": 0,
+        "now_ms": 3000
+      },
+      "module": "retry_schedule",
+      "name": "last_due",
+      "output": {
+        "due": true,
+        "exhausted": false,
+        "next_delay_ms": 0
+      }
+    },
+    {
+      "input": {
+        "attempts_done": 4,
+        "first_pass_ms": 0,
+        "now_ms": 5000
+      },
+      "module": "retry_schedule",
+      "name": "exhausted",
+      "output": {
+        "due": false,
+        "exhausted": true,
+        "next_delay_ms": -1
+      }
+    },
+    {
+      "input": {
+        "attempts_done": 2,
+        "first_pass_ms": 1000,
+        "now_ms": 1250
+      },
+      "module": "retry_schedule",
+      "name": "offset_clock",
+      "output": {
+        "due": false,
+        "exhausted": false,
+        "next_delay_ms": 750
+      }
+    },
+    {
+      "input": {
+        "count": 0,
+        "max_restarts": 3,
+        "now_ms": 1000,
+        "window_ms": 600000,
+        "window_start_ms": 0
+      },
+      "module": "crash_restart_guard",
+      "name": "first_restart",
+      "output": {
+        "allowed": true,
+        "count": 1,
+        "window_start_ms": 1000
+      }
+    },
+    {
+      "input": {
+        "count": 1,
+        "max_restarts": 3,
+        "now_ms": 2000,
+        "window_ms": 600000,
+        "window_start_ms": 1000
+      },
+      "module": "crash_restart_guard",
+      "name": "second_in_window",
+      "output": {
+        "allowed": true,
+        "count": 2,
+        "window_start_ms": 1000
+      }
+    },
+    {
+      "input": {
+        "count": 2,
+        "max_restarts": 3,
+        "now_ms": 2000,
+        "window_ms": 600000,
+        "window_start_ms": 1000
+      },
+      "module": "crash_restart_guard",
+      "name": "third_in_window",
+      "output": {
+        "allowed": true,
+        "count": 3,
+        "window_start_ms": 1000
+      }
+    },
+    {
+      "input": {
+        "count": 3,
+        "max_restarts": 3,
+        "now_ms": 2000,
+        "window_ms": 600000,
+        "window_start_ms": 1000
+      },
+      "module": "crash_restart_guard",
+      "name": "over_the_budget",
+      "output": {
+        "allowed": false,
+        "count": 4,
+        "window_start_ms": 1000
+      }
+    },
+    {
+      "input": {
+        "count": 1,
+        "max_restarts": 3,
+        "now_ms": 601000,
+        "window_ms": 600000,
+        "window_start_ms": 1000
+      },
+      "module": "crash_restart_guard",
+      "name": "window_expired",
+      "output": {
+        "allowed": true,
+        "count": 1,
+        "window_start_ms": 601000
+      }
+    },
+    {
+      "input": {
+        "count": 1,
+        "max_restarts": 3,
+        "now_ms": 601001,
+        "window_ms": 600000,
+        "window_start_ms": 1000
+      },
+      "module": "crash_restart_guard",
+      "name": "window_expired_plus_one",
+      "output": {
+        "allowed": true,
+        "count": 1,
+        "window_start_ms": 601001
+      }
+    },
+    {
+      "input": {
+        "count": 1,
+        "max_restarts": 3,
+        "now_ms": 2000,
+        "window_ms": 0,
+        "window_start_ms": 1000
+      },
+      "module": "crash_restart_guard",
+      "name": "zero_window",
+      "output": {
+        "allowed": true,
+        "count": 1,
+        "window_start_ms": 2000
+      }
+    },
+    {
+      "input": {
+        "count": 1,
+        "max_restarts": 3,
+        "now_ms": 4000,
+        "window_ms": 600000,
+        "window_start_ms": 5000
+      },
+      "module": "crash_restart_guard",
+      "name": "clock_went_backwards",
+      "output": {
+        "allowed": true,
+        "count": 1,
+        "window_start_ms": 4000
+      }
+    },
+    {
+      "input": {
+        "mask": 0
+      },
+      "module": "pause_controller",
+      "name": "none",
+      "output": {
+        "hides_wallpaper": false,
+        "mask": 0,
+        "slots_paused": false,
+        "ui_paused": false
+      }
+    },
+    {
+      "input": {
+        "mask": 1
+      },
+      "module": "pause_controller",
+      "name": "user",
+      "output": {
+        "hides_wallpaper": false,
+        "mask": 1,
+        "slots_paused": true,
+        "ui_paused": true
+      }
+    },
+    {
+      "input": {
+        "mask": 2
+      },
+      "module": "pause_controller",
+      "name": "fullscreen",
+      "output": {
+        "hides_wallpaper": true,
+        "mask": 2,
+        "slots_paused": true,
+        "ui_paused": true
+      }
+    },
+    {
+      "input": {
+        "mask": 4
+      },
+      "module": "pause_controller",
+      "name": "suspend",
+      "output": {
+        "hides_wallpaper": true,
+        "mask": 4,
+        "slots_paused": true,
+        "ui_paused": true
+      }
+    },
+    {
+      "input": {
+        "mask": 8
+      },
+      "module": "pause_controller",
+      "name": "power",
+      "output": {
+        "hides_wallpaper": false,
+        "mask": 8,
+        "slots_paused": true,
+        "ui_paused": false
+      }
+    },
+    {
+      "input": {
+        "mask": 16
+      },
+      "module": "pause_controller",
+      "name": "session_lock",
+      "output": {
+        "hides_wallpaper": true,
+        "mask": 16,
+        "slots_paused": true,
+        "ui_paused": true
+      }
+    },
+    {
+      "input": {
+        "mask": 32
+      },
+      "module": "pause_controller",
+      "name": "screen_off",
+      "output": {
+        "hides_wallpaper": true,
+        "mask": 32,
+        "slots_paused": true,
+        "ui_paused": true
+      }
+    },
+    {
+      "input": {
+        "mask": 3
+      },
+      "module": "pause_controller",
+      "name": "user_and_fullscreen",
+      "output": {
+        "hides_wallpaper": true,
+        "mask": 3,
+        "slots_paused": true,
+        "ui_paused": true
+      }
+    },
+    {
+      "input": {
+        "mask": 54
+      },
+      "module": "pause_controller",
+      "name": "all_invisible",
+      "output": {
+        "hides_wallpaper": true,
+        "mask": 54,
+        "slots_paused": true,
+        "ui_paused": true
+      }
+    },
+    {
+      "input": {
+        "mask": 63
+      },
+      "module": "pause_controller",
+      "name": "all",
+      "output": {
+        "hides_wallpaper": true,
+        "mask": 63,
+        "slots_paused": true,
+        "ui_paused": true
+      }
+    },
+    {
+      "input": {
+        "new": {
+          "hash_snapshot": "h1",
+          "monitors": [
+            {
+              "degraded": false,
+              "height": 1080,
+              "is_primary": true,
+              "orientation": 0,
+              "scale_pct": 100,
+              "stable_key": "edid:AAA",
+              "width": 1920,
+              "x": 0,
+              "y": 0
+            }
+          ],
+          "virtual_height": 1080,
+          "virtual_width": 1920,
+          "virtual_x": 0,
+          "virtual_y": 0
+        },
+        "old": {
+          "hash_snapshot": "h1",
+          "monitors": [
+            {
+              "degraded": false,
+              "height": 1080,
+              "is_primary": true,
+              "orientation": 0,
+              "scale_pct": 100,
+              "stable_key": "edid:AAA",
+              "width": 1920,
+              "x": 0,
+              "y": 0
+            }
+          ],
+          "virtual_height": 1080,
+          "virtual_width": 1920,
+          "virtual_x": 0,
+          "virtual_y": 0
+        }
+      },
+      "module": "topology_diff",
+      "name": "identical",
+      "output": {
+        "added_keys": [],
+        "dpi_keys": [],
+        "empty": true,
+        "hash_changed": false,
+        "moved_keys": [],
+        "orientation_keys": [],
+        "primary_changed": false,
+        "removed_keys": [],
+        "resized_keys": []
+      }
+    },
+    {
+      "input": {
+        "new": {
+          "hash_snapshot": "h2",
+          "monitors": [
+            {
+              "degraded": false,
+              "height": 1080,
+              "is_primary": true,
+              "orientation": 0,
+              "scale_pct": 100,
+              "stable_key": "edid:AAA",
+              "width": 1920,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "degraded": false,
+              "height": 1080,
+              "is_primary": false,
+              "orientation": 0,
+              "scale_pct": 100,
+              "stable_key": "edid:CCC",
+              "width": 1920,
+              "x": 1920,
+              "y": 0
+            }
+          ],
+          "virtual_height": 1080,
+          "virtual_width": 1920,
+          "virtual_x": 0,
+          "virtual_y": 0
+        },
+        "old": {
+          "hash_snapshot": "h1",
+          "monitors": [
+            {
+              "degraded": false,
+              "height": 1080,
+              "is_primary": true,
+              "orientation": 0,
+              "scale_pct": 100,
+              "stable_key": "edid:AAA",
+              "width": 1920,
+              "x": 0,
+              "y": 0
+            }
+          ],
+          "virtual_height": 1080,
+          "virtual_width": 1920,
+          "virtual_x": 0,
+          "virtual_y": 0
+        }
+      },
+      "module": "topology_diff",
+      "name": "added",
+      "output": {
+        "added_keys": [
+          "edid:CCC"
+        ],
+        "dpi_keys": [],
+        "empty": false,
+        "hash_changed": true,
+        "moved_keys": [],
+        "orientation_keys": [],
+        "primary_changed": false,
+        "removed_keys": [],
+        "resized_keys": []
+      }
+    },
+    {
+      "input": {
+        "new": {
+          "hash_snapshot": "h2",
+          "monitors": [
+            {
+              "degraded": false,
+              "height": 1080,
+              "is_primary": true,
+              "orientation": 0,
+              "scale_pct": 100,
+              "stable_key": "edid:AAA",
+              "width": 1920,
+              "x": 0,
+              "y": 0
+            }
+          ],
+          "virtual_height": 1080,
+          "virtual_width": 1920,
+          "virtual_x": 0,
+          "virtual_y": 0
+        },
+        "old": {
+          "hash_snapshot": "h1",
+          "monitors": [
+            {
+              "degraded": false,
+              "height": 1080,
+              "is_primary": true,
+              "orientation": 0,
+              "scale_pct": 100,
+              "stable_key": "edid:AAA",
+              "width": 1920,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "degraded": false,
+              "height": 1080,
+              "is_primary": false,
+              "orientation": 0,
+              "scale_pct": 100,
+              "stable_key": "edid:BBB",
+              "width": 1920,
+              "x": -1920,
+              "y": 0
+            }
+          ],
+          "virtual_height": 1080,
+          "virtual_width": 1920,
+          "virtual_x": 0,
+          "virtual_y": 0
+        }
+      },
+      "module": "topology_diff",
+      "name": "removed",
+      "output": {
+        "added_keys": [],
+        "dpi_keys": [],
+        "empty": false,
+        "hash_changed": true,
+        "moved_keys": [],
+        "orientation_keys": [],
+        "primary_changed": false,
+        "removed_keys": [
+          "edid:BBB"
+        ],
+        "resized_keys": []
+      }
+    },
+    {
+      "input": {
+        "new": {
+          "hash_snapshot": "h2",
+          "monitors": [
+            {
+              "degraded": false,
+              "height": 1080,
+              "is_primary": true,
+              "orientation": 0,
+              "scale_pct": 100,
+              "stable_key": "edid:AAA",
+              "width": 1920,
+              "x": 0,
+              "y": 100
+            }
+          ],
+          "virtual_height": 1080,
+          "virtual_width": 1920,
+          "virtual_x": 0,
+          "virtual_y": 0
+        },
+        "old": {
+          "hash_snapshot": "h1",
+          "monitors": [
+            {
+              "degraded": false,
+              "height": 1080,
+              "is_primary": true,
+              "orientation": 0,
+              "scale_pct": 100,
+              "stable_key": "edid:AAA",
+              "width": 1920,
+              "x": 0,
+              "y": 0
+            }
+          ],
+          "virtual_height": 1080,
+          "virtual_width": 1920,
+          "virtual_x": 0,
+          "virtual_y": 0
+        }
+      },
+      "module": "topology_diff",
+      "name": "moved",
+      "output": {
+        "added_keys": [],
+        "dpi_keys": [],
+        "empty": false,
+        "hash_changed": true,
+        "moved_keys": [
+          "edid:AAA"
+        ],
+        "orientation_keys": [],
+        "primary_changed": false,
+        "removed_keys": [],
+        "resized_keys": []
+      }
+    },
+    {
+      "input": {
+        "new": {
+          "hash_snapshot": "h2",
+          "monitors": [
+            {
+              "degraded": false,
+              "height": 720,
+              "is_primary": true,
+              "orientation": 0,
+              "scale_pct": 100,
+              "stable_key": "edid:AAA",
+              "width": 1280,
+              "x": 0,
+              "y": 0
+            }
+          ],
+          "virtual_height": 1080,
+          "virtual_width": 1920,
+          "virtual_x": 0,
+          "virtual_y": 0
+        },
+        "old": {
+          "hash_snapshot": "h1",
+          "monitors": [
+            {
+              "degraded": false,
+              "height": 1080,
+              "is_primary": true,
+              "orientation": 0,
+              "scale_pct": 100,
+              "stable_key": "edid:AAA",
+              "width": 1920,
+              "x": 0,
+              "y": 0
+            }
+          ],
+          "virtual_height": 1080,
+          "virtual_width": 1920,
+          "virtual_x": 0,
+          "virtual_y": 0
+        }
+      },
+      "module": "topology_diff",
+      "name": "resized",
+      "output": {
+        "added_keys": [],
+        "dpi_keys": [],
+        "empty": false,
+        "hash_changed": true,
+        "moved_keys": [],
+        "orientation_keys": [],
+        "primary_changed": false,
+        "removed_keys": [],
+        "resized_keys": [
+          "edid:AAA"
+        ]
+      }
+    },
+    {
+      "input": {
+        "new": {
+          "hash_snapshot": "h2",
+          "monitors": [
+            {
+              "degraded": false,
+              "height": 1080,
+              "is_primary": true,
+              "orientation": 0,
+              "scale_pct": 125,
+              "stable_key": "edid:AAA",
+              "width": 1920,
+              "x": 0,
+              "y": 0
+            }
+          ],
+          "virtual_height": 1080,
+          "virtual_width": 1920,
+          "virtual_x": 0,
+          "virtual_y": 0
+        },
+        "old": {
+          "hash_snapshot": "h1",
+          "monitors": [
+            {
+              "degraded": false,
+              "height": 1080,
+              "is_primary": true,
+              "orientation": 0,
+              "scale_pct": 100,
+              "stable_key": "edid:AAA",
+              "width": 1920,
+              "x": 0,
+              "y": 0
+            }
+          ],
+          "virtual_height": 1080,
+          "virtual_width": 1920,
+          "virtual_x": 0,
+          "virtual_y": 0
+        }
+      },
+      "module": "topology_diff",
+      "name": "dpi_changed",
+      "output": {
+        "added_keys": [],
+        "dpi_keys": [
+          "edid:AAA"
+        ],
+        "empty": false,
+        "hash_changed": true,
+        "moved_keys": [],
+        "orientation_keys": [],
+        "primary_changed": false,
+        "removed_keys": [],
+        "resized_keys": []
+      }
+    },
+    {
+      "input": {
+        "new": {
+          "hash_snapshot": "h2",
+          "monitors": [
+            {
+              "degraded": false,
+              "height": 1080,
+              "is_primary": true,
+              "orientation": 1,
+              "scale_pct": 100,
+              "stable_key": "edid:AAA",
+              "width": 1920,
+              "x": 0,
+              "y": 0
+            }
+          ],
+          "virtual_height": 1080,
+          "virtual_width": 1920,
+          "virtual_x": 0,
+          "virtual_y": 0
+        },
+        "old": {
+          "hash_snapshot": "h1",
+          "monitors": [
+            {
+              "degraded": false,
+              "height": 1080,
+              "is_primary": true,
+              "orientation": 0,
+              "scale_pct": 100,
+              "stable_key": "edid:AAA",
+              "width": 1920,
+              "x": 0,
+              "y": 0
+            }
+          ],
+          "virtual_height": 1080,
+          "virtual_width": 1920,
+          "virtual_x": 0,
+          "virtual_y": 0
+        }
+      },
+      "module": "topology_diff",
+      "name": "orientation_changed",
+      "output": {
+        "added_keys": [],
+        "dpi_keys": [],
+        "empty": false,
+        "hash_changed": true,
+        "moved_keys": [],
+        "orientation_keys": [
+          "edid:AAA"
+        ],
+        "primary_changed": false,
+        "removed_keys": [],
+        "resized_keys": []
+      }
+    },
+    {
+      "input": {
+        "new": {
+          "hash_snapshot": "h2",
+          "monitors": [
+            {
+              "degraded": false,
+              "height": 1080,
+              "is_primary": false,
+              "orientation": 0,
+              "scale_pct": 100,
+              "stable_key": "edid:AAA",
+              "width": 1920,
+              "x": 0,
+              "y": 0
+            }
+          ],
+          "virtual_height": 1080,
+          "virtual_width": 1920,
+          "virtual_x": 0,
+          "virtual_y": 0
+        },
+        "old": {
+          "hash_snapshot": "h1",
+          "monitors": [
+            {
+              "degraded": false,
+              "height": 1080,
+              "is_primary": true,
+              "orientation": 0,
+              "scale_pct": 100,
+              "stable_key": "edid:AAA",
+              "width": 1920,
+              "x": 0,
+              "y": 0
+            }
+          ],
+          "virtual_height": 1080,
+          "virtual_width": 1920,
+          "virtual_x": 0,
+          "virtual_y": 0
+        }
+      },
+      "module": "topology_diff",
+      "name": "primary_changed",
+      "output": {
+        "added_keys": [],
+        "dpi_keys": [],
+        "empty": false,
+        "hash_changed": true,
+        "moved_keys": [],
+        "orientation_keys": [],
+        "primary_changed": true,
+        "removed_keys": [],
+        "resized_keys": []
+      }
+    },
+    {
+      "input": {
+        "new": {
+          "hash_snapshot": "h2",
+          "monitors": [
+            {
+              "degraded": false,
+              "height": 1080,
+              "is_primary": true,
+              "orientation": 0,
+              "scale_pct": 100,
+              "stable_key": "edid:AAA",
+              "width": 1920,
+              "x": 0,
+              "y": 0
+            }
+          ],
+          "virtual_height": 1080,
+          "virtual_width": 1920,
+          "virtual_x": 0,
+          "virtual_y": 0
+        },
+        "old": {
+          "hash_snapshot": "h1",
+          "monitors": [
+            {
+              "degraded": false,
+              "height": 1080,
+              "is_primary": true,
+              "orientation": 0,
+              "scale_pct": 100,
+              "stable_key": "edid:AAA",
+              "width": 1920,
+              "x": 0,
+              "y": 0
+            }
+          ],
+          "virtual_height": 1080,
+          "virtual_width": 1920,
+          "virtual_x": 0,
+          "virtual_y": 0
+        }
+      },
+      "module": "topology_diff",
+      "name": "hash_only",
+      "output": {
+        "added_keys": [],
+        "dpi_keys": [],
+        "empty": true,
+        "hash_changed": true,
+        "moved_keys": [],
+        "orientation_keys": [],
+        "primary_changed": false,
+        "removed_keys": [],
+        "resized_keys": []
+      }
+    },
+    {
+      "input": {
+        "new": {
+          "hash_snapshot": "h2",
+          "monitors": [
+            {
+              "degraded": false,
+              "height": 1080,
+              "is_primary": false,
+              "orientation": 0,
+              "scale_pct": 100,
+              "stable_key": "edid:BBB",
+              "width": 1920,
+              "x": -1920,
+              "y": 0
+            },
+            {
+              "degraded": false,
+              "height": 1080,
+              "is_primary": true,
+              "orientation": 0,
+              "scale_pct": 100,
+              "stable_key": "edid:AAA",
+              "width": 1920,
+              "x": 0,
+              "y": 0
+            }
+          ],
+          "virtual_height": 1080,
+          "virtual_width": 1920,
+          "virtual_x": 0,
+          "virtual_y": 0
+        },
+        "old": {
+          "hash_snapshot": "h1",
+          "monitors": [
+            {
+              "degraded": false,
+              "height": 1080,
+              "is_primary": true,
+              "orientation": 0,
+              "scale_pct": 100,
+              "stable_key": "edid:AAA",
+              "width": 1920,
+              "x": 0,
+              "y": 0
+            },
+            {
+              "degraded": false,
+              "height": 1080,
+              "is_primary": false,
+              "orientation": 0,
+              "scale_pct": 100,
+              "stable_key": "edid:BBB",
+              "width": 1920,
+              "x": -1920,
+              "y": 0
+            }
+          ],
+          "virtual_height": 1080,
+          "virtual_width": 1920,
+          "virtual_x": 0,
+          "virtual_y": 0
+        }
+      },
+      "module": "topology_diff",
+      "name": "swap",
+      "output": {
+        "added_keys": [],
+        "dpi_keys": [],
+        "empty": true,
+        "hash_changed": true,
+        "moved_keys": [],
+        "orientation_keys": [],
+        "primary_changed": false,
+        "removed_keys": [],
+        "resized_keys": []
+      }
+    },
+    {
+      "input": {
+        "trigger": "display-change"
+      },
+      "module": "reconcile_policy",
+      "name": "display_change",
+      "output": {
+        "action": "converge",
+        "needs_stable_topology": false
+      }
+    },
+    {
+      "input": {
+        "trigger": "monitor-on"
+      },
+      "module": "reconcile_policy",
+      "name": "monitor_on",
+      "output": {
+        "action": "converge",
+        "needs_stable_topology": false
+      }
+    },
+    {
+      "input": {
+        "trigger": "device-lost"
+      },
+      "module": "reconcile_policy",
+      "name": "device_lost",
+      "output": {
+        "action": "converge",
+        "needs_stable_topology": false
+      }
+    },
+    {
+      "input": {
+        "trigger": "resume"
+      },
+      "module": "reconcile_policy",
+      "name": "resume",
+      "output": {
+        "action": "reanchor",
+        "needs_stable_topology": true
+      }
+    },
+    {
+      "input": {
+        "trigger": "session-unlock"
+      },
+      "module": "reconcile_policy",
+      "name": "session_unlock",
+      "output": {
+        "action": "reanchor",
+        "needs_stable_topology": true
+      }
+    },
+    {
+      "input": {
+        "trigger": "taskbar-created"
+      },
+      "module": "reconcile_policy",
+      "name": "taskbar_created",
+      "output": {
+        "action": "reanchor",
+        "needs_stable_topology": true
+      }
+    },
+    {
+      "input": {
+        "trigger": "setting-change"
+      },
+      "module": "reconcile_policy",
+      "name": "setting_change",
+      "output": {
+        "action": "reanchor",
+        "needs_stable_topology": true
+      }
+    },
+    {
+      "input": {
+        "trigger": "something-else"
+      },
+      "module": "reconcile_policy",
+      "name": "unknown_trigger",
+      "output": {
+        "action": "none",
+        "needs_stable_topology": false
+      }
+    },
+    {
+      "input": {
+        "trigger": ""
+      },
+      "module": "reconcile_policy",
+      "name": "empty_trigger",
+      "output": {
+        "action": "none",
+        "needs_stable_topology": false
+      }
+    },
+    {
+      "input": {
+        "first": [
+          {
+            "device_name": "\\\\.\\DISPLAY1",
+            "height": 1080,
+            "id": 0,
+            "identity_degraded": false,
+            "is_primary": true,
+            "orientation": 0,
+            "refresh_hz": 60,
+            "scale_pct": 100,
+            "stable_key": "edid:AAA",
+            "width": 1920,
+            "x": 0,
+            "y": 0
+          },
+          {
+            "device_name": "\\\\.\\DISPLAY2",
+            "height": 1080,
+            "id": 1,
+            "identity_degraded": false,
+            "is_primary": false,
+            "orientation": 0,
+            "refresh_hz": 60,
+            "scale_pct": 100,
+            "stable_key": "edid:BBB",
+            "width": 1920,
+            "x": -1920,
+            "y": 0
+          }
+        ],
+        "second": [
+          {
+            "device_name": "\\\\.\\DISPLAY1",
+            "height": 1080,
+            "id": 0,
+            "identity_degraded": false,
+            "is_primary": true,
+            "orientation": 0,
+            "refresh_hz": 60,
+            "scale_pct": 100,
+            "stable_key": "edid:AAA",
+            "width": 1920,
+            "x": 0,
+            "y": 0
+          },
+          {
+            "device_name": "\\\\.\\DISPLAY2",
+            "height": 1080,
+            "id": 1,
+            "identity_degraded": false,
+            "is_primary": false,
+            "orientation": 0,
+            "refresh_hz": 60,
+            "scale_pct": 100,
+            "stable_key": "edid:BBB",
+            "width": 1920,
+            "x": -1920,
+            "y": 0
+          }
+        ]
+      },
+      "module": "reconcile_policy",
+      "name": "same_order",
+      "output": {
+        "signature": "edid:AAA@0,0,1920x1080p;edid:BBB@-1920,0,1920x1080s",
+        "stable": true
+      }
+    },
+    {
+      "input": {
+        "first": [
+          {
+            "device_name": "\\\\.\\DISPLAY1",
+            "height": 1080,
+            "id": 0,
+            "identity_degraded": false,
+            "is_primary": true,
+            "orientation": 0,
+            "refresh_hz": 60,
+            "scale_pct": 100,
+            "stable_key": "edid:AAA",
+            "width": 1920,
+            "x": 0,
+            "y": 0
+          },
+          {
+            "device_name": "\\\\.\\DISPLAY2",
+            "height": 1080,
+            "id": 1,
+            "identity_degraded": false,
+            "is_primary": false,
+            "orientation": 0,
+            "refresh_hz": 60,
+            "scale_pct": 100,
+            "stable_key": "edid:BBB",
+            "width": 1920,
+            "x": -1920,
+            "y": 0
+          }
+        ],
+        "second": [
+          {
+            "device_name": "\\\\.\\DISPLAY2",
+            "height": 1080,
+            "id": 1,
+            "identity_degraded": false,
+            "is_primary": false,
+            "orientation": 0,
+            "refresh_hz": 60,
+            "scale_pct": 100,
+            "stable_key": "edid:BBB",
+            "width": 1920,
+            "x": -1920,
+            "y": 0
+          },
+          {
+            "device_name": "\\\\.\\DISPLAY1",
+            "height": 1080,
+            "id": 0,
+            "identity_degraded": false,
+            "is_primary": true,
+            "orientation": 0,
+            "refresh_hz": 60,
+            "scale_pct": 100,
+            "stable_key": "edid:AAA",
+            "width": 1920,
+            "x": 0,
+            "y": 0
+          }
+        ]
+      },
+      "module": "reconcile_policy",
+      "name": "reordered",
+      "output": {
+        "signature": "edid:AAA@0,0,1920x1080p;edid:BBB@-1920,0,1920x1080s",
+        "stable": true
+      }
+    },
+    {
+      "input": {
+        "first": [
+          {
+            "device_name": "\\\\.\\DISPLAY1",
+            "height": 1080,
+            "id": 0,
+            "identity_degraded": false,
+            "is_primary": true,
+            "orientation": 0,
+            "refresh_hz": 60,
+            "scale_pct": 100,
+            "stable_key": "edid:AAA",
+            "width": 1920,
+            "x": 0,
+            "y": 0
+          },
+          {
+            "device_name": "\\\\.\\DISPLAY2",
+            "height": 1080,
+            "id": 1,
+            "identity_degraded": false,
+            "is_primary": false,
+            "orientation": 0,
+            "refresh_hz": 60,
+            "scale_pct": 100,
+            "stable_key": "edid:BBB",
+            "width": 1920,
+            "x": -1920,
+            "y": 0
+          }
+        ],
+        "second": [
+          {
+            "device_name": "\\\\.\\DISPLAY1",
+            "height": 1080,
+            "id": 0,
+            "identity_degraded": false,
+            "is_primary": true,
+            "orientation": 0,
+            "refresh_hz": 60,
+            "scale_pct": 100,
+            "stable_key": "edid:AAA",
+            "width": 1920,
+            "x": 0,
+            "y": 0
+          },
+          {
+            "device_name": "\\\\.\\DISPLAY2",
+            "height": 1080,
+            "id": 1,
+            "identity_degraded": false,
+            "is_primary": false,
+            "orientation": 0,
+            "refresh_hz": 60,
+            "scale_pct": 100,
+            "stable_key": "edid:BBB",
+            "width": 1920,
+            "x": -1920,
+            "y": 50
+          }
+        ]
+      },
+      "module": "reconcile_policy",
+      "name": "moved",
+      "output": {
+        "signature": "edid:AAA@0,0,1920x1080p;edid:BBB@-1920,0,1920x1080s",
+        "stable": false
+      }
+    },
+    {
+      "input": {
+        "first": [
+          {
+            "device_name": "\\\\.\\DISPLAY1",
+            "height": 1080,
+            "id": 0,
+            "identity_degraded": false,
+            "is_primary": true,
+            "orientation": 0,
+            "refresh_hz": 60,
+            "scale_pct": 100,
+            "stable_key": "edid:AAA",
+            "width": 1920,
+            "x": 0,
+            "y": 0
+          }
+        ],
+        "second": [
+          {
+            "device_name": "\\\\.\\DISPLAY1",
+            "height": 1080,
+            "id": 0,
+            "identity_degraded": false,
+            "is_primary": true,
+            "orientation": 0,
+            "refresh_hz": 60,
+            "scale_pct": 100,
+            "stable_key": "edid:AAA",
+            "width": 1920,
+            "x": 0,
+            "y": 0
+          },
+          {
+            "device_name": "\\\\.\\DISPLAY2",
+            "height": 1080,
+            "id": 1,
+            "identity_degraded": false,
+            "is_primary": false,
+            "orientation": 0,
+            "refresh_hz": 60,
+            "scale_pct": 100,
+            "stable_key": "edid:BBB",
+            "width": 1920,
+            "x": -1920,
+            "y": 0
+          }
+        ]
+      },
+      "module": "reconcile_policy",
+      "name": "count_changed",
+      "output": {
+        "signature": "edid:AAA@0,0,1920x1080p",
+        "stable": false
+      }
+    },
+    {
+      "input": {
+        "first": [
+          {
+            "device_name": "\\\\.\\DISPLAY1",
+            "height": 1080,
+            "id": 0,
+            "identity_degraded": false,
+            "is_primary": true,
+            "orientation": 0,
+            "refresh_hz": 60,
+            "scale_pct": 100,
+            "stable_key": "edid:AAA",
+            "width": 1920,
+            "x": 0,
+            "y": 0
+          },
+          {
+            "device_name": "\\\\.\\DISPLAY2",
+            "height": 1080,
+            "id": 1,
+            "identity_degraded": false,
+            "is_primary": false,
+            "orientation": 0,
+            "refresh_hz": 60,
+            "scale_pct": 100,
+            "stable_key": "edid:BBB",
+            "width": 1920,
+            "x": -1920,
+            "y": 0
+          }
+        ],
+        "second": [
+          {
+            "device_name": "\\\\.\\DISPLAY1",
+            "height": 1080,
+            "id": 0,
+            "identity_degraded": false,
+            "is_primary": true,
+            "orientation": 0,
+            "refresh_hz": 60,
+            "scale_pct": 100,
+            "stable_key": "edid:AAA",
+            "width": 1920,
+            "x": 0,
+            "y": 0
+          },
+          {
+            "device_name": "\\\\.\\DISPLAY2",
+            "height": 1080,
+            "id": 1,
+            "identity_degraded": false,
+            "is_primary": false,
+            "orientation": 0,
+            "refresh_hz": 60,
+            "scale_pct": 100,
+            "stable_key": "edid:AAA",
+            "width": 1920,
+            "x": -1920,
+            "y": 0
+          }
+        ]
+      },
+      "module": "reconcile_policy",
+      "name": "duplicate_identity",
+      "output": {
+        "signature": "edid:AAA@0,0,1920x1080p;edid:BBB@-1920,0,1920x1080s",
+        "stable": false
+      }
+    },
+    {
+      "input": {
+        "mask": 0,
+        "now_ms": 1000,
+        "op": "pause_changed",
+        "pause_started_ms": 0,
+        "paused": true,
+        "state": "active",
+        "unload_after_ms": 30000
+      },
+      "module": "unload_state",
+      "name": "pause_starts",
+      "output": {
+        "pause_started_ms": 1000,
+        "reload_due": false,
+        "state": "paused",
+        "unload_due": false
+      }
+    },
+    {
+      "input": {
+        "mask": 0,
+        "now_ms": 5000,
+        "op": "pause_changed",
+        "pause_started_ms": 1000,
+        "paused": true,
+        "state": "paused",
+        "unload_after_ms": 30000
+      },
+      "module": "unload_state",
+      "name": "pause_keeps_the_deadline",
+      "output": {
+        "pause_started_ms": 1000,
+        "reload_due": false,
+        "state": "paused",
+        "unload_due": false
+      }
+    },
+    {
+      "input": {
+        "mask": 0,
+        "now_ms": 1000,
+        "op": "pause_changed",
+        "pause_started_ms": 0,
+        "paused": false,
+        "state": "active",
+        "unload_after_ms": 30000
+      },
+      "module": "unload_state",
+      "name": "active_stays_active",
+      "output": {
+        "pause_started_ms": 0,
+        "reload_due": false,
+        "state": "active",
+        "unload_due": false
+      }
+    },
+    {
+      "input": {
+        "mask": 0,
+        "now_ms": 5000,
+        "op": "pause_changed",
+        "pause_started_ms": 1000,
+        "paused": false,
+        "state": "paused",
+        "unload_after_ms": 30000
+      },
+      "module": "unload_state",
+      "name": "resume_from_paused",
+      "output": {
+        "pause_started_ms": 0,
+        "reload_due": false,
+        "state": "active",
+        "unload_due": false
+      }
+    },
+    {
+      "input": {
+        "mask": 0,
+        "now_ms": 5000,
+        "op": "pause_changed",
+        "pause_started_ms": 1000,
+        "paused": false,
+        "state": "unloaded",
+        "unload_after_ms": 30000
+      },
+      "module": "unload_state",
+      "name": "resume_from_unloaded_reloads",
+      "output": {
+        "pause_started_ms": 0,
+        "reload_due": true,
+        "state": "active",
+        "unload_due": false
+      }
+    },
+    {
+      "input": {
+        "mask": 0,
+        "now_ms": 5000,
+        "op": "pause_changed",
+        "pause_started_ms": 1000,
+        "paused": true,
+        "state": "unloaded",
+        "unload_after_ms": 30000
+      },
+      "module": "unload_state",
+      "name": "pause_while_unloaded",
+      "output": {
+        "pause_started_ms": 1000,
+        "reload_due": false,
+        "state": "unloaded",
+        "unload_due": false
+      }
+    },
+    {
+      "input": {
+        "mask": 2,
+        "now_ms": 31000,
+        "op": "tick",
+        "pause_started_ms": 1000,
+        "paused": false,
+        "state": "paused",
+        "unload_after_ms": 30000
+      },
+      "module": "unload_state",
+      "name": "deadline_unloads",
+      "output": {
+        "pause_started_ms": 1000,
+        "reload_due": false,
+        "state": "unloaded",
+        "unload_due": true
+      }
+    },
+    {
+      "input": {
+        "mask": 2,
+        "now_ms": 30999,
+        "op": "tick",
+        "pause_started_ms": 1000,
+        "paused": false,
+        "state": "paused",
+        "unload_after_ms": 30000
+      },
+      "module": "unload_state",
+      "name": "deadline_not_reached",
+      "output": {
+        "pause_started_ms": 1000,
+        "reload_due": false,
+        "state": "paused",
+        "unload_due": false
+      }
+    },
+    {
+      "input": {
+        "mask": 2,
+        "now_ms": 31000,
+        "op": "tick",
+        "pause_started_ms": 1000,
+        "paused": false,
+        "state": "paused",
+        "unload_after_ms": 30000
+      },
+      "module": "unload_state",
+      "name": "deadline_exactly",
+      "output": {
+        "pause_started_ms": 1000,
+        "reload_due": false,
+        "state": "unloaded",
+        "unload_due": true
+      }
+    },
+    {
+      "input": {
+        "mask": 1,
+        "now_ms": 31000,
+        "op": "tick",
+        "pause_started_ms": 1000,
+        "paused": false,
+        "state": "paused",
+        "unload_after_ms": 30000
+      },
+      "module": "unload_state",
+      "name": "user_pause_keeps_the_picture",
+      "output": {
+        "pause_started_ms": 1000,
+        "reload_due": false,
+        "state": "paused",
+        "unload_due": false
+      }
+    },
+    {
+      "input": {
+        "mask": 8,
+        "now_ms": 31000,
+        "op": "tick",
+        "pause_started_ms": 1000,
+        "paused": false,
+        "state": "paused",
+        "unload_after_ms": 30000
+      },
+      "module": "unload_state",
+      "name": "power_cap_keeps_the_picture",
+      "output": {
+        "pause_started_ms": 1000,
+        "reload_due": false,
+        "state": "paused",
+        "unload_due": false
+      }
+    },
+    {
+      "input": {
+        "mask": 32,
+        "now_ms": 31000,
+        "op": "tick",
+        "pause_started_ms": 1000,
+        "paused": false,
+        "state": "paused",
+        "unload_after_ms": 30000
+      },
+      "module": "unload_state",
+      "name": "screen_off_unloads",
+      "output": {
+        "pause_started_ms": 1000,
+        "reload_due": false,
+        "state": "unloaded",
+        "unload_due": true
+      }
+    },
+    {
+      "input": {
+        "mask": 16,
+        "now_ms": 31000,
+        "op": "tick",
+        "pause_started_ms": 1000,
+        "paused": false,
+        "state": "paused",
+        "unload_after_ms": 30000
+      },
+      "module": "unload_state",
+      "name": "session_lock_unloads",
+      "output": {
+        "pause_started_ms": 1000,
+        "reload_due": false,
+        "state": "unloaded",
+        "unload_due": true
+      }
+    },
+    {
+      "input": {
+        "mask": 4,
+        "now_ms": 31000,
+        "op": "tick",
+        "pause_started_ms": 1000,
+        "paused": false,
+        "state": "paused",
+        "unload_after_ms": 30000
+      },
+      "module": "unload_state",
+      "name": "suspend_unloads",
+      "output": {
+        "pause_started_ms": 1000,
+        "reload_due": false,
+        "state": "unloaded",
+        "unload_due": true
+      }
+    },
+    {
+      "input": {
+        "mask": 2,
+        "now_ms": 31000,
+        "op": "tick",
+        "pause_started_ms": 1000,
+        "paused": false,
+        "state": "paused",
+        "unload_after_ms": 0
+      },
+      "module": "unload_state",
+      "name": "never_unloads",
+      "output": {
+        "pause_started_ms": 1000,
+        "reload_due": false,
+        "state": "paused",
+        "unload_due": false
+      }
+    },
+    {
+      "input": {
+        "mask": 2,
+        "now_ms": 31000,
+        "op": "tick",
+        "pause_started_ms": 0,
+        "paused": false,
+        "state": "active",
+        "unload_after_ms": 30000
+      },
+      "module": "unload_state",
+      "name": "active_tick_does_nothing",
+      "output": {
+        "pause_started_ms": 0,
+        "reload_due": false,
+        "state": "active",
+        "unload_due": false
+      }
+    },
+    {
+      "input": {
+        "mask": 2,
+        "now_ms": 31000,
+        "op": "tick",
+        "pause_started_ms": 0,
+        "paused": false,
+        "state": "paused",
+        "unload_after_ms": 30000
+      },
+      "module": "unload_state",
+      "name": "no_pause_start_does_nothing",
+      "output": {
+        "pause_started_ms": 0,
+        "reload_due": false,
+        "state": "paused",
+        "unload_due": false
+      }
+    },
+    {
+      "input": {
+        "mask": 2,
+        "now_ms": 31000,
+        "op": "tick",
+        "pause_started_ms": 1000,
+        "paused": false,
+        "state": "unloaded",
+        "unload_after_ms": 30000
+      },
+      "module": "unload_state",
+      "name": "unloaded_tick_does_nothing",
+      "output": {
+        "pause_started_ms": 1000,
+        "reload_due": false,
+        "state": "unloaded",
+        "unload_due": false
+      }
+    },
+    {
+      "input": {
+        "armed": false,
+        "deadline_ms": 6000,
+        "now_ms": 7000
+      },
+      "module": "pin_verify_schedule",
+      "name": "not_armed",
+      "output": {
+        "due": false
+      }
+    },
+    {
+      "input": {
+        "armed": true,
+        "deadline_ms": 6000,
+        "now_ms": 5999
+      },
+      "module": "pin_verify_schedule",
+      "name": "before_the_deadline",
+      "output": {
+        "due": false
+      }
+    },
+    {
+      "input": {
+        "armed": true,
+        "deadline_ms": 6000,
+        "now_ms": 6000
+      },
+      "module": "pin_verify_schedule",
+      "name": "at_the_deadline",
+      "output": {
+        "due": true
+      }
+    },
+    {
+      "input": {
+        "armed": true,
+        "deadline_ms": 6000,
+        "now_ms": 6001
+      },
+      "module": "pin_verify_schedule",
+      "name": "after_the_deadline",
+      "output": {
+        "due": true
+      }
+    },
+    {
+      "input": {
+        "reverts": 1,
+        "total": 0
+      },
+      "module": "pin_verify_schedule",
+      "name": "first_revert",
+      "output": {
+        "total": 1
+      }
+    },
+    {
+      "input": {
+        "reverts": 0,
+        "total": 0
+      },
+      "module": "pin_verify_schedule",
+      "name": "no_revert",
+      "output": {
+        "total": 0
+      }
+    },
+    {
+      "input": {
+        "reverts": 1,
+        "total": 2
+      },
+      "module": "pin_verify_schedule",
+      "name": "accumulates",
+      "output": {
+        "total": 3
+      }
+    },
+    {
+      "input": {
+        "reverts": 3,
+        "total": 1
+      },
+      "module": "pin_verify_schedule",
+      "name": "several_at_once",
+      "output": {
+        "total": 4
+      }
+    }
+  ],
+  "note": "The G5 golden fixtures for the engine's PURE logic (task G5). The C++ side writes them and checks them; the Rust side replays them. A change in any of these decisions is a behaviour change on both sides.",
+  "version": 1
+}

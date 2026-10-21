@@ -540,11 +540,19 @@ mod tests {
     }
 
     #[test]
-    fn an_unknown_version_is_an_error() {
+    fn a_corrupt_version_is_an_error_and_a_newer_one_is_not() {
+        // A NEGATIVE version is corrupt: it must fail.
         let err = migrate_config(r#"{"version":-1}"#).expect_err("must fail");
         assert_eq!(err.to_string(), "unsupported config schema version: -1");
-        let err = migrate_config(r#"{"version":7}"#).expect_err("must fail");
-        assert_eq!(err.to_string(), "unsupported config schema version: 7");
+        // A NEWER version (written by a newer engine) is read BEST-EFFORT:
+        // the known fields keep their values, the unknown ones take their
+        // defaults. The older engine must NOT reset the user's settings to
+        // the defaults (task G4).
+        let cfg = migrate_config(r#"{"version":7,"video_path":"C:\\v\\new.mp4","crf":19}"#)
+            .expect("a newer file must migrate");
+        assert_eq!(cfg.version, CONFIG_SCHEMA_VERSION);
+        assert_eq!(cfg.video_path, std::path::PathBuf::from("C:\\v\\new.mp4"));
+        assert_eq!(cfg.crf, 19);
     }
 
     #[test]

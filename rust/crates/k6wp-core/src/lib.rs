@@ -8,6 +8,7 @@
 pub mod compress_args;
 pub mod config;
 pub mod displays;
+pub mod engine_logic;
 pub mod ipc;
 pub mod library;
 pub mod playlist;

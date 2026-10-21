@@ -11,6 +11,19 @@ namespace k6wp {
 // Run loop. Thread-safe: the queued set_video executor arms it on the main
 // thread while the loop polls it, and get_state reads the counter on the IPC
 // worker thread.
+// The pure core of the verify schedule (task G5): the delay after every
+// (re)load and the two decisions, with the clock as a PARAMETER.
+inline constexpr long long kPinVerifyDelayMs = 6000;
+
+// True when the verify pass is due: it is armed AND the deadline elapsed.
+// (An unarmed schedule is never due, whatever the clock says.)
+inline bool PinVerifyDueAt(bool armed, long long deadline_ms, long long now_ms) {
+  return armed && now_ms >= deadline_ms;
+}
+
+// The lifetime revert counter: the new total after n reverts.
+inline int PinVerifyAddReverts(int total, int n) { return total + n; }
+
 class PinVerifySchedule {
  public:
   // Arms the +6 s deadline when a pin is configured. No-op without a pin.

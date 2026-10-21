@@ -450,6 +450,31 @@ add_dependencies(engine_no_winrt_test engine)
 add_test(NAME engine_no_winrt_test
          COMMAND engine_no_winrt_test $<TARGET_FILE:engine>)
 
+  # engine_logic_dump (task G5): the golden fixtures for the engine's PURE
+  # logic - the placement geometry, the WorkerW host rule, the retry
+  # schedule, the crash-restart backoff and the pause mask. The C++ side
+  # checks them (--check, wired as the ctest below) and the Rust side
+  # replays them (k6wp-core's engine_logic golden test), so a port that
+  # differs in any way fails on both sides.
+  # The link model is the pure one: no mpv, no desktop_inject.cpp.
+  add_executable(engine_logic_dump ../tests/engine_logic_dump.cpp
+    src/desktop_placement.cpp
+    src/retry_schedule.cpp
+    src/crash_restart_guard.cpp
+    src/topology_diff.cpp
+    src/reconcile_policy.cpp
+    src/pin_verify_schedule.cpp
+  )
+  target_link_libraries(engine_logic_dump PRIVATE user32 k6wp_shared)
+  target_include_directories(engine_logic_dump PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/shared
+    ${CMAKE_SOURCE_DIR}/tests
+  )
+  add_test(NAME engine_logic_test
+           COMMAND engine_logic_dump --check
+                   ${CMAKE_SOURCE_DIR}/tests/golden/engine_logic.json)
+
 endif()
 
 # E5: EVERY test gets a hard timeout. A hung test must never hang the

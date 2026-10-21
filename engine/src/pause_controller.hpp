@@ -44,6 +44,20 @@ class PauseController {
   std::atomic<int> mask_{0};
 };
 
+// The owners that make the wallpaper INVISIBLE - the ones the unload (task
+// 1.1) may run for. An EXPLICIT user pause (kUser) and the DC power cap
+// (kPower) are NOT in the set: in both cases the wallpaper is on screen and
+// stays there (a user pause must keep the frozen picture).
+inline constexpr int kInvisiblePauseOwners =
+    PauseController::kFullscreen | PauseController::kScreenOff |
+    PauseController::kSessionLock | PauseController::kSuspend;
+
+// True when the pause mask contains an owner that hides the wallpaper.
+// Pure: the unload state machine and the tray read it.
+inline bool PauseHidesWallpaper(int mask) {
+  return (mask & kInvisiblePauseOwners) != 0;
+}
+
 // Human-readable name for a kUser..kScreenOff bit (logs). "unknown" otherwise.
 inline const char* PauseOwnerName(int bit) {
   switch (bit) {
