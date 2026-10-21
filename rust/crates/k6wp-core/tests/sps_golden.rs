@@ -106,3 +106,52 @@ fn the_sps_parser_agrees_with_ffmpeg() {
     );
     eprintln!("sps: {checked} cases match ffmpeg's trace_headers");
 }
+
+/// The DPB byte budget (G1) - the rule the compressor uses to decide
+/// between copying a file and re-encoding it.
+///
+/// The expected values are the measured ones (the DPB bytes and the
+/// measured engine RAM), so a change in the parser or in the rule shows up
+/// here.
+#[test]
+fn the_dpb_byte_budget_is_pinned() {
+    // file -> (the DPB bytes, the copy decision)
+    let expected: &[(&str, u64, bool)] = &[
+        // 4 refs x 1920 x 1088 x 1.5 = 12.5 MB -> inside the budget.
+        ("anime.mp4", 12_533_760, true),
+        // 8 refs -> 25.1 MB -> inside.
+        ("meddpb_1080p.mp4", 25_067_520, true),
+        // 16 refs -> 50.1 MB -> inside (the 64 MB budget).
+        ("highdpb_1080p.mp4", 50_135_040, true),
+        // 16 refs at 4K -> 199.1 MB -> OVER the budget -> re-encoded.
+        ("highdpb_4k.mp4", 199_065_600, false),
+        // HEVC: 5 refs x 1920 x 1080 x 1.5 = 15.6 MB -> inside.
+        ("hevc_1080p.mp4", 15_552_000, true),
+        // The interlaced file: 4 refs -> 12.5 MB -> inside.
+        ("interlaced.mp4", 12_533_760, true),
+        // Two SPSs (4 and 16 refs): the LARGER one decides -> 50.1 MB.
+        ("multi_sps.mp4", 50_135_040, true),
+    ];
+    let corpus = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../tests/corpus");
+    let mut checked = 0usize;
+    for (name, want_bytes, want_copy) in expected {
+        let file = corpus.join(name);
+        if !file.exists() {
+            eprintln!("[SKIP] {name} is not in the corpus");
+            continue;
+        }
+        let report = probe_dpb(&file).unwrap_or_else(|e| panic!("{name}: {e}"));
+        let bytes = report
+            .sps
+            .iter()
+            .filter_map(|s| s.dpb_bytes())
+            .max()
+            .unwrap_or(0);
+        assert_eq!(bytes, *want_bytes, "{name}: the DPB bytes changed");
+        let copy_safe = report.sps.iter().any(|s| s.is_copy_safe());
+        assert_eq!(copy_safe, *want_copy, "{name}: the copy decision changed");
+        checked += 1;
+    }
+    assert!(checked > 0, "no corpus file was available");
+    eprintln!("sps: {checked} DPB budgets pinned");
+}

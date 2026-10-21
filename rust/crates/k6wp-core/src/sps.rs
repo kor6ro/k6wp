@@ -79,6 +79,67 @@ impl SpsInfo {
         }
     }
 
+    /// The DPB budget: a file whose DPB costs more than this is re-encoded
+    /// (with the DPB pinned), so the decoder's pool stays bounded.
+    ///
+    /// 64 MB: above the 1080p worst case (50 MB at 16 refs) and below the
+    /// 4K cases (100 MB at 8 refs, 199 MB at 16 refs) - so a 1080p clip is
+    /// never re-encoded for a few megabytes, while a 4K clip with a deep
+    /// reference list is.
+    ///
+    /// The C++ compressor uses the same budget
+    /// (`compressor/src/dpb_probe.hpp::kMaxDpbBytesForCopy`).
+    pub const MAX_DPB_BYTES_FOR_COPY: u64 = 64 * 1024 * 1024;
+
+    /// The reference frames the decoder actually holds: the smallest of
+    /// `max_num_ref_frames` and the parameter set's own DPB bound (the VUI's
+    /// `max_dec_frame_buffering` for H.264, `sps_max_dec_pic_buffering` for
+    /// HEVC).
+    ///
+    /// The LEVEL is deliberately not a cap: MEASURED, a level-4.2 file with
+    /// 16 refs still allocates 16 frames (195.16 MB against the 8-ref
+    /// file's 169.55 MB - exactly 8 frames more).
+    pub fn effective_refs(&self) -> Option<u32> {
+        // H.264 counts the reference frames, HEVC counts the DPB pictures.
+        let refs = self.max_num_ref_frames.or(self.sps_max_dec_pic_buffering)?;
+        let bound = self
+            .max_dec_frame_buffering
+            .or(self.sps_max_dec_pic_buffering);
+        match bound {
+            Some(bound) if bound > 0 => Some(refs.min(bound)),
+            _ => Some(refs),
+        }
+    }
+
+    /// The DPB's memory in bytes: `effective_refs x width x height x 1.5`
+    /// (YUV 4:2:0). `None` when the frame size or the reference count is
+    /// unknown - never a guess.
+    pub fn dpb_bytes(&self) -> Option<u64> {
+        let refs = self.effective_refs()?;
+        let width = self.width?;
+        let height = self.height?;
+        if refs == 0 || width == 0 || height == 0 {
+            return None;
+        }
+        let pixels = u64::from(width)
+            .checked_mul(u64::from(height))?
+            .checked_mul(u64::from(refs))?;
+        // 1.5 bytes per pixel, without a float: pixels * 3 / 2.
+        pixels.checked_mul(3)?.checked_div(2)
+    }
+
+    /// May this file be COPIED (instead of re-encoded)?
+    ///
+    /// False when the DPB cannot be read: an unknown DPB must never take
+    /// the copy path - the copy path is the one that can leak the deep
+    /// pool.
+    pub fn is_copy_safe(&self) -> bool {
+        match self.dpb_bytes() {
+            Some(bytes) => bytes <= SpsInfo::MAX_DPB_BYTES_FOR_COPY,
+            None => false,
+        }
+    }
+
     /// Is this a parameter set a decoder could really be told?
     ///
     /// The in-band scan walks raw bytes, so a random match parses into

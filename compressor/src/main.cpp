@@ -115,21 +115,25 @@ bool IsOptimal(const k6wp::compressor::VideoProps& props, int target_w,
 // num_ref_frames (16 for a 4K clip) and the DECODER's surface pool scaled
 // with it - 467 MB of GPU shared memory on playback.
 //
-// So a source whose DPB is deeper than kMaxRefFramesForCopy is NOT
+// So a source whose DPB costs more than kMaxDpbBytesForCopy is NOT
 // optimal: it is re-encoded (with the same CRF / resolution / FPS) so the
-// pinned-DPB encode path runs.
+// pinned-DPB encode path runs. The budget is a BYTE budget, not a
+// reference count: the same reference count costs very different amounts
+// at 1080p and at 4K, and the old "4 refs" rule re-encoded a 1080p clip
+// whose decoder only holds 8-16 frames - a lossy re-encode for a few
+// megabytes.
 //
-// A DPB that cannot be read (0 = unknown) is treated as NOT optimal: an
-// unknown DPB must never take the copy path, because the copy path is the
-// one that can leak the deep pool.
+// A DPB that cannot be read is treated as NOT optimal: an unknown DPB must
+// never take the copy path, because the copy path is the one that can leak
+// the deep pool.
 bool IsDpbAcceptable(const std::filesystem::path& in) {
-  const int refs = k6wp::compressor::ProbeMaxRefFrames(in);
-  if (refs <= 0) {
+  const k6wp::compressor::DpbInfo dpb = k6wp::compressor::ProbeDpb(in);
+  if (!dpb.ok || dpb.dpb_bytes == 0) {
     std::fprintf(stderr,
                  "{\"note\":\"dpb unknown\"}\n");
     return false;
   }
-  return refs <= k6wp::compressor::kMaxRefFramesForCopy;
+  return dpb.dpb_bytes <= k6wp::compressor::kMaxDpbBytesForCopy;
 }
 
 }  // namespace

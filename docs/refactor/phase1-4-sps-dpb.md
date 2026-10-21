@@ -102,6 +102,74 @@ the threshold. The Rust parser reproduces the SAME number, so the Rust port
 inherits the measured A/B (the 4K/16-ref case: private **386.8 → 228.2 MB,
 −41 %**, GPU shared 467.7 → 432.5 MB, rate 0.99 in both, parity Δluma 0.04).
 
+## G1 — the re-encode threshold, decided on purpose
+
+**The rule is now a BYTE budget, not a reference count.**
+
+```
+re-encode  ⟺  effective_refs × width × height × 1.5  >  64 MB
+```
+
+**Why the old "4 refs" rule was wrong.** It looked at the reference count
+but the RAM scales with the DPB's BYTES, and the same count costs very
+different amounts at different resolutions. Concretely, the old rule
+re-encoded the 1080p files whose decoder only holds 8-16 frames — a lossy
+re-encode for a few megabytes — while the claim "4 refs ≈ 50 MB at both
+resolutions" was simply **wrong** (4 refs ≈ 12.5 MB at 1080p, ≈ 50 MB at
+4K).
+
+**The measured data (this host, private bytes; the GPU shared moves with
+it):**
+
+| file | refs | level | DPB bytes | private RAM |
+|---|---|---|---|---|
+| anime.mp4 | 4 | 4.0 | 12.5 MB | 163.3 MB |
+| meddpb_1080p.mp4 (new corpus case) | 8 | 5.0 | 25.1 MB | 169.6 MB |
+| highdpb_1080p.mp4 | 16 | 4.2 | 50.1 MB | 195.2 MB |
+| highdpb_4k.mp4 | 16 | 6.2 | 199.1 MB | 387.2 MB |
+| highdpb_4k.mp4 (the DPB-pinned re-encode) | 2 | 6.2 | 24.9 MB | 228.2 MB |
+
+**The LEVEL does not cap the decoder's allocation** (measured, not
+assumed): the 1080p file with 16 refs declares level 4.2 (whose
+MaxDpbFrames is 8) and still costs exactly 8 reference frames more than
+the 8-ref file (195.16 MB vs 169.55 MB = +25.6 MB = 8 frames × 3.13 MB).
+So the level is **reported** but not used as a cap; the DPB size is
+`min(max_num_ref_frames, the parameter set's own bound)`.
+
+### The A/B and the parity, re-run on the corpus
+
+The threshold change flips **three** H.264 cases (the 1080p files with 8
+and 16 refs and the two-SPS file): they are now **copied** instead of
+re-encoded. A/B (ABAB, one session, private + GPU shared + the playback
+rate + the frame counters) and the visual parity (the engine's own
+rendered frames, the same source frame):
+
+| case | A = the source (the new rule: copied) | B = the DPB-pinned re-encode (the old rule) | the RAM the new rule keeps |
+|---|---|---|---|
+| meddpb_1080p (8 refs) | 170.38 MB / 153.57 MB shared | 165.46 MB / 154.23 MB | **+4.9 MB** |
+| highdpb_1080p (16 refs) | 194.37 MB / 157.59 MB | 164.99 MB / 151.57 MB | **+29.4 MB** |
+| multi_sps (the max 16 refs) | 173.43 MB / 160.83 MB | 162.32 MB / 151.57 MB | **+11.1 MB** |
+| highdpb_4k (16 refs, over the budget → still re-encoded) | 386.79 MB / 467.73 MB | 228.20 MB / 432.53 MB | **−158.6 MB** |
+
+The playback rate is 0.93-1.00 in every arm and the frame counters are
+clean (0 delayed frames); the parity gate passes for all three flipped
+cases (the same-frame pixel diff 0.38-0.48, Δluma ≤ 0.01, Δstddev ≤ 0.01 —
+a lossy re-encode, not a render-path change).
+
+**The trade-off, stated plainly:** with the 64 MB budget a 1080p clip with a
+deep reference list is **left alone** — it keeps up to ~29 MB more RAM
+than the old rule would have saved, and in exchange the picture is NOT
+re-encoded a second time. The 4K cases (the ones that really matter: 199 MB
+of DPB) are still re-encoded, saving 158.6 MB. The budget is a single
+number in both implementations
+(`compressor/src/dpb_probe.hpp::kMaxDpbBytesForCopy` and
+`k6wp-core`'s `SpsInfo::MAX_DPB_BYTES_FOR_COPY`), so the owner can move
+it with one edit.
+
+**The HEVC corpus case is re-encoded for a different reason**: the
+compressor only ever COPIES H.264 files (`IsOptimal` requires
+`video_codec == "h264"`), so the DPB rule does not change it.
+
 ## The `ffprobe.exe` verdict (D4's condition)
 
 D4's condition was: *the 5 metadata fields via libmpv **and** the
