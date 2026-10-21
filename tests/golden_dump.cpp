@@ -142,6 +142,11 @@ void DumpConfig() {
       {"v5_reconcile_on", R"({"version":5,"reconcile_mode":"on"})"},
       {"v5_reconcile_bogus", R"({"version":5,"reconcile_mode":"bogus"})"},
       {"v6_future", R"({"version":6})"},
+      // A file from a NEWER engine (G4): the known fields must keep their
+      // values and the unknown ones fall back to their defaults - the
+      // older engine must not reset the user's settings.
+      {"v7_newer",
+       R"({"version":7,"video_path":"C:\\v\\new.mp4","fit_mode":"fit","crf":19,"fps_cap":30,"unknown_future_key":"keep-me-not"})"},
       {"v_neg", R"({"version":-1})"},
       {"unknown_fit", R"({"version":5,"fit_mode":"squish"})"},
       {"crf_low", R"({"version":5,"crf":15})"},

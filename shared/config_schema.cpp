@@ -239,9 +239,22 @@ WallpaperConfig MigrateConfig(const nlohmann::json& raw) {
   WallpaperConfig cfg;
   try {
     const int version = raw.value("version", 0);
-    if (version < 0 || version > kConfigSchemaVersion) {
+    if (version < 0) {
       throw ConfigError("unsupported config schema version: " + std::to_string(version));
     }
+    // A NEWER file (written by a newer engine) is read BEST-EFFORT: the
+    // known fields keep their values and the ones this engine does not know
+    // fall back to their defaults. The older engine must NOT reset the
+    // user's settings to the defaults - that is a data loss the user
+    // cannot see coming.
+    //
+    // The keys this engine does not know are DISCARDED when the file is
+    // rewritten at the current schema (the .bak keeps the original bytes
+    // until the next write) - the config is a closed schema and a
+    // half-understood key set is worse than a clean one.
+    //
+    // The version written out is always the CURRENT one, so the next load
+    // is a clean one.
     // Step 5: v0/v1 -> v2 always writes monitor_id = -1 (the old id had no
     // render effect, so keeping it would newly single-out one screen).
     // v2 files keep their stored value (default -1 when absent).

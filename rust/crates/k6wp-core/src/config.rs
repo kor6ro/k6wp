@@ -169,10 +169,22 @@ pub fn migrate_config_value(raw: &Value) -> Result<WallpaperConfig, ConfigError>
         .ok_or_else(|| ConfigError("config root must be a JSON object".to_string()))?;
 
     let version = read_i64(object, "version", 0, CONTEXT)?;
-    if !(0..=CONFIG_SCHEMA_VERSION).contains(&version) {
+    if version < 0 {
         return Err(ConfigError(format!(
             "unsupported config schema version: {version}"
         )));
+    }
+    // A NEWER file (written by a newer engine) is read BEST-EFFORT: the
+    // known fields keep their values and the ones this engine does not know
+    // fall back to their defaults. The older engine must NOT reset the
+    // user's settings to the defaults - that is a data loss the user cannot
+    // see coming.
+    //
+    // The keys this engine does not know are DISCARDED when the file is
+    // rewritten at the current schema (the .bak keeps the original bytes
+    // until the next write) - the config is a closed schema.
+    if version > CONFIG_SCHEMA_VERSION {
+        // fall through: the fields below are read with the current defaults
     }
 
     // The fields are read in the C++ order, so a file with two type-corrupt
