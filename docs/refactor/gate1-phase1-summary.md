@@ -47,7 +47,24 @@ gpu/fps 0.72), 4K rate 0.98 (29.54 fps, cpu/fps 0.06, gpu/fps 2.46),
 0.9694** — marginally under the 0.97 validity bound; recorded, not
 smoothed.
 
-## What is still UNPROVEN
+## The D2 resume latency (measured, n=5)
+
+The resume after an invisible-owner pause (the fullscreen case), measured
+by `tools/bench_unload_scenarios.ps1` on the D2 build:
+
+| cycle | 1 | 2 | 3 | 4 | 5 | **median** |
+|---|---|---|---|---|---|---|
+| resume latency (ms) | 1061 | 788 | 811 | 762 | 798 | **798 ms** |
+
+(The budget is ≤ 2000 ms; the Phase 0 reference was the 1114–1657 ms
+"resume → visible motion" range.)
+
+**And no black frame**: the D2 gate sampled the screen across five REAL
+fullscreen exits — 170 samples, **0 black**. The wallpaper underneath is
+the shell's own (the per-user still), so the transition reads as "the
+wallpaper starts over" rather than a glitch.
+
+## The UNPROVEN list
 
 Single monitor, one rig, one Windows build. **Not** proven here:
 

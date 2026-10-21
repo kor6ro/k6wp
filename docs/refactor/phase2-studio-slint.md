@@ -10,14 +10,71 @@ The measurement says the Qt removal is **not** a bundle-size play: the Qt
 group is 19.78 MB of a 148.13 MB ZIP (13.4 %) — dropping it entirely cannot
 reach the old "≥ 30 % ZIP" target (`docs/refactor/phase1-3-bundle.md`).
 
-It IS the right change for the **Studio process**: 337.53 MB of private
-bytes and 1290 ms of startup. Those are the Phase 2 gates:
+It IS the right change for the **Studio process**: the Qt Studio holds
+hundreds of megabytes of private bytes and takes seconds to paint its
+first frame. Those are the Phase 2 gates.
 
-| metric | baseline (Qt Studio) | **gate** | the Slint shell (2.0) |
+## The Studio numbers — RE-measured (E1)
+
+> **The earlier claim in this document is RETRACTED.** "2.4–8.8 MB vs Qt
+> 337 MB" and "422 vs 1290 ms" were not comparable: the two were measured
+> in different states, with different startup definitions, and the Slint
+> side was a DEBUG build with a 2-row list. The numbers below replace them.
+
+**The conditions (identical for both):** ONE library index file with 200
+items, pointed at by the same `K6WP_LIBRARY_JSON` override; the same screen
+(1920x1080@144); an isolated `%LOCALAPPDATA%`; and ONE startup definition —
+**the process start until the window has PAINTED** (a `PrintWindow` capture
+is no longer a flat colour), not "the window handle exists". The C4
+metrics: private bytes + GPU shared. The working set is recorded and never
+decides. Evidence: `docs/bench/studio-compare-2.0.json`.
+
+| | **Qt Studio** (release) | **Slint Studio 2.0** (release) | delta |
 |---|---|---|---|
-| Studio private bytes | 337.53 MB | **≤ 150 MB** | **2.4 – 8.8 MB** (debug build) |
-| Studio startup (to the first window) | 1290 ms | **≤ 700 ms** | **422 ms** (median of 5) |
-| threads | 55 | — | 4–5 |
+| first painted frame | 3576 ms | **1027 ms** | **−71 %** |
+| private bytes | 500.67 MB | **39.56 MB** | **−92 %** |
+| GPU shared | 45.60 MB | 42.97 MB | −6 % |
+| CPU (static) | 0.14 % | 0.05 % | |
+| threads | 59 | 13 | −78 % |
+
+**These are the SHELL's numbers, not the finished Studio's.** The Slint
+side has no thumbnailer, no preview, no compress queue and no settings
+bindings yet; each arrives as its own slice, and E1 is re-run at every
+slice. The Qt side is the FINISHED Studio, so the gap will narrow — the
+budget (≤ 150 MB, ≤ 700 ms) has to hold for the FINISHED Slint Studio.
+
+### The reconciliation (why the Qt number moved)
+
+The Qt Studio's private bytes were quoted at three different numbers. They
+are the SAME binary, measured at three points in its life:
+
+| point in the Studio's life | private bytes | where it comes from |
+|---|---|---|
+| the process, before the QML engine is up | **67.5 MB** | the "old baseline ~51 MB" - the same ballpark, measured before Qt/QML is loaded |
+| 0.8–2.0 s (the QML is loading) | 102.5 MB | |
+| 2.4 s (the QML compiles) | 191.5 MB | |
+| the window is up (2.8 s) | 400 MB | the QML's peak |
+| **the Phase 0 sample point** (3–13 s after the start, an empty library) | **338.12 MB** | the Phase 0 baseline's 337.53 MB — reproduced here to within 0.6 MB |
+| **the E1 sample point** (5 s after the FIRST PAINTED FRAME, the 200-item library bound) | **500.67 MB** | the QML peak + the library grid model + the QML image cache |
+
+So "337 MB" and "500 MB" are **not comparable**: they are the same process
+at two different moments, and the difference is the QML engine's
+allocation curve, not a regression. The Phase 0 number is reproduced
+exactly (338.12 vs 337.53 MB) with the Phase 0 method in the same
+harness — the proof that the two measurements differ in their
+**definition**, not in the build. The old ~51 MB baseline was taken before
+the QML engine was up (67.5 MB measured now).
+
+**The rule this sets for the rest of Phase 2:** every Studio number carries
+its measurement point (the definition line in the JSON) and the same
+library. A comparison without both is "not comparable".
+
+### The slice table (the shell only, for reference)
+
+| metric | the Slint shell (2.0) | the finished Studio (the gate) |
+|---|---|---|
+| private bytes | 39.56 MB | **≤ 150 MB** |
+| first painted frame | 1027 ms | **≤ 700 ms** |
 
 **These are the SHELL's numbers, not the finished Studio's.** The shell has
 no library, no thumbnailer, no preview, no compress queue and no settings

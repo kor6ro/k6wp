@@ -126,9 +126,9 @@ parity gate. A phase that hits its parity gate but misses its target is
 | 1.4 | GPU shared, playback 4K/16-ref | 468.08 MB (v2) | ≤ 482 MB | **≤ 440 MB** | **432.5 MB** (−7.5 %) |
 | 1.4 | visual parity of the re-encode | — | Δluma ≤ 12, Δstddev ≤ 12 | same | **Δluma 0.04, Δstddev 0.06**, same-frame pixel diff 0.528, and the re-encoded file still animates live (diff 2.16) |
 | 1.3 | **install size, ffprobe** | 96.98 MB | ≤ 96.98 MB | **0 MB** (probe with libmpv) | pending — the biggest single lever |
-| 2.3 | Studio private bytes | 337.53 MB | ≤ 348 MB | **≤ 150 MB** (Slint, no Qt) | pending |
+| 2.3 | Studio private bytes (the E1 point: 5 s after the first painted frame, the 200-item library) | 500.67 MB | - | **<= 150 MB** (the FINISHED Slint Studio) | **39.56 MB** for the 2.0 shell - the finished Studio is not ported yet |
 | 2.7 | install size, qt group | 48.0 MB + 8.1 MB payload | ≤ 56.1 MB | **0 MB** | pending — **NOT a ZIP-size lever** (see below) |
-| 2.7 | Studio startup | 1290 ms | ≤ 1600 ms | **≤ 700 ms** | pending |
+| 2.7 | Studio startup (E1: the first painted frame) | 3576 ms | - | **<= 700 ms** | **1027 ms** for the 2.0 shell - the finished Studio is not ported yet |
 | 3.x | install size, ffmpeg group | 194.16 MB | ≤ 194.16 MB | **≤ 100 MB** (or 0 if ffmpeg is dropped) | DEFER — no build toolchain here |
 | 3.x | **install size, total** | 389.14 MB | ≤ 389.14 MB | **≤ 292 MB (−25 %)** | pending |
 | 3.x | **ZIP size** | 148.13 MB | ≤ 148.13 MB | **≤ 115 MB (−22 %)** | pending |

@@ -15,6 +15,7 @@ export struct LibraryRow {
 
 export component AppWindow inherits Window {
     in-out property <[LibraryRow]> library: [];
+    in-out property <int> library-count: 0;
     in-out property <string> version: "";
 
     title: "K6WP Studio";

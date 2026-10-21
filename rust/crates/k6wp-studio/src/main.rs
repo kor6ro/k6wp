@@ -2,48 +2,82 @@
 //
 // This is the Slint shell that replaces the QML Studio: the same window,
 // the same settings surface, without Qt. The shell is deliberately thin -
-// the Phase 2 slices add the library, the thumbnailer, the compress queue
-// and the settings bindings one at a time, each with its own gate.
+// the Phase 2 slices add the library, the thumbnailer, the preview, the
+// compress queue and the settings bindings one at a time, each with its
+// own gate.
 //
 // The startup budget is 700 ms (baseline v2: the Qt Studio took 1290 ms
 // with 337 MB of private bytes); the RAM budget is 150 MB.
 
 slint::include_modules!();
 
+use k6wp_core::{LibraryEntry, LibraryIndex};
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
+use std::path::PathBuf;
 
-// The LibraryRow type is GENERATED from ui/app.slint (the `export struct`
-// there) - it is not defined here, so the UI and the Rust code can never
-// drift apart.
+/// The library index the Studio reads - the SAME file the Qt Studio reads
+/// (the C++ override first, then %LOCALAPPDATA%\K6WP\library.json).
+///
+/// The override is what makes the Phase 2 comparison (E1) possible: both
+/// Studios are pointed at ONE index file, so the state is identical.
+fn library_index_path() -> Option<PathBuf> {
+    if let Ok(override_path) = std::env::var("K6WP_LIBRARY_JSON") {
+        if !override_path.is_empty() {
+            return Some(PathBuf::from(override_path));
+        }
+    }
+    let local = std::env::var("LOCALAPPDATA").ok()?;
+    if local.is_empty() {
+        return None;
+    }
+    Some(PathBuf::from(local).join("K6WP").join("library.json"))
+}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ui = AppWindow::new()?;
 
-    // The library model: the shell's own data binding, so the first slice
-    // already exercises the Slint <-> Rust boundary the real library will
-    // use.
+    // The library model: the SAME index file the Qt Studio reads, through
+    // the shared codec (k6wp-core).
     let rows = VecModel::<LibraryRow>::default();
-    for (name, path) in [
-        (
-            "anime.mp4",
-            "C:/Users/axioo/AppData/Local/K6WP/wallpapers/anime.mp4",
-        ),
-        (
-            "slideshow.mp4",
-            "C:/Users/axioo/AppData/Local/K6WP/wallpapers/slideshow.mp4",
-        ),
-    ] {
-        rows.push(LibraryRow {
-            name: name.into(),
-            path: path.into(),
-            duration_s: 30.0,
-        });
+    let mut loaded = 0usize;
+    if let Some(path) = library_index_path() {
+        match std::fs::read_to_string(&path) {
+            Ok(text) => match LibraryIndex::parse(&text) {
+                Ok(index) => {
+                    for entry in &index.entries {
+                        rows.push(row_from(entry));
+                    }
+                    loaded = index.entries.len();
+                }
+                Err(e) => {
+                    eprintln!("studio: the library index is malformed: {e}");
+                }
+            },
+            Err(e) => {
+                eprintln!("studio: the library index could not be read: {e}");
+            }
+        }
     }
     ui.set_library(ModelRc::new(rows));
+    ui.set_library_count(loaded as i32);
 
     // The version line: the same information the Qt Studio showed.
     ui.set_version(SharedString::from(env!("CARGO_PKG_VERSION")));
 
     ui.run()?;
     Ok(())
+}
+
+fn row_from(entry: &LibraryEntry) -> LibraryRow {
+    LibraryRow {
+        name: SharedString::from(
+            entry
+                .dst
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default(),
+        ),
+        path: SharedString::from(entry.dst.to_string_lossy().to_string()),
+        duration_s: entry.duration as f32,
+    }
 }

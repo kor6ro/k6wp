@@ -2376,9 +2376,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "k6wp-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "k6wp-studio"
 version = "0.1.0"
 dependencies = [
+ "k6wp-core",
  "slint",
  "slint-build",
 ]

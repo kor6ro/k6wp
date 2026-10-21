@@ -1,0 +1,73 @@
+﻿{
+    "tool":  "bench_studio_compare",
+    "phase":  2,
+    "slice":  "2.0",
+    "date":  "2026-10-21T23:18:57+07:00",
+    "label":  "live-proven (one machine)",
+    "method":  "ONE library index (200 items) for both Studios, the same screen, an isolated %LOCALAPPDATA%, and ONE startup definition: the process start until the window has PAINTED (the capture is not a flat colour). The C4 metrics: private bytes + GPU shared; the working set is recorded but never decides",
+    "library_items":  200,
+    "library_path":  "C:\\Users\\axioo\\AppData\\Local\\Temp\\k6wp-studio-cmp-4227e926\\library.json",
+    "startup_definition":  "process start -\u003e the window handle exists AND a PrintWindow capture is not a flat colour (the first painted frame)",
+    "qt":  {
+               "first_frame_ms":  3575.5,
+               "private_mb":  500.67,
+               "ws_mb":  324.64,
+               "gpu_shared_mb":  45.6,
+               "cpu_pct_static":  0.14,
+               "threads":  59
+           },
+    "slint":  {
+                  "first_frame_ms":  1027,
+                  "private_mb":  39.56,
+                  "ws_mb":  89.09,
+                  "gpu_shared_mb":  42.97,
+                  "cpu_pct_static":  0.05,
+                  "threads":  13
+              },
+    "runs":  [
+                 {
+                     "tag":  "qt",
+                     "exe":  "studio.exe",
+                     "first_frame_ms":  3721,
+                     "private_mb":  380.59,
+                     "ws_mb":  273.53,
+                     "gpu_shared_mb":  36.75,
+                     "cpu_pct_static":  0,
+                     "max_thread_cpu_pct":  0,
+                     "threads":  59
+                 },
+                 {
+                     "tag":  "slint",
+                     "exe":  "k6wp-studio.exe",
+                     "first_frame_ms":  1200,
+                     "private_mb":  39.68,
+                     "ws_mb":  92.59,
+                     "gpu_shared_mb":  42.98,
+                     "cpu_pct_static":  0.1,
+                     "max_thread_cpu_pct":  1.55,
+                     "threads":  13
+                 },
+                 {
+                     "tag":  "qt",
+                     "exe":  "studio.exe",
+                     "first_frame_ms":  3430,
+                     "private_mb":  620.75,
+                     "ws_mb":  375.76,
+                     "gpu_shared_mb":  54.45,
+                     "cpu_pct_static":  0.29,
+                     "max_thread_cpu_pct":  3.1,
+                     "threads":  111
+                 },
+                 {
+                     "tag":  "slint",
+                     "exe":  "k6wp-studio.exe",
+                     "first_frame_ms":  854,
+                     "private_mb":  39.45,
+                     "ws_mb":  85.59,
+                     "gpu_shared_mb":  42.97,
+                     "cpu_pct_static":  0,
+                     "max_thread_cpu_pct":  0,
+                     "threads":  13
+                 }
+             ]
+}
