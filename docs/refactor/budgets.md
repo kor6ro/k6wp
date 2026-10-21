@@ -131,7 +131,7 @@ parity gate. A phase that hits its parity gate but misses its target is
 | 2.7 | Studio startup (E1: the first painted frame) | 3576 ms | - | **<= 700 ms** | **1027 ms** for the 2.0 shell - the finished Studio is not ported yet |
 | 3.x | install size, ffmpeg group | 194.16 MB | ≤ 194.16 MB | **≤ 100 MB** (or 0 if ffmpeg is dropped) | DEFER — no build toolchain here |
 | 3.x | **install size, total** | 389.14 MB | ≤ 389.14 MB | **≤ 292 MB (−25 %)** | pending |
-| 3.x | **ZIP size** | 148.13 MB | ≤ 148.13 MB | **≤ 115 MB (−22 %)** | pending |
+| 3.x | **ZIP size** | 148.13 MB | ≤ 148.13 MB | **≤ 115 MB (-22 %)** | **DEFERRED to Phase 3 (the compressor in Rust)** - not "nearly": the ZIP stays 148.13 MB and the target is NOT met. The ffprobe removal (D4) was AUTHORIZED and measured (0 disagreements over 5 metadata fields, the SPS parser 9/9 against ffmpeg's `trace_headers`), but the ffprobe.exe MECHANISM only disappears when the compressor links libmpv - and that is the Rust port's native path (Phase 3). |
 
 ## Bundle budget rationale (REVISED by measurement, C3)
 
