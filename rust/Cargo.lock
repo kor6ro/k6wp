@@ -2445,6 +2445,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "k6wp-ipc"
+version = "0.1.0"
+dependencies = [
+ "k6wp-core",
+ "serde_json",
+ "windows",
+]
+
+[[package]]
 name = "k6wp-studio"
 version = "0.1.0"
 dependencies = [

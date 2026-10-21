@@ -5,7 +5,7 @@
 # the protocol and the settings crates.
 [workspace]
 resolver = "2"
-members = ["crates/k6wp-core", "crates/k6wp-studio"]
+members = ["crates/k6wp-core", "crates/k6wp-ipc", "crates/k6wp-studio"]
 
 [workspace.package]
 version = "0.1.0"
