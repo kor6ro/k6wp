@@ -313,7 +313,7 @@ void TestRedB1SwapRect() {
   const std::string path_b = FixturePath(kB);
   MultiMonitor mm(&QuietLog, MakeFactory());
   mm.SetHeadlessHost(kHeadlessHost);
-  Check(mm.Init(MultiMonitorMode::PerMonitor),
+  Check(mm.Init(),
         "red-B1: Init attaches both monitors");
   Check(mm.slot_count() == 2, "red-B1: slot_count()==2 before the swap");
   Check(mm.LoadLoopSlot("\\\\.\\DISPLAY1", path_a, ""),
@@ -352,7 +352,7 @@ void TestRedB2UnplugReindex() {
   const std::string path_b = FixturePath(kB);
   MultiMonitor mm(&QuietLog, MakeFactory());
   mm.SetHeadlessHost(kHeadlessHost);
-  Check(mm.Init(MultiMonitorMode::PerMonitor),
+  Check(mm.Init(),
         "red-B2: Init attaches both monitors");
   Check(mm.LoadLoopSlot("\\\\.\\DISPLAY1", path_a, ""),
         "red-B2: DISPLAY1 accepts A.mp4");
@@ -391,7 +391,7 @@ void TestRedB3SecondaryKeyChange() {
   const std::string path_b = FixturePath(kB);
   MultiMonitor mm(&QuietLog, MakeFactory());
   mm.SetHeadlessHost(kHeadlessHost);
-  Check(mm.Init(MultiMonitorMode::PerMonitor),
+  Check(mm.Init(),
         "red-B3: Init attaches both monitors");
   Check(mm.LoadLoopSlot("\\\\.\\DISPLAY1", path_a, ""),
         "red-B3: DISPLAY1 accepts A.mp4");
@@ -430,7 +430,7 @@ void TestRedB4ReplugRebind() {
   const std::string path_b = FixturePath(kB);
   MultiMonitor mm(&QuietLog, MakeFactory());
   mm.SetHeadlessHost(kHeadlessHost);
-  Check(mm.Init(MultiMonitorMode::PerMonitor),
+  Check(mm.Init(),
         "red-B4: Init attaches both monitors");
   Check(mm.LoadLoopSlot("\\\\.\\DISPLAY1", path_a, ""),
         "red-B4: DISPLAY1 accepts A.mp4");

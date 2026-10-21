@@ -32,7 +32,6 @@
 
 namespace k6wp {
 
-enum class MultiMonitorMode { PerMonitor, Span };
 
 // Virtual-screen geometry, pixels in virtual-screen coordinates.
 struct SpanGeometry {
@@ -144,7 +143,7 @@ class MultiMonitor {
   // when at least one slot is live (a headless renderer counts — Attach
   // failure degrades to the hidden host, never fatal). False only when no
   // monitors exist at all; the engine keeps running either way.
-  bool Init(MultiMonitorMode mode);
+  bool Init();
 
   // Tear down all slots. Idempotent.
   void Shutdown();
@@ -335,7 +334,7 @@ class MultiMonitor {
 
   size_t slot_count() const;
   std::vector<int> monitor_ids() const;
-  MultiMonitorMode mode() const;
+
 
   // True when at least one live slot is headless (DesktopInjector::Attach
   // failed -> renderer created with a null HWND). Self-maintaining: derived
@@ -464,7 +463,6 @@ class MultiMonitor {
  private:
   void ClearSlots();
   bool AttachSlot(const MonitorInfo& mi);
-  bool AttachSpanSlot();
   // Row 7: resolve the desktop host ONCE for the current attach pass and
   // store it in shared_host_. Called at each pass entry that attaches or
   // re-attaches (ApplyActiveFilter, the span paths); every slot then receives
@@ -479,7 +477,6 @@ class MultiMonitor {
   // fallback. `slot.injector` must be non-null. No logging here so the
   // callers' distinct lines stay put. Structural slot changes are
   // main-thread-only, so no lock is taken despite the name.
-  void ReattachSpanLocked(Slot& slot, int x, int y, int w, int h, bool reassert);
   // Power/Explorer resilience: after a destroy/recreate of the slot surface,
   // mpv has already ended the file (its VO window is gone). Re-issue the
   // slot's own video with force=true (same-path short-circuit would leave a
@@ -524,7 +521,6 @@ class MultiMonitor {
   void ReapplyRetainedLocked();
 
   LogFn log_ = nullptr;
-  MultiMonitorMode mode_ = MultiMonitorMode::PerMonitor;
   InjectMode inject_mode_ = InjectMode::kAuto;
   std::string adapter_pin_;  // P3L.3: d3d11-adapter substring for new slots
   std::string last_video_;   // P3L.3: last LoadLoopAll path (revert reload)
@@ -533,7 +529,6 @@ class MultiMonitor {
   // writes it (queued set_monitor executor, Init). Atomic — no mutex needed
   // for a single int; structural slot changes stay main-thread-only.
   std::atomic<int> active_monitor_{-1};
-  bool span_filter_logged_ = false;
   // True once Init() has run: separates the pre-Init SetActiveMonitor (just
   // stores; Init attaches) from a live retarget to an empty set (must
   // re-attach immediately so recovery from an absent id restores slots).

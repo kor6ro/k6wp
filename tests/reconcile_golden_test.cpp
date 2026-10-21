@@ -383,7 +383,7 @@ void TestGolden24H2() {
 
   MultiMonitor mm(&RecordLog, MakeRecordingFactory());
   mm.SetHeadlessHost(kHeadlessHost);
-  const bool ok = mm.Init(MultiMonitorMode::PerMonitor);
+  const bool ok = mm.Init();
   Check(ok, "golden-24h2: Init(PerMonitor) returns true");
   Check(mm.slot_count() == 2, "golden-24h2: slot_count()==2");
   Check(g_resolve_calls == 1,
@@ -441,7 +441,7 @@ void TestGoldenClassic() {
 
   MultiMonitor mm(&RecordLog, MakeRecordingFactory());
   mm.SetHeadlessHost(kHeadlessHost);
-  const bool ok = mm.Init(MultiMonitorMode::PerMonitor);
+  const bool ok = mm.Init();
   Check(ok, "golden-classic: Init(PerMonitor) returns true");
   Check(mm.slot_count() == 2, "golden-classic: slot_count()==2");
   Check(g_resolve_calls == 1,
@@ -464,44 +464,6 @@ void TestGoldenClassic() {
   mm.Shutdown();
 }
 
-// ---------------------------------------------------------------------------
-// Golden 3: Span mode. Virtual screen forced via SetSpanGeometryOverride (the
-// test seam); one slot keyed by kSpanSlotId (-1); row-10 `WorkerWSpansRect`
-// confirms the resolved host spans the virtual screen.
-// ---------------------------------------------------------------------------
-void TestGoldenSpan() {
-  ResetStubs();
-  SpanGeometry fake{0, 0, 3840, 1080};
-  MultiMonitor::SetSpanGeometryOverride(&fake);
-  const PlacementRect virtual_rect{0, 0, 3840, 1080};
-  const PlacementRect host_rect{0, 0, 3840, 1080};
-  Check(WorkerWSpansRect(host_rect, virtual_rect),
-        "golden-span: WorkerWSpansRect(host covering virtual screen)==true");
-  g_resolve_result = MakeHost("24H2 path", true, 0, 0, 3840, 1080);
-
-  MultiMonitor mm(&RecordLog, MakeRecordingFactory());
-  mm.SetHeadlessHost(kHeadlessHost);
-  const bool ok = mm.Init(MultiMonitorMode::Span);
-  Check(ok, "golden-span: Init(Span) returns true");
-  Check(mm.slot_count() == 1, "golden-span: slot_count()==1");
-  Check(mm.mode() == MultiMonitorMode::Span, "golden-span: mode()==Span");
-  Check(mm.monitor_ids() == std::vector<int>{-1},
-        "golden-span: span slot keyed by kSpanSlotId(-1)");
-  Check(g_resolve_calls == 1,
-        "golden-span: ResolveSharedHost ran exactly once for the span pass");
-  Check(g_attach_rects.size() == 1 && g_attach_rects[0].x == 0 &&
-            g_attach_rects[0].y == 0 && g_attach_rects[0].w == 3840 &&
-            g_attach_rects[0].h == 1080,
-        "golden-span: single attach covering the virtual screen");
-  Check(mm.SlotCoverageReason(-1) == "placement: covered",
-        "golden-span: span slot covered");
-  Check(mm.headless_slot_count() == 0, "golden-span: headless_slot_count()==0");
-  Check(LogContains("placement: host-resolution branch=24H2 path"),
-        "golden-span: `placement: host-resolution` emitted for the span pass");
-  MultiMonitor::SetSpanGeometryOverride(nullptr);
-  mm.Shutdown();
-}
-
 }  // namespace k6wp
 
 int main(int argc, char** argv) {
@@ -511,9 +473,6 @@ int main(int argc, char** argv) {
   }
   if (sel == "all" || sel == "golden-classic") {
     k6wp::TestGoldenClassic();
-  }
-  if (sel == "all" || sel == "golden-span") {
-    k6wp::TestGoldenSpan();
   }
   std::cout << k6wp::g_checks << " checks, " << k6wp::g_failures
             << " failures\n";

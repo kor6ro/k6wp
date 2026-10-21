@@ -26,10 +26,6 @@ namespace k6wp {
 
 namespace {
 
-// Span-mode slot key. Monitor ids from ListMonitors() are >= 0, so -1 can
-// never collide with a per-monitor slot.
-constexpr int kSpanSlotId = -1;
-
 void LogLine(LogFn log, const char* msg) {
   if (log != nullptr && msg != nullptr) {
     log("%s", msg);
@@ -94,12 +90,10 @@ MultiMonitor::~MultiMonitor() { ClearSlots(); }
 
 MultiMonitor::MultiMonitor(MultiMonitor&& other) noexcept
     : log_(other.log_),
-      mode_(other.mode_),
       inject_mode_(other.inject_mode_),
       adapter_pin_(std::move(other.adapter_pin_)),
       last_video_(std::move(other.last_video_)),
       active_monitor_(other.active_monitor_.load(std::memory_order_relaxed)),
-      span_filter_logged_(other.span_filter_logged_),
       filter_armed_(other.filter_armed_),
       factory_(std::move(other.factory_)),
       slots_(std::move(other.slots_)),
@@ -116,13 +110,11 @@ MultiMonitor& MultiMonitor::operator=(MultiMonitor&& other) noexcept {
   if (this != &other) {
     ClearSlots();
     log_ = other.log_;
-    mode_ = other.mode_;
     inject_mode_ = other.inject_mode_;
     adapter_pin_ = std::move(other.adapter_pin_);
     last_video_ = std::move(other.last_video_);
     active_monitor_.store(other.active_monitor_.load(std::memory_order_relaxed),
                           std::memory_order_relaxed);
-    span_filter_logged_ = other.span_filter_logged_;
     filter_armed_ = other.filter_armed_;
     factory_ = std::move(other.factory_);
     slots_ = std::move(other.slots_);
@@ -230,58 +222,6 @@ bool MultiMonitor::AttachSlot(const MonitorInfo& mi) {
     inserted->second.renderer->Pause();
   }
   return true;
-}
-
-bool MultiMonitor::AttachSpanSlot() {
-  SpanGeometry g = GetSpanGeometry();
-  MonitorInfo mi;
-  mi.id = kSpanSlotId;
-  mi.x = g.x;
-  mi.y = g.y;
-  mi.width = g.width;
-  mi.height = g.height;
-  mi.is_primary = true;
-  if (mi.width <= 0 || mi.height <= 0) {
-    // Virtual-screen query failed; fall back to the primary resolution so
-    // span mode still shows something instead of dying.
-    const MonitorInfo primary = GetPrimaryMonitor();
-    mi.x = primary.x;
-    mi.y = primary.y;
-    mi.width = primary.width;
-    mi.height = primary.height;
-    mi.device_name = primary.device_name;
-    if (mi.width <= 0 || mi.height <= 0) {
-      LogLine(log_, "multi_monitor: no usable span geometry (no monitors)");
-      return false;
-    }
-  }
-  ResolveHostForPass();
-  return AttachSlot(mi);
-}
-
-// Span re-anchor shared by OnDisplayChange and Reanchor. `slot.injector` must
-// be non-null. Falls back to the primary resolution when the virtual-screen
-// query yields a non-positive size (same policy as AttachSpanSlot) and to the
-// hidden host when the re-attach fails. `reassert` re-applies the sticky
-// frameless style after a successful attach (Reanchor); OnDisplayChange passes
-// false. No logging here so the callers' distinct fall-back lines stay at the
-// call sites. Structural slot changes are main-thread-only (see the header).
-void MultiMonitor::ReattachSpanLocked(Slot& slot, int x, int y, int w, int h,
-                                      bool reassert) {
-  if (w <= 0 || h <= 0) {
-    const MonitorInfo primary = GetPrimaryMonitor();
-    w = primary.width;
-    h = primary.height;
-  }
-  // Row 7: the span re-anchor reuses the pass's shared host too (its caller
-  // resolved it before reaching this funnel) - ReplaceSlotSurfaceLocked
-  // installs it on the injector before the fresh Attach.
-  //
-  // The old surface is RELEASED (hidden, destroyed later by the graveyard
-  // once the mpv handle is gone) instead of being destroyed under a live
-  // VO: DestroyWindow on a window a foreign thread still renders into is
-  // the cross-thread destroy deadlock this path exists to avoid.
-  ReplaceSlotSurfaceLocked(slot, x, y, w, h, reassert);
 }
 
 void MultiMonitor::ReloadSlotVideoLocked(Slot& slot) {
@@ -427,17 +367,6 @@ void MultiMonitor::SetActiveMonitor(int id) {
   }
   k6wp::lock_order::RecursiveSlotsGuard guard(slots_mutex_);
   active_monitor_.store(id, std::memory_order_release);
-  if (mode_ == MultiMonitorMode::Span) {
-    if (!span_filter_logged_) {
-      span_filter_logged_ = true;
-      char buf[128];
-      std::snprintf(buf, sizeof(buf),
-                    "multi_monitor: active monitor %d ignored in Span mode",
-                    id);
-      LogLine(log_, buf);
-    }
-    return;
-  }
   if (initialized_ || filter_armed_) {
     ApplyActiveFilter(FilterMonitors(active_monitor_.load(std::memory_order_acquire)));
     ReapplyRetainedLocked();
@@ -514,23 +443,9 @@ void MultiMonitor::ApplyActiveFilter(const std::vector<MonitorInfo>& desired) {
   initialized_ = !slots_.empty();
 }
 
-bool MultiMonitor::Init(MultiMonitorMode mode) {
+bool MultiMonitor::Init() {
   k6wp::lock_order::RecursiveSlotsGuard guard(slots_mutex_);
   ClearSlots();
-  mode_ = mode;
-  if (mode_ == MultiMonitorMode::Span) {
-    if (active_monitor_.load(std::memory_order_acquire) >= 0 &&
-        !span_filter_logged_) {
-      span_filter_logged_ = true;
-      LogLine(log_, "multi_monitor: active monitor ignored in Span mode");
-    }
-    if (AttachSpanSlot()) {
-      initialized_ = true;
-    }
-    RememberHostPlacement();
-    filter_armed_ = true;
-    return initialized_;
-  }
   ApplyActiveFilter(FilterMonitors(active_monitor_.load(std::memory_order_acquire)));
   filter_armed_ = true;
   RememberHostPlacement();
@@ -552,43 +467,6 @@ void MultiMonitor::OnDisplayChange() {
   // the map half-walked; lock_guard unlocks on unwind.
   k6wp::lock_order::RecursiveSlotsGuard guard(slots_mutex_);
   try {
-    if (mode_ == MultiMonitorMode::Span) {
-      const auto it = slots_.find(kSpanSlotId);
-      if (it == slots_.end()) {
-        AttachSpanSlot();
-        RememberHostPlacement();
-        return;
-      }
-      // Row 11: resolve the host BEFORE the change checks - the host-rect
-      // comparison needs a live measurement, and row 7 treats pass entries
-      // as unconditional resolutions.
-      ResolveHostForPass();
-      const SpanGeometry g = GetSpanGeometry();
-      Slot& slot = it->second;
-      const bool geometry_changed =
-          !(slot.info.x == g.x && slot.info.y == g.y &&
-            slot.info.width == g.width && slot.info.height == g.height);
-      const bool host_moved =
-          shared_host_.host != nullptr &&
-          !SamePlacementRect(shared_host_.client_rect, attached_host_rect_);
-      const bool surface_alive =
-          !slot.injector || slot.injector->IsSurfaceAlive();
-      if (!geometry_changed && !host_moved && surface_alive) {
-        return;  // Geometry, host and surface unchanged — keep the stream.
-      }
-      // Re-attach the injector at the current span size against the
-      // refreshed host. A real re-attach destroys the old surface and ends
-      // the stream, so ReattachSpanLocked force-reloads the slot's video.
-      if (slot.injector) {
-        ReattachSpanLocked(slot, g.x, g.y, g.width, g.height, /*reassert=*/false);
-      }
-      slot.info.x = g.x;
-      slot.info.y = g.y;
-      slot.info.width = g.width;
-      slot.info.height = g.height;
-      RememberHostPlacement();
-      return;
-    }
     const std::vector<MonitorInfo> desired =
         FilterMonitors(active_monitor_.load(std::memory_order_acquire));
     // 1. Step 5: converge the slot set to the active target (vanished
@@ -920,7 +798,6 @@ std::vector<std::wstring> MultiMonitor::DropCollidingAssignments(
 
 void MultiMonitor::ReapplyRetainedLocked() {
   if (retained_assignments_.empty()) return;
-  if (mode_ == MultiMonitorMode::Span) return;
   for (auto it = retained_assignments_.begin();
        it != retained_assignments_.end();) {
     const std::wstring& key = it->first;
@@ -1104,46 +981,6 @@ bool MultiMonitor::IsSlotPaused(size_t idx) const {
 void MultiMonitor::Reanchor() {
   k6wp::lock_order::RecursiveSlotsGuard guard(slots_mutex_);
   try {
-    if (mode_ == MultiMonitorMode::Span) {
-      // Span mode: a single slot keyed by kSpanSlotId. Explorer restart /
-      // power-resume may recreate the desktop windows even when the geometry
-      // is unchanged, but a still-live surface must be kept: recreating it
-      // also destroys mpv's VO window and ends the stream. Never create
-      // per-monitor slots here — that would duplicate the span window.
-      const auto it = slots_.find(kSpanSlotId);
-      if (it == slots_.end()) {
-        AttachSpanSlot();
-      } else if (it->second.injector) {
-        ResolveHostForPass();
-        const SpanGeometry g = GetSpanGeometry();
-        Slot& slot = it->second;
-        const bool geometry_changed =
-            !(slot.info.x == g.x && slot.info.y == g.y &&
-              slot.info.width == g.width && slot.info.height == g.height);
-        const bool host_moved =
-            shared_host_.host != nullptr &&
-            !SamePlacementRect(shared_host_.client_rect, attached_host_rect_);
-        slot.injector->SetSharedHost(shared_host_);
-        if (!geometry_changed && !host_moved &&
-            slot.injector->IsSurfaceAlive()) {
-          // Sleep/resume or wallpaper change with the desktop intact: keep
-          // the live surface and its mpv stream untouched.
-        } else {
-          // Fresh origin wins: re-attach at the freshly measured g.x/g.y
-          // instead of the stored slot origin.
-          ReattachSpanLocked(slot, g.x, g.y, g.width, g.height,
-                             /*reassert=*/true);
-          slot.info.x = g.x;
-          slot.info.y = g.y;
-          slot.info.width = g.width;
-          slot.info.height = g.height;
-        }
-      }
-      RememberHostPlacement();
-      ReapplyRetainedLocked();
-      initialized_ = !slots_.empty();
-      return;
-    }
     const std::vector<MonitorInfo> desired =
         FilterMonitors(active_monitor_.load(std::memory_order_acquire));
     // Step 5: converge to the active target first (filtered-out slots torn
@@ -1252,7 +1089,6 @@ std::vector<int> MultiMonitor::monitor_ids() const {
   return ids;
 }
 
-MultiMonitorMode MultiMonitor::mode() const { return mode_; }
 
 
 // P3: free function TopologyDivergesFromMonitors (�R12.1)

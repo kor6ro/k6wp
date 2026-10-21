@@ -309,7 +309,7 @@ class FakeEngine {
   bool Boot(const k6wp::DisplaysConfig* seed) {
     mm_ = std::make_unique<k6wp::MultiMonitor>(MmQuietLog);
     mm_->SetHeadlessHost(kMmHeadlessHost);
-    if (!mm_->Init(k6wp::MultiMonitorMode::PerMonitor)) return false;
+    if (!mm_->Init()) return false;
     if (!mm_->LoadLoopAll(default_video_)) return false;
     if (seed != nullptr) {
       k6wp::DisplaysConfig sanitized = *seed;
@@ -1087,7 +1087,7 @@ int main() {
         MmMakeMonitor(0, L"\\\\.\\DISPLAY1", 0, 0, 1920, 1080));
     k6wp::MultiMonitor mm(MmQuietLog);
     mm.SetHeadlessHost(kMmHeadlessHost);
-    Check(mm.Init(k6wp::MultiMonitorMode::PerMonitor),
+    Check(mm.Init(),
           "b14: Init attaches the live monitor");
     const size_t slot_count_before = mm.slot_count();
 

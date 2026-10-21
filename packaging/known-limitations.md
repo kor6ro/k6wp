@@ -47,10 +47,12 @@ end of this section.
   live run on any machine here. The DPI>100% path is argued from
   PerMonitorV2 physical pixels + runtime awareness `2` (learnings T4
   follow-up), never observed.
-- **Code-quoted**: span mode (`MultiMonitorMode::Span`) has no CLI flag and
-  is engine-code-only; its geometry (virtual-screen union) was verified by
-  reading the metrics, not by displaying. Automatic span is out of scope for
-  this release (see §10).
+- **Removed (Phase 1.5)**: span mode (`MultiMonitorMode::Span`) is GONE — the
+  enum, the span slot, the span re-anchor and the span branches of the
+  display-change and occlusion paths were deleted, and per-monitor is now
+  the only topology in the engine. Automatic span (one decode across the
+  virtual-screen union) stays out of scope until the single-decode render
+  API (§9) exists; until then every monitor owns its decode instance.
 - **Out of scope by decision: HDR / colour handling.** No HDR metadata, no
   tone mapping and no colour-management path ships; SDR video is mapped as
   before. This is a recorded scope boundary (plan Must-NOT-have), not a
@@ -350,12 +352,13 @@ runtime beyond Qt + the vendor binaries listed in `vendor/VERSIONS.md`.
   renderer reports hwdec inactive. A wrong pick costs one flicker + reload,
   never a stuck software-decode session. Override with
   `"gpu_adapter": "discrete"` / `"integrated"` (restart required).
-- **Span-auto conditions**: span mode (`MultiMonitorMode::Span`) is still
-  engine-code-only with no CLI/Studio flag; per-monitor (`-1` = all screens)
-  is the only shipped topology, and the new per-monitor video assignment
-  (`displays.json`, §2) does not change that. Automatic span (one decode
-  across the virtual-screen union) arrives only with the single-decode render
-  API (§9); until then every monitor owns its decode instance.
+- **Span-auto conditions**: per-monitor (`-1` = all screens) is the only
+  topology in the engine — the span mode was removed in Phase 1.5, so there
+  is no longer a second, unreached code path. The per-monitor video
+  assignment (`displays.json`, §2) does not change that. Automatic span (one
+  decode across the virtual-screen union) arrives only with the
+  single-decode render API (§9); until then every monitor owns its decode
+  instance.
 - **ffmpeg essentials scope**: the 8.1.2 essentials build carries exactly
   what the pipeline calls — `h264_nvenc`, `h264_qsv`, `h264_amf`, `libx264`
   encoders, `scale`/`fps` filters, mp4 `faststart`. Anything outside that

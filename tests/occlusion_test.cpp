@@ -24,7 +24,6 @@ namespace k6wp {
 void MultiMonitor::PauseSlot(size_t, bool) { std::abort(); }
 bool MultiMonitor::IsSlotPaused(size_t) const { std::abort(); }
 std::vector<int> MultiMonitor::monitor_ids() const { std::abort(); }
-MultiMonitorMode MultiMonitor::mode() const { std::abort(); }
 SpanGeometry MultiMonitor::GetSpanGeometry() noexcept { std::abort(); }
 }  // namespace k6wp
 

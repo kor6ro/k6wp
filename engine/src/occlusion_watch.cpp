@@ -275,21 +275,11 @@ void OcclusionWatch::Check(MultiMonitor& slots) {
 void OcclusionWatch::CheckNow(MultiMonitor& slots) {
 
   // Slot rects idx-aligned by construction: monitor_ids() IS the slots_
-  // iteration order PauseSlot/IsSlotPaused index into (span mode is the
-  // single kSpanSlotId slot at index 0).
+  // iteration order PauseSlot/IsSlotPaused index into.
   CoverRect mons[kMaxSlots];
   bool valid[kMaxSlots] = {};
   size_t nslots = 0;
-  if (slots.mode() == MultiMonitorMode::Span) {
-    const SpanGeometry g = MultiMonitor::GetSpanGeometry();
-    if (g.width <= 0 || g.height <= 0) return;
-    mons[0].left = g.x;
-    mons[0].top = g.y;
-    mons[0].right = g.x + g.width;
-    mons[0].bottom = g.y + g.height;
-    valid[0] = true;
-    nslots = 1;
-  } else {
+  {
     const std::vector<int> ids = slots.monitor_ids();
     if (ids.empty()) return;
     nslots = ids.size() < kMaxSlots ? ids.size() : kMaxSlots;

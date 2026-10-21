@@ -27,7 +27,7 @@ outstanding work and belong under `docs/img/` once they exist.
 ## Features
 
 - Hardware decode with fallback (`d3d11va` → `dxva2` → software), `vo=gpu`, loop playback via libmpv.
-- Multi-monitor: per-monitor windows, DPI PerMonitorV2, span mode (engine-code-only).
+- Multi-monitor: per-monitor windows, DPI PerMonitorV2.
 - Fullscreen auto-pause: foreground fullscreen app pauses rendering, resumes after.
 - Battery saver: FPS cap (default 30, down to 24 on DC) + restore on AC.
 - Auto-compress to monitor resolution: H.264/MP4 (default CRF 22) with LRU output

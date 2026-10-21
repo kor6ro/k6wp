@@ -464,7 +464,7 @@ void TestA_OneMonitorPrimary() {
   MultiMonitor mm(&QuietLog, MakeRecordingFactory());
   mm.SetHeadlessHost(kHeadlessHost);
   mm.SetInjectMode(InjectMode::kProgman);
-  const bool ok = mm.Init(MultiMonitorMode::PerMonitor);
+  const bool ok = mm.Init();
   Check(ok, "a: Init(PerMonitor) returns true with 1 monitor");
   Check(mm.slot_count() == 1, "a: slot_count()==1");
   Check(AttachRectsEqual({{0, 0, 1920, 1080}}),
@@ -510,7 +510,7 @@ void TestB_TwoSideBySideHappy() {
 
   MultiMonitor mm(&QuietLog, MakeRecordingFactory());
   mm.SetHeadlessHost(kHeadlessHost);
-  const bool ok = mm.Init(MultiMonitorMode::PerMonitor);
+  const bool ok = mm.Init();
   Check(ok, "b: Init(PerMonitor) returns true with 2 monitors");
   Check(mm.slot_count() == 2, "b: slot_count()==2");
   Check(AttachRectsEqual({{0, 0, 1920, 1080}, {1920, 0, 1920, 1080}}),
@@ -594,7 +594,7 @@ void TestC_SecondMonitorLeftNegative() {
 
   MultiMonitor mm(&RecordLog, MakeRecordingFactory());
   mm.SetHeadlessHost(kHeadlessHost);
-  const bool ok = mm.Init(MultiMonitorMode::PerMonitor);
+  const bool ok = mm.Init();
   Check(ok, "c: Init(PerMonitor) returns true (headless counts as live)");
   Check(mm.slot_count() == 2,
         "c: slot_count()==2 (both slots live - failed attach degrades to "
@@ -662,7 +662,7 @@ void TestD_SecondMonitorAbove() {
 
   MultiMonitor mm(&QuietLog, MakeRecordingFactory());
   mm.SetHeadlessHost(kHeadlessHost);
-  const bool ok = mm.Init(MultiMonitorMode::PerMonitor);
+  const bool ok = mm.Init();
   Check(ok, "d: Init(PerMonitor) returns true");
   Check(mm.slot_count() == 2, "d: slot_count()==2");
   Check(AttachRectsEqual({{0, 0, 1920, 1080}, {0, -1080, 1920, 1080}}),
@@ -706,7 +706,7 @@ void TestE_PortraitSecondary() {
 
   MultiMonitor mm(&QuietLog, MakeRecordingFactory());
   mm.SetHeadlessHost(kHeadlessHost);
-  const bool ok = mm.Init(MultiMonitorMode::PerMonitor);
+  const bool ok = mm.Init();
   Check(ok, "e: Init(PerMonitor) returns true");
   Check(mm.slot_count() == 2, "e: slot_count()==2");
   Check(AttachRectsEqual({{0, 0, 1920, 1080}, {1920, 0, 1080, 1920}}),
@@ -754,7 +754,7 @@ void TestF_ThreeMixedSizes() {
 
   MultiMonitor mm(&QuietLog, MakeRecordingFactory());
   mm.SetHeadlessHost(kHeadlessHost);
-  const bool ok = mm.Init(MultiMonitorMode::PerMonitor);
+  const bool ok = mm.Init();
   Check(ok, "f: Init(PerMonitor) returns true with 3 monitors");
   Check(mm.slot_count() == 3, "f: slot_count()==3");
   Check(AttachRectsEqual({{0, 0, 1920, 1080},
@@ -835,7 +835,7 @@ void TestG_DuplicateModeCollision() {
   // Both slots still attach despite the collision.
   MultiMonitor mm(&QuietLog, MakeRecordingFactory());
   mm.SetHeadlessHost(kHeadlessHost);
-  const bool ok = mm.Init(MultiMonitorMode::PerMonitor);
+  const bool ok = mm.Init();
   Check(ok, "g: Init(PerMonitor) returns true in duplicate mode");
   Check(mm.slot_count() == 2,
         "g: slot_count()==2 - BOTH slots still attach despite the "
@@ -877,7 +877,7 @@ void TestH_MixedDpi() {
 
   MultiMonitor mm(&QuietLog, MakeRecordingFactory());
   mm.SetHeadlessHost(kHeadlessHost);
-  const bool ok = mm.Init(MultiMonitorMode::PerMonitor);
+  const bool ok = mm.Init();
   Check(ok, "h: Init(PerMonitor) returns true with mixed-DPI fixtures");
   Check(mm.slot_count() == 2, "h: slot_count()==2");
   Check(AttachRectsEqual({{0, 0, 1920, 1080}, {0, 0, 1920, 1080}}),
@@ -909,7 +909,7 @@ void TestH_MixedDpi() {
   };
   MultiMonitor mm2(&QuietLog, MakeRecordingFactory());
   mm2.SetHeadlessHost(kHeadlessHost);
-  const bool ok2 = mm2.Init(MultiMonitorMode::PerMonitor);
+  const bool ok2 = mm2.Init();
   Check(ok2, "h2: Init(PerMonitor) returns true with mixed-DPI rects");
   Check(mm2.slot_count() == 2, "h2: slot_count()==2");
   Check(AttachRectsEqual({{0, 0, 1920, 1080}, {1920, 0, 2560, 1440}}),

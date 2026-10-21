@@ -194,11 +194,18 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   // unhandled exception anywhere writes a .dmp + engine.log line.
   SetUnhandledExceptionFilter(&CrashDumpHandler);
   // PerMonitorV2 before any window is created. The embedded app.manifest
-  // already declares PerMonitorV2, so these calls are defense-in-depth and
-  // return FALSE as a no-op when the manifest set the context — never a
-  // downgrade. SetProcessDPIAware covers pre-1703 Windows.
+  // already declares PerMonitorV2, so this call is defense-in-depth and
+  // returns FALSE as a no-op when the manifest set the context - never a
+  // downgrade.
+  //
+  // There is no pre-1703 fallback any more: the minimum OS is Windows 10
+  // 22H2 (build 19041), enforced by shared/os_version.cpp before anything
+  // starts. The old SetProcessDPIAware fallback was dead code.
   if (!k6wp::SetProcessDpiAwarenessContextPMDA()) {
-    ::SetProcessDPIAware();
+    k6wp::AppendEngineLogLine(
+        "warning: SetProcessDpiAwarenessContext(PMv2) failed - the manifest "
+        "still applies",
+        true);
   }
   // P1.5: run the whole process (and every child it spawns) at BELOW_NORMAL
   // priority. Never fatal: a failed class change logs and continues.

@@ -571,7 +571,7 @@ void TestHappyInjectedFactory() {
   mm.SetInjectMode(InjectMode::kProgman);
   mm.SetAdapterPin("Intel");
 
-  const bool ok = mm.Init(MultiMonitorMode::PerMonitor);
+  const bool ok = mm.Init();
   Check(ok, "happy: Init(PerMonitor) returns true with 2 monitors");
   Check(mm.slot_count() == 2, "happy: slot_count()==2");
   Check(mm.slots().size() == 2, "happy: slots() exposes both slots");
@@ -579,8 +579,6 @@ void TestHappyInjectedFactory() {
         "happy: slots() keyed by monitor id 0 and 1");
   const std::vector<int> want_ids = {0, 1};
   Check(mm.monitor_ids() == want_ids, "happy: monitor_ids()=={0,1}");
-  Check(mm.mode() == MultiMonitorMode::PerMonitor,
-        "happy: mode()==PerMonitor");
   Check(g_factory_injectors == 2, "happy: injected factory built 2 injectors");
   Check(g_factory_renderers == 2, "happy: injected factory built 2 renderers");
 
@@ -656,7 +654,7 @@ void TestDefaultFactoryProductionShape() {
     mm.SetHeadlessHost(kHeadlessHost);
     mm.SetInjectMode(InjectMode::kProgman);
     mm.SetAdapterPin("Intel");
-    const bool ok = mm.Init(MultiMonitorMode::PerMonitor);
+    const bool ok = mm.Init();
     Check(ok, "default: Init(PerMonitor) returns true");
     Check(mm.slot_count() == 2, "default: slot_count()==2");
     Check(g_factory_injectors == 0 && g_factory_renderers == 0,
@@ -697,7 +695,7 @@ void TestHeadlessFallbackContract() {
   MultiMonitor mm(&QuietLog);              // production default materialised...
   mm.SetSlotFactory(MakeRecordingFactory());  // ...then overridden by the seam
   mm.SetHeadlessHost(kHeadlessHost);
-  const bool ok = mm.Init(MultiMonitorMode::PerMonitor);
+  const bool ok = mm.Init();
   Check(ok, "headless: Init still returns true (headless counts as live)");
   Check(mm.slot_count() == 2, "headless: slot_count()==2");
   Check(mm.slots().size() == 2, "headless: slots() exposes both slots");
@@ -747,7 +745,7 @@ void TestNullSharedHostDegradesHeadless() {
 
   Check(!g_resolve_result.host,
         "nullhost: fixture ResolveSharedHost returns a null host (null Progman)");
-  const bool ok = mm.Init(MultiMonitorMode::PerMonitor);
+  const bool ok = mm.Init();
   Check(ok, "nullhost: Init still returns true (headless slots count as live)");
   Check(mm.slot_count() == 2,
         "nullhost: slot_count()==2 (no crash, both slots exist)");
@@ -839,7 +837,7 @@ void TestFalseSuccessHeadless() {
 
   MultiMonitor mm(&RecordLog, MakeRecordingFactory());
   mm.SetHeadlessHost(kHeadlessHost);
-  const bool ok = mm.Init(MultiMonitorMode::PerMonitor);
+  const bool ok = mm.Init();
   Check(ok, "false-success: Init still returns true (headless counts as live)");
   Check(mm.slot_count() == 2, "false-success: slot_count()==2");
   Check(mm.headless_slot_count() == 1,
@@ -892,7 +890,7 @@ void TestHostMoveTriggersReattach() {
   g_attach_ok = true;
   MultiMonitor mm(&QuietLog, MakeRecordingFactory());
   mm.SetHeadlessHost(kHeadlessHost);
-  const bool ok = mm.Init(MultiMonitorMode::PerMonitor);
+  const bool ok = mm.Init();
   Check(ok, "hostmove: Init(PerMonitor) returns true");
   Check(mm.slot_count() == 2, "hostmove: slot_count()==2 after Init");
   bool baseline = g_inj.size() == 2;
@@ -969,7 +967,7 @@ void TestMonitorOnlyReattachUnchanged() {
   g_attach_ok = true;
   MultiMonitor mm(&QuietLog, MakeRecordingFactory());
   mm.SetHeadlessHost(kHeadlessHost);
-  const bool ok = mm.Init(MultiMonitorMode::PerMonitor);
+  const bool ok = mm.Init();
   Check(ok, "mononly: Init(PerMonitor) returns true");
   g_monitors[0].height = 1440;
   mm.OnDisplayChange();
@@ -1004,7 +1002,7 @@ void TestNoGeometryOrHostChangeSkips() {
   g_attach_ok = true;
   MultiMonitor mm(&QuietLog, MakeRecordingFactory());
   mm.SetHeadlessHost(kHeadlessHost);
-  const bool ok = mm.Init(MultiMonitorMode::PerMonitor);
+  const bool ok = mm.Init();
   Check(ok, "nochange: Init(PerMonitor) returns true");
   mm.OnDisplayChange();
   bool none = g_inj.size() == 2;
@@ -1018,94 +1016,6 @@ void TestNoGeometryOrHostChangeSkips() {
   mm.Shutdown();
 }
 
-// Row 11 span host-move: identical virtual-screen geometry, HOST rect moved
-// only. The span slot must re-attach Detach+Attach style (Reanchor's
-// ReattachSpanLocked funnel) against the refreshed shared host - not via
-// injector->OnDisplayChange, and not skipped.
-void TestSpanHostMoveReattaches() {
-  ResetStubs();
-  static SpanGeometry fake{0, 0, 1920, 1080};
-  MultiMonitor::SetSpanGeometryOverride(&fake);
-  g_attach_ok = true;
-  MultiMonitor mm(&QuietLog, MakeRecordingFactory());
-  mm.SetHeadlessHost(kHeadlessHost);
-  const bool ok = mm.Init(MultiMonitorMode::Span);
-  Check(ok, "spanhost: Init(Span) returns true");
-  Check(mm.slot_count() == 1, "spanhost: slot_count()==1 after Init");
-  const InjState* inj = nullptr;
-  for (const auto& kv : g_inj) inj = &kv.second;
-  Check(inj != nullptr && inj->attach_calls == 1 &&
-            inj->on_display_change_calls == 0,
-        "spanhost: baseline one Attach, zero OnDisplayChange");
-
-  g_resolve_result = MakeMovedHost();
-  mm.OnDisplayChange();
-
-  Check(mm.slot_count() == 1, "spanhost: span slot survives");
-  Check(inj != nullptr && inj->attach_calls == 2,
-        "spanhost: host-move re-attached with a new surface (attach_calls==2)");
-  Check(inj != nullptr && inj->on_display_change_calls == 0,
-        "spanhost: span re-attach did NOT go through injector->OnDisplayChange");
-  Check(inj != nullptr && inj->release_calls == 1 && inj->detach_calls == 0,
-        "spanhost: the old surface was RELEASED before the re-Attach (never "
-        "destroyed under a live mpv VO)");
-  Check(inj != nullptr && inj->shared_set &&
-            inj->shared.client_rect.left == 5 &&
-            inj->shared.client_rect.right == 1925,
-        "spanhost: span re-attach received the refreshed host client_rect B");
-  MultiMonitor::SetSpanGeometryOverride(nullptr);
-  mm.Shutdown();
-}
-
-// Row 11 failure QA: virtual-screen query yields non-positive dimensions
-// (SetSpanGeometryOverride {0,0,0,0}) AND the resolved host client_rect is
-// non-positive too. OnDisplayChange must not throw (catch at OnDisplayChange)
-// and ReattachSpanLocked must still fall back to the primary resolution
-// (same policy as AttachSpanSlot's virtual-screen fallback).
-void TestSpanNonPositiveGeometryPrimaryFallback() {
-  ResetStubs();
-  static SpanGeometry zero{0, 0, 0, 0};
-  MultiMonitor::SetSpanGeometryOverride(&zero);
-  SharedHost broken = MakeStubSharedHost();
-  broken.client_rect = {0, 0, 0, 0};
-  g_resolve_result = broken;
-  g_logs.clear();
-  const MonitorInfo primary = GetPrimaryMonitor();
-
-  MultiMonitor mm(&RecordLog, MakeRecordingFactory());
-  mm.SetHeadlessHost(kHeadlessHost);
-  const bool ok = mm.Init(MultiMonitorMode::Span);
-  Check(ok, "spanfail: Init(Span) returns true with non-positive span geometry");
-  Check(mm.slot_count() == 1, "spanfail: one span slot after primary fallback");
-  const InjState* inj = nullptr;
-  for (const auto& kv : g_inj) inj = &kv.second;
-  Check(inj != nullptr && inj->att_x == primary.x && inj->att_y == primary.y &&
-            inj->att_w == primary.width && inj->att_h == primary.height,
-        "spanfail: Init fell back to primary resolution "
-        "(AttachSpanSlot virtual-screen fallback)");
-
-  broken.client_rect = {1, 1, 0, 0};
-  g_resolve_result = broken;
-  bool threw = false;
-  try {
-    mm.OnDisplayChange();
-  } catch (...) {
-    threw = true;
-  }
-  Check(!threw, "spanfail: OnDisplayChange did not throw (catch swallows)");
-  Check(mm.slot_count() == 1, "spanfail: span slot still live");
-  Check(inj != nullptr && inj->attach_calls == 2,
-        "spanfail: re-attach attempted after the host-rect change");
-  Check(inj != nullptr && inj->att_x == primary.x && inj->att_y == primary.y &&
-            inj->att_w == primary.width && inj->att_h == primary.height,
-        "spanfail: ReattachSpanLocked fell back to primary resolution "
-        "(non-positive w/h -> GetPrimaryMonitor)");
-  Check(inj != nullptr && inj->shared_set && inj->shared.host == broken.host,
-        "spanfail: refreshed shared host was still passed down");
-  MultiMonitor::SetSpanGeometryOverride(nullptr);
-  mm.Shutdown();
-}
-
 // Power-resume regression (1.3.0-beta.4): Reanchor on an intact desktop must
 // not touch the injected surface or reload the stream. The old code always
 // Detach()+Attach(), which destroyed mpv's VO window
@@ -1115,7 +1025,7 @@ void TestReanchorNoOpKeepsLiveSurface() {
   ResetStubs();
   MultiMonitor mm(&QuietLog, MakeRecordingFactory());
   mm.SetHeadlessHost(kHeadlessHost);
-  Check(mm.Init(MultiMonitorMode::PerMonitor),
+  Check(mm.Init(),
         "resume-noop: Init(PerMonitor) returns true");
   Check(mm.LoadLoopAll("C:\\wallpapers\\loop.mp4"),
         "resume-noop: baseline LoadLoopAll accepted by both slots");
@@ -1160,7 +1070,7 @@ void TestReanchorAfterSurfaceLossReloadsVideo() {
   ResetStubs();
   MultiMonitor mm(&QuietLog, MakeRecordingFactory());
   mm.SetHeadlessHost(kHeadlessHost);
-  Check(mm.Init(MultiMonitorMode::PerMonitor),
+  Check(mm.Init(),
         "resume-reload: Init(PerMonitor) returns true");
   Check(mm.LoadLoopAll("C:\\wallpapers\\loop.mp4"),
         "resume-reload: baseline LoadLoopAll accepted");
@@ -1203,7 +1113,7 @@ void TestReanchorHostMoveReloadsVideo() {
   ResetStubs();
   MultiMonitor mm(&QuietLog, MakeRecordingFactory());
   mm.SetHeadlessHost(kHeadlessHost);
-  Check(mm.Init(MultiMonitorMode::PerMonitor),
+  Check(mm.Init(),
         "resume-hostmove: Init(PerMonitor) returns true");
   Check(mm.LoadLoopAll("C:\\wallpapers\\loop.mp4"),
         "resume-hostmove: baseline LoadLoopAll accepted");
@@ -1234,7 +1144,7 @@ void TestLiveFrameCapture() {
   ResetStubs();
   MultiMonitor mm(&QuietLog, MakeRecordingFactory());
   mm.SetHeadlessHost(kHeadlessHost);
-  Check(mm.Init(MultiMonitorMode::PerMonitor),
+  Check(mm.Init(),
         "liveframe: Init(PerMonitor) returns true");
 
   const std::string target = "C:\\ProgramData\\K6WP\\lockscreen.live.tmp.jpg";
@@ -1255,47 +1165,6 @@ void TestLiveFrameCapture() {
   for (auto& kv : g_ren) kv.second.screenshot_ok = false;
   Check(!mm.CaptureLiveFrame(target),
         "liveframe: a refused capture reports failure (the caller falls back)");
-  mm.Shutdown();
-}
-
-// Span mode has its own Reanchor branch: same no-op guarantee, same
-// force-reload after a real surface loss.
-void TestSpanReanchorKeepsAndReloads() {
-  ResetStubs();
-  static SpanGeometry fake{0, 0, 1920, 1080};
-  MultiMonitor::SetSpanGeometryOverride(&fake);
-  MultiMonitor mm(&QuietLog, MakeRecordingFactory());
-  mm.SetHeadlessHost(kHeadlessHost);
-  Check(mm.Init(MultiMonitorMode::Span), "span-resume: Init(Span) returns true");
-  Check(mm.LoadLoopAll("C:\\wallpapers\\span.mp4"),
-        "span-resume: baseline LoadLoopAll accepted");
-
-  mm.Reanchor();
-  const InjState* inj = nullptr;
-  const RenState* ren = nullptr;
-  for (const auto& kv : g_inj) inj = &kv.second;
-  for (const auto& kv : g_ren) ren = &kv.second;
-  Check(inj != nullptr && inj->attach_calls == 1 && inj->detach_calls == 0,
-        "span-resume: intact surface is not detached/recreated");
-  Check(ren != nullptr && ren->load_loop_calls == 1 &&
-            ren->load_loop_force_calls == 0,
-        "span-resume: intact stream is not reloaded");
-
-  g_surface_alive = false;
-  mm.Reanchor();
-  // The OLD renderer went to the graveyard: wait for the worker so the
-  // census below sees only the NEW one.
-  Check(RendererGraveyard::WaitIdle(5000), "span-resume: graveyard drained");
-  Check(inj != nullptr && inj->attach_calls == 2 && inj->release_calls == 1 &&
-            inj->detach_calls == 0,
-        "span-resume: lost surface is re-placed (old one released, not "
-        "destroyed under a live VO)");
-  // The re-place created a NEW renderer (the old one was handed to the
-  // graveyard), so the live renderer is the fresh one and it re-loaded the
-  // span video.
-  Check(g_load_force_calls.load(std::memory_order_relaxed) == 1,
-        "span-resume: lost surface force-reloads the span video");
-  MultiMonitor::SetSpanGeometryOverride(nullptr);
   mm.Shutdown();
 }
 
@@ -1329,10 +1198,8 @@ int main(int argc, char** argv) {
     k6wp::TestNoGeometryOrHostChangeSkips();
   }
   if (sel == "all" || sel == "spanhost") {
-    k6wp::TestSpanHostMoveReattaches();
   }
   if (sel == "all" || sel == "spanfail") {
-    k6wp::TestSpanNonPositiveGeometryPrimaryFallback();
   }
   if (sel == "all" || sel == "resume-noop") {
     k6wp::TestReanchorNoOpKeepsLiveSurface();
@@ -1344,7 +1211,6 @@ int main(int argc, char** argv) {
     k6wp::TestReanchorHostMoveReloadsVideo();
   }
   if (sel == "all" || sel == "span-resume") {
-    k6wp::TestSpanReanchorKeepsAndReloads();
   }
   if (sel == "all" || sel == "liveframe") {
     k6wp::TestLiveFrameCapture();

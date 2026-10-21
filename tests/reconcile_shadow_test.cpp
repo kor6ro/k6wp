@@ -483,7 +483,7 @@ void TestVerifyCoverage() {
       MakeMon(1, 1920, 0, 1920, 1080, false, L"\\\\.\\DISPLAY2", "key-b", true),
   };
   MultiMonitor mm(&QuietLog, MakeRecordingFactory());
-  mm.Init(MultiMonitorMode::PerMonitor);
+  mm.Init();
 
   // VerifyCoverage read-only: counts live slots, covered if coverage_reason
   // == "placement: covered" (set during Attach via the stub), degraded keys
@@ -502,7 +502,7 @@ void TestApplyTopologyShadowNoOp() {
       MakeMon(0, 0, 0, 1920, 1080, true, L"\\\\.\\DISPLAY1", "key-a"),
   };
   MultiMonitor mm(&QuietLog, MakeRecordingFactory());
-  mm.Init(MultiMonitorMode::PerMonitor);
+  mm.Init();
   size_t slots_before = mm.slot_count();
 
   TopologySnapshot snap = SnapshotTopology();
@@ -524,7 +524,7 @@ void TestSharedHostBranch() {
   // Before Init: shared_host_ is default (zero rect) -> "(none)"
   Check(mm.SharedHostBranch() == "(none)",
         "shadow-branch: default-constructed -> (none)");
-  mm.Init(MultiMonitorMode::PerMonitor);
+  mm.Init();
   // After Init: host resolved via ResolveHostForPass -> branch string
   Check(mm.SharedHostBranch() != "(none)",
         "shadow-branch: after Init -> non-empty branch");

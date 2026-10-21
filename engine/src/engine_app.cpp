@@ -618,7 +618,7 @@ void EngineApp::InitWallpaperSurface(const std::string& video_utf8) {
   }
   multi_monitor_.SetInjectMode(inject_mode);
   wallpaper_surface_live_.store(
-      multi_monitor_.Init(MultiMonitorMode::PerMonitor),
+      multi_monitor_.Init(),
       std::memory_order_release);
   Log("engine: wallpaper surface init (slots=%llu live=%s)",
       static_cast<unsigned long long>(multi_monitor_.slot_count()),

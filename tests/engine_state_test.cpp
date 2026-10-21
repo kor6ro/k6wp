@@ -657,7 +657,7 @@ int main() {
           MmMakeMonitor(0, L"\\\\.\\DISPLAY1", 0, 0, 1920, 1080));
       k6wp::MultiMonitor mm(MmQuietLog);
       mm.SetHeadlessHost(kMmHeadlessHost);
-      Check(mm.Init(k6wp::MultiMonitorMode::PerMonitor),
+      Check(mm.Init(),
             "boot17-i: Init attaches the live monitor");
       Check(mm.LoadLoopAll(default_u8),
             "boot17-i: LoadLoopAll accepts the default path");
@@ -681,7 +681,7 @@ int main() {
           MmMakeMonitor(0, L"\\\\.\\DISPLAY1", 0, 0, 1920, 1080));
       k6wp::MultiMonitor mm(MmRecordLog);
       mm.SetHeadlessHost(kMmHeadlessHost);
-      mm.Init(k6wp::MultiMonitorMode::PerMonitor);
+      mm.Init();
       mm.LoadLoopAll(default_u8);
       const k6wp::DisplaysConfig cfg = make_cfg(L"\\\\.\\DISPLAY9",
                                                  assigned_mp4.wstring());
@@ -720,7 +720,7 @@ int main() {
           MmMakeMonitor(0, L"\\\\.\\DISPLAY1", 0, 0, 1920, 1080));
       k6wp::MultiMonitor mm(MmRecordLog);
       mm.SetHeadlessHost(kMmHeadlessHost);
-      mm.Init(k6wp::MultiMonitorMode::PerMonitor);
+      mm.Init();
       mm.LoadLoopAll(default_u8);
       const k6wp::DisplaysConfig cfg = make_cfg(L"\\\\.\\DISPLAY1",
                                                  missing_mp4.wstring());
