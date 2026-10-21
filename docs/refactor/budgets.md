@@ -94,31 +94,65 @@ parity gate. A phase that hits its parity gate but misses its target is
 |---|---|---|---|---|---|
 | 1.1 | private bytes, paused 30 s | 162.35 MB | ≤ 168.4 MB | **≤ 60 MB** (mpv unloaded) | **69.0 MB** when the pause owner hides the wallpaper (phase1-1-unload.md) |
 | 1.1 | GPU shared, paused 30 s | 151.57 MB | ≤ 163.6 MB | **≤ 20 MB** | **0 MB** |
-| 1.2 | wakeups/s, playback | 1273 | ≤ 1400 | **≤ 700** (event-driven) | **1103** — the desync busy-wait is gone (`phase1-2-vsync.md`) |
 | 1.2 | CPU, playback 1080p | 4.73 % | ≤ 6.5 % | lower | **1.06 %** (−72.5 %) |
 | 1.2 | CPU, playback 4K | 4.64 % | ≤ 6.5 % | lower | **1.45 %** (−64.9 %) |
 | 1.2 | GPU 3D, playback 1080p | 12.47 % | ≤ 15.0 % | lower | **9.39 %** (−62.7 %) |
 | 1.2 | rendered-frame parity | — | pixel diff 0 | 0 | **0.000** (byte-identical) |
-| 1.3 | install size, mpv group | 114.77 MB | ≤ 114.77 MB | **≤ 60 MB** (lean libmpv build) | pending |
+| 1.3 | install size, mpv group | 114.77 MB | ≤ 114.77 MB | **≤ 60 MB** (lean libmpv build) | DEFER — no build toolchain here (`docs/refactor/phase1-3-bundle.md`) |
+| 1.3 | **install size, ffprobe** | 96.98 MB | ≤ 96.98 MB | **0 MB** (probe with libmpv) | pending — the biggest single lever |
 | 2.3 | Studio private bytes | 337.53 MB | ≤ 348 MB | **≤ 150 MB** (Slint, no Qt) | pending |
-| 2.7 | install size, qt group | 48.0 MB + 8.1 MB payload | ≤ 56.1 MB | **0 MB** | pending |
+| 2.7 | install size, qt group | 48.0 MB + 8.1 MB payload | ≤ 56.1 MB | **0 MB** | pending — **NOT a ZIP-size lever** (see below) |
 | 2.7 | Studio startup | 1290 ms | ≤ 1600 ms | **≤ 700 ms** | pending |
-| 3.x | install size, ffmpeg group | 194.16 MB | ≤ 194.16 MB | **≤ 100 MB** (or 0 if ffmpeg is dropped) | pending |
-| 3.x | install size, total | 389.14 MB | ≤ 389.14 MB | **≤ 200 MB** | pending |
+| 3.x | install size, ffmpeg group | 194.16 MB | ≤ 194.16 MB | **≤ 100 MB** (or 0 if ffmpeg is dropped) | DEFER — no build toolchain here |
+| 3.x | **install size, total** | 389.14 MB | ≤ 389.14 MB | **≤ 292 MB (−25 %)** | pending |
+| 3.x | **ZIP size** | 148.13 MB | ≤ 148.13 MB | **≤ 115 MB (−22 %)** | pending |
 
-## Bundle budget rationale
+## Bundle budget rationale (REVISED by measurement, C3)
 
-The 389 MB install is dominated by two vendor binaries that are **not** the
-application:
+The install is 389.14 MB; the shipped **ZIP is 148.13 MB** (38.1 % ratio,
+measured from `dist/K6WP-portable-0.0.1-alpha.3.zip`,
+`docs/bench/bundle-zip.json`). The two numbers are different levers, and the
+old "≥ 30 % ZIP reduction by removing Qt" target was **unreachable** — the
+measurement says so:
 
-- ffmpeg 194 MB (50 %) — used only by the compressor.
-- libmpv 115 MB (30 %) — used by the engine and the Studio preview.
+| group | install MB | **ZIP MB** | ZIP % |
+|---|---|---|---|
+| **ffmpeg + ffprobe** | 194.16 | **70.73** | **47.8 %** |
+| **mpv** (libmpv-2.dll) | 114.77 | **44.64** | **30.1 %** |
+| **Qt DLLs** | 48.00 | **19.78** | **13.4 %** |
+| shader cache (dxcompiler + dxil) | 15.09 | 6.88 | 4.6 % |
+| QML payload | 8.14 | ~2.6 | ~1.8 % |
+| K6WP exes | 5.44 | 2.08 | 1.4 % |
+| MSVC runtime | 0.83 | 0.30 | 0.2 % |
 
-A 30-second H.264 clip is transcoded by a full-featured ffmpeg build that
-carries every encoder, filter and protocol. A build limited to
-`libx264 + h264 demux/mux` would be a fraction of the size. That is the
-single largest lever in the whole refactor, and it is **independent** of the
-C++ → Rust work — it can ship in Phase 1.
+**Dropping Qt entirely saves at most 19.78 + 2.6 ≈ 22 MB of a 148 MB ZIP
+(15 %)** — the Qt removal cannot reach a 30 % ZIP reduction. It is still the
+right change for **Studio RAM (337 MB → ≤ 150 MB), Studio startup (1290 ms →
+≤ 700 ms) and code tidiness**, which is why Phase 2 exists; it is NOT a
+bundle-size play.
+
+**The real levers, in order:**
+
+1. **ffprobe (96.98 MB install / ~35 MB ZIP, 24 % of the ZIP on its own).**
+   It is a second copy of the ffmpeg build, and the product only asks it
+   for five fields: `format.duration`, the first video stream's
+   `codec_name` / `width` / `height` / `r_frame_rate`, and whether an audio
+   stream exists. `libmpv-2.dll` is **already shipped**, so probing through
+   it costs zero new shipping bytes. This is the highest-value, lowest-risk
+   bundle action — and the only one that is feasible here.
+2. **A lean libmpv build** (up to 44.64 MB of the ZIP) — DEFER: this
+   machine has **no meson, ninja or C/C++ toolchain** and the vendor tree
+   carries prebuilt binaries only, so the build cannot be produced or
+   verified here. Shipping an unverified media build is exactly the risk the
+   brief forbids.
+3. **A lean ffmpeg build** (up to 70.73 MB of the ZIP) — DEFER for the same
+   reason, and it additionally changes the encoder set (every codec the
+   product can emit), so it needs a full playback/compress parity pass.
+
+**Revised targets:** the ZIP target is **≤ 115 MB (−22 %)**, reachable by
+the ffprobe→libmpv swap alone; the install target is **≤ 292 MB (−25 %)** on
+the same swap. The deferred levers (lean libmpv, lean ffmpeg) are upside,
+not part of the gate.
 
 ## Rules for using these numbers
 

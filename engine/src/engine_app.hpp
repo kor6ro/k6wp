@@ -277,6 +277,7 @@ class EngineApp {
     return dump_mpv_counters_count_ > 0 && dump_mpv_counters_done_ < dump_mpv_counters_count_;
   }
   std::wstring dump_mpv_counters_path_;
+  std::wstring dump_media_props_path_;
   std::wstring dump_mpv_properties_path_;
   int dump_mpv_counters_count_ = 0;
   int dump_mpv_counters_interval_ms_ = 0;
@@ -326,6 +327,9 @@ class EngineApp {
   void MaybeUnloadAfterPause(long long elapsed_ms);
   void UnloadDecodeNow(long long elapsed_ms);
   void ReloadDecodeNow(long long elapsed_ms);
+  // Hidden QA: write the media metadata mpv reports for the loaded file.
+  void DumpMediaProps();
+  bool dump_media_props_pending_ = false;
   // True when the pause mask contains an owner that makes the wallpaper
   // INVISIBLE to the user (a fullscreen app, the screen off, the session
   // locked, the machine suspending). Only then is the decode pipeline

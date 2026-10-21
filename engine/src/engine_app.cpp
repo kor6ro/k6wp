@@ -495,6 +495,9 @@ bool EngineApp::Init(int argc, char** argv) {
       LogImportant("test: fps-cap override %d applied to the renderers",
                    options_.fps_cap_override);
     }
+    if (!options_.dump_media_props_path.empty()) {
+      dump_media_props_path_ = options_.dump_media_props_path;
+    }
     if (options_.unload_after_pause_ms > 0) {
       // Hidden QA: the SAME mechanism the production config drives, with the
       // deadline forced to a known value so the measurement is deterministic.
@@ -521,6 +524,13 @@ bool EngineApp::Init(int argc, char** argv) {
   // so a headless LoadLoop here would decode the same file twice (~500MB on
   // 4K). Still AFTER tray/IPC are up (Todo 9: surface logging needs them).
   InitWallpaperSurface(boot_video);
+  // Hidden QA: the media metadata mpv reports (the ffprobe replacement
+  // experiment). It runs from the loop, once the file is loaded - mpv only
+  // knows the duration and the frame rate after the demuxer is done, so a
+  // dump at init would report zeros.
+  if (!dump_media_props_path_.empty()) {
+    dump_media_props_pending_ = true;
+  }
   // E-04: arm the DXGI adapter-removed watch now that the live surface exists;
   // its event joins the Run-loop wait array below. Start() never throws and
   // leaves the watch inactive on any COM failure, so a missing dxgi/older OS
@@ -870,6 +880,126 @@ void EngineApp::DumpMpvCountersStep(long long elapsed_ms) {
   }
 }
 
+// Hidden QA: the media metadata mpv reports for the loaded file, as the
+// JSON the ffprobe-based probe would have produced. It exists to PROVE that
+// the mpv-based probe can replace the 97 MB ffprobe binary: the two must
+// agree on every field (duration, codec, width, height, fps, has_audio).
+void EngineApp::DumpMediaProps() {
+  if (dump_media_props_path_.empty()) return;
+  nlohmann::json out = nlohmann::json::object();
+  // The properties must come from the renderer that actually HAS the file:
+  // with a live wallpaper surface that is the SLOT's renderer, not the
+  // headless one (which stays empty in that case).
+  auto read = [&](const char* name, std::string& value) -> bool {
+    bool ok = false;
+    if (wallpaper_surface_live_.load(std::memory_order_acquire)) {
+      ok = multi_monitor_.ReadLiveCounterText(name, value);
+    }
+    if (!ok) {
+      if (std::shared_ptr<MpvRenderer> renderer = AcquireRenderer()) {
+        ok = renderer->GetPropertyValue(name, value);
+      }
+    }
+    return ok;
+  };
+  {
+    bool ok = false;
+    // mpv's "duration" is a DOUBLE, so it must be read as TEXT (an
+    // int-only read reports the property as unavailable).
+    auto read_double = [&](const char* name, bool& good) -> double {
+      std::string text;
+      good = read(name, text);
+      if (!good) return 0.0;
+      try { return std::stod(text); } catch (...) { return 0.0; }
+    };
+    // mpv's "duration" is the media duration in seconds - the same value
+    // ffprobe reports as format.duration.
+    out["duration"] = read_double("duration", ok);
+    out["has_duration"] = ok;
+    // The frame size AND the short codec name: mpv exposes both in the
+    // "video-params" node. mpv's "video-codec" property is the
+    // human-readable description ("H.264 / AVC / MPEG-4 AVC / MPEG-4 part
+    // 10"), while ffprobe's codec_name is the short name ("h264") - so the
+    // params node is the one that matches ffprobe.
+    std::string params;
+    std::string codec;
+    bool has_codec = false;
+    if (read("video-params", params)) {
+      nlohmann::json p = nlohmann::json::parse(params, nullptr, false);
+      if (!p.is_discarded() && p.is_object()) {
+        out["width"] = p.value("w", 0);
+        out["height"] = p.value("h", 0);
+        if (p.contains("codec")) {
+          codec = p.value("codec", "");
+          has_codec = !codec.empty();
+        }
+      }
+    }
+    if (!has_codec) {
+      std::string readable;
+      if (read("video-codec", readable)) {
+        codec = readable;
+        has_codec = true;
+      }
+    }
+    out["has_codec"] = has_codec;
+    out["codec"] = codec;
+    // The frame rate: "container-fps" is the container's rate (a rational
+    // in mpv, a float in the JSON), "estimated-vf-fps" the estimated rate.
+    std::string fps;
+    out["has_fps"] = read("container-fps", fps);
+    out["fps"] = fps;
+    std::string est;
+    out["has_estimated_fps"] = read("estimated-vf-fps", est);
+    out["estimated_fps"] = est;
+    // The track list carries the audio streams.
+    std::string tracks;
+    out["has_track_list"] = read("track-list", tracks);
+    if (out["has_track_list"].get<bool>()) {
+      nlohmann::json t = nlohmann::json::parse(tracks, nullptr, false);
+      bool audio = false;
+      bool video = false;
+      if (!t.is_discarded() && t.is_array()) {
+        for (const auto& tr : t) {
+          if (!tr.is_object()) continue;
+          const std::string type = tr.value("type", "");
+          if (type == "audio") audio = true;
+          if (type == "video") {
+            video = true;
+            // The track list carries the SHORT codec name ("h264"), which
+            // is what ffprobe's codec_name is. mpv's "video-codec" property
+            // is the human-readable description ("H.264 / AVC / MPEG-4 AVC
+            // / MPEG-4 part 10") and does not match - so the track list
+            // WINS over the video-codec fallback.
+            if (tr.contains("codec")) {
+              const std::string tc = tr.value("codec", "");
+              if (!tc.empty()) {
+                codec = tc;
+                has_codec = true;
+              }
+            }
+          }
+        }
+      }
+      out["has_audio"] = audio;
+      out["has_video"] = video;
+    }
+    out["has_codec"] = has_codec;
+    out["codec"] = codec;
+  }
+  std::FILE* f = _wfopen(dump_media_props_path_.c_str(), L"wb");
+  if (!f) {
+    LogImportant("test: dump-media-props could not write '%ls'",
+                 dump_media_props_path_.c_str());
+    return;
+  }
+  const std::string text = out.dump(2);
+  std::fputs(text.c_str(), f);
+  std::fputc('\n', f);
+  std::fclose(f);
+  LogImportant("test: dump-media-props written to '%ls'", dump_media_props_path_.c_str());
+}
+
 void EngineApp::ApplyFitMode(const std::string& fit_mode) {
   if (renderer_) renderer_->SetFitMode(fit_mode);
   if (wallpaper_surface_live_.load(std::memory_order_acquire))
@@ -992,6 +1122,19 @@ int EngineApp::Run() {
     // Hidden QA: the live mpv counter dump (see DumpMpvCountersStep).
     if (DumpMpvCountersPending()) {
       DumpMpvCountersStep(elapsed_ms);
+    }
+    // Hidden QA: the media metadata dump, once the file is loaded (mpv needs
+    // the demuxer to be done before the duration and the frame rate are
+    // known). The dump waits for the duration to appear, with a cap.
+    if (dump_media_props_pending_ && elapsed_ms >= 3000) {
+      std::string probe;
+      const bool ready = multi_monitor_.ReadLiveCounterText("duration", probe) ||
+                         (AcquireRenderer() &&
+                          AcquireRenderer()->GetPropertyValue("duration", probe));
+      if (ready || elapsed_ms >= 20000) {
+        dump_media_props_pending_ = false;
+        DumpMediaProps();
+      }
     }
     // Task 1.1: the paused -> unloaded deadline.
     MaybeUnloadAfterPause(elapsed_ms);

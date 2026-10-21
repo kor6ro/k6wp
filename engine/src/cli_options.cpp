@@ -259,6 +259,10 @@ int ParseCli(int argc, char** argv, CliOptions& out) {
         std::fprintf(stderr, "error: --unload-after-pause-ms must be >= 0\n");
         return 2;
       }
+    } else if (flag == "--dump-media-props") {
+      const auto value = take_value("--dump-media-props");
+      if (!value) return 2;
+      out.dump_media_props_path = std::filesystem::u8path(*value).wstring();
     } else if (flag == "--capture-frames-count") {
       const auto value = take_value("--capture-frames-count");
       if (!value) return 2;

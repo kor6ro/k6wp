@@ -1,0 +1,145 @@
+﻿{
+    "tool":  "bench_probe_parity",
+    "date":  "2026-10-21T12:06:53+07:00",
+    "label":  "live-proven (one machine)",
+    "method":  "the same five fields from ffprobe and from the live mpv instance, per file",
+    "files":  5,
+    "disagreements":  0,
+    "rows":  [
+                 {
+                     "file":  "anime.mp4",
+                     "ffprobe":  {
+                                     "duration":  30,
+                                     "codec":  "h264",
+                                     "width":  1920,
+                                     "height":  1080,
+                                     "fps":  30,
+                                     "has_audio":  false,
+                                     "found_video":  true
+                                 },
+                     "mpv":  {
+                                 "duration":  30,
+                                 "codec":  "h264",
+                                 "width":  1920,
+                                 "height":  1080,
+                                 "fps":  30,
+                                 "has_audio":  false,
+                                 "found_video":  true
+                             },
+                     "duration_delta":  0,
+                     "duration_ok":  true,
+                     "codec_ok":  true,
+                     "size_ok":  true,
+                     "fps_ok":  true,
+                     "audio_ok":  true
+                 },
+                 {
+                     "file":  "gaming.mp4",
+                     "ffprobe":  {
+                                     "duration":  30,
+                                     "codec":  "h264",
+                                     "width":  1920,
+                                     "height":  1080,
+                                     "fps":  30,
+                                     "has_audio":  false,
+                                     "found_video":  true
+                                 },
+                     "mpv":  {
+                                 "duration":  30,
+                                 "codec":  "h264",
+                                 "width":  1920,
+                                 "height":  1080,
+                                 "fps":  30,
+                                 "has_audio":  false,
+                                 "found_video":  true
+                             },
+                     "duration_delta":  0,
+                     "duration_ok":  true,
+                     "codec_ok":  true,
+                     "size_ok":  true,
+                     "fps_ok":  true,
+                     "audio_ok":  true
+                 },
+                 {
+                     "file":  "highdpb_1080p.mp4",
+                     "ffprobe":  {
+                                     "duration":  20,
+                                     "codec":  "h264",
+                                     "width":  1920,
+                                     "height":  1080,
+                                     "fps":  30,
+                                     "has_audio":  false,
+                                     "found_video":  true
+                                 },
+                     "mpv":  {
+                                 "duration":  20,
+                                 "codec":  "h264",
+                                 "width":  1920,
+                                 "height":  1080,
+                                 "fps":  30,
+                                 "has_audio":  false,
+                                 "found_video":  true
+                             },
+                     "duration_delta":  0,
+                     "duration_ok":  true,
+                     "codec_ok":  true,
+                     "size_ok":  true,
+                     "fps_ok":  true,
+                     "audio_ok":  true
+                 },
+                 {
+                     "file":  "highdpb_4k.mp4",
+                     "ffprobe":  {
+                                     "duration":  12,
+                                     "codec":  "h264",
+                                     "width":  3840,
+                                     "height":  2160,
+                                     "fps":  30,
+                                     "has_audio":  false,
+                                     "found_video":  true
+                                 },
+                     "mpv":  {
+                                 "duration":  12,
+                                 "codec":  "h264",
+                                 "width":  3840,
+                                 "height":  2160,
+                                 "fps":  30,
+                                 "has_audio":  false,
+                                 "found_video":  true
+                             },
+                     "duration_delta":  0,
+                     "duration_ok":  true,
+                     "codec_ok":  true,
+                     "size_ok":  true,
+                     "fps_ok":  true,
+                     "audio_ok":  true
+                 },
+                 {
+                     "file":  "slideshow.mp4",
+                     "ffprobe":  {
+                                     "duration":  30,
+                                     "codec":  "h264",
+                                     "width":  1920,
+                                     "height":  1080,
+                                     "fps":  5,
+                                     "has_audio":  false,
+                                     "found_video":  true
+                                 },
+                     "mpv":  {
+                                 "duration":  30,
+                                 "codec":  "h264",
+                                 "width":  1920,
+                                 "height":  1080,
+                                 "fps":  5,
+                                 "has_audio":  false,
+                                 "found_video":  true
+                             },
+                     "duration_delta":  0,
+                     "duration_ok":  true,
+                     "codec_ok":  true,
+                     "size_ok":  true,
+                     "fps_ok":  true,
+                     "audio_ok":  true
+                 }
+             ]
+}

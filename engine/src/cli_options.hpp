@@ -57,6 +57,11 @@ struct CliOptions {
   // "unload after a long pause" uses, so the measurement exercises the real
   // mechanism instead of a copy of it.
   int unload_after_pause_ms = 0;
+  // Hidden QA: write the media metadata that mpv reports for this file
+  // (duration, codec, size, fps, whether it has audio) to this path as
+  // JSON. It exists to prove that the mpv-based probe can replace the
+  // 97 MB ffprobe binary: the two must agree on every field.
+  std::wstring dump_media_props_path;
 };
 
 const char* WallpaperModeToString(WallpaperMode mode);

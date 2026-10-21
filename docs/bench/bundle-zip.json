@@ -1,0 +1,115 @@
+﻿{
+    "tool":  "bench_bundle_zip",
+    "date":  "2026-10-21T11:47:24+07:00",
+    "label":  "live-proven (one machine)",
+    "zip":  "K6WP-portable-0.0.1-alpha.3.zip",
+    "entries":  1295,
+    "uncompressed_mb":  388.78,
+    "compressed_mb":  148.13,
+    "groups":  [
+                   {
+                       "group":  "ffmpeg+ffprobe",
+                       "uncomp":  194.16,
+                       "zip":  70.73,
+                       "pct":  47.8
+                   },
+                   {
+                       "group":  "mpv",
+                       "uncomp":  114.77,
+                       "zip":  44.64,
+                       "pct":  30.1
+                   },
+                   {
+                       "group":  "qt-dlls",
+                       "uncomp":  48,
+                       "zip":  19.78,
+                       "pct":  13.4
+                   },
+                   {
+                       "group":  "shader-cache",
+                       "uncomp":  15.09,
+                       "zip":  6.88,
+                       "pct":  4.6
+                   },
+                   {
+                       "group":  "other",
+                       "uncomp":  10.5,
+                       "zip":  3.72,
+                       "pct":  2.5
+                   },
+                   {
+                       "group":  "k6wp-exes",
+                       "uncomp":  5.44,
+                       "zip":  2.08,
+                       "pct":  1.4
+                   },
+                   {
+                       "group":  "msvc-runtime",
+                       "uncomp":  0.83,
+                       "zip":  0.3,
+                       "pct":  0.2
+                   }
+               ],
+    "largest":  [
+                    {
+                        "name":  "libmpv-2.dll",
+                        "uncompressed_mb":  114.77,
+                        "zip_mb":  44.64
+                    },
+                    {
+                        "name":  "ffmpeg.exe",
+                        "uncompressed_mb":  97.18,
+                        "zip_mb":  35.42
+                    },
+                    {
+                        "name":  "ffprobe.exe",
+                        "uncompressed_mb":  96.98,
+                        "zip_mb":  35.32
+                    },
+                    {
+                        "name":  "dxcompiler.dll",
+                        "uncompressed_mb":  13.65,
+                        "zip_mb":  6.23
+                    },
+                    {
+                        "name":  "Qt6Gui.dll",
+                        "uncompressed_mb":  8.86,
+                        "zip_mb":  3.89
+                    },
+                    {
+                        "name":  "Qt6Widgets.dll",
+                        "uncompressed_mb":  6.2,
+                        "zip_mb":  2.85
+                    },
+                    {
+                        "name":  "Qt6Quick.dll",
+                        "uncompressed_mb":  5.99,
+                        "zip_mb":  2.64
+                    },
+                    {
+                        "name":  "Qt6Core.dll",
+                        "uncompressed_mb":  5.87,
+                        "zip_mb":  2.41
+                    },
+                    {
+                        "name":  "Qt6Qml.dll",
+                        "uncompressed_mb":  5.01,
+                        "zip_mb":  2
+                    },
+                    {
+                        "name":  "studio.exe",
+                        "uncompressed_mb":  3.91,
+                        "zip_mb":  1.53
+                    },
+                    {
+                        "name":  "Qt6QuickControls2Imagine.dll",
+                        "uncompressed_mb":  2.43,
+                        "zip_mb":  1.09
+                    },
+                    {
+                        "name":  "qml\\QtQuick\\Controls\\FluentWinUI3\\qtquickcontrols2fluentwinui3styleplugin.dll",
+                        "uncompressed_mb":  2.66,
+                        "zip_mb":  1.04
+                    }
+                ]
+}
