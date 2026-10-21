@@ -7,7 +7,7 @@ license.workspace = true
 description = "The K6WP Studio: the wallpapers, the library and the settings, in Slint."
 
 [dependencies]
-k6wp-core = { path = "../k6wp-core" }
+k6wp-core = { path = "../k6wp-core", version = "0.1.0" }
 slint = { workspace = true }
 
 [build-dependencies]

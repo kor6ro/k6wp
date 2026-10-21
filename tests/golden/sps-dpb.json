@@ -1,0 +1,116 @@
+{
+    "tool":  "extract_sps_truth",
+    "date":  "2026-10-22T01:15:11+07:00",
+    "label":  "the ground truth: ffmpeg trace_headers (its own bitstream parser)",
+    "note":  "the corpus is gitignored; tools\\build_corpus.ps1 regenerates it. The sha256 pins the exact file the values were taken from.",
+    "cases":  [
+                  {
+                      "file":  "anime.mp4",
+                      "sha256":  "260cd12f2d50f6e45821f848e435531de861af6265bac1b8e616a3313f191aa1",
+                      "bytes":  33972972,
+                      "expected":  {
+                                       "max_num_ref_frames":  4,
+                                       "max_dec_frame_buffering":  4,
+                                       "sps_max_dec_pic_buffering":  null,
+                                       "interlaced":  false,
+                                       "sps_count":  1
+                                   }
+                  },
+                  {
+                      "file":  "gaming.mp4",
+                      "sha256":  "25c30d1533a3c32b84f5b219397b0336fe8650748094551cdd7c433662f00ea6",
+                      "bytes":  443568229,
+                      "expected":  {
+                                       "max_num_ref_frames":  4,
+                                       "max_dec_frame_buffering":  4,
+                                       "sps_max_dec_pic_buffering":  null,
+                                       "interlaced":  false,
+                                       "sps_count":  1
+                                   }
+                  },
+                  {
+                      "file":  "hevc_1080p.mp4",
+                      "sha256":  "f68be10bf0a3423d60afc0c5567fc8c4e9122984fdb1d454ae01714b18a5be7e",
+                      "bytes":  3614100,
+                      "expected":  {
+                                       "max_num_ref_frames":  null,
+                                       "max_dec_frame_buffering":  null,
+                                       "sps_max_dec_pic_buffering":  5,
+                                       "interlaced":  null,
+                                       "sps_count":  1
+                                   }
+                  },
+                  {
+                      "file":  "highdpb_1080p.mp4",
+                      "sha256":  "aa5593748472fa7ddaba3bb3aa1af2404449ba52fe3757064c6722b4fea787cd",
+                      "bytes":  22182120,
+                      "expected":  {
+                                       "max_num_ref_frames":  16,
+                                       "max_dec_frame_buffering":  16,
+                                       "sps_max_dec_pic_buffering":  null,
+                                       "interlaced":  false,
+                                       "sps_count":  1
+                                   }
+                  },
+                  {
+                      "file":  "highdpb_4k.mp4",
+                      "sha256":  "031f7509fac736f692cbf6d082deca76b2f0f52454f83314a2aa7690a826089f",
+                      "bytes":  40267736,
+                      "expected":  {
+                                       "max_num_ref_frames":  16,
+                                       "max_dec_frame_buffering":  16,
+                                       "sps_max_dec_pic_buffering":  null,
+                                       "interlaced":  false,
+                                       "sps_count":  1
+                                   }
+                  },
+                  {
+                      "file":  "interlaced.mp4",
+                      "sha256":  "a4ed6c805827b33dc9f2b7e2ffb7ac961d2fc7e23ef80d570d8266fd03b7947f",
+                      "bytes":  4785757,
+                      "expected":  {
+                                       "max_num_ref_frames":  4,
+                                       "max_dec_frame_buffering":  4,
+                                       "sps_max_dec_pic_buffering":  null,
+                                       "interlaced":  true,
+                                       "sps_count":  1
+                                   }
+                  },
+                  {
+                      "file":  "multi_sps.h264",
+                      "sha256":  "777025d89850103ccb8f07573d8ab99670cbb8e50f3a3e30fd0e30c846e83d6b",
+                      "bytes":  56137305,
+                      "expected":  {
+                                       "max_num_ref_frames":  16,
+                                       "max_dec_frame_buffering":  16,
+                                       "sps_max_dec_pic_buffering":  null,
+                                       "interlaced":  false,
+                                       "sps_count":  8
+                                   }
+                  },
+                  {
+                      "file":  "multi_sps.mp4",
+                      "sha256":  "6b569cf9adeed43c55fe6944fabdc013d9604577866c5c309e367ea3ebb3e377",
+                      "bytes":  56154420,
+                      "expected":  {
+                                       "max_num_ref_frames":  16,
+                                       "max_dec_frame_buffering":  16,
+                                       "sps_max_dec_pic_buffering":  null,
+                                       "interlaced":  false,
+                                       "sps_count":  8
+                                   }
+                  },
+                  {
+                      "file":  "slideshow.mp4",
+                      "sha256":  "09a80ff2ecff8283f98c39ae26948968ce8c78bbc229b6fe1fc7b07e3aa7f89d",
+                      "bytes":  14435,
+                      "expected":  {
+                                       "max_num_ref_frames":  4,
+                                       "max_dec_frame_buffering":  4,
+                                       "sps_max_dec_pic_buffering":  null,
+                                       "interlaced":  false,
+                                       "sps_count":  1
+                                   }
+                  }
+              ]
+}
