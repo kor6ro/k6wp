@@ -12,6 +12,8 @@ component uses. The repository's own licence is the root `LICENSE`.
 | `slint-GPL-3.0-only.txt` | Slint (the Rust Studio) | GPL-3.0-only |
 | `slint-royalty-free-2.0.md` | Slint (the Rust Studio) | LicenseRef-Slint-Royalty-free-2.0 |
 | `slint-software-3.0.md` | Slint (the Rust Studio) | LicenseRef-Slint-Software-3.0 (the paid / source-available plan) |
+| `rust-dependency-licenses.html` | the Rust dependency tree | the **cargo-about** report (the crates, their versions and their licences) |
+| `rust-dependency-licenses.txt` | the Rust dependency tree | the same list in text form (`cargo deny list`), for grepping |
 
 ## The Slint licence decision (E7) — OPEN, the owner's call
 

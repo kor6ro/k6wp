@@ -1,0 +1,41 @@
+# cargo-about configuration (the licence report for the shipped binary).
+#
+# The accepted set mirrors rust/deny.toml: every licence must be KNOWN -
+# an unknown licence is an error, not a warning, so a new dependency can
+# never slip in with a licence nobody looked at.
+#
+# The Slint licences are the three options of Slint's triple licence. Which
+# one the product takes is the owner's decision (see LICENSES/README.md); all
+# three are accepted so the build is not blocked by that decision.
+
+accepted = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CC0-1.0",
+    "ISC",
+    "MIT",
+    "MIT-0",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "Zlib",
+    "GPL-2.0-only",
+    "GPL-2.0-or-later",
+    "GPL-3.0-only",
+    "GPL-3.0-or-later",
+    "LicenseRef-Slint-Royalty-free-2.0",
+    "LicenseRef-Slint-Software-3.0",
+]
+
+targets = ["x86_64-pc-windows-msvc"]
+
+ignore-build-dependencies = false
+ignore-dev-dependencies = false
+ignore-transitive-dependencies = false
+
+# The private crates are not published.
+private = { ignore = true }
+
