@@ -79,6 +79,15 @@ Single monitor, one rig, one Windows build. **Not** proven here:
    compress job takes a little longer (the DPB probe is 39 ms) and the
    output is a lossy re-encode (Δluma 0.04, Δstddev 0.06).
 
+## A precondition for the test gate
+
+**Run `ctest` with NO engine running.** A running engine holds the
+singleton mutex (`Local\K6WP-Engine-Singleton`), so a test that starts an
+engine gets "another instance is already running" and waits for a pipe
+answer that never comes — the suite hung for 30 minutes when the live
+session's engine was up, and passed 49/49 in 69 s with it stopped. Stop the
+engine before the test gate (and restart it afterwards).
+
 ## Gate 1: PASS
 
 Every Phase 1 task is ACCEPT or a DEFER **with its reason measured and
