@@ -24,7 +24,7 @@ bool NeedsMigration(const nlohmann::json& raw) {
   static const char* const kFields[] = {
       "video_path", "fit_mode",   "speed",        "monitor_id", "crf",
       "resolution_w", "resolution_h", "fps_cap",  "battery_saver",
-      "battery_mode", "cpu_affinity", "gpu_adapter",
+      "battery_mode", "cpu_affinity", "gpu_adapter", "pause_unload_after_sec",
   };
   for (const char* field : kFields) {
     if (!raw.contains(field)) {
@@ -95,6 +95,7 @@ nlohmann::json ConfigToJson(const WallpaperConfig& cfg) {
   j["cpu_affinity"] = cfg.cpu_affinity;
   j["gpu_adapter"] = cfg.gpu_adapter;
   j["reconcile_mode"] = cfg.reconcile_mode;
+  j["pause_unload_after_sec"] = cfg.pause_unload_after_sec;
   return j;
 }
 
@@ -225,6 +226,10 @@ void ValidateConfig(WallpaperConfig& cfg) {
       cfg.reconcile_mode != "on") {
     throw ConfigError("unknown reconcile_mode: " + cfg.reconcile_mode);
   }
+  if (cfg.pause_unload_after_sec < 0 || cfg.pause_unload_after_sec > 3600) {
+    throw ConfigError("pause_unload_after_sec out of range [0,3600]: " +
+                      std::to_string(cfg.pause_unload_after_sec));
+  }
 }
 
 WallpaperConfig MigrateConfig(const nlohmann::json& raw) {
@@ -267,6 +272,9 @@ WallpaperConfig MigrateConfig(const nlohmann::json& raw) {
     // rewrite) and simply defaults to "legacy". Unknown strings pass through
     // and are rejected by ValidateConfig (ConfigError + .bak + keep-last-valid).
     cfg.reconcile_mode = raw.value("reconcile_mode", "legacy");
+    // v6: the pause-unload deadline. A v5 file (or any file without the
+    // key) migrates to the default 30 s. 0 = never unload.
+    cfg.pause_unload_after_sec = raw.value("pause_unload_after_sec", 30);
   } catch (const ConfigError&) {
     throw;
   } catch (const nlohmann::json::exception& e) {

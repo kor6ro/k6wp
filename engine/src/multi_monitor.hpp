@@ -175,6 +175,18 @@ class MultiMonitor {
   // frame. No-op with no live slots.
   void SeekAllTo(double seconds);
 
+  // Releases the loaded file in every live slot (the Unloaded state): the
+  // decoder and its surfaces go away, the surface, the window and the mpv
+  // instance stay. Returns the number of slots that accepted the unload.
+  int UnloadAllVideos();
+
+  // Re-loads the file in every live slot that is in the Unloaded state.
+  // Returns the number of slots that accepted the reload.
+  int ReloadAllVideos();
+
+  // True when at least one live slot is in the Unloaded state.
+  bool any_video_unloaded() const;
+
   // Reads an integer mpv property from the FIRST live slot (the counters
   // are per-mpv-instance; with one monitor there is one slot). Used by the
   // hidden QA counter dump to measure frame drops / mistimed frames.

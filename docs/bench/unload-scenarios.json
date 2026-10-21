@@ -1,0 +1,34 @@
+﻿{
+    "tool":  "bench_unload_scenarios",
+    "phase":  1,
+    "date":  "2026-10-21T11:39:59+07:00",
+    "label":  "live-proven (one machine)",
+    "engine":  "C:\\Users\\axioo\\Desktop\\k6wp\\build\\release\\engine.exe",
+    "unload_after_ms":  3000,
+    "results":  {
+                    "resume_latency_ms":  {
+                                              "n":  5,
+                                              "median":  840,
+                                              "mean":  864.2,
+                                              "min":  766,
+                                              "max":  1056
+                                          },
+                    "black_frames_seen":  5,
+                    "quit_while_unloaded":  {
+                                                "acked":  true,
+                                                "exited":  true,
+                                                "exit_ms":  141,
+                                                "exit_code":  0
+                                            },
+                    "video_change_while_unloaded":  {
+                                                        "acked":  true,
+                                                        "decode_state":  "unloaded",
+                                                        "video":  "C:\\Users\\axioo\\Desktop\\k6wp\\tools\\..\\tests\\corpus\\slideshow.mp4"
+                                                    },
+                    "user_pause":  {
+                                       "decode_state":  "paused",
+                                       "surface_luma":  127.97,
+                                       "picture_present":  true
+                                   }
+                }
+}

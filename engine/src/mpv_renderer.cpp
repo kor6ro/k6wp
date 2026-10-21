@@ -356,6 +356,34 @@ bool MpvRenderer::GetInt64Property(const std::string& name,
   return true;
 }
 
+bool MpvRenderer::UnloadVideo() {
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (!mpv_ || !initialized_) return false;
+  if (last_path_.empty()) return false;
+  // "stop" unloads the current file: the decoder, its surfaces and the
+  // demuxer buffers are released, while the instance, the VO and the window
+  // survive and the last presented frame stays on screen. The path is kept
+  // so ReloadVideo() can bring the stream back.
+  if (mpv_command_string(mpv_, "stop") < 0) return false;
+  video_unloaded_.store(true, std::memory_order_relaxed);
+  return true;
+}
+
+bool MpvRenderer::ReloadVideo() {
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (!mpv_ || !initialized_) return false;
+  if (!video_unloaded_.load(std::memory_order_relaxed)) return false;
+  if (last_path_.empty()) return false;
+  const char* cmd[] = {"loadfile", last_path_.c_str(), nullptr};
+  if (mpv_command(mpv_, cmd) < 0) return false;
+  video_unloaded_.store(false, std::memory_order_relaxed);
+  {
+    std::lock_guard<std::mutex> ev_lock(event_mutex_);
+    eof_pending_ = false;
+  }
+  return true;
+}
+
 bool MpvRenderer::GetPropertyValue(const std::string& name,
                                    std::string& out) const {
   std::lock_guard<std::mutex> lock(mutex_);
@@ -407,6 +435,19 @@ void MpvRenderer::SetHWND(void* hwnd) {
 bool MpvRenderer::LoadLoop(const std::string& path, bool force) {
   std::lock_guard<std::mutex> lock(mutex_);
   if (!mpv_ || !initialized_) return false;
+  // Task 1.1: while the renderer is UNLOADED, a new file is only RECORDED.
+  // Loading it now would bring the decoder (and its GPU surfaces) straight
+  // back during a pause the unload was supposed to free. The resume loads
+  // the recorded path. No new renderer is created either way.
+  if (video_unloaded_.load(std::memory_order_relaxed)) {
+    last_path_ = path;
+    std::error_code ec;
+    last_size_ = std::filesystem::file_size(std::filesystem::u8path(path), ec);
+    if (ec) last_size_ = 0;
+    last_mtime_ = std::filesystem::last_write_time(std::filesystem::u8path(path), ec);
+    if (ec) last_mtime_ = std::filesystem::file_time_type{};
+    return true;
+  }
   if (!force && !last_path_.empty() && path == last_path_) {
     // Same path: skip the reload unless the file bytes changed (a
     // re-compress overwrite keeps the path). Stat failure reloads — a
@@ -427,6 +468,7 @@ bool MpvRenderer::LoadLoop(const std::string& path, bool force) {
     return false;
   }
   last_path_ = path;
+  video_unloaded_.store(false, std::memory_order_relaxed);
   std::error_code ec;
   last_size_ = std::filesystem::file_size(std::filesystem::u8path(path), ec);
   if (ec) last_size_ = 0;

@@ -132,6 +132,41 @@ class MpvRenderer {
   // Returns false when there is no instance or mpv refuses the command.
   bool SeekTo(double seconds);
 
+  // Releases the loaded file (the decoder, its surfaces and the demuxer
+  // buffers) while KEEPING the mpv instance, the VO and the window alive.
+  //
+  // The last presented frame stays on screen, so the wallpaper does not go
+  // black. The remembered path is kept, so ReloadVideo() can bring the
+  // stream back.
+  //
+  // This is the cheap form of the "unload after a long pause" state: the
+  // surface, the window and the mpv instance survive, so a resume is a
+  // loadfile and not a re-injection (no black frame, no re-anchor, no
+  // graveyard round trip).
+  bool UnloadVideo();
+
+  // Re-loads the file UnloadVideo() released. Returns false when nothing was
+  // unloaded or mpv refuses the command.
+  bool ReloadVideo();
+
+  // Task 1.1: the UNLOAD releases the video decoder and its GPU surfaces.
+  // mpv's "stop" also clears the VO surface, so the picture is gone until
+  // the video is decoded again - which is why the engine only unloads when
+  // the wallpaper is INVISIBLE anyway (see EngineApp::PauseHidesWallpaper).
+  //
+  // Two alternatives were measured and REJECTED:
+  //  - loading a still IMAGE in the video's place: the image decoder kept
+  //    the video's resources alive (the private bytes only fell to 164 MB
+  //    instead of 69 MB) and the resume jumped to 300 MB;
+  //  - hiding the injected surface so the shell's own wallpaper shows
+  //    through: ShowWindow on a window parented to the shell's WorkerW
+  //    blocks on Explorer's UI thread and HUNG the engine.
+
+  // True when the file is currently unloaded (the Unloaded state).
+  bool video_unloaded() const {
+    return video_unloaded_.load(std::memory_order_relaxed);
+  }
+
   // Reads an integer property from the live mpv instance. Used by the
   // hidden QA counter dump to measure frame drops / mistimed frames, so the
   // pacing change can be judged on QUALITY and not only on CPU/GPU numbers.
@@ -207,6 +242,9 @@ class MpvRenderer {
   // mutex_ while holding event_mutex_, so the order is deadlock-free.
   mutable std::mutex event_mutex_;
   std::atomic<bool> hwdec_active_{false};
+  // The Unloaded state: the file is released but the instance, the VO and
+  // the window are alive.
+  std::atomic<bool> video_unloaded_{false};
   bool initialized_ = false;
   // M3 (1.3.0-beta.2): hwdec fallback chain position, guarded by mutex_:
   // 0 = d3d11va requested at Create, 1 = dxva2 requested, 2 = software

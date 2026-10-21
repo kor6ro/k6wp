@@ -52,6 +52,11 @@ struct CliOptions {
   // otherwise applies the cap only on the DC power path, so a pacing
   // experiment needs a deterministic cap.
   int fps_cap_override = 0;  // 0 = no override
+  // Hidden QA: unload the video N ms after the engine enters the paused
+  // state (0 = never). It drives the SAME code path the production
+  // "unload after a long pause" uses, so the measurement exercises the real
+  // mechanism instead of a copy of it.
+  int unload_after_pause_ms = 0;
 };
 
 const char* WallpaperModeToString(WallpaperMode mode);

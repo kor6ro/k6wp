@@ -286,6 +286,58 @@ class EngineApp {
   // expose is simply reported as unavailable.
   static const char* const kMpvCounterNames[];
   static constexpr int kMpvCounterCount = 9;
+
+  // --- the Active -> Paused -> Unloaded state machine (task 1.1) ------------
+  //
+  // A long pause used to hold the whole decode pipeline: the measured cost
+  // was 162 MB private + 152 MB GPU shared for a paused 1080p session,
+  // against 24 MB for an idle engine. The Unloaded state gives that memory
+  // back while the wallpaper stays on screen.
+  //
+  // The three states:
+  //   Active   - a video is loaded and playing (no pause owner).
+  //   Paused   - a pause owner holds the mask; the file is still loaded.
+  //   Unloaded - the pause lasted longer than the configured deadline; the
+  //              file is released, the surface and the last frame stay.
+  //
+  // The unload is an mpv-level "stop": the decoder, its surfaces and the
+  // demuxer buffers are released, while the mpv instance, the VO, the
+  // injected window and the last presented frame survive. That is why the
+  // teardown needs no graveyard round trip and no re-injection: a resume is
+  // a loadfile. (The spec's "destroy the renderer in the background" wording
+  // is the harder variant; the measurement decides which one is needed -
+  // see docs/refactor/phase1-1.md.)
+  enum class DecodeState { kActive, kPaused, kUnloaded };
+  DecodeState decode_state_ = DecodeState::kActive;
+  // When the current pause started (engine clock, ms). 0 = not paused.
+  long long pause_started_ms_ = 0;
+  // The configured deadline: unload after this many ms of continuous pause.
+  // 0 = never unload.
+  int unload_after_pause_ms_ = 0;
+  // The engine clock when the Unloaded state was entered (for the log).
+  long long unloaded_at_ms_ = 0;
+  // Guards the state machine (the pause mask changes from several threads).
+  mutable std::mutex decode_state_mutex_;
+
+  // The pause/unload transitions. OnPauseStateChanged is called from
+  // ApplyPauseState (the single place the pause mask changes);
+  // MaybeUnloadAfterPause runs from the loop.
+  void OnPauseStateChanged(bool paused);
+  void MaybeUnloadAfterPause(long long elapsed_ms);
+  void UnloadDecodeNow(long long elapsed_ms);
+  void ReloadDecodeNow(long long elapsed_ms);
+  // True when the pause mask contains an owner that makes the wallpaper
+  // INVISIBLE to the user (a fullscreen app, the screen off, the session
+  // locked, the machine suspending). Only then is the decode pipeline
+  // released - an explicit user pause keeps the picture on screen.
+  bool PauseHidesWallpaper(int mask) const;
+  // The engine's steady clock in milliseconds (the same clock the run loop
+  // uses for elapsed_ms).
+  static long long NowMs() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+               std::chrono::steady_clock::now().time_since_epoch())
+        .count();
+  }
   int init_exit_code_ = 2;
   std::atomic<bool> device_lost_{false};
   // Config file watcher (Todo 11): started in Init() from CliOptions

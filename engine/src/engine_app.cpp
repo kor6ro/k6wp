@@ -495,6 +495,18 @@ bool EngineApp::Init(int argc, char** argv) {
       LogImportant("test: fps-cap override %d applied to the renderers",
                    options_.fps_cap_override);
     }
+    if (options_.unload_after_pause_ms > 0) {
+      // Hidden QA: the SAME mechanism the production config drives, with the
+      // deadline forced to a known value so the measurement is deterministic.
+      unload_after_pause_ms_ = options_.unload_after_pause_ms;
+      LogImportant("test: unload-after-pause override %d ms",
+                   unload_after_pause_ms_);
+    } else {
+      // The production value comes from the config (schema v6). 0 = never.
+      unload_after_pause_ms_ =
+          config_watcher_.GetConfig().pause_unload_after_sec * 1000;
+      LogImportant("decode: pause-unload deadline %d ms", unload_after_pause_ms_);
+    }
     if (!options_.dump_mpv_properties_path.empty()) {
       // The property list is written once the live surface exists, so the
       // list comes from the mpv instance that actually renders.
@@ -715,6 +727,22 @@ DWORD EngineApp::ComputeWaitTimeoutMs() const {
                               ? dump_mpv_counters_interval_ms_
                               : 1000;
     return static_cast<DWORD>(interval < 500 ? interval : 500);
+  }
+  // Task 1.1: a pending unload deadline needs ONE wakeup. The loop parks
+  // INFINITE while paused (the zero-wakeup design), and a WM_TIMER cannot
+  // wake it (QS_ALLINPUT does not include timer messages), so the wait is
+  // bounded by the time left until the deadline. That is ONE wakeup per
+  // pause episode, not a periodic one.
+  {
+    std::lock_guard<std::mutex> lock(decode_state_mutex_);
+    if (decode_state_ == DecodeState::kPaused && pause_started_ms_ > 0 &&
+        unload_after_pause_ms_ > 0) {
+      const long long remaining =
+          pause_started_ms_ + unload_after_pause_ms_ - NowMs();
+      if (remaining <= 0) return 0;
+      if (remaining < 1000) return static_cast<DWORD>(remaining);
+      return 1000;
+    }
   }
   if (SlotsPaused()) return INFINITE;
   return 1500;
@@ -965,6 +993,8 @@ int EngineApp::Run() {
     if (DumpMpvCountersPending()) {
       DumpMpvCountersStep(elapsed_ms);
     }
+    // Task 1.1: the paused -> unloaded deadline.
+    MaybeUnloadAfterPause(elapsed_ms);
 
     const TestSimulator::Fired fired = sim_.Tick(elapsed_ms);
     if (fired.device_lost) {
@@ -1246,8 +1276,123 @@ void EngineApp::ApplyPauseState(const char* owner) {
   // called from the IPC worker — never touches loop timers directly);
   // any owner disarms it (the loop wait goes INFINITE, zero wakeups).
   occlusion_watch_.OnPauseMaskChanged(slots);
+  // Task 1.1: the Active -> Paused -> Unloaded transition follows the mask.
+  OnPauseStateChanged(slots);
   LogImportant("pause: owner=%s mask=%d ui=%d slots=%d", owner, mask, ui ? 1 : 0,
                slots ? 1 : 0);
+}
+
+// Task 1.1: the pause side of the state machine.
+//
+// The mask can change from several threads (the IPC worker, the UI thread, the
+// power broadcast), so the transition is guarded by a mutex and the clock is
+// the engine's own steady clock.
+// Task 1.1: which pause owners make the wallpaper INVISIBLE to the user?
+//
+// The unload releases the decode pipeline, and mpv's "stop" clears the VO
+// surface - so an unload while the wallpaper is ON SCREEN would black it
+// out. The still that would replace it was rejected on measurements:
+//   - hiding the injected surface (so the shell's wallpaper shows through)
+//     HANGS the engine: ShowWindow on a window parented to the shell's
+//     WorkerW blocks on Explorer's UI thread;
+//   - loading a still image into mpv instead of the video kept the image
+//     decoder's resources alive next to the new video decoder (the private
+//     bytes jumped to 300 MB on the resume).
+//
+// So the unload is done ONLY for the owners where nobody is looking at the
+// wallpaper anyway: a fullscreen app, the screen being off, the session
+// locked, the machine suspending. An EXPLICIT user pause keeps the frozen
+// picture (that is what "pause" means), so there is no visible change.
+bool EngineApp::PauseHidesWallpaper(int mask) const {
+  // kPauseFullscreen | kPauseScreenOff | kPauseSessionLock | kPauseSuspend.
+  // kUser (an explicit pause) and kPower (the DC static mode) are NOT in
+  // the set: in both cases the wallpaper is on screen.
+  constexpr int kInvisibleOwners =
+      PauseController::kFullscreen | PauseController::kScreenOff |
+      PauseController::kSessionLock | PauseController::kSuspend;
+  return (mask & kInvisibleOwners) != 0;
+}
+
+void EngineApp::OnPauseStateChanged(bool paused) {
+  std::unique_lock<std::mutex> lock(decode_state_mutex_);
+  if (paused) {
+    if (decode_state_ == DecodeState::kActive) {
+      decode_state_ = DecodeState::kPaused;
+      pause_started_ms_ = NowMs();
+    }
+    return;
+  }
+  // The mask is clear: the engine is active again. If the file was unloaded,
+  // bring it back now (a resume must not wait for the next tick).
+  if (decode_state_ == DecodeState::kUnloaded) {
+    // The reload itself talks to mpv, so it is done outside the lock.
+    const long long now = NowMs();
+    lock.unlock();
+    ReloadDecodeNow(now);
+    lock.lock();
+    decode_state_ = DecodeState::kActive;
+    pause_started_ms_ = 0;
+    return;
+  }
+  decode_state_ = DecodeState::kActive;
+  pause_started_ms_ = 0;
+}
+
+// Task 1.1: the deadline check. Runs from the message loop.
+//
+// The deadline is measured on the SAME clock as pause_started_ms_ (the
+// steady clock), NOT on the loop's elapsed_ms (which is relative to the
+// start of Run()) - mixing the two would make the deadline unreachable.
+void EngineApp::MaybeUnloadAfterPause(long long elapsed_ms) {
+  (void)elapsed_ms;
+  if (unload_after_pause_ms_ <= 0) return;
+  bool due = false;
+  {
+    std::lock_guard<std::mutex> lock(decode_state_mutex_);
+    if (decode_state_ != DecodeState::kPaused) return;
+    if (pause_started_ms_ <= 0) return;
+    if (NowMs() - pause_started_ms_ < unload_after_pause_ms_) return;
+    // Only the owners that make the wallpaper invisible qualify (see
+    // PauseHidesWallpaper): an explicit user pause keeps the picture.
+    if (!PauseHidesWallpaper(pause_.mask())) return;
+    decode_state_ = DecodeState::kUnloaded;
+    due = true;
+  }
+  if (due) UnloadDecodeNow(NowMs());
+}
+
+void EngineApp::UnloadDecodeNow(long long elapsed_ms) {
+  int slots = 0;
+  if (wallpaper_surface_live_.load(std::memory_order_acquire)) {
+    // The unload releases the video decoder AND its GPU surfaces. mpv's
+    // "stop" also clears the VO surface, so the picture is gone until the
+    // video is decoded again - which is why the unload only runs for the
+    // owners that make the wallpaper INVISIBLE (see PauseHidesWallpaper).
+    //
+    // Two alternatives were measured and REJECTED:
+    //  - loading a still IMAGE in the video's place: the image decoder kept
+    //    the video's resources alive (the private bytes only fell to
+    //    164 MB instead of 69 MB) and the resume jumped to 300 MB;
+    //  - hiding the injected surface so the shell's own wallpaper shows
+    //    through: ShowWindow on a window parented to the shell's WorkerW
+    //    blocks on Explorer's UI thread and HUNG the engine.
+    slots = multi_monitor_.UnloadAllVideos();
+  } else if (std::shared_ptr<MpvRenderer> renderer = AcquireRenderer()) {
+    if (renderer->UnloadVideo()) slots = 1;
+  }
+  unloaded_at_ms_ = elapsed_ms;
+  LogImportant("decode: unloaded after a long pause (slots=%d, held=%lld ms)",
+               slots, elapsed_ms - pause_started_ms_);
+}
+void EngineApp::ReloadDecodeNow(long long elapsed_ms) {
+  int slots = 0;
+  if (wallpaper_surface_live_.load(std::memory_order_acquire)) {
+    slots = multi_monitor_.ReloadAllVideos();
+  } else if (std::shared_ptr<MpvRenderer> renderer = AcquireRenderer()) {
+    if (renderer->ReloadVideo()) slots = 1;
+  }
+  LogImportant("decode: reloaded after resume (slots=%d, unloaded for %lld ms)",
+               slots, elapsed_ms - unloaded_at_ms_);
 }
 
 void EngineApp::OnDeviceLost() {
@@ -1961,6 +2106,20 @@ std::string EngineApp::BuildStateJson() const {
       // P2.3, additive only: raw pause-owner mask (bit 32 = screen-off) so
       // QA can prove the screen-off bit sets and clears via get_state.
       {"pause_mask", pause_.mask()},
+      // Task 1.1, additive only: the decode-pipeline state. "active" = the
+      // file is loaded, "paused" = a pause owner holds the mask, "unloaded"
+      // = the file was released after a long pause (the decode pipeline and
+      // its GPU surfaces are gone, the wallpaper stays on screen). Old
+      // clients ignore the key; the IPC command values are UNCHANGED.
+      {"decode_state", [this] {
+        std::lock_guard<std::mutex> lock(decode_state_mutex_);
+        switch (decode_state_) {
+          case DecodeState::kUnloaded: return std::string("unloaded");
+          case DecodeState::kPaused: return std::string("paused");
+          case DecodeState::kActive: break;
+        }
+        return std::string("active");
+      }()},
       {"pid", static_cast<unsigned long long>(GetCurrentProcessId())},
       {"wallpaper_mode", wallpaper_mode_str},
       {"video", video_utf8},

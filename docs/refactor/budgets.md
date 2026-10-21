@@ -61,6 +61,8 @@ Baseline = Phase 0 median (`docs/bench/phase0.json`).
 | 23 | **VO delayed frames** | playback, 60 s | 0 (vsync) | — | **≤ 5** | frames must not be delivered late (the desync build showed 184–197) |
 | 24 | **VO frame drops** | playback, 60 s | 0 | — | **0** | no dropped frames |
 | 25 | **Decoder frame drops** | playback, 60 s | 0 | — | **0** | no dropped frames |
+| 26 | **Resume → visible motion** (task 1.1) | after an unload | 840 ms (median n=5) | — | **≤ 2000 ms** | the wallpaper must come back |
+| 27 | **Black surface during the resume** (task 1.1) | after an unload | ~840 ms | — | **≤ 1000 ms** (known cost, see phase1-1-unload.md) | mpv's "stop" clears the VO surface; a Rust engine that owns the last frame can close this |
 
 ### C4 — the honest RAM metric
 
@@ -90,8 +92,8 @@ parity gate. A phase that hits its parity gate but misses its target is
 
 | Phase | Metric | Baseline | Parity gate | **Target** | **Result** |
 |---|---|---|---|---|---|
-| 1.1 | private bytes, paused 30 s | 162.35 MB | ≤ 168.4 MB | **≤ 60 MB** (mpv unloaded) | pending |
-| 1.1 | GPU shared, paused 30 s | 151.57 MB | ≤ 163.6 MB | **≤ 20 MB** | pending |
+| 1.1 | private bytes, paused 30 s | 162.35 MB | ≤ 168.4 MB | **≤ 60 MB** (mpv unloaded) | **69.0 MB** when the pause owner hides the wallpaper (phase1-1-unload.md) |
+| 1.1 | GPU shared, paused 30 s | 151.57 MB | ≤ 163.6 MB | **≤ 20 MB** | **0 MB** |
 | 1.2 | wakeups/s, playback | 1273 | ≤ 1400 | **≤ 700** (event-driven) | **1103** — the desync busy-wait is gone (`phase1-2-vsync.md`) |
 | 1.2 | CPU, playback 1080p | 4.73 % | ≤ 6.5 % | lower | **1.06 %** (−72.5 %) |
 | 1.2 | CPU, playback 4K | 4.64 % | ≤ 6.5 % | lower | **1.45 %** (−64.9 %) |

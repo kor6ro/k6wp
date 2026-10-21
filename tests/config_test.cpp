@@ -56,8 +56,11 @@ std::filesystem::path BakPath(const std::filesystem::path& p) {
 }
 
 nlohmann::json ValidJson() {
+  // The CURRENT schema. The version is the constant, so a future schema bump
+  // does not have to touch every case here - but the FIELD SET does, and a
+  // missing field is a migration (which is covered by its own case below).
   return {
-      {"version", 5},
+      {"version", k6wp::kConfigSchemaVersion},
       {"video_path", "C:\\videos\\test.mp4"},
       {"fit_mode", "cover"},
       {"speed", 1.0},
@@ -70,6 +73,7 @@ nlohmann::json ValidJson() {
       {"battery_mode", "cap24"},
       {"cpu_affinity", "auto"},
       {"gpu_adapter", "auto"},
+      {"pause_unload_after_sec", 30},
   };
 }
 
@@ -167,7 +171,7 @@ int main(int argc, char* argv[]) {
     WriteJson(p, ValidJson());
     k6wp::WallpaperConfig cfg;
     if (ExpectLoadOk(p, "1. load valid config", &cfg)) {
-      Check(cfg.version == 5, "1. version == 5");
+      Check(cfg.version == k6wp::kConfigSchemaVersion, "1. version == current");
       Check(cfg.video_path == L"C:\\videos\\test.mp4", "1. video_path correct");
       Check(cfg.fit_mode == "cover", "1. fit_mode correct");
       Check(cfg.speed == 1.0, "1. speed correct");
@@ -255,7 +259,7 @@ int main(int argc, char* argv[]) {
   {
     const nlohmann::json v0 = {{"video_path", "C:\\videos\\old.mp4"}};
     const k6wp::WallpaperConfig cfg = k6wp::MigrateConfig(v0);
-    Check(cfg.version == 5, "9. migrated version == 5");
+    Check(cfg.version == k6wp::kConfigSchemaVersion, "9. migrated version == current");
     Check(cfg.video_path == L"C:\\videos\\old.mp4", "9. video_path preserved");
     Check(cfg.fit_mode == "cover", "9. fit_mode defaulted");
     Check(cfg.speed == 1.0, "9. speed defaulted");
@@ -274,7 +278,7 @@ int main(int argc, char* argv[]) {
   // fill->cover normalization.
   {
     k6wp::WallpaperConfig cfg;
-    cfg.version = 5;
+    cfg.version = k6wp::kConfigSchemaVersion;
     cfg.video_path = L"C:\\videos\\배경화면 wallpaper.mp4";
     cfg.fit_mode = "stretch";
     cfg.speed = 1.5;
@@ -314,7 +318,7 @@ int main(int argc, char* argv[]) {
     WriteText(p, original);
     k6wp::WallpaperConfig cfg;
     if (ExpectLoadOk(p, "11. v0 minimal migrates", &cfg)) {
-      Check(cfg.version == 5, "11. version == 5");
+      Check(cfg.version == k6wp::kConfigSchemaVersion, "11. version == current");
       Check(cfg.video_path == L"C:\\videos\\old.mp4", "11. video_path preserved");
       Check(cfg.fit_mode == "cover" && cfg.speed == 1.0 && cfg.monitor_id == -1,
             "11. fit/speed defaulted, monitor forced -1");
@@ -331,8 +335,8 @@ int main(int argc, char* argv[]) {
     Check(ReadText(bak) == original, "11. .bak holds original bytes");
     k6wp::WallpaperConfig cfg2;
     if (ExpectLoadOk(p, "11. rewritten file loads clean", &cfg2)) {
-      Check(cfg2.version == 5 && cfg2.battery_saver == false,
-            "11. rewritten v5 stable");
+      Check(cfg2.version == k6wp::kConfigSchemaVersion && cfg2.battery_saver == false,
+            "11. rewritten stable");
     }
   }
 
@@ -346,7 +350,7 @@ int main(int argc, char* argv[]) {
     const std::string original = ReadText(p);
     k6wp::WallpaperConfig cfg;
     if (ExpectLoadOk(p, "12. v5-no-battery-saver migrates", &cfg)) {
-      Check(cfg.version == 5, "12. version == 5");
+      Check(cfg.version == k6wp::kConfigSchemaVersion, "12. version == current");
       Check(cfg.battery_saver == false, "12. battery_saver defaulted");
       Check(cfg.crf == 23 && cfg.monitor_id == 0, "12. other fields preserved");
     }
@@ -367,7 +371,7 @@ int main(int argc, char* argv[]) {
     const std::string original = ReadText(p);
     k6wp::WallpaperConfig cfg;
     if (ExpectLoadOk(p, "13. v5-no-monitor migrates", &cfg)) {
-      Check(cfg.version == 5, "13. version == 5");
+      Check(cfg.version == k6wp::kConfigSchemaVersion, "13. version == current");
       Check(cfg.monitor_id == -1, "13. monitor_id defaulted to -1");
       Check(cfg.resolution_w == 0 && cfg.resolution_h == 0,
             "13. resolution defaulted");
@@ -684,7 +688,7 @@ int main(int argc, char* argv[]) {
     const std::string original = ReadText(p);
     k6wp::WallpaperConfig cfg;
     if (ExpectLoadOk(p, "22. v1 monitor_id 0 migrates", &cfg)) {
-      Check(cfg.version == 5, "22. version == 5");
+      Check(cfg.version == k6wp::kConfigSchemaVersion, "22. version == current");
       Check(cfg.monitor_id == -1, "22. monitor_id forced to -1");
     }
     const auto bak = BakPath(p);
@@ -722,7 +726,7 @@ int main(int argc, char* argv[]) {
     const std::string original = ReadText(p);
     k6wp::WallpaperConfig cfg;
     if (ExpectLoadOk(p, "24. v2 fill migrates", &cfg)) {
-      Check(cfg.version == 5, "24. version == 5");
+      Check(cfg.version == k6wp::kConfigSchemaVersion, "24. version == current");
       Check(cfg.fit_mode == "cover", "24. fill normalized to cover");
     }
     const auto bak = BakPath(p);
@@ -730,8 +734,8 @@ int main(int argc, char* argv[]) {
     Check(ReadText(bak) == original, "24. .bak holds original bytes");
     k6wp::WallpaperConfig cfg2;
     if (ExpectLoadOk(p, "24. rewritten file loads clean", &cfg2)) {
-      Check(cfg2.version == 5 && cfg2.fit_mode == "cover",
-            "24. rewritten v5 stable");
+      Check(cfg2.version == k6wp::kConfigSchemaVersion && cfg2.fit_mode == "cover",
+            "24. rewritten stable");
     }
   }
 
@@ -977,7 +981,7 @@ int main(int argc, char* argv[]) {
     const std::string original = ReadText(p);
     k6wp::WallpaperConfig cfg;
     if (ExpectLoadOk(p, "34. v3 migrates to v5", &cfg)) {
-      Check(cfg.version == 5, "34. version == 5");
+      Check(cfg.version == k6wp::kConfigSchemaVersion, "34. version == current");
       Check(cfg.battery_mode == "cap24", "34. battery_mode defaulted to cap24");
       Check(cfg.video_path == L"C:\\videos\\test.mp4" && cfg.crf == 23 &&
                 cfg.monitor_id == 0 && cfg.battery_saver == false,
@@ -988,8 +992,8 @@ int main(int argc, char* argv[]) {
     Check(ReadText(bak) == original, "34. .bak holds original bytes");
     k6wp::WallpaperConfig cfg2;
     if (ExpectLoadOk(p, "34. rewritten file loads clean", &cfg2)) {
-      Check(cfg2.version == 5 && cfg2.battery_mode == "cap24",
-            "34. rewritten v5 stable");
+      Check(cfg2.version == k6wp::kConfigSchemaVersion && cfg2.battery_mode == "cap24",
+            "34. rewritten stable");
     }
   }
 
@@ -1003,7 +1007,7 @@ int main(int argc, char* argv[]) {
     WriteJson(p, j);
     k6wp::WallpaperConfig cfg;
     if (ExpectLoadOk(p, "35. static mode loads", &cfg)) {
-      Check(cfg.version == 5 && cfg.battery_mode == "static",
+      Check(cfg.version == k6wp::kConfigSchemaVersion && cfg.battery_mode == "static",
             "35. static preserved on load");
     }
     const auto q = dir / "static_mode" / "config.json";
@@ -1039,13 +1043,13 @@ int main(int argc, char* argv[]) {
     WriteJson(p, ValidJson());
     k6wp::WallpaperConfig cfg1;
     if (ExpectLoadOk(p, "37. v5 loads clean", &cfg1)) {
-      Check(cfg1.version == 5 && cfg1.battery_mode == "cap24",
+      Check(cfg1.version == k6wp::kConfigSchemaVersion && cfg1.battery_mode == "cap24",
             "37. version/mode correct");
       Check(cfg1.cpu_affinity == "auto" && cfg1.gpu_adapter == "auto",
             "37. affinity/adapter defaults correct");
     }
     Check(!std::filesystem::exists(BakPath(p)),
-          "37. no .bak on clean v5 load");
+          "37. no .bak on clean current load");
     const auto q = dir / "v5_stable" / "config.json";
     k6wp::SaveConfig(q, cfg1);
     k6wp::WallpaperConfig cfg2;
@@ -1087,7 +1091,7 @@ int main(int argc, char* argv[]) {
       Check(cfg.gpu_adapter == "discrete", "39. gpu_adapter preserved");
     }
     Check(!std::filesystem::exists(BakPath(p)),
-          "39. no .bak on clean v5 load");
+          "39. no .bak on clean current load");
   }
 
   // 40. P3L.1: unknown cpu_affinity -> ConfigError + .bak.
@@ -1130,7 +1134,7 @@ int main(int argc, char* argv[]) {
     const std::string original = ReadText(p);
     k6wp::WallpaperConfig cfg;
     if (ExpectLoadOk(p, "42. v4 migrates to v5", &cfg)) {
-      Check(cfg.version == 5, "42. version == 5");
+      Check(cfg.version == k6wp::kConfigSchemaVersion, "42. version == current");
       Check(cfg.cpu_affinity == "auto" && cfg.gpu_adapter == "auto",
             "42. affinity/adapter defaulted to auto");
       Check(cfg.video_path == L"C:\\videos\\test.mp4" && cfg.crf == 23 &&
@@ -1142,9 +1146,9 @@ int main(int argc, char* argv[]) {
     Check(ReadText(bak) == original, "42. .bak holds original bytes");
     k6wp::WallpaperConfig cfg2;
     if (ExpectLoadOk(p, "42. rewritten file loads clean", &cfg2)) {
-      Check(cfg2.version == 5 && cfg2.cpu_affinity == "auto" &&
+      Check(cfg2.version == k6wp::kConfigSchemaVersion && cfg2.cpu_affinity == "auto" &&
                 cfg2.gpu_adapter == "auto",
-            "42. rewritten v5 stable");
+            "42. rewritten stable");
     }
   }
 
@@ -1158,7 +1162,7 @@ int main(int argc, char* argv[]) {
     WriteText(p, original);
     k6wp::WallpaperConfig cfg;
     if (ExpectLoadOk(p, "43. v0 full-chain migrates", &cfg)) {
-      Check(cfg.version == 5, "43. version == 5");
+      Check(cfg.version == k6wp::kConfigSchemaVersion, "43. version == current");
       Check(cfg.video_path == L"C:\\videos\\old.mp4",
             "43. video_path preserved");
       Check(cfg.fit_mode == "cover",
@@ -1174,7 +1178,8 @@ int main(int argc, char* argv[]) {
     k6wp::SaveConfig(q, cfg);
     k6wp::WallpaperConfig reloaded;
     if (ExpectLoadOk(q, "43. round-trips after save", &reloaded)) {
-      Check(reloaded.version == 5 && reloaded.fit_mode == "cover" &&
+      Check(reloaded.version == k6wp::kConfigSchemaVersion &&
+                reloaded.fit_mode == "cover" &&
                 reloaded.monitor_id == -1 &&
                 reloaded.cpu_affinity == "auto" &&
                 reloaded.gpu_adapter == "auto",
@@ -1276,7 +1281,7 @@ int main(int argc, char* argv[]) {
     WriteJson(u, uj);
     k6wp::WallpaperConfig umig;
     if (ExpectLoadOk(u, "45. v4 seed migrates", &umig)) {
-      Check(umig.version == 5, "45. migrated to v5");
+      Check(umig.version == k6wp::kConfigSchemaVersion, "45. migrated to current");
     }
     const auto ubak = BakPath(u);
     Check(std::filesystem::exists(ubak),
@@ -1296,6 +1301,87 @@ int main(int argc, char* argv[]) {
     if (ExpectLoadOk(ubak, "45. .bak loads as last-valid fallback",
                      &from_bak)) {
       Check(from_bak.monitor_id == 0, "45. .bak field values intact");
+    }
+  }
+
+  // --- schema v6: pause_unload_after_sec (task 1.1) ----------------------
+  // The new key: unload the decode pipeline after a long pause. The
+  // migration must keep the .bak self-heal contract: a v5 file is backed up
+  // byte-for-byte and rewritten at the current schema, and the value the
+  // user had is never changed.
+  {
+    // The default on a fresh struct.
+    k6wp::WallpaperConfig fresh;
+    Check(fresh.pause_unload_after_sec == 30,
+          "47. default pause_unload_after_sec == 30");
+  }
+  {
+    // A v5 file (every v5 field, version 5) migrates: the new key takes
+    // the default, the .bak keeps the original bytes, and the file is
+    // rewritten at the current schema.
+    const auto p = dir / "v5_to_v6.json";
+    auto j = ValidJson();
+    j["version"] = 5;
+    j.erase("pause_unload_after_sec");
+    WriteJson(p, j);
+    const std::string original = ReadText(p);
+    k6wp::WallpaperConfig cfg;
+    if (ExpectLoadOk(p, "48. v5 file migrates to the current schema", &cfg)) {
+      Check(cfg.version == k6wp::kConfigSchemaVersion,
+            "48. migrated to the current version");
+      Check(cfg.pause_unload_after_sec == 30,
+            "48. the new key takes its default");
+      Check(cfg.video_path == L"C:\\videos\\test.mp4" && cfg.crf == 23,
+            "48. the user's values are preserved");
+    }
+    Check(std::filesystem::exists(BakPath(p)),
+          "48. the migration left a .bak");
+    Check(ReadText(BakPath(p)) == original,
+          "48. the .bak holds the original v5 bytes");
+    // The rewritten file is at the current schema, so the next load is a
+    // clean one (no second .bak).
+    std::filesystem::remove(BakPath(p));
+    k6wp::WallpaperConfig again;
+    if (ExpectLoadOk(p, "48. the rewritten file loads clean", &again)) {
+      Check(again.version == k6wp::kConfigSchemaVersion &&
+                again.pause_unload_after_sec == 30,
+            "48. the rewritten file is stable");
+    }
+    Check(!std::filesystem::exists(BakPath(p)),
+          "48. no second .bak on the clean load");
+  }
+  {
+    // An explicit value is preserved.
+    const auto p = dir / "v6_explicit_unload.json";
+    auto j = ValidJson();
+    j["pause_unload_after_sec"] = 120;
+    WriteJson(p, j);
+    k6wp::WallpaperConfig cfg;
+    if (ExpectLoadOk(p, "49. an explicit value loads", &cfg)) {
+      Check(cfg.pause_unload_after_sec == 120,
+            "49. the explicit value is preserved");
+    }
+    // 0 = never unload.
+    j["pause_unload_after_sec"] = 0;
+    WriteJson(p, j);
+    if (ExpectLoadOk(p, "49. zero (never unload) loads", &cfg)) {
+      Check(cfg.pause_unload_after_sec == 0, "49. zero is preserved");
+    }
+  }
+  {
+    // Out of range is rejected, with the .bak contract.
+    for (const int bad : {-1, 3601}) {
+      const auto p = dir / ("v6_bad_unload_" + std::to_string(bad) + ".json");
+      auto j = ValidJson();
+      j["pause_unload_after_sec"] = bad;
+      WriteJson(p, j);
+      const std::string original = ReadText(p);
+      ExpectLoadThrows(p, "50. pause_unload_after_sec=" +
+                              std::to_string(bad) + " is rejected");
+      Check(std::filesystem::exists(BakPath(p)) &&
+                ReadText(BakPath(p)) == original,
+            "50. the .bak holds the original bytes for " +
+                std::to_string(bad));
     }
   }
 

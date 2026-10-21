@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://k6wp.local/schemas/config.schema.json",
   "title": "K6WP WallpaperConfig",
-  "description": "Versioned on-disk configuration for the K6WP wallpaper engine. Stored at %LOCALAPPDATA%/K6WP/config.json. Version 0 (legacy) is missing the newer fields and is migrated to version 5 by the loader; version 1 migrates to version 5 with monitor_id forced to -1 (the v0/v1 id had no render effect); version 2 migrates with legacy fit_mode fill normalized to cover; version 3 migrates with battery_mode defaulted to cap24; version 4 migrates with cpu_affinity/gpu_adapter defaulted to auto. On migration (or corrupt input) the loader backs up the original bytes to <config>.bak and rewrites the file at the current version.",
+  "description": "Versioned on-disk configuration for the K6WP wallpaper engine. Stored at %LOCALAPPDATA%/K6WP/config.json. Version 0 (legacy) is missing the newer fields and is migrated to version 6 by the loader; version 1 migrates to version 6 with monitor_id forced to -1 (the v0/v1 id had no render effect); version 2 migrates with legacy fit_mode fill normalized to cover; version 3 migrates with battery_mode defaulted to cap24; version 4 migrates with cpu_affinity/gpu_adapter defaulted to auto; version 5 migrates with pause_unload_after_sec defaulted to 30. On migration (or corrupt input) the loader backs up the original bytes to <config>.bak and rewrites the file at the current version.",
   "type": "object",
   "additionalProperties": false,
   "required": ["version"],
@@ -10,8 +10,8 @@
     "version": {
       "type": "integer",
       "minimum": 0,
-      "maximum": 5,
-      "description": "Schema version. 0 = legacy (missing fields are defaulted on load), 1 = monitor_id without render effect, 2 = monitor targeting (-1 = all screens), 3 = legacy fit_mode fill normalized to cover, 4 = battery_mode cap24|static, 5 = current (cpu_affinity auto|all + gpu_adapter auto|integrated|discrete)."
+      "maximum": 6,
+      "description": "Schema version. 0 = legacy (missing fields are defaulted on load), 1 = monitor_id without render effect, 2 = monitor targeting (-1 = all screens), 3 = legacy fit_mode fill normalized to cover, 4 = battery_mode cap24|static, 5 = cpu_affinity auto|all + gpu_adapter auto|integrated|discrete, 6 = current (pause_unload_after_sec: unload the decode pipeline after a long pause)."
     },
     "video_path": {
       "type": "string",
@@ -90,6 +90,13 @@
       "enum": ["legacy", "shadow", "on"],
       "default": "legacy",
       "description": "Display-resilience reconcile engine mode. legacy = today's behavior (no reconcile pass); shadow = compute snapshot + diff each debounce burst and report only (no slot mutation, never writes displays.json); on = cut over to live reconcile (P4)."
+    },
+    "pause_unload_after_sec": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 3600,
+      "default": 30,
+      "description": "Unload the decode pipeline after this many seconds of continuous pause. A paused wallpaper used to hold the whole decoder and its GPU surfaces (measured: 162 MB private + 152 MB GPU shared for a paused 1080p session, against 24 MB for an idle engine). After the deadline the file is released, the wallpaper stays on screen (the last frame) and the memory goes back. 0 = never unload."
     }
   }
 }

@@ -19,10 +19,12 @@ inline constexpr std::uintmax_t kMaxConfigBytes = 1024u * 1024u;
 // defaulted on load); v1 = monitor_id without render effect; v2 = monitor
 // targeting (-1 = all screens); v3 = legacy "fill" normalized to "cover";
 // v4 = battery_mode ("cap24" | "static", default "cap24");
-// v5 = current (cpu_affinity "auto" | "all" + gpu_adapter "auto" |
-// "integrated" | "discrete", both default "auto"; Phase 3-lite, shared-decode
-// descoped so no render_mode key).
-inline constexpr int kConfigSchemaVersion = 5;
+// v5 = cpu_affinity "auto" | "all" + gpu_adapter "auto" | "integrated" |
+// "discrete", both default "auto"; Phase 3-lite, shared-decode descoped so
+// no render_mode key;
+// v6 = current (pause_unload_after_sec: unload the decode pipeline after a
+// long pause, 0 = never, default 30 s).
+inline constexpr int kConfigSchemaVersion = 6;
 
 // Structured error thrown on corrupt/invalid config. Carries a human-readable
 // message; consumers (Engine config_watch, Studio settings) catch this and
@@ -54,6 +56,11 @@ struct WallpaperConfig {
   // "legacy": a config lacking the key loads clean with NO .bak and NO version
   // bump (NeedsMigration deliberately omits it — see the PR artifacts).
   std::string reconcile_mode = "legacy";  // legacy | shadow | on
+  // Task 1.1: unload the decode pipeline after this many seconds of
+  // continuous pause, so a long pause (the wallpaper is not visible anyway)
+  // stops holding the decoder and its GPU surfaces. 0 = never unload. The
+  // range is 0..3600 s; the default is 30 s.
+  int pause_unload_after_sec = 30;
 };
 
 // Loads, migrates and validates the config at `path`.

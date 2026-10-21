@@ -245,6 +245,20 @@ int ParseCli(int argc, char** argv, CliOptions& out) {
         std::fprintf(stderr, "error: --fps-cap must be >= 0\n");
         return 2;
       }
+    } else if (flag == "--unload-after-pause-ms") {
+      const auto value = take_value("--unload-after-pause-ms");
+      if (!value) return 2;
+      try {
+        out.unload_after_pause_ms = std::stoi(*value);
+      } catch (...) {
+        std::fprintf(stderr, "error: --unload-after-pause-ms expects an integer, got '%s'\n",
+                     value->c_str());
+        return 2;
+      }
+      if (out.unload_after_pause_ms < 0) {
+        std::fprintf(stderr, "error: --unload-after-pause-ms must be >= 0\n");
+        return 2;
+      }
     } else if (flag == "--capture-frames-count") {
       const auto value = take_value("--capture-frames-count");
       if (!value) return 2;

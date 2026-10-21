@@ -684,6 +684,32 @@ bool MultiMonitor::ReadLiveCounter(const std::string& name,
   return false;
 }
 
+int MultiMonitor::UnloadAllVideos() {
+  k6wp::lock_order::RecursiveSlotsGuard guard(slots_mutex_);
+  int count = 0;
+  for (auto& kv : slots_) {
+    if (kv.second.renderer && kv.second.renderer->UnloadVideo()) ++count;
+  }
+  return count;
+}
+
+int MultiMonitor::ReloadAllVideos() {
+  k6wp::lock_order::RecursiveSlotsGuard guard(slots_mutex_);
+  int count = 0;
+  for (auto& kv : slots_) {
+    if (kv.second.renderer && kv.second.renderer->ReloadVideo()) ++count;
+  }
+  return count;
+}
+
+bool MultiMonitor::any_video_unloaded() const {
+  k6wp::lock_order::RecursiveSlotsGuard guard(slots_mutex_);
+  for (const auto& kv : slots_) {
+    if (kv.second.renderer && kv.second.renderer->video_unloaded()) return true;
+  }
+  return false;
+}
+
 bool MultiMonitor::ReadLiveCounterText(const std::string& name,
                                        std::string& out) const {
   k6wp::lock_order::RecursiveSlotsGuard guard(slots_mutex_);

@@ -13,11 +13,12 @@
         "fps_cap": 24,
         "gpu_adapter": "auto",
         "monitor_id": -1,
+        "pause_unload_after_sec": 30,
         "reconcile_mode": "legacy",
         "resolution_h": 0,
         "resolution_w": 0,
         "speed": 1.0,
-        "version": 5,
+        "version": 6,
         "video_path": ""
       }
     },
@@ -34,11 +35,12 @@
         "fps_cap": 24,
         "gpu_adapter": "auto",
         "monitor_id": -1,
+        "pause_unload_after_sec": 30,
         "reconcile_mode": "legacy",
         "resolution_h": 0,
         "resolution_w": 0,
         "speed": 1.0,
-        "version": 5,
+        "version": 6,
         "video_path": "C:\\v\\a.mp4"
       }
     },
@@ -55,11 +57,12 @@
         "fps_cap": 24,
         "gpu_adapter": "auto",
         "monitor_id": -1,
+        "pause_unload_after_sec": 30,
         "reconcile_mode": "legacy",
         "resolution_h": 0,
         "resolution_w": 0,
         "speed": 1.0,
-        "version": 5,
+        "version": 6,
         "video_path": ""
       }
     },
@@ -76,11 +79,12 @@
         "fps_cap": 24,
         "gpu_adapter": "auto",
         "monitor_id": -1,
+        "pause_unload_after_sec": 30,
         "reconcile_mode": "legacy",
         "resolution_h": 0,
         "resolution_w": 0,
         "speed": 1.0,
-        "version": 5,
+        "version": 6,
         "video_path": "C:\\v\\a.mp4"
       }
     },
@@ -97,11 +101,12 @@
         "fps_cap": 24,
         "gpu_adapter": "auto",
         "monitor_id": -1,
+        "pause_unload_after_sec": 30,
         "reconcile_mode": "legacy",
         "resolution_h": 0,
         "resolution_w": 0,
         "speed": 1.0,
-        "version": 5,
+        "version": 6,
         "video_path": ""
       }
     },
@@ -118,11 +123,12 @@
         "fps_cap": 24,
         "gpu_adapter": "auto",
         "monitor_id": 1,
+        "pause_unload_after_sec": 30,
         "reconcile_mode": "legacy",
         "resolution_h": 0,
         "resolution_w": 0,
         "speed": 1.0,
-        "version": 5,
+        "version": 6,
         "video_path": ""
       }
     },
@@ -139,11 +145,12 @@
         "fps_cap": 24,
         "gpu_adapter": "auto",
         "monitor_id": -1,
+        "pause_unload_after_sec": 30,
         "reconcile_mode": "legacy",
         "resolution_h": 0,
         "resolution_w": 0,
         "speed": 1.0,
-        "version": 5,
+        "version": 6,
         "video_path": ""
       }
     },
@@ -160,11 +167,12 @@
         "fps_cap": 24,
         "gpu_adapter": "discrete",
         "monitor_id": -1,
+        "pause_unload_after_sec": 30,
         "reconcile_mode": "legacy",
         "resolution_h": 0,
         "resolution_w": 0,
         "speed": 1.0,
-        "version": 5,
+        "version": 6,
         "video_path": ""
       }
     },
@@ -181,11 +189,12 @@
         "fps_cap": 30,
         "gpu_adapter": "integrated",
         "monitor_id": 0,
+        "pause_unload_after_sec": 30,
         "reconcile_mode": "shadow",
         "resolution_h": 1080,
         "resolution_w": 1920,
         "speed": 1.5,
-        "version": 5,
+        "version": 6,
         "video_path": "C:\\v\\b.mp4"
       }
     },
@@ -202,11 +211,12 @@
         "fps_cap": 24,
         "gpu_adapter": "auto",
         "monitor_id": -1,
+        "pause_unload_after_sec": 30,
         "reconcile_mode": "on",
         "resolution_h": 0,
         "resolution_w": 0,
         "speed": 1.0,
-        "version": 5,
+        "version": 6,
         "video_path": ""
       }
     },
@@ -223,19 +233,36 @@
         "fps_cap": 24,
         "gpu_adapter": "auto",
         "monitor_id": -1,
+        "pause_unload_after_sec": 30,
         "reconcile_mode": "bogus",
         "resolution_h": 0,
         "resolution_w": 0,
         "speed": 1.0,
-        "version": 5,
+        "version": 6,
         "video_path": ""
       }
     },
     {
-      "error": "unsupported config schema version: 6",
       "fn": "MigrateConfig",
       "id": "config.migrate.v6_future",
-      "input": "{\"version\":6}"
+      "input": "{\"version\":6}",
+      "output": {
+        "battery_mode": "cap24",
+        "battery_saver": false,
+        "cpu_affinity": "auto",
+        "crf": 22,
+        "fit_mode": "cover",
+        "fps_cap": 24,
+        "gpu_adapter": "auto",
+        "monitor_id": -1,
+        "pause_unload_after_sec": 30,
+        "reconcile_mode": "legacy",
+        "resolution_h": 0,
+        "resolution_w": 0,
+        "speed": 1.0,
+        "version": 6,
+        "video_path": ""
+      }
     },
     {
       "error": "unsupported config schema version: -1",
@@ -256,11 +283,12 @@
         "fps_cap": 24,
         "gpu_adapter": "auto",
         "monitor_id": -1,
+        "pause_unload_after_sec": 30,
         "reconcile_mode": "legacy",
         "resolution_h": 0,
         "resolution_w": 0,
         "speed": 1.0,
-        "version": 5,
+        "version": 6,
         "video_path": ""
       }
     },
@@ -277,11 +305,12 @@
         "fps_cap": 24,
         "gpu_adapter": "auto",
         "monitor_id": -1,
+        "pause_unload_after_sec": 30,
         "reconcile_mode": "legacy",
         "resolution_h": 0,
         "resolution_w": 0,
         "speed": 1.0,
-        "version": 5,
+        "version": 6,
         "video_path": ""
       }
     },
@@ -298,11 +327,12 @@
         "fps_cap": 24,
         "gpu_adapter": "auto",
         "monitor_id": -1,
+        "pause_unload_after_sec": 30,
         "reconcile_mode": "legacy",
         "resolution_h": 0,
         "resolution_w": 0,
         "speed": 1.0,
-        "version": 5,
+        "version": 6,
         "video_path": ""
       }
     },
@@ -319,11 +349,12 @@
         "fps_cap": 24,
         "gpu_adapter": "auto",
         "monitor_id": -1,
+        "pause_unload_after_sec": 30,
         "reconcile_mode": "legacy",
         "resolution_h": 0,
         "resolution_w": 0,
         "speed": 0.4,
-        "version": 5,
+        "version": 6,
         "video_path": ""
       }
     },
@@ -340,11 +371,12 @@
         "fps_cap": 24,
         "gpu_adapter": "auto",
         "monitor_id": -1,
+        "pause_unload_after_sec": 30,
         "reconcile_mode": "legacy",
         "resolution_h": 0,
         "resolution_w": 0,
         "speed": 2.1,
-        "version": 5,
+        "version": 6,
         "video_path": ""
       }
     },
@@ -361,11 +393,12 @@
         "fps_cap": 0,
         "gpu_adapter": "auto",
         "monitor_id": -1,
+        "pause_unload_after_sec": 30,
         "reconcile_mode": "legacy",
         "resolution_h": 0,
         "resolution_w": 0,
         "speed": 1.0,
-        "version": 5,
+        "version": 6,
         "video_path": ""
       }
     },
@@ -382,11 +415,12 @@
         "fps_cap": 31,
         "gpu_adapter": "auto",
         "monitor_id": -1,
+        "pause_unload_after_sec": 30,
         "reconcile_mode": "legacy",
         "resolution_h": 0,
         "resolution_w": 0,
         "speed": 1.0,
-        "version": 5,
+        "version": 6,
         "video_path": ""
       }
     },
@@ -403,11 +437,12 @@
         "fps_cap": 24,
         "gpu_adapter": "auto",
         "monitor_id": -1,
+        "pause_unload_after_sec": 30,
         "reconcile_mode": "legacy",
         "resolution_h": 0,
         "resolution_w": -1,
         "speed": 1.0,
-        "version": 5,
+        "version": 6,
         "video_path": ""
       }
     },
@@ -424,11 +459,12 @@
         "fps_cap": 24,
         "gpu_adapter": "auto",
         "monitor_id": -2,
+        "pause_unload_after_sec": 30,
         "reconcile_mode": "legacy",
         "resolution_h": 0,
         "resolution_w": 0,
         "speed": 1.0,
-        "version": 5,
+        "version": 6,
         "video_path": ""
       }
     },
@@ -445,11 +481,12 @@
         "fps_cap": 24,
         "gpu_adapter": "auto",
         "monitor_id": -1,
+        "pause_unload_after_sec": 30,
         "reconcile_mode": "legacy",
         "resolution_h": 0,
         "resolution_w": 0,
         "speed": 1.0,
-        "version": 5,
+        "version": 6,
         "video_path": ""
       }
     },
@@ -466,11 +503,12 @@
         "fps_cap": 24,
         "gpu_adapter": "auto",
         "monitor_id": -1,
+        "pause_unload_after_sec": 30,
         "reconcile_mode": "legacy",
         "resolution_h": 0,
         "resolution_w": 0,
         "speed": 1.0,
-        "version": 5,
+        "version": 6,
         "video_path": ""
       }
     },
@@ -487,11 +525,12 @@
         "fps_cap": 24,
         "gpu_adapter": "zzz",
         "monitor_id": -1,
+        "pause_unload_after_sec": 30,
         "reconcile_mode": "legacy",
         "resolution_h": 0,
         "resolution_w": 0,
         "speed": 1.0,
-        "version": 5,
+        "version": 6,
         "video_path": ""
       }
     },

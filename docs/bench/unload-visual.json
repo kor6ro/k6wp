@@ -1,0 +1,16 @@
+﻿{
+    "tool":  "bench_unload_visual",
+    "phase":  1,
+    "date":  "2026-10-21T10:41:13+07:00",
+    "label":  "live-proven (one machine)",
+    "method":  "PrintWindow on the injected wallpaper surface (immune to the desktop composite)",
+    "playing_diff":  6.257,
+    "unloaded_luma":  128.04,
+    "unloaded_stddev":  67.1,
+    "playing_luma":  128.45,
+    "playing_stddev":  66.72,
+    "resumed_diff":  12.954,
+    "animating_while_playing":  true,
+    "animating_after_resume":  true,
+    "unloaded_shows_picture":  true
+}
