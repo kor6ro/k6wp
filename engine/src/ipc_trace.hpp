@@ -25,10 +25,16 @@
 //   does not even contain the variable name. In a debug build with the
 //   variable unset it costs one static bool.
 //
-// CAVEAT (L1): the summary is logged from the scope's DESTRUCTOR, i.e. inside
-// the section it measures, every `kTraceSummaryEvery` samples. That is fine
-// for a MEAN and wrong for a MAX (the 200th request pays the log flush). Never
-// quote a max from a trace-on run: the L1 gate ran with the trace OFF.
+// CAVEAT (L1): the summary is logged from a scope's DESTRUCTOR, i.e. after its
+// duration was taken but still inside every ENCLOSING section. A cascade of
+// child summaries at the same boundary used to land inside `get_state.json`
+// and `ipc.handler`, so a trace-on max was not usable.
+//
+// L2 FIX: only the OUTERMOST active scope logs (a thread-local depth counter).
+// The flush therefore happens after the outermost measurement ended and no
+// measured block encloses it - a trace-on MAX is usable now. The means still
+// include the debug-build clock + map + mutex overhead, so quote means as
+// upper bounds; the trace-OFF run remains the latency source of truth.
 
 #include <algorithm>
 #include <chrono>
@@ -96,15 +102,24 @@ inline std::mutex& TraceStatsMutex() {
 // How many samples between two summaries.
 inline constexpr std::uint64_t kTraceSummaryEvery = 200;
 
+// The current thread's open-scope count (L2). Only the outermost scope logs;
+// see the caveat at the top.
+inline int& TraceDepth() {
+  static thread_local int depth = 0;
+  return depth;
+}
+
 // A scoped stopwatch that records its duration in the per-label accumulator.
 class TraceScope {
  public:
   explicit TraceScope(const char* label) : label_(label) {
     if (!IpcTraceEnabled()) return;
+    active_ = true;
+    ++TraceDepth();
     start_ = std::chrono::steady_clock::now();
   }
   ~TraceScope() {
-    if (!IpcTraceEnabled()) return;
+    if (!active_) return;
     const auto microseconds =
         std::chrono::duration_cast<std::chrono::microseconds>(
             std::chrono::steady_clock::now() - start_)
@@ -118,7 +133,10 @@ class TraceScope {
       stat.max_us = std::max(stat.max_us, static_cast<std::uint64_t>(microseconds));
       total += stat.count;
     }
-    if (total % kTraceSummaryEvery == 0) {
+    // L2: log only when the outermost scope exits, AFTER its duration was
+    // taken. No measured block encloses the flush, so trace-on maxes are
+    // usable (the child labels have already accumulated their samples).
+    if (--TraceDepth() == 0 && total % kTraceSummaryEvery == 0) {
       std::lock_guard<std::mutex> lock(TraceStatsMutex());
       for (const auto& [label, stat] : TraceStats()) {
         const double mean = stat.count ? (static_cast<double>(stat.total_us) /
@@ -136,7 +154,8 @@ class TraceScope {
 
  private:
   const char* label_;
-  std::chrono::steady_clock::time_point start_ = std::chrono::steady_clock::now();
+  bool active_ = false;
+  std::chrono::steady_clock::time_point start_{};
 };
 
 }  // namespace k6wp

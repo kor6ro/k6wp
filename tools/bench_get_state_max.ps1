@@ -14,9 +14,22 @@
 #   The same Rust stress client K1 used (4 clients by default) hammers
 #   `get_state` for N requests and records every latency. The report carries
 #   the p50/p95/p99/max and, with `-WithTrace`, the accumulator's per-label
-#   n/mean/max from `ipc_trace.hpp` (debug builds only). Quote the MEANS from
-#   a trace run, not the max: the summary write lands inside the scope every
-#   200 samples (see the caveat in the header).
+#   n/mean/max from `ipc_trace.hpp` (debug builds only).
+#
+#   The MEANS are the honest per-field numbers: the accumulator adds a clock
+#   pair, a map lookup and a mutex per scope, and the engine is a Debug build,
+#   so every mean is an UPPER BOUND on the release cost.
+#
+#   The trace-on MAX is usable since L2: the accumulator logs its summary only
+#   when the OUTERMOST scope exits (a thread-local depth counter), after its
+#   own duration was taken - no measured block encloses the flush. Before L2
+#   the flush landed inside the scope every 200 samples and the max was fake
+#   (9-15 ms); the L1 gate therefore ran with the trace OFF, and it still does.
+#   The trace-off run remains the latency gate.
+#
+#   A max is ONE sample: under a live session it can be an OS scheduler stall
+#   (L2 saw 31-62 ms maxima with a p99 of 0-1 ms). Quote the p99 next to any
+#   max, and the sample series (`-SamplesOut`) when a max has to be explained.
 #
 # THE EVIDENCE RULE
 #   One invocation = one run. The L1 gate needs n >= 5 runs per binary, with
@@ -34,13 +47,15 @@ param(
     [int]$Threads = 4,
     [int]$Requests = 2000,
     [int]$ReadyTimeoutSec = 20,
-    # OFF by default: the trace logs its summary INSIDE the measured scope
-    # every 200 samples, so it would put its own flush into the max. Use it
-    # for the per-label means (L2), never for the latency gate. NOTE the name:
-    # a [switch] parameter types its variable, so it must NOT be called
-    # `-Trace` if the script also has a `$trace` accumulator (case-insensitive
-    # variables + a type constraint = "Cannot convert OrderedDictionary to
-    # SwitchParameter").
+    # OFF by default: the trace adds a clock pair, a map lookup and a mutex
+    # per scope, so the means are upper bounds - and the client latency is the
+    # gate, not the trace. Use `-WithTrace` for the per-label means (L2) and
+    # for the per-field maxima (usable since the L2 depth gate: the summary
+    # logs only at the outermost scope, so no measured block encloses the
+    # flush). NOTE the name: a [switch] parameter types its variable, so it
+    # must NOT be called `-Trace` if the script also has a `$trace` accumulator
+    # (case-insensitive variables + a type constraint = "Cannot convert
+    # OrderedDictionary to SwitchParameter").
     [switch]$WithTrace
 )
 
@@ -168,7 +183,9 @@ try {
     $clientReport = Get-Content -LiteralPath $clientJson -Raw | ConvertFrom-Json
 
     # The trace summary: the LAST line per label in the delta (the summary is
-    # logged every 200 samples, so the last one covers the run).
+    # logged every 200 samples per label, so the last one covers the run).
+    # Every label is kept: L2 measures the per-field scopes (state.*), so the
+    # report must not whitelist a fixed set.
     $trace = [ordered]@{}
     $delta = Read-LogDelta
     foreach ($line in ($delta -split "`r?`n")) {
@@ -181,15 +198,9 @@ try {
         }
     }
 
-    $labels = @('get_state.json', 'ipc.handler', 'ipc.ack')
-    $traceOut = [ordered]@{}
-    foreach ($name in $labels) {
-        $traceOut[$name] = if ($trace.Contains($name)) { $trace[$name] } else { $null }
-    }
-
     $report = [ordered]@{
         tool         = 'bench_get_state_max'
-        task         = 'L1'
+        task         = 'L1/L2'
         label        = $Label
         date         = (Get-Date).ToString('o')
         engine       = $EngineExe
@@ -204,16 +215,23 @@ try {
         max_ms       = $clientReport.max_ms
         failures     = $clientReport.failures
         wall_seconds = $clientReport.wall_seconds
-        trace        = $traceOut
+        trace        = $trace
     }
     $outDir = Split-Path -Parent ([IO.Path]::GetFullPath($OutJson))
     if (-not (Test-Path -LiteralPath $outDir)) { New-Item -ItemType Directory -Force -Path $outDir | Out-Null }
     $report | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $OutJson -Encoding UTF8
-    $jsonMax = if ($report.trace['get_state.json']) { $report.trace['get_state.json'].max_us } else { 'n/a' }
-    $handlerMax = if ($report.trace['ipc.handler']) { $report.trace['ipc.handler'].max_us } else { 'n/a' }
     Write-Host ("  [l1] {0}: {1} requests, the p50 {2} ms, the p99 {3} ms, the max {4} ms" -f `
             $Label, $report.requests, $report.p50_ms, $report.p99_ms, $report.max_ms)
-    Write-Host ("  [l1] the trace max: get_state.json {0} us, ipc.handler {1} us" -f $jsonMax, $handlerMax)
+    if ($trace.Count -gt 0) {
+        Write-Host "  [l2] the trace (n / mean / max, us):"
+        foreach ($name in ($trace.Keys | Sort-Object)) {
+            $t = $trace[$name]
+            Write-Host ("       {0,-18} {1,6}  {2,8}  {3,8}" -f $name, $t.n, $t.mean_us, $t.max_us)
+        }
+    }
+    else {
+        Write-Host "  [l2] no trace labels (run with -WithTrace on a debug engine)"
+    }
 } finally {
     if ($engineProcess -and -not $engineProcess.HasExited) {
         Stop-Process -Id $engineProcess.Id -Force -ErrorAction SilentlyContinue

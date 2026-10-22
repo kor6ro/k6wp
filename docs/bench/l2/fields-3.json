@@ -1,0 +1,65 @@
+﻿{
+    "tool":  "bench_get_state_max",
+    "task":  "L1/L2",
+    "label":  "fields-3",
+    "date":  "2026-10-22T18:21:49.0726206+07:00",
+    "engine":  "C:\\Users\\axioo\\Desktop\\k6wp\\build\\l1\\engine.exe",
+    "private":  true,
+    "mutex":  "Local\\K6WP-Engine-L1-456e6b57",
+    "pipe":  "\\\\.\\pipe\\k6wp-engine-l1-456e6b57",
+    "threads":  1,
+    "requests":  4000,
+    "p50_ms":  0,
+    "p95_ms":  0,
+    "p99_ms":  1,
+    "max_ms":  15,
+    "failures":  0,
+    "wall_seconds":  2.1599406,
+    "trace":  {
+                  "get_state.json":  {
+                                         "n":  4000,
+                                         "mean_us":  305,
+                                         "max_us":  1281
+                                     },
+                  "ipc.ack":  {
+                                  "n":  4000,
+                                  "mean_us":  9,
+                                  "max_us":  133
+                              },
+                  "ipc.handler":  {
+                                      "n":  4000,
+                                      "mean_us":  393,
+                                      "max_us":  1433
+                                  },
+                  "state.coverage":  {
+                                         "n":  4000,
+                                         "mean_us":  1,
+                                         "max_us":  29
+                                     },
+                  "state.displays":  {
+                                         "n":  4000,
+                                         "mean_us":  32,
+                                         "max_us":  185
+                                     },
+                  "state.dump":  {
+                                     "n":  4000,
+                                     "mean_us":  41,
+                                     "max_us":  317
+                                 },
+                  "state.json":  {
+                                     "n":  4000,
+                                     "mean_us":  165,
+                                     "max_us":  410
+                                 },
+                  "state.options":  {
+                                        "n":  4000,
+                                        "mean_us":  5,
+                                        "max_us":  52
+                                    },
+                  "state.video":  {
+                                      "n":  4000,
+                                      "mean_us":  0,
+                                      "max_us":  30
+                                  }
+              }
+}

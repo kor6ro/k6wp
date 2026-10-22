@@ -136,15 +136,34 @@ noise.
 - `tools/bench_get_state_max.ps1` - the private-instance harness.
 - `docs/bench/l1/` - the 10 raw runs and the two sample series.
 
-## 6. The instrument caveat (for L2)
+## 6. The instrument caveat (for L2) - **resolved by L2**
 
-`TraceScope`'s destructor logs the summary **inline** every 200 samples
-(`ipc_trace.hpp`), so with `K6WP_IPC_TRACE=1` the 200th request pays the
-log write, and the write lands **inside** the very scope it is summarising.
+`TraceScope`'s destructor logged the summary **inline** every 200 samples
+(`ipc_trace.hpp`), so with `K6WP_IPC_TRACE=1` the 200th request paid the
+log write, and the write landed **inside** the very scope it is summarising.
 That is acceptable for the **means** L2 needs and **not** acceptable for a
-max gate - which is why the L1 gate ran with the trace off. L2 should either
-move the summary to a background writer or log it at shutdown before a max
-number is quoted from it.
+max gate - which is why the L1 gate ran with the trace off.
+
+**L2 fixed it** (the cheap option, not a background writer): the summary is
+now logged only when the **outermost** scope exits (a thread-local depth
+counter), after that scope's own duration was taken. No measured block
+encloses the flush, so a trace-on **max is usable** - the whole build's
+trace-on max fell from 9-15 ms (flush) to 1.3-2.2 ms (real). The L1 gate
+numbers below stay trace-off; they are unaffected. The trace-off path also
+got cheaper: the scope no longer calls the clock when the trace is disabled.
+
+**One caveat remains** (and it is the one that matters for L2's numbers): the
+per-label **means** include the Debug-build instrument (a clock pair, a
+`std::map` lookup and a mutex per scope), so they are **upper bounds** on the
+release cost. The trace-off run remains the latency gate.
+
+**A second caveat, found by L2's own runs:** the L1 gate's "0 of 20,000
+samples >= 20 ms" was true **for L1's runs** but is not a universal
+guarantee - a later L2 run saw 2 of 4,000 samples at 21 and 31 ms (the 31 ms
+at offset ~1.1 s, not at startup) and clean harness runs had maxima of
+34/57/62 ms, always with a p99 of 0-1 ms. The **p99 is the stable metric**;
+the max is one OS-scheduling sample under a live session. `budgets.md` now
+scopes the 20 ms row accordingly - see `docs/refactor/ipc-poll-cost.md` §7.
 
 `K6WP_IPC_TRACE` is now **compiled out of the release build**: it obeys the
 same `build_flags.hpp` gate as the pipe and mutex names, and the name is in

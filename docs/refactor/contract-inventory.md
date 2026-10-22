@@ -394,10 +394,12 @@ Built by `EngineApp::BuildStateJson` (`engine/src/engine_app.cpp:1671-1793`). Th
 | `reconcile.retries` | int | retry count | `engine/src/engine_app.cpp:1778` |
 | `reconcile.degraded_keys` | array of string | degraded slot keys | `engine/src/engine_app.cpp:1779-1781` |
 | `display_capability` | int | **always 1** in the current engine; `0` = engine predates the display fields | `engine/src/engine_app.cpp:1788`, `shared/ipc_protocol.hpp:97-101` |
-| `display_assignments` | object: `{GDI device name → utf-8 video path}` | from the in-memory `displays.json` snapshot | `engine/src/engine_app.cpp:1708-1721,1789` |
-| `display_coverage` | object: `{GDI device name → verdict}` | per-slot placement verdict | `engine/src/engine_app.cpp:1722-1744,1790` |
+| `display_assignments` | object: `{GDI device name → utf-8 video path}` | from the in-memory `displays.json` snapshot | `engine/src/engine_app.cpp:2245-2262,2360` |
+| `display_coverage` | object: `{GDI device name → verdict}` | per-slot placement verdict, or `degraded` from the **recorded** `exists` hint (never a per-poll stat) | `engine/src/engine_app.cpp:2265-2292,2361` |
 
-**`display_coverage` verdict vocabulary:** `"covered"`, `"clipped-left"`, `"clipped-top"`, `"clipped-right"`, `"clipped-bottom"`, `"headless"`, and the additive `"degraded"` (the assignment is recorded but the file no longer exists on disk) (`engine/src/engine_app.cpp:86-96,1733-1742`).
+**`display_coverage` verdict vocabulary:** `"covered"`, `"clipped-left"`, `"clipped-top"`, `"clipped-right"`, `"clipped-bottom"`, `"headless"`, and the additive `"degraded"` (an assignment is recorded and its `MonitorAssignment::exists` hint is false - the file was missing when the Studio wrote the assignment or the engine applied it; **not** a live filesystem check) (`engine/src/engine_app.cpp:78-96,2274-2291`).
+
+`display_coverage` is parsed by `ParseEngineState` (`shared/ipc_protocol.cpp:297-301`) but has **no UI consumer**: no Studio, Rust crate or tool reads it (grep, 2026-10-22). L2 therefore reports the recorded hint instead of stat'ing the path on every poll - the stat blocked the IPC thread for 21 s on a dead SMB share (see `ipc-poll-cost.md`). A future consumer that needs live existence must use a watcher/scan result, not a per-poll `std::filesystem::exists`.
 
 **Keys emitted by the engine but NOT consumed by `ParseEngineState`** (a port may keep them; the Studio's typed view ignores them): `running`, `pause_mask`, `wallpaper_mode`, `config`, `monitor`, `handle_count`, `hwdec_active`, `gpu_pin`, `gpu_pin_reverts` - compare the emitted list (`engine/src/engine_app.cpp:1745-1791`) with the parsed list (`shared/ipc_protocol.cpp:221-302`). `thread_count` was in this list until **L1 removed it** (v1.10): an unconsumed diagnostic does not justify a 50-75 ms system-wide snapshot on every poll (see `phase2-l1-get-state-max.md`).
 

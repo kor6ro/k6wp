@@ -60,8 +60,11 @@ inline constexpr std::size_t kDisplaysMaxEntries = 100;
 // GDI device name is the map key.
 struct MonitorAssignment {
   std::wstring path;  // UTF-8 on disk, wide in memory (Win32-friendly)
-  bool exists = false;  // Studio-side existence hint at write time; the
-                        // engine re-checks the filesystem at apply time.
+  bool exists = false;  // Existence hint recorded at write time (Studio) or
+                        // apply time (engine). get_state's "degraded" verdict
+                        // reads THIS, never the filesystem: a per-poll stat on
+                        // a dead SMB share blocked the IPC thread for 21 s
+                        // (L2, docs/refactor/ipc-poll-cost.md).
   // P2a §R4.4: tiered stable identity (e.g. L"ccd:...", L"edid:...:1a2b").
   // Empty = legacy entry (key_stable is not emitted on disk when empty, so a
   // legacy file round-trips byte-for-byte).

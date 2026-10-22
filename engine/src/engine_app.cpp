@@ -26,6 +26,7 @@
 #include <cwchar>
 #include <cstdlib>
 #include <filesystem>
+#include <map>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -2198,10 +2199,12 @@ void EngineApp::OnTrayQuickSwitch(std::size_t idx) {
 
 std::string EngineApp::BuildStateJson() const {
   // L1/L2: the `get_state` build measured with the K1 accumulator. The whole
-  // build is one label; the per-field labels come with L2.
+  // build is one label; the per-field labels below attribute the cost so a
+  // field over the budget cannot hide behind the total.
   k6wp::TraceScope trace_json("get_state.json");
   std::string video_utf8;
   {
+    k6wp::TraceScope trace_video("state.video");
     k6wp::lock_order::LeafGuard video_guard(video_mutex_);
     video_utf8 = current_video_utf8_;
   }
@@ -2214,16 +2217,19 @@ std::string EngineApp::BuildStateJson() const {
   std::string config_utf8;
   WallpaperMode wallpaper_mode_copy = WallpaperMode::kAuto;
   int reverts_copy = 0;
-  try {
-    k6wp::lock_order::LeafGuard options_guard(options_mutex_);
-    config_utf8 = options_.config_path.empty()
-                      ? DefaultConfigPath().u8string()
-                      : std::filesystem::path(options_.config_path).u8string();
-    wallpaper_mode_copy = options_.wallpaper_mode;
-  } catch (...) {
-    config_utf8.clear();
+  {
+    k6wp::TraceScope trace_options("state.options");
+    try {
+      k6wp::lock_order::LeafGuard options_guard(options_mutex_);
+      config_utf8 = options_.config_path.empty()
+                        ? DefaultConfigPath().u8string()
+                        : std::filesystem::path(options_.config_path).u8string();
+      wallpaper_mode_copy = options_.wallpaper_mode;
+    } catch (...) {
+      config_utf8.clear();
+    }
+    reverts_copy = pin_verify_.total();
   }
-  reverts_copy = pin_verify_.total();
   // WallpaperModeToString takes the enum by value — resolve outside the
   // lock from the snapshot.
   const char* wallpaper_mode_str = WallpaperModeToString(wallpaper_mode_copy);
@@ -2237,43 +2243,59 @@ std::string EngineApp::BuildStateJson() const {
   // row 4's verdict chain per live slot (MultiMonitor::Slot::coverage_reason
   // via SlotCoverageReason) — same best-effort diagnostic class.
   nlohmann::json display_assignments = nlohmann::json::object();
-  try {
-    // Copy under the mutex, then release before building JSON (the main loop
-    // only blocks for the assignment-map copy).
-    k6wp::DisplaysConfig displays_cfg;
-    {
-      k6wp::lock_order::LeafGuard displays_guard(displays_mutex_);
-      displays_cfg = displays_snapshot_;
+  std::map<std::string, bool> assignment_exists;  // L2: recorded, never stat'ed
+  {
+    k6wp::TraceScope trace_displays("state.displays");
+    try {
+      // Copy under the mutex, then release before building JSON (the main loop
+      // only blocks for the assignment-map copy).
+      k6wp::DisplaysConfig displays_cfg;
+      {
+        k6wp::lock_order::LeafGuard displays_guard(displays_mutex_);
+        displays_cfg = displays_snapshot_;
+      }
+      for (const auto& [key, a] : displays_cfg.assignments) {
+        const std::string device = NarrowUtf8(key);
+        display_assignments[device] = NarrowUtf8(a.path);
+        assignment_exists[device] = a.exists;
+      }
+    } catch (const std::exception&) {
     }
-    for (const auto& [key, a] : displays_cfg.assignments) {
-      display_assignments[NarrowUtf8(key)] = NarrowUtf8(a.path);
-    }
-  } catch (const std::exception&) {
   }
   nlohmann::json display_coverage = nlohmann::json::object();
   // H1 (1.3.0-beta.2): this runs on the IPC worker thread while the main
   // loop mutates the slot map (set_monitor / display change / re-anchor).
   // SnapshotSlots() takes the slot mutex internally; iterating slots()
   // here was a data race.
-  for (const auto& s : multi_monitor_.SnapshotSlots()) {
-    // Row 34 (additive only): a slot whose assignment key is recorded in
-    // display_assignments but whose path no longer exists on disk reports
-    // "degraded" instead of the placement verdict (the slot keeps running
-    // the default video while an assignment is recorded). Every other
-    // device keeps exactly the covered|clipped-*|headless verdict below.
-    std::string verdict =
-        s.headless ? "headless" : DisplayCoverageVerdict(s.coverage);
-    if (display_assignments.contains(s.device)) {
-      std::error_code ec;
-      const std::filesystem::path assigned_path(std::filesystem::u8path(
-          display_assignments.at(s.device).get<std::string>()));
-      if (!std::filesystem::exists(assigned_path, ec) || ec) {
+  {
+    k6wp::TraceScope trace_coverage("state.coverage");
+    for (const auto& s : multi_monitor_.SnapshotSlots()) {
+      // Row 34 (additive only): a slot whose assignment key is recorded in
+      // display_assignments reports "degraded" instead of the placement
+      // verdict when its path was recorded as missing (the slot keeps running
+      // the default video while an assignment is recorded). Every other
+      // device keeps exactly the covered|clipped-*|headless verdict below.
+      std::string verdict =
+          s.headless ? "headless" : DisplayCoverageVerdict(s.coverage);
+      const auto hint = assignment_exists.find(s.device);
+      if (hint != assignment_exists.end() && !hint->second) {
+        // L2: no filesystem call on the poll path. `exists` is the hint the
+        // writer recorded (the Studio at write time, the engine at apply
+        // time). A stat here was 57 us warm on a local volume, but a path on
+        // a dead SMB share blocked the IPC thread for 21,053 ms - and the
+        // Studio's poll timeout turns that into "Disconnected". Cost of the
+        // narrower meaning: a file deleted AFTER the assignment does not
+        // flip to "degraded" within a poll; nothing in the Studio or the Rust
+        // crates reads this field (the library scanner marks broken files).
         verdict = "degraded";
       }
+      display_coverage[s.device] = std::move(verdict);
     }
-    display_coverage[s.device] = std::move(verdict);
   }
-  const nlohmann::json state = {
+  nlohmann::json state;
+  {
+    k6wp::TraceScope trace_state_json("state.json");
+    state = nlohmann::json{
       {"running", running_.load(std::memory_order_acquire)},
       {"paused", UiPaused()},
       // P2.3, additive only: raw pause-owner mask (bit 32 = screen-off) so
@@ -2337,8 +2359,14 @@ std::string EngineApp::BuildStateJson() const {
       {"display_capability", 1},
       {"display_assignments", display_assignments},
       {"display_coverage", display_coverage},
-  };
-  return state.dump();
+    };
+  }
+  std::string out;
+  {
+    k6wp::TraceScope trace_dump("state.dump");
+    out = state.dump();
+  }
+  return out;
 }
 
 // Display resilience P3: ArmReconcile - burst-coalesce reconcile trigger.

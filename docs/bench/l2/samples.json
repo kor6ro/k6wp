@@ -1,0 +1,21 @@
+﻿{
+    "tool":  "bench_get_state_max",
+    "task":  "L1/L2",
+    "label":  "samples",
+    "date":  "2026-10-22T18:29:34.3827223+07:00",
+    "engine":  "C:\\Users\\axioo\\Desktop\\k6wp\\build\\l1\\engine.exe",
+    "private":  true,
+    "mutex":  "Local\\K6WP-Engine-L1-2b10bd14",
+    "pipe":  "\\\\.\\pipe\\k6wp-engine-l1-2b10bd14",
+    "threads":  1,
+    "requests":  4000,
+    "p50_ms":  0,
+    "p95_ms":  0,
+    "p99_ms":  0,
+    "max_ms":  31,
+    "failures":  0,
+    "wall_seconds":  2.0430671,
+    "trace":  {
+
+              }
+}

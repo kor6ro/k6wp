@@ -1,0 +1,21 @@
+﻿{
+    "tool":  "bench_get_state_max",
+    "task":  "L1/L2",
+    "label":  "gate-4",
+    "date":  "2026-10-22T18:22:17.1146446+07:00",
+    "engine":  "C:\\Users\\axioo\\Desktop\\k6wp\\build\\l1\\engine.exe",
+    "private":  true,
+    "mutex":  "Local\\K6WP-Engine-L1-0d6f1d6e",
+    "pipe":  "\\\\.\\pipe\\k6wp-engine-l1-0d6f1d6e",
+    "threads":  1,
+    "requests":  4000,
+    "p50_ms":  0,
+    "p95_ms":  0,
+    "p99_ms":  0,
+    "max_ms":  62,
+    "failures":  0,
+    "wall_seconds":  2.3551203,
+    "trace":  {
+
+              }
+}

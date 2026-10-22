@@ -410,14 +410,19 @@ class FakeEngine {
     }
   }
 
-  // Production BuildStateJson display_* fields (engine_app.cpp:1321-1372)
-  // plus the case-(d) degraded override (file banner).
+  // Production BuildStateJson display_* fields (engine_app.cpp) plus the
+  // case-(d) degraded override. L2: the production path reads the recorded
+  // `exists` hint instead of stat'ing the file per poll, so this simulation
+  // must do the same (a stat here would hide the 21 s dead-share regression).
   std::string HandleGetState() {
     nlohmann::json display_assignments = nlohmann::json::object();
+    std::map<std::string, bool> assignment_exists;
     try {
       const k6wp::DisplaysConfig cfg = k6wp::LoadDisplays(displays_path_);
       for (const auto& [key, a] : cfg.assignments) {
-        display_assignments[NarrowUtf8(key)] = NarrowUtf8(a.path);
+        const std::string device = NarrowUtf8(key);
+        display_assignments[device] = NarrowUtf8(a.path);
+        assignment_exists[device] = a.exists;
       }
     } catch (const k6wp::ConfigError&) {
     } catch (const std::exception&) {
@@ -432,13 +437,9 @@ class FakeEngine {
                                 : DisplayCoverageVerdict(
                                       mm_->SlotCoverageReason(id));
       const std::string device = NarrowUtf8(slot.info.device_name);
-      if (display_assignments.contains(device)) {
-        std::error_code ec;
-        const std::filesystem::path p(std::filesystem::u8path(
-            display_assignments.at(device).get<std::string>()));
-        if (!std::filesystem::exists(p, ec) || ec) {
-          verdict = "degraded";
-        }
+      const auto hint = assignment_exists.find(device);
+      if (hint != assignment_exists.end() && !hint->second) {
+        verdict = "degraded";
       }
       display_coverage[device] = verdict;
     }
@@ -813,7 +814,7 @@ int main() {
     k6wp::DisplaysConfig seed;
     k6wp::MonitorAssignment a;
     a.path = WidenUtf8(s.missing_u8);
-    a.exists = false;  // Studio hint; engine re-checks the filesystem
+    a.exists = false;  // Studio hint; get_state reports it (L2: no per-poll stat)
     seed.assignments[L"\\\\.\\DISPLAY1"] = a;
     k6wp::SaveDisplays(s.displays, seed);
 
