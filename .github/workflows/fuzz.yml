@@ -141,3 +141,38 @@ jobs:
           name: the-ctest-stability-report
           path: docs/bench/ctest-stability.json
           if-no-files-found: ignore
+
+  ipc-stress:
+    name: the IPC stress (the p99/max budget)
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Fetch vendored binaries
+        shell: pwsh
+        run: ./tools/fetch_vendor.ps1
+
+      - name: Install Rust (the stable toolchain)
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+
+      - name: Build the release engine
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+          cmake --build build --config Release --parallel
+
+      # Task K1: the IPC stress under the churn. The budget: the p99 of
+      # get_state <= 100 ms, the max <= 500 ms, 0 "ack write failed".
+      - name: The IPC stress (10 minutes)
+        shell: pwsh
+        run: ./tools/stress_ipc.ps1 -EngineExe build/Release/engine.exe -Minutes 10 -Threads 2 -Requests 300
+
+      - name: The stress report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: the-ipc-stress-report
+          path: docs/bench/ipc-stress.json
+          if-no-files-found: ignore

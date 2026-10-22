@@ -1,0 +1,19 @@
+﻿{
+    "tool":  "stress_ipc",
+    "task":  "K1",
+    "date":  "2026-10-22T14:03:35+07:00",
+    "label":  "live-proven (one machine)",
+    "method":  "the Rust client (k6wp-ipc) hammers get_state while the engine changes the video and reassigns a display; the latency is measured per request",
+    "engine":  "C:\\Users\\axioo\\Desktop\\k6wp\\build\\msvc-dev\\engine.exe",
+    "engine_pid":  23808,
+    "threads":  4,
+    "requests_per_thread":  200,
+    "churn_video":  "C:\\Users\\axioo\\Desktop\\k6wp\\tests\\corpus\\meddpb_1080p.mp4",
+    "wall_seconds":  4.1,
+    "p50_ms":  1,
+    "p95_ms":  2,
+    "p99_ms":  4,
+    "max_ms":  121,
+    "failures":  0,
+    "ack_write_failures":  0
+}

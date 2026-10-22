@@ -116,6 +116,7 @@ the budgets, the visual-parity gate.
 | I5 | `STATE.md` (this file) - the one page every session reads first |
 | H1 | the G1 verdict is an **owner-directed trade-off**; the held-back RAM measured (**n = 5**, the medians + the bands: +13.23 / +35.74 / +15.46 MB on the three 1080p H.264 cases, -158.59 MB saved on the 4K case); the threshold evaluated by the savings it can obtain -> the data does **not** support a change, so it stays at 64 MB |
 | J2 | the two flakes rooted: the still''s mtime collision **fixed** (the test sets the timestamp explicitly), the lint for the production pipe/mutex names (**0 violations**), and the gate: **10 consecutive full ctest runs with the live engine, 0 failures** |
+| K1 | the IPC defect **rooted and fixed**: the cause was a system-wide Toolhelp thread snapshot (75 ms per `get_state`, the p99 84 ms); it is cached now (**the p50 1 ms, the p99 3-4 ms, the max ~130 ms**) and the instrument that proved it (`K6WP_IPC_TRACE=1`) stays in the tree. **The defect is pre-existing** (the `baseline-pre-refactor` build has the same 78 ms p50) - not a refactor regression |
 
 ### Phase 3 - the engine in Rust - **not started** (3.7 after J4's engine part)
 ### E4 - the lean ffmpeg/libmpv builds - **optional**, deferred (no build toolchain here)
@@ -146,7 +147,8 @@ the budgets, the visual-parity gate.
 | `ffprobe.exe` may not be removed before J6 passes | - | **open** (J6) |
 | the public release | held | the owner's Slint licence decision (F3) |
 | the 10 consecutive green ctest runs with the live engine | J2 | **done** (10/10, 0 failures, 50.7-59.1 s per run) |
-| the engine''s IPC ack latency must be bounded (the `get_state` handler must not block on the main loop''s locks) | J2 (the open finding) | **open** - a late ack makes the Studio show "Disconnected" |
+| the IPC ack latency must be bounded | K1 | **done** - the cause was the system-wide Toolhelp thread snapshot (75 ms per `get_state`); it is cached now: the p99 **3 ms**, the max **152 ms** under a 10-minute stress, 0 "ack write failed" |
+| the IPC server must serve the clients **concurrently** (one slow ack may never delay another client) | K1 | **open** - the cause fix removed the symptom (0 lost requests), the structural change (the per-connection workers) was reverted because it destabilised the pipe-instance accounting; it goes into the Rust engine (Phase 3) |
 
 ---
 

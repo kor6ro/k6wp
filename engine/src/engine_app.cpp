@@ -52,6 +52,30 @@ unsigned long long CurrentThreadCount() {
   return n;
 }
 
+// The thread count for the get_state, CACHED (task K1).
+//
+// Counting the threads means a SYSTEM-WIDE Toolhelp snapshot: it walks
+// every thread of every process in the machine, and it holds a kernel-wide
+// lock while it does it. MEASURED on this host: 75 ms per call, and the
+// get_state is polled by the Studio, so the snapshot was repeated on every
+// poll - and the IPC thread is serial, so it delayed EVERY other client
+// too (the Studio then showed "Disconnected" and the apply flow failed).
+//
+// The field is a diagnostic, so a second of staleness is invisible: the
+// snapshot now happens at most once per second.
+unsigned long long CurrentThreadCountCached() {
+  static std::mutex mutex;
+  static std::chrono::steady_clock::time_point next_refresh{};
+  static unsigned long long cached = 0;
+  std::lock_guard<std::mutex> lock(mutex);
+  const auto now = std::chrono::steady_clock::now();
+  if (now >= next_refresh) {
+    cached = CurrentThreadCount();
+    next_refresh = now + std::chrono::seconds(1);
+  }
+  return cached;
+}
+
 unsigned long long CurrentHandleCount() {
   DWORD n = 0;
   if (!GetProcessHandleCount(GetCurrentProcess(), &n)) return 0;
@@ -2308,7 +2332,7 @@ std::string EngineApp::BuildStateJson() const {
       {"live", multi_monitor_.slot_count() > 0},
       // Step 5, additive only: live monitor target (-1 = all screens).
       {"monitor", multi_monitor_.active_monitor()},
-      {"thread_count", CurrentThreadCount()},
+      {"thread_count", CurrentThreadCountCached()},
       {"handle_count", CurrentHandleCount()},
       {"hwdec_active", renderer_snapshot ? renderer_snapshot->IsHwdecActive() : false},
       // P3L.3, additive only: resolved d3d11-adapter pin ("" = unpinned)
