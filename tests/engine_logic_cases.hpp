@@ -594,6 +594,29 @@ inline std::vector<EngineLogicCase> EngineLogicCases() {
 
 // The evaluator: it calls the PRODUCTION functions. The output is the frozen
 // behaviour.
+//
+// THE PROVENANCE of every module (where its behaviour comes from):
+//   "baseline" - the behaviour existed in the `baseline-pre-refactor` build
+//   and the differential test (tools/g5_diff_baseline.ps1) proves it is
+//   IDENTICAL there: the same inputs, the same outputs.
+//   "task-1.1" - the behaviour was introduced by task 1.1 (the unload after
+//   a long pause), so the baseline has no counterpart to compare against.
+// The fields that are not in the baseline are named per module.
+inline const std::vector<std::pair<std::string, std::string>>&
+EngineLogicProvenance() {
+  static const std::vector<std::pair<std::string, std::string>> kProvenance = {
+      {"desktop_placement", "baseline"},
+      {"workerw_host", "C7 (post-baseline: the rule was inline in desktop_inject.cpp)"},
+      {"retry_schedule", "baseline"},
+      {"crash_restart_guard", "baseline"},
+      {"topology_diff", "baseline"},
+      {"reconcile_policy", "baseline"},
+      {"pin_verify_schedule", "baseline"},
+      {"pause_controller", "baseline (except hides_wallpaper: task-1.1)"},
+      {"unload_state", "task-1.1"},
+  };
+  return kProvenance;
+}
 inline json EvaluateEngineLogicCase(const EngineLogicCase& c) {
   using namespace k6wp;
   json out = json::object();

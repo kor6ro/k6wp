@@ -2135,5 +2135,16 @@
     }
   ],
   "note": "The G5 golden fixtures for the engine's PURE logic (task G5). The C++ side writes them and checks them; the Rust side replays them. A change in any of these decisions is a behaviour change on both sides.",
+  "provenance": {
+    "crash_restart_guard": "baseline",
+    "desktop_placement": "baseline",
+    "pause_controller": "baseline (except hides_wallpaper: task-1.1)",
+    "pin_verify_schedule": "baseline",
+    "reconcile_policy": "baseline",
+    "retry_schedule": "baseline",
+    "topology_diff": "baseline",
+    "unload_state": "task-1.1",
+    "workerw_host": "baseline"
+  },
   "version": 1
 }

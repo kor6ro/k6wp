@@ -1,0 +1,20 @@
+﻿{
+    "tag":  "baseline-pre-refactor",
+    "baseline_commit":  "9923cc0bb684fa945e9744cc4092fc96671f152f",
+    "compared_values":  213,
+    "skipped_cases":  24,
+    "excluded_modules":  {
+                             "workerw_host":  "task C7: the WorkerW host rule was inline in the baseline, not a pure function",
+                             "unload_state":  "the task 1.1 unload state machine: the baseline has no counterpart"
+                         },
+    "excluded_fields":  {
+                            "pause_controller":  [
+                                                     "hides_wallpaper"
+                                                 ]
+                        },
+    "difference_count":  0,
+    "differences":  [
+
+                    ],
+    "verdict":  "IDENTICAL"
+}

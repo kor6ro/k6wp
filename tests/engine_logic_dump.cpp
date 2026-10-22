@@ -46,6 +46,14 @@ k6wp_test::json BuildDocument() {
     arr.push_back(std::move(entry));
   }
   doc["cases"] = std::move(arr);
+  // The provenance: where every module's behaviour comes from. A "baseline"
+  // module is proven identical to the `baseline-pre-refactor` build by the
+  // differential test (tools/g5_diff_baseline.ps1).
+  k6wp_test::json provenance = k6wp_test::json::object();
+  for (const auto& entry : k6wp_test::EngineLogicProvenance()) {
+    provenance[entry.first] = entry.second;
+  }
+  doc["provenance"] = std::move(provenance);
   return doc;
 }
 
