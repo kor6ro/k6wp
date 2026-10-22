@@ -5,6 +5,58 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+The v1.10 hardening work (the IPC follow-ups and the poll-path audit). The
+public release is still **held** (the Slint licence decision, F3).
+
+### Fixed
+
+- **The Rust IPC client waits for a free pipe instance instead of failing.**
+  The engine serves one client at a time, so a second client gets
+  `ERROR_PIPE_BUSY` (231) until the first one disconnects. The client now
+  blocks on `WaitNamedPipe` with a bounded timeout (no 50 ms polling) and,
+  when the deadline passes, fails with a message that says why - "the pipe
+  ... has no free instance after 5.0 s (the Win32 error 121): every instance
+  is in use" - instead of a bare Win32 code. The over-limit case is covered
+  by a test that proves it does not hang.
+- **The Rust IPC client no longer loses an answer that arrived
+  synchronously.** The overlapped read asked for no byte count, so a
+  `ReadFile` that completed synchronously (the answer was already in the
+  pipe buffer - the common case, because the engine answers fast) reported
+  **0 bytes**: the client saw an empty reply, failed to parse it and
+  counted a phantom failure. The count is now requested, and a short write
+  is an error instead of a silent truncation. This was the trigger of the
+  lost runs in the L2 latency gate.
+- **The reconnect releases the old pipe handle first.** The engine serves
+  one client at a time, so a still-open old handle kept the only instance
+  busy and the reconnect waited for the whole timeout (5 s) before failing.
+  `IpcClient::reconnect` now consumes the client, so the handle is closed
+  before the new connect starts.
+
+### Changed
+
+- The engine's `get_state` does **no filesystem I/O** any more: the
+  "degraded" verdict for a per-monitor assignment reads the existence hint
+  recorded when the assignment was written (Studio) or applied (engine)
+  instead of stat-ing the path on every poll. The stat was 57 us on a local
+  volume but **21 seconds** on an unreachable network share, on the IPC
+  thread - where the Studio's request timeout turns it into "Disconnected".
+  No consumer read the field.
+- The IPC latency trace now logs its summary only when the outermost scope
+  exits, so a trace-on maximum is meaningful (before, the log flush landed
+  inside the measured scope and made the maximum 9-15 ms of fake cost).
+
+### Known limitations
+
+- The IPC pipe serves one client at a time; a client that gives up before
+  its timeout loses that request. The pre-refactor baseline lost **3 of
+  1200 requests (0.25 %)** with 4 clients. The client waits properly now,
+  but a request that was in flight when the pipe broke is still lost: the
+  protocol has no request id and no replay. The per-worker connection model
+  that removes the wait is specified for Phase 3
+  (`docs/refactor/phase3-ipc-connection-model.md`).
+
 ## [0.0.1-alpha.3] - 2026-10-20
 
 Third alpha pre-release. The elevated lock-screen mechanism is replaced by a

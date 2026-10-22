@@ -233,9 +233,22 @@ runs (`docs/bench/l2/gate-{1..5}.json`, same harness, 4000 requests):
 then tried to reconnect **while still holding the old pipe handle**, the
 single-instance server was still serving that old connection, and the new
 connect timed out after 5 s (`ERROR_PIPE_BUSY`; the client's error branch
-reconnects without closing the old client - this is **L4's** bounded-retry
-task). The engine stayed alive. The 3 clean runs have p99 0 and max 34-62 ms;
-the client saw the spikes as single samples.
+reconnects without closing the old client). The engine stayed alive. The 3
+clean runs have p99 0 and max 34-62 ms; the client saw the spikes as single
+samples.
+
+**L4 found the trigger (and it was the client, not the engine).** The
+"immediate request error" was a **phantom** one: the Rust client's read
+returned **0 bytes** when `ReadFile` completed **synchronously** (the answer
+was already in the pipe buffer) - the byte count was never requested, so the
+client saw an empty reply and reported a failure. The reconnect then hit the
+deadlock above. Both are client defects, fixed in
+`docs/refactor/phase2-l4-ipc-client-retry.md`; with the fixed client the
+**same** harness, engine and parameters give **5/5 clean runs, 0 failures
+over 20,000 requests, p99 0-1 ms, max 3-15 ms**
+(`docs/bench/l4/gate-{1..5}.json`). The engine-side conclusion of this
+document - no field over 1 ms - is unaffected (the trace measures the
+engine).
 
 **One clean run with per-sample CSV** (`-SamplesOut`) put the maximum
 (**31 ms**) at **offset ~1.0-1.2 s**, not in the first requests (the first
@@ -252,6 +265,9 @@ not a hard 20 ms guarantee**: under a live session the tail is OS scheduling,
 and the stable metric is **p99 = 0-1 ms**. `budgets.md` is amended to say so
 and to scope the 20 ms row to L1's measurement conditions. Hiding this would
 be exactly the kind of clean-looking number this refactor must not ship.
+(The later, cleaner tail - max 3-15 ms over 20,000 requests - comes from the
+fixed client; the 34-62 ms maxima above were measured with the client that
+could report phantom failures.)
 
 ---
 
@@ -261,15 +277,19 @@ be exactly the kind of clean-looking number this refactor must not ship.
 | --- | --- |
 | per-field trace, 3 runs x 4000 | `docs/bench/l2/fields-{1,2,3}.json` |
 | trace-off sanity runs | `docs/bench/l2/gate-{1..5}.json` |
+| the same runs with the fixed client | `docs/bench/l4/gate-{1..5}.json` (L4) |
 | the fix | `engine/src/engine_app.cpp` (`BuildStateJson`, 2245-2290) |
 | the hint contract | `shared/displays_schema.hpp` (`MonitorAssignment::exists`) |
 | the simulation test | `tests/display_assignment_test.cpp` (`HandleGetState`, case (d)) |
 | the instrument | `engine/src/ipc_trace.hpp` (depth-gated summary) |
 | K1/L1 context | `docs/refactor/phase2-l1-get-state-max.md` |
+| the client defect that caused the 2 failed runs | `docs/refactor/phase2-l4-ipc-client-retry.md` |
 | the budget rows | `docs/refactor/budgets.md` (2.6) |
 | the contract note | `docs/refactor/contract-inventory.md` (§2.5) |
 
 **Labels:** per-field numbers = **test-proven** (private engine, n stated);
 the 21 s = **test-proven** (unit bench); "no filesystem call" =
 **code-quoted**; the tail/contradiction = **test-proven, recorded**; the
-Studio consumers = **code-quoted** (`ParseEngineState` + grep).
+Studio consumers = **code-quoted** (`ParseEngineState` + grep); the client
+root cause = **test-proven** (L4: the same run is 5/5 clean with the fixed
+client).

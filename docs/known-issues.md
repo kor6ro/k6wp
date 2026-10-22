@@ -70,3 +70,18 @@ manual checklist in docs/manual-test.md.
    event). The watchdog cannot detect a hang that looks like idleness: the
    paused engine waits INFINITE on purpose and is explicitly NOT treated
    as a hang.
+9. **The IPC pipe serves one client at a time, so a client that waits
+   longer than its timeout loses its request.** The engine creates ONE pipe
+   instance and serves it until that client disconnects; a second client
+   waits for the instance (`ERROR_PIPE_BUSY`) and, if it gives up first,
+   loses that request. The measured cost on the pre-refactor baseline was
+   **3 of 1200 requests (0.25 %)** with 4 clients (K1's table,
+   `docs/refactor/phase2-k1-ipc-latency.md`). The Rust client now waits
+   properly - it blocks on `WaitNamedPipe` with a bounded timeout and fails
+   with a clear "no free instance" error instead of hanging (L4,
+   `docs/refactor/phase2-l4-ipc-client-retry.md`). The residual is stated:
+   **a request that was in flight when the pipe broke is still lost** -
+   there is no request id and no replay in the protocol, and adding one is
+   a protocol change, not a connection fix. The connection model that
+   removes the wait altogether (one instance per worker) is specified for
+   Phase 3 in `docs/refactor/phase3-ipc-connection-model.md`.

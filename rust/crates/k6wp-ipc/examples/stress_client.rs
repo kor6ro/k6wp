@@ -174,14 +174,19 @@ fn main() {
                         let elapsed = t0.elapsed().as_millis() as u64;
                         samples.push((thread_started.elapsed().as_millis() as u64, elapsed));
                         failures.fetch_add(1, Ordering::Relaxed);
-                        // A broken pipe: reconnect for the next request.
+                        // A broken pipe: reconnect for the next request. The
+                        // reconnect releases the OLD handle first (it
+                        // consumes the client) - the engine serves one
+                        // client at a time, so a live handle keeps the pipe
+                        // instance busy and the new connect would wait for
+                        // the whole timeout for nothing (task L4).
                         let options = ConnectOptions {
                             timeout: Duration::from_secs(5),
                             expected_server_image: None,
                             require_current_user: true,
                             require_same_session: true,
                         };
-                        match IpcClient::connect(&pipe, options) {
+                        match client.reconnect(options) {
                             Ok(next) => client = next,
                             Err(_) => break,
                         }

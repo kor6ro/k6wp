@@ -189,6 +189,8 @@ pub struct IpcClient {
     handle: windows::Win32::Foundation::HANDLE,
     options: ConnectOptions,
     identity: ServerIdentity,
+    /// The pipe this client is connected to (needed by `reconnect`).
+    pipe_name: String,
 }
 
 impl IpcClient {
@@ -197,7 +199,21 @@ impl IpcClient {
     /// The order matters: the pipe is opened, then the server is verified,
     /// and only then can a request be sent. A failure closes the handle.
     pub fn connect(pipe_name: &str, options: ConnectOptions) -> Result<IpcClient, IpcError> {
-        let handle = open_pipe(pipe_name, options.timeout)?;
+        Self::connect_with(pipe_name, options, false)
+    }
+
+    /// The connect, with the "the pipe may be momentarily absent" switch.
+    ///
+    /// `wait_for_the_pipe` is true only for a **reconnect**: the engine
+    /// creates the next pipe instance right after the old client left, so
+    /// the name can be gone for a moment. A plain `connect` treats a
+    /// missing pipe as "the engine is not running" and fails at once.
+    fn connect_with(
+        pipe_name: &str,
+        options: ConnectOptions,
+        wait_for_the_pipe: bool,
+    ) -> Result<IpcClient, IpcError> {
+        let handle = open_pipe(pipe_name, options.timeout, wait_for_the_pipe)?;
         let client = IpcClient {
             handle,
             options,
@@ -207,6 +223,7 @@ impl IpcClient {
                 image_path: None,
                 owner_sid: None,
             },
+            pipe_name: pipe_name.to_string(),
         };
         match client.verify_server() {
             Ok(identity) => {
@@ -216,6 +233,21 @@ impl IpcClient {
             }
             Err(e) => Err(e),
         }
+    }
+
+    /// Reconnects after a transport failure.
+    ///
+    /// The old handle is **closed first**: this method consumes `self`, so
+    /// the `Drop` impl closes the pipe before the new connect starts. The
+    /// engine serves **one client at a time**, so a live old handle keeps
+    /// the only pipe instance busy and the new connect would wait for the
+    /// whole timeout (`ERROR_PIPE_BUSY`) - the 5 s stall the L2 runs hit.
+    /// Releasing the handle first is what makes the reconnect possible at
+    /// all (task L4).
+    pub fn reconnect(self, options: ConnectOptions) -> Result<IpcClient, IpcError> {
+        let pipe_name = self.pipe_name.clone();
+        drop(self); // the Drop impl closes the handle
+        Self::connect_with(&pipe_name, options, true)
     }
 
     /// Connects to the engine of THIS session.
@@ -262,9 +294,9 @@ impl IpcClient {
 
     /// Closes the pipe.
     pub fn close(self) {
-        unsafe {
-            let _ = windows::Win32::Foundation::CloseHandle(self.handle);
-        }
+        // The `Drop` impl closes the handle: closing it here as well would
+        // close the same handle twice.
+        drop(self);
     }
 
     /// Verifies the server (see the module docs for the list).
@@ -515,19 +547,32 @@ fn sid_to_string(buffer: &[u8]) -> Option<String> {
 }
 
 /// Opens the pipe (the connect itself is bounded by the timeout).
+///
+/// A pipe whose instances are ALL busy (the engine serves one client at a
+/// time) is not a hard error yet: the client waits for an instance with
+/// `WaitNamedPipe`, bounded by the deadline. When the deadline passes, the
+/// error says exactly that ("no free instance") instead of a bare Win32
+/// code - and the client never hangs (task L4).
+///
+/// `wait_for_the_pipe` is for the **reconnect** path: the engine creates
+/// the next pipe instance right after the old client left, so the NAME can
+/// be momentarily absent (the Win32 error 2). A plain `connect` does not
+/// wait for that - a missing pipe means the engine is not running, and the
+/// caller wants to know that now.
 fn open_pipe(
     pipe_name: &str,
     timeout: Duration,
+    wait_for_the_pipe: bool,
 ) -> Result<windows::Win32::Foundation::HANDLE, IpcError> {
     use windows::core::PCWSTR;
     use windows::Win32::Storage::FileSystem::{
         CreateFileW, FILE_FLAG_OVERLAPPED, FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_SHARE_MODE,
         OPEN_EXISTING,
     };
+    use windows::Win32::System::Pipes::WaitNamedPipeW;
 
     let wide: Vec<u16> = pipe_name.encode_utf16().chain(std::iter::once(0)).collect();
     let deadline = std::time::Instant::now() + timeout;
-    let mut last_error;
     loop {
         // SAFETY: the name is a valid null-terminated wide string and the
         // handle is checked below.
@@ -568,19 +613,54 @@ fn open_pipe(
                 // the HRESULT itself with 231 (ERROR_PIPE_BUSY) would never
                 // match, and the client would fail instead of waiting for a
                 // free pipe instance.
-                last_error = (e.code().0 as u32) & 0xFFFF;
+                let last_error = (e.code().0 as u32) & 0xFFFF;
                 // ERROR_PIPE_BUSY (231): every instance is in use (the engine
-                // is serving another client) - retry until the deadline.
-                // ERROR_SEM_TIMEOUT (121): the pipe exists but no instance
-                // is free yet.
-                let retryable = last_error == 231 || last_error == 121;
-                if retryable && std::time::Instant::now() < deadline {
-                    std::thread::sleep(Duration::from_millis(50));
-                    continue;
+                // is serving another client). ERROR_SEM_TIMEOUT (121): the
+                // pipe exists but no instance is free yet.
+                // ERROR_FILE_NOT_FOUND (2): the pipe is not there at all.
+                let busy = last_error == 231 || last_error == 121;
+                let missing = last_error == 2;
+                if !busy && !(missing && wait_for_the_pipe) {
+                    return Err(IpcError::Connect(format!(
+                        "the pipe {pipe_name} could not be opened (the Win32 error {last_error})"
+                    )));
                 }
-                return Err(IpcError::Connect(format!(
-                    "the pipe {pipe_name} could not be opened (the Win32 error {last_error})"
-                )));
+                let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+                if remaining.is_zero() {
+                    return Err(IpcError::Connect(format!(
+                        "the pipe {pipe_name} could not be opened within {:.1} s (the Win32 error {last_error}): {}",
+                        timeout.as_secs_f64(),
+                        if missing {
+                            "the engine is not listening"
+                        } else {
+                            "every instance is in use"
+                        }
+                    )));
+                }
+                if busy {
+                    // WaitNamedPipe waits for an instance to become free
+                    // instead of polling every 50 ms. The wait is bounded
+                    // by the deadline, so a busy pipe can never hang the
+                    // client. The timeout is clamped to at least 1 ms: a 0
+                    // would mean "wait forever" to the Win32 API.
+                    let wait_ms = remaining.as_millis().clamp(1, u32::MAX as u128) as u32;
+                    // SAFETY: the name is a valid null-terminated wide string.
+                    let waited = unsafe { WaitNamedPipeW(PCWSTR(wide.as_ptr()), wait_ms) };
+                    if !waited.as_bool() {
+                        // SAFETY: GetLastError has no preconditions.
+                        let code = unsafe { windows::Win32::Foundation::GetLastError() };
+                        return Err(IpcError::Connect(format!(
+                            "the pipe {pipe_name} has no free instance after {:.1} s (the Win32 error {}): every instance is in use",
+                            timeout.as_secs_f64(),
+                            code.0
+                        )));
+                    }
+                    // An instance is free now: open it (the loop retries).
+                } else {
+                    // The pipe is momentarily absent: the engine is between
+                    // two instances. Wait a little and try again.
+                    std::thread::sleep(Duration::from_millis(50).min(remaining));
+                }
             }
         }
     }
@@ -605,19 +685,25 @@ fn overlapped_write(
 
     let mut written = 0u32;
     // SAFETY: the buffer is valid for the duration of the call and the
-    // OVERLAPPED (with its event) outlives it.
+    // OVERLAPPED (with its event) outlives it. The count is requested so a
+    // short write can be caught instead of silently truncating the message.
     let ok = unsafe {
         windows::Win32::Storage::FileSystem::WriteFile(
             handle,
             Some(bytes),
-            None,
+            Some(&mut written),
             Some(&mut overlapped),
         )
     };
-    let _ = &mut written;
     if ok.is_ok() {
         unsafe {
             let _ = CloseHandle(event);
+        }
+        if written as usize != bytes.len() {
+            return Err(IpcError::Transport(format!(
+                "the write was short: {written} of {} bytes",
+                bytes.len()
+            )));
         }
         return Ok(());
     }
@@ -669,14 +755,19 @@ fn overlapped_read(
         ..Default::default()
     };
 
-    let read = 0u32;
+    let mut transferred = 0u32;
     // SAFETY: the buffer is valid and the OVERLAPPED (with its event)
-    // outlives the call.
+    // outlives the call. The byte count MUST be requested: when the read
+    // completes SYNCHRONOUSLY (the answer is already in the pipe buffer),
+    // `ReadFile` returns TRUE and the count arrives ONLY through
+    // `lpNumberOfBytesRead`. Without it the client saw an EMPTY answer
+    // ("the answer is not JSON: EOF") and reported a phantom failure -
+    // the bug behind the L2 gate's 2/5 lost runs.
     let ok = unsafe {
         windows::Win32::Storage::FileSystem::ReadFile(
             handle,
             Some(&mut buffer[..]),
-            None,
+            Some(&mut transferred),
             Some(&mut overlapped),
         )
     };
@@ -684,13 +775,12 @@ fn overlapped_read(
         unsafe {
             let _ = CloseHandle(event);
         }
-        return Ok(read as usize);
+        return Ok(transferred as usize);
     }
     let timeout_ms = timeout.as_millis().min(u32::MAX as u128) as u32;
     // SAFETY: the OVERLAPPED and its event are alive until the call returns.
     let waited =
         unsafe { windows::Win32::System::Threading::WaitForSingleObject(event, timeout_ms) };
-    let mut transferred = 0u32;
     // SAFETY: the OVERLAPPED and its event are alive until the call returns.
     let done = unsafe {
         GetOverlappedResult(
