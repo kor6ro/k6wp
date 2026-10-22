@@ -13,6 +13,16 @@ target_link_libraries(probe_json_test PRIVATE k6wp_shared)
 target_include_directories(probe_json_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 add_test(NAME probe_json_test COMMAND probe_json_test)
 
+# dpb_frame_size_test (H2): the frame size of the decoder's pool follows the
+# bit depth and the chroma format - the old constant (1.5 bytes per pixel)
+# was only the 8-bit 4:2:0 case and UNDER-counted a 10-bit file by half.
+# The Rust side has the same table (k6wp-core's SpsInfo::frame_bytes); the
+# two must never disagree.
+add_executable(dpb_frame_size_test tests/dpb_frame_size_test.cpp)
+target_link_libraries(dpb_frame_size_test PRIVATE k6wp_shared)
+target_include_directories(dpb_frame_size_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+add_test(NAME dpb_frame_size_test COMMAND dpb_frame_size_test)
+
 # compress_argv_contract_test (MED-15): golden Studio<->compressor argv
 # contract — builds argv from shared/compress_args.hpp (the same builder
 # StartNext uses) and replays it against the real compressor.exe --dry-run

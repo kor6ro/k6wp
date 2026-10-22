@@ -96,9 +96,58 @@ $okSlide = Invoke-Ffmpeg -Label ("slideshow (" + $Size + " 3x" + $SlideEach + "s
 )
 if (-not $okSlide) { $ok = $false }
 
+# 4. The bit-depth and codec cases (task H3). They are SHORT (10 s) and
+#    generated with lavfi, so they cost seconds. The pairs share the
+#    encoder settings, so only the bit depth differs between the arms of an
+#    A/B - that is what makes the extra-RAM estimate measurable.
+#    - h264_8bit / hi10: the H.264 8-bit and 10-bit pair (High 10).
+#    - hevc8 / hevc10: the HEVC 8-bit and 10-bit pair (Main 10). They use
+#      the NVENC encoder (the box has an RTX 2050); a box without it can
+#      use libx265, which then needs a 10-bit-capable build.
+#    - mpeg2: the UNKNOWN-codec case - the parser reads no SPS for it, so
+#      the estimate is unknown. It is an elementary stream (.m2v) on
+#      purpose: the corpus sweep asserts that every .mp4/.h264/.hevc file
+#      IS parsed by the module.
+$BitDepthSize = "1920x1080"
+$BitDepthDur = 10
+$bitDepthSource = @(
+  "-y",
+  "-f", "lavfi", "-i", ("testsrc2=size=" + $BitDepthSize + ":rate=30:duration=" + $BitDepthDur)
+)
+$h264_8bit = Join-Path $OutDir "h264_8bit_1080p.mp4"
+$okH264_8 = Invoke-Ffmpeg -Label "h264_8bit (8-bit 4:2:0)" -FfmpegArgs ($bitDepthSource + @(
+  "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "20", "-preset", "veryfast",
+  $h264_8bit
+))
+if (-not $okH264_8) { $ok = $false }
+$hi10 = Join-Path $OutDir "hi10_1080p.mp4"
+$okHi10 = Invoke-Ffmpeg -Label "hi10 (10-bit 4:2:0, High 10)" -FfmpegArgs ($bitDepthSource + @(
+  "-c:v", "libx264", "-profile:v", "high10", "-pix_fmt", "yuv420p10le", "-crf", "20", "-preset", "veryfast",
+  $hi10
+))
+if (-not $okHi10) { $ok = $false }
+$hevc8 = Join-Path $OutDir "hevc8_1080p.mp4"
+$okHevc8 = Invoke-Ffmpeg -Label "hevc8 (8-bit 4:2:0)" -FfmpegArgs ($bitDepthSource + @(
+  "-c:v", "hevc_nvenc", "-pix_fmt", "yuv420p", "-preset", "p4", "-cq", "24", "-b:v", "0",
+  $hevc8
+))
+if (-not $okHevc8) { $ok = $false }
+$hevc10 = Join-Path $OutDir "hevc10_1080p.mp4"
+$okHevc10 = Invoke-Ffmpeg -Label "hevc10 (10-bit 4:2:0, Main 10)" -FfmpegArgs ($bitDepthSource + @(
+  "-c:v", "hevc_nvenc", "-profile:v", "main10", "-pix_fmt", "p010le", "-preset", "p4", "-cq", "24", "-b:v", "0",
+  $hevc10
+))
+if (-not $okHevc10) { $ok = $false }
+$mpeg2 = Join-Path $OutDir "mpeg2_1080p.m2v"
+$okMpeg2 = Invoke-Ffmpeg -Label "mpeg2 (the unknown-codec case)" -FfmpegArgs ($bitDepthSource + @(
+  "-c:v", "mpeg2video", "-b:v", "8M", "-pix_fmt", "yuv420p", "-f", "mpeg2video",
+  $mpeg2
+))
+if (-not $okMpeg2) { $ok = $false }
+
 # Verify with ffprobe (duration + size report, non-fatal if ffprobe missing).
 if (Test-Path -LiteralPath $Ffprobe) {
-  foreach ($f in @($anime, $gaming, $slideshow)) {
+  foreach ($f in @($anime, $gaming, $slideshow, $h264_8bit, $hi10, $hevc8, $hevc10, $mpeg2)) {
     if (Test-Path -LiteralPath $f) {
       $p = Start-Process -FilePath $Ffprobe -ArgumentList @("-v", "error", "-show_entries", "format=duration,size", "-of", "default=noprint_wrappers=1", $f) -NoNewWindow -Wait -PassThru
       if ($p.ExitCode -ne 0) {

@@ -28,24 +28,38 @@ function Get-TraceFields([string]$File) {
     $vui = @()
     $hevc = @()
     $mbs = @()
+    $chroma = @()
+    $depth = @()
     foreach ($line in ($text -split "`n")) {
         if ($line -match 'max_num_ref_frames\s+\S+\s*=\s*(\d+)') { $refs += [int]$Matches[1] }
         elseif ($line -match 'max_dec_frame_buffering\s+\S+\s*=\s*(\d+)') { $vui += [int]$Matches[1] }
         elseif ($line -match 'sps_max_dec_pic_buffering_minus1(?:\[\d+\])?\s+\S+\s*=\s*(\d+)') { $hevc += [int]$Matches[1] }
         elseif ($line -match 'frame_mbs_only_flag\s+\S+\s*=\s*(\d+)') { $mbs += [int]$Matches[1] }
+        # The chroma format and the bit depth (task H2): they decide the
+        # bytes per pixel, so the DPB of a 10-bit file is TWICE the 8-bit
+        # one. Both codecs print them.
+        elseif ($line -match 'chroma_format_idc\s+\S+\s*=\s*(\d+)') { $chroma += [int]$Matches[1] }
+        elseif ($line -match 'bit_depth_luma_minus8\s+\S+\s*=\s*(\d+)') { $depth += [int]$Matches[1] }
     }
     $result = [ordered]@{
         max_num_ref_frames = if ($refs.Count -gt 0) { ($refs | Measure-Object -Maximum).Maximum } else { $null }
         max_dec_frame_buffering = if ($vui.Count -gt 0) { ($vui | Measure-Object -Maximum).Maximum } else { $null }
         sps_max_dec_pic_buffering = if ($hevc.Count -gt 0) { (($hevc | Measure-Object -Maximum).Maximum) + 1 } else { $null }
         interlaced = if ($mbs.Count -gt 0) { (($mbs | Measure-Object -Minimum).Minimum -eq 0) } else { $null }
+        chroma_format_idc = if ($chroma.Count -gt 0) { ($chroma | Measure-Object -Maximum).Maximum } else { $null }
+        bit_depth_luma = if ($depth.Count -gt 0) { (($depth | Measure-Object -Maximum).Maximum) + 8 } else { $null }
         sps_count = $refs.Count + $hevc.Count
     }
     return $result
 }
 
 $files = Get-ChildItem -LiteralPath $corpus -File |
-    Where-Object { $_.Extension -in @('.mp4', '.h264', '.mkv', '.webm') } |
+    # The containers the SPS module parses itself. A .mkv/.webm is NOT
+    # here on purpose: the module does not parse those containers (it falls
+    # back - that is the read-strategy sweep's job, tests/sps_read_strategy.rs),
+    # so a Matroska case in THIS fixture would compare the module against
+    # ffmpeg on a file the module never claimed to read.
+    Where-Object { $_.Extension -in @('.mp4', '.h264') } |
     Where-Object { $_.Length -gt 0 } |
     Sort-Object Name
 if ($files.Count -eq 0) { throw "the corpus is empty - run tools\build_corpus.ps1 first" }
@@ -61,8 +75,8 @@ foreach ($f in $files) {
         bytes = $f.Length
         expected = $truth
     }
-    Write-Host ("   refs={0} vui_dpb={1} hevc_dpb={2} interlaced={3}" -f `
-            $truth.max_num_ref_frames, $truth.max_dec_frame_buffering, $truth.sps_max_dec_pic_buffering, $truth.interlaced)
+    Write-Host ("   refs={0} vui_dpb={1} hevc_dpb={2} interlaced={3} chroma={4} depth={5}" -f `
+            $truth.max_num_ref_frames, $truth.max_dec_frame_buffering, $truth.sps_max_dec_pic_buffering, $truth.interlaced, $truth.chroma_format_idc, $truth.bit_depth_luma)
 }
 
 $report = [ordered]@{

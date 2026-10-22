@@ -1,6 +1,6 @@
 {
     "tool":  "extract_sps_truth",
-    "date":  "2026-10-22T01:15:11+07:00",
+    "date":  "2026-10-22T20:54:19+07:00",
     "label":  "the ground truth: ffmpeg trace_headers (its own bitstream parser)",
     "note":  "the corpus is gitignored; tools\\build_corpus.ps1 regenerates it. The sha256 pins the exact file the values were taken from.",
     "cases":  [
@@ -13,6 +13,8 @@
                                        "max_dec_frame_buffering":  4,
                                        "sps_max_dec_pic_buffering":  null,
                                        "interlaced":  false,
+                                       "chroma_format_idc":  1,
+                                       "bit_depth_luma":  8,
                                        "sps_count":  1
                                    }
                   },
@@ -25,6 +27,22 @@
                                        "max_dec_frame_buffering":  4,
                                        "sps_max_dec_pic_buffering":  null,
                                        "interlaced":  false,
+                                       "chroma_format_idc":  1,
+                                       "bit_depth_luma":  8,
+                                       "sps_count":  1
+                                   }
+                  },
+                  {
+                      "file":  "h264_8bit_1080p.mp4",
+                      "sha256":  "ff925f4c7268c1050c7a9ebc7833dba5bb71f5d296ddf8bf329283c47682e3f9",
+                      "bytes":  9438579,
+                      "expected":  {
+                                       "max_num_ref_frames":  4,
+                                       "max_dec_frame_buffering":  4,
+                                       "sps_max_dec_pic_buffering":  null,
+                                       "interlaced":  false,
+                                       "chroma_format_idc":  1,
+                                       "bit_depth_luma":  8,
                                        "sps_count":  1
                                    }
                   },
@@ -37,6 +55,50 @@
                                        "max_dec_frame_buffering":  null,
                                        "sps_max_dec_pic_buffering":  5,
                                        "interlaced":  null,
+                                       "chroma_format_idc":  1,
+                                       "bit_depth_luma":  8,
+                                       "sps_count":  1
+                                   }
+                  },
+                  {
+                      "file":  "hevc10_1080p.mp4",
+                      "sha256":  "031c4a7222bafc290a75d06e358b3eec33b7ff846a82c2d3c9d086e169dc1b59",
+                      "bytes":  12159127,
+                      "expected":  {
+                                       "max_num_ref_frames":  null,
+                                       "max_dec_frame_buffering":  null,
+                                       "sps_max_dec_pic_buffering":  6,
+                                       "interlaced":  null,
+                                       "chroma_format_idc":  1,
+                                       "bit_depth_luma":  10,
+                                       "sps_count":  1
+                                   }
+                  },
+                  {
+                      "file":  "hevc8_1080p.mp4",
+                      "sha256":  "4a784b4cecdcd4c9850d3923884e7b359caccb34c59f8f524997c03784d22e2e",
+                      "bytes":  12177098,
+                      "expected":  {
+                                       "max_num_ref_frames":  null,
+                                       "max_dec_frame_buffering":  null,
+                                       "sps_max_dec_pic_buffering":  6,
+                                       "interlaced":  null,
+                                       "chroma_format_idc":  1,
+                                       "bit_depth_luma":  8,
+                                       "sps_count":  1
+                                   }
+                  },
+                  {
+                      "file":  "hi10_1080p.mp4",
+                      "sha256":  "21de792c0c93302b79837a79d30ae21ec0c5a9b4a6aed5b01effd29ae3607121",
+                      "bytes":  9404151,
+                      "expected":  {
+                                       "max_num_ref_frames":  4,
+                                       "max_dec_frame_buffering":  4,
+                                       "sps_max_dec_pic_buffering":  null,
+                                       "interlaced":  false,
+                                       "chroma_format_idc":  1,
+                                       "bit_depth_luma":  10,
                                        "sps_count":  1
                                    }
                   },
@@ -49,6 +111,8 @@
                                        "max_dec_frame_buffering":  16,
                                        "sps_max_dec_pic_buffering":  null,
                                        "interlaced":  false,
+                                       "chroma_format_idc":  1,
+                                       "bit_depth_luma":  8,
                                        "sps_count":  1
                                    }
                   },
@@ -61,6 +125,8 @@
                                        "max_dec_frame_buffering":  16,
                                        "sps_max_dec_pic_buffering":  null,
                                        "interlaced":  false,
+                                       "chroma_format_idc":  1,
+                                       "bit_depth_luma":  8,
                                        "sps_count":  1
                                    }
                   },
@@ -73,6 +139,22 @@
                                        "max_dec_frame_buffering":  4,
                                        "sps_max_dec_pic_buffering":  null,
                                        "interlaced":  true,
+                                       "chroma_format_idc":  1,
+                                       "bit_depth_luma":  8,
+                                       "sps_count":  1
+                                   }
+                  },
+                  {
+                      "file":  "meddpb_1080p.mp4",
+                      "sha256":  "37ecbf89e697443ba9e96e167597459d9d8659d7fb90e02e3255eef153d5d601",
+                      "bytes":  4575274,
+                      "expected":  {
+                                       "max_num_ref_frames":  8,
+                                       "max_dec_frame_buffering":  8,
+                                       "sps_max_dec_pic_buffering":  null,
+                                       "interlaced":  false,
+                                       "chroma_format_idc":  1,
+                                       "bit_depth_luma":  8,
                                        "sps_count":  1
                                    }
                   },
@@ -85,6 +167,8 @@
                                        "max_dec_frame_buffering":  16,
                                        "sps_max_dec_pic_buffering":  null,
                                        "interlaced":  false,
+                                       "chroma_format_idc":  1,
+                                       "bit_depth_luma":  8,
                                        "sps_count":  8
                                    }
                   },
@@ -97,6 +181,8 @@
                                        "max_dec_frame_buffering":  16,
                                        "sps_max_dec_pic_buffering":  null,
                                        "interlaced":  false,
+                                       "chroma_format_idc":  1,
+                                       "bit_depth_luma":  8,
                                        "sps_count":  8
                                    }
                   },
@@ -109,6 +195,8 @@
                                        "max_dec_frame_buffering":  4,
                                        "sps_max_dec_pic_buffering":  null,
                                        "interlaced":  false,
+                                       "chroma_format_idc":  1,
+                                       "bit_depth_luma":  8,
                                        "sps_count":  1
                                    }
                   }

@@ -35,6 +35,7 @@ CMakeUserPresets.json
 
 # Benchmark corpus (k6wp-18): generated locally via tools/make_corpus.ps1, never commit
 tests/corpus/*.mp4
+tests/corpus/*.m2v
 
 # QA probe scratch dirs (task-25: ad-hoc verbose/cfg probes write here; never commit)
 *verbose-probe*/

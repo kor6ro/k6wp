@@ -47,12 +47,49 @@ struct DpbInfo {
   /// The frame size in pixels (0 = unknown).
   int width = 0;
   int height = 0;
+  /// The chroma format (0 = monochrome, 1 = 4:2:0, 2 = 4:2:2, 3 = 4:4:4).
+  /// 0 means "absent" - the profile implies 4:2:0 (task H2).
+  int chroma_format_idc = 0;
+  /// The luma bit depth (8 when the field is absent - the baseline and the
+  /// main profiles of H.264 do not carry it, task H2).
+  int bit_depth_luma = 8;
   /// The reference frames the decoder actually holds: the smallest of
   /// `max_num_ref_frames` and the VUI's / HEVC's own DPB bound.
   int effective_refs = 0;
   /// The DPB's memory in bytes (0 = unknown).
   std::uint64_t dpb_bytes = 0;
 };
+
+/// The size of ONE decoded frame in bytes (0 = unknown).
+///
+/// The same formula as the Rust side (`k6wp-core`'s `SpsInfo::frame_bytes`),
+/// so the two never disagree: the samples per pixel of the chroma format
+/// times the bytes per sample of the bit depth.
+///
+///   | chroma            | samples/pixel | 8-bit | 10-bit |
+///   | ----------------- | ------------: | ----: | -----: |
+///   | 4:0:0 (monochrome) |           1 |     1 |      2 |
+///   | 4:2:0              |         1.5 |   1.5 |      3 |
+///   | 4:2:2              |           2 |     2 |      4 |
+///   | 4:4:4              |           3 |     3 |      6 |
+inline std::uint64_t FrameBytesFor(int width, int height, int chroma_format_idc,
+                                   int bit_depth_luma) {
+  if (width <= 0 || height <= 0) return 0;
+  // The samples per pixel, in halves, so the arithmetic stays exact.
+  std::uint64_t samples_x2 = 3;  // 4:2:0 - the default
+  switch (chroma_format_idc) {
+    case 0: samples_x2 = 2; break;  // monochrome
+    case 2: samples_x2 = 4; break;  // 4:2:2
+    case 3: samples_x2 = 6; break;  // 4:4:4
+    default: samples_x2 = 3; break; // 4:2:0
+  }
+  // The bytes per sample: 1 for 8-bit, 2 for 9-16 bit (the samples live in
+  // 16-bit words).
+  const std::uint64_t bytes_per_sample = bit_depth_luma > 8 ? 2u : 1u;
+  const std::uint64_t pixels =
+      static_cast<std::uint64_t>(width) * static_cast<std::uint64_t>(height);
+  return pixels * samples_x2 / 2u * bytes_per_sample;
+}
 
 /// The DPB budget: a file whose DPB costs more than this is re-encoded
 /// (with the DPB pinned), so the decoder's pool stays bounded.

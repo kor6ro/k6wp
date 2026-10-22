@@ -80,6 +80,35 @@ fn the_sps_parser_agrees_with_ffmpeg() {
                         ));
                     }
                 }
+                // The chroma format and the bit depth (task H2): they decide
+                // the bytes per pixel, so a 10-bit file's pool is twice the
+                // 8-bit one. ffmpeg's trace is the truth for both.
+                if let Some(expected_chroma) = expected["chroma_format_idc"].as_u64() {
+                    let got = report
+                        .sps
+                        .iter()
+                        .filter_map(|s| s.chroma_format_idc)
+                        .max()
+                        .unwrap_or(0) as u64;
+                    if got != expected_chroma {
+                        failures.push(format!(
+                            "{name}: the chroma format is {got}, expected {expected_chroma}"
+                        ));
+                    }
+                }
+                if let Some(expected_depth) = expected["bit_depth_luma"].as_u64() {
+                    let got = report
+                        .sps
+                        .iter()
+                        .filter_map(|s| s.bit_depth_luma)
+                        .max()
+                        .unwrap_or(0) as u64;
+                    if got != expected_depth {
+                        failures.push(format!(
+                            "{name}: the bit depth is {got}, expected {expected_depth}"
+                        ));
+                    }
+                }
                 checked += 1;
             }
             Err(e) => failures.push(format!("{name}: the parser failed: {e}")),

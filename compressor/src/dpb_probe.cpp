@@ -123,6 +123,20 @@ DpbInfo ProbeDpb(const std::filesystem::path& in) {
       frame_mbs_only = value;
       continue;
     }
+    // The chroma format and the bit depth (task H2): the trace prints them
+    // for both codecs. They decide the bytes per pixel, so the DPB of a
+    // 10-bit file is TWICE the 8-bit one - the same formula as the Rust
+    // side, so the two never disagree.
+    value = ParseFieldValue(line, "chroma_format_idc");
+    if (value >= 0) {
+      info.chroma_format_idc = value;
+      continue;
+    }
+    value = ParseFieldValue(line, "bit_depth_luma_minus8");
+    if (value >= 0) {
+      info.bit_depth_luma = value + 8;
+      continue;
+    }
   }
 
   if (width_in_mbs >= 0) {
@@ -148,10 +162,15 @@ DpbInfo ProbeDpb(const std::filesystem::path& in) {
   info.effective_refs = refs;
 
   if (refs > 0 && info.width > 0 && info.height > 0) {
-    // YUV 4:2:0 -> 1.5 bytes per pixel.
-    info.dpb_bytes = static_cast<std::uint64_t>(refs) *
-                      static_cast<std::uint64_t>(info.width) *
-                      static_cast<std::uint64_t>(info.height) * 3ull / 2ull;
+    // The frame size follows the chroma format and the bit depth (task
+    // H2): the samples per pixel times the bytes per sample. The old
+    // constant (1.5 bytes per pixel) was only the 8-bit 4:2:0 case, and it
+    // UNDER-counted a 10-bit file by half - which could have taken the
+    // copy path with a deep pool.
+    const std::uint64_t frame =
+        FrameBytesFor(info.width, info.height, info.chroma_format_idc,
+                      info.bit_depth_luma);
+    info.dpb_bytes = static_cast<std::uint64_t>(refs) * frame;
   }
   info.ok = info.effective_refs > 0 && info.dpb_bytes > 0;
   return info;

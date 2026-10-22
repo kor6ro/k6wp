@@ -26,15 +26,24 @@ fn main() {
                     .sps
                     .iter()
                     .map(|s| {
+                        // Task H2: the pixel format and the frame size the
+                        // import dialog's RAM estimate uses.
+                        let format = s
+                            .pixel_format()
+                            .map(|(chroma, depth)| format!("{chroma}/{depth}bit"))
+                            .unwrap_or_else(|| "unknown".to_string());
                         format!(
-                            "{:?} refs={:?} vui_dpb={:?} hevc_dpb={:?} mbs_only={:?} {}x{}",
+                            "{:?} refs={:?} vui_dpb={:?} hevc_dpb={:?} mbs_only={:?} {}x{} {} frame={:?} dpb={:?}B",
                             s.codec,
                             s.max_num_ref_frames,
                             s.max_dec_frame_buffering,
                             s.sps_max_dec_pic_buffering,
                             s.frame_mbs_only_flag,
                             s.width.unwrap_or(0),
-                            s.height.unwrap_or(0)
+                            s.height.unwrap_or(0),
+                            format,
+                            s.frame_bytes(),
+                            s.dpb_bytes()
                         )
                     })
                     .collect();

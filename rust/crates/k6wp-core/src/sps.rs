@@ -171,6 +171,16 @@ pub struct SpsInfo {
     /// The frame size in pixels, when the SPS carries it.
     pub width: Option<u32>,
     pub height: Option<u32>,
+    /// The chroma format the SPS declares: 0 = monochrome, 1 = 4:2:0,
+    /// 2 = 4:2:2, 3 = 4:4:4 (task H2).
+    ///
+    /// `None` when the codec's profile does not carry the field (the
+    /// baseline/main profiles of H.264 imply 4:2:0).
+    pub chroma_format_idc: Option<u32>,
+    /// The luma bit depth: `bit_depth_luma_minus8 + 8` (task H2).
+    ///
+    /// `None` when the profile does not carry the field (8-bit implied).
+    pub bit_depth_luma: Option<u32>,
 }
 
 impl SpsInfo {
@@ -220,21 +230,18 @@ impl SpsInfo {
         }
     }
 
-    /// The DPB's memory in bytes: `effective_refs x width x height x 1.5`
-    /// (YUV 4:2:0). `None` when the frame size or the reference count is
-    /// unknown - never a guess.
+    /// The DPB's memory in bytes: `effective_refs x frame_bytes`.
+    ///
+    /// `None` when the frame size or the reference count is unknown - never
+    /// a guess. The frame size follows the bit depth and the chroma format
+    /// (task H2), so a 10-bit file is counted at its real cost.
     pub fn dpb_bytes(&self) -> Option<u64> {
         let refs = self.effective_refs()?;
-        let width = self.width?;
-        let height = self.height?;
-        if refs == 0 || width == 0 || height == 0 {
+        let frame = self.frame_bytes()?;
+        if refs == 0 {
             return None;
         }
-        let pixels = u64::from(width)
-            .checked_mul(u64::from(height))?
-            .checked_mul(u64::from(refs))?;
-        // 1.5 bytes per pixel, without a float: pixels * 3 / 2.
-        pixels.checked_mul(3)?.checked_div(2)
+        u64::from(refs).checked_mul(frame)
     }
 
     /// The size of ONE decoded frame in bytes.
@@ -242,18 +249,72 @@ impl SpsInfo {
     /// The frame is the **coded** size (the crop is a display concern and is
     /// not what the decoder allocates) times the bytes per pixel.
     ///
-    /// The bytes per pixel: 1.5 for the 8-bit 4:2:0 case (the luma plane
-    /// plus half the chroma). H2 generalises this to the bit depth and the
-    /// chroma format the SPS carries.
+    /// The bytes per pixel (task H2) are the **samples per pixel** of the
+    /// chroma format times the **bytes per sample** of the bit depth:
+    ///
+    /// | chroma | samples/pixel | 8-bit | 10-bit |
+    /// | --- | ---: | ---: | ---: |
+    /// | 4:0:0 (monochrome) | 1 | 1 | 2 |
+    /// | 4:2:0 | 1.5 | 1.5 | 3 |
+    /// | 4:2:2 | 2 | 2 | 4 |
+    /// | 4:4:4 | 3 | 3 | 6 |
+    ///
+    /// A 10-bit 4:2:0 frame is therefore **twice** the 8-bit one - the
+    /// decoder holds 16-bit samples - and a 4:4:4 frame twice that again.
+    /// The old constant (1.5 bytes per pixel) was only the 8-bit 4:2:0 case.
+    ///
+    /// `None` when the frame size is unknown - never a guess.
     pub fn frame_bytes(&self) -> Option<u64> {
+        // The policy for a codec the parser does not read (MPEG-2, VP9,
+        // AV1): UNKNOWN, never a guess. The width and the height alone do
+        // not tell the bytes per pixel - the bit depth and the chroma
+        // format do, and those are unknown. The import dialog shows
+        // "unknown" instead of an estimate (task H3).
+        match self.codec {
+            Some(Codec::H264) | Some(Codec::Hevc) => {}
+            _ => return None,
+        }
         let width = self.width?;
         let height = self.height?;
         if width == 0 || height == 0 {
             return None;
         }
         let pixels = u64::from(width).checked_mul(u64::from(height))?;
-        // 1.5 bytes per pixel, without a float: pixels * 3 / 2.
-        pixels.checked_mul(3)?.checked_div(2)
+        // The samples per pixel, in halves, so the arithmetic stays exact:
+        // 2 = 4:0:0, 3 = 4:2:0, 4 = 4:2:2, 6 = 4:4:4.
+        let samples_x2: u64 = match self.chroma_format_idc {
+            Some(0) => 2,
+            Some(2) => 4,
+            Some(3) => 6,
+            _ => 3, // 4:2:0 - and the default when the profile does not say
+        };
+        // The bytes per sample: 1 for 8-bit, 2 for 9-16 bit (the samples are
+        // stored in 16-bit words).
+        let bytes_per_sample: u64 = match self.bit_depth_luma {
+            Some(depth) if depth > 8 => 2,
+            _ => 1,
+        };
+        // pixels * samples_x2 / 2 * bytes_per_sample, without a float.
+        pixels
+            .checked_mul(samples_x2)?
+            .checked_mul(bytes_per_sample)?
+            .checked_div(2)
+    }
+
+    /// The chroma format and the bit depth, as the import dialog shows them
+    /// (task H2).
+    ///
+    /// `None` when the SPS does not carry them (an 8-bit 4:2:0 file is then
+    /// implied by the profile).
+    pub fn pixel_format(&self) -> Option<(&'static str, u32)> {
+        let depth = self.bit_depth_luma?;
+        let chroma = match self.chroma_format_idc {
+            Some(0) => "mono",
+            Some(2) => "4:2:2",
+            Some(3) => "4:4:4",
+            _ => "4:2:0",
+        };
+        Some((chroma, depth))
     }
 
     /// The RAM a DPB-pinned re-encode would actually RECOVER (task H1).
@@ -475,6 +536,11 @@ fn parse_h264_sps(nal: &[u8]) -> Option<SpsInfo> {
 
     let mut info = SpsInfo {
         codec: Some(Codec::H264),
+        // The baseline and the main profiles do not carry the chroma or the
+        // bit depth: the spec says they are 8-bit 4:2:0, so the implied
+        // values are recorded (the import dialog shows them).
+        chroma_format_idc: Some(1),
+        bit_depth_luma: Some(8),
         ..Default::default()
     };
 
@@ -485,8 +551,13 @@ fn parse_h264_sps(nal: &[u8]) -> Option<SpsInfo> {
         if chroma_format_idc == 3 {
             bits.bit()?; // separate_colour_plane_flag
         }
-        bits.ue()?; // bit_depth_luma_minus8
-        bits.ue()?; // bit_depth_chroma_minus8
+        let bit_depth_luma = bits.ue()?; // bit_depth_luma_minus8
+        let bit_depth_chroma = bits.ue()?; // bit_depth_chroma_minus8
+                                           // The decoder holds the LUMA samples; a deeper chroma is the rare
+                                           // case, so the luma depth is the one that decides the frame size.
+        info.chroma_format_idc = Some(chroma_format_idc);
+        info.bit_depth_luma = Some(bit_depth_luma + 8);
+        let _ = bit_depth_chroma;
         bits.bit()?; // qpprime_y_zero_transform_bypass_flag
         let scaling_matrix_present = bits.bit()?;
         if scaling_matrix_present == 1 {
@@ -686,16 +757,19 @@ fn parse_hevc_sps(nal: &[u8]) -> Option<SpsInfo> {
         bits.ue();
         bits.ue();
     }
-    bits.ue()?; // bit_depth_luma_minus8
-    bits.ue()?; // bit_depth_chroma_minus8
+    let bit_depth_luma = bits.ue()?; // bit_depth_luma_minus8
+    let bit_depth_chroma = bits.ue()?; // bit_depth_chroma_minus8
     bits.ue()?; // log2_max_pic_order_cnt_lsb_minus4
 
     let mut info = SpsInfo {
         codec: Some(Codec::Hevc),
         width: Some(width),
         height: Some(height),
+        chroma_format_idc: Some(chroma_format_idc),
+        bit_depth_luma: Some(bit_depth_luma + 8),
         ..Default::default()
     };
+    let _ = bit_depth_chroma;
 
     let sub_layer_ordering_present = bits.bit().unwrap_or(0);
     let first = if sub_layer_ordering_present == 1 {
@@ -1698,5 +1772,78 @@ mod tests {
         assert!(!is_sps_nal(&[0x68, 0x42])); // an H.264 PPS
         assert!(!is_sps_nal(&[0x40, 0x01])); // an HEVC VPS
         assert!(!is_sps_nal(&[]));
+    }
+
+    /// Task H2: the frame size follows the bit depth and the chroma format,
+    /// not a constant 1.5 bytes per pixel.
+    #[test]
+    fn the_frame_size_follows_the_bit_depth_and_the_chroma() {
+        let base = SpsInfo {
+            codec: Some(Codec::H264),
+            width: Some(1920),
+            height: Some(1080),
+            max_num_ref_frames: Some(4),
+            chroma_format_idc: Some(1),
+            bit_depth_luma: Some(8),
+            ..Default::default()
+        };
+        // 8-bit 4:2:0: 1920 * 1080 * 1.5 = 3,110,400 bytes.
+        assert_eq!(base.frame_bytes(), Some(3_110_400));
+        // 10-bit 4:2:0: the samples are 16-bit, so the frame is TWICE.
+        let ten = SpsInfo {
+            bit_depth_luma: Some(10),
+            ..base.clone()
+        };
+        assert_eq!(ten.frame_bytes(), Some(6_220_800));
+        // 4:4:4 8-bit: 3 samples per pixel.
+        let full = SpsInfo {
+            chroma_format_idc: Some(3),
+            ..base.clone()
+        };
+        assert_eq!(full.frame_bytes(), Some(6_220_800));
+        // 4:2:2 8-bit: 2 samples per pixel.
+        let subsampled = SpsInfo {
+            chroma_format_idc: Some(2),
+            ..base.clone()
+        };
+        assert_eq!(subsampled.frame_bytes(), Some(4_147_200));
+        // Monochrome 8-bit: 1 sample per pixel.
+        let mono = SpsInfo {
+            chroma_format_idc: Some(0),
+            ..base.clone()
+        };
+        assert_eq!(mono.frame_bytes(), Some(2_073_600));
+        // The DPB is the pool times the frame size: 4 refs of the 8-bit
+        // frame, 4 refs of the 10-bit one.
+        assert_eq!(base.dpb_bytes(), Some(4 * 3_110_400));
+        assert_eq!(ten.dpb_bytes(), Some(4 * 6_220_800));
+        // The savings a pinned re-encode would give back.
+        assert_eq!(base.savings_obtainable(), Some(2 * 3_110_400));
+        assert_eq!(ten.savings_obtainable(), Some(2 * 6_220_800));
+    }
+
+    /// Task H2: an unknown size is a `None`, never a guess.
+    #[test]
+    fn an_unknown_frame_size_is_never_guessed() {
+        let no_size = SpsInfo {
+            codec: Some(Codec::H264),
+            max_num_ref_frames: Some(4),
+            ..Default::default()
+        };
+        assert_eq!(no_size.frame_bytes(), None);
+        assert_eq!(no_size.dpb_bytes(), None);
+        assert!(!no_size.is_copy_safe());
+        // A codec the parser does not read (MPEG-2, VP9, AV1): the policy
+        // is UNKNOWN, never a default.
+        let unknown_codec = SpsInfo {
+            codec: None,
+            width: Some(1920),
+            height: Some(1080),
+            max_num_ref_frames: Some(4),
+            ..Default::default()
+        };
+        assert_eq!(unknown_codec.frame_bytes(), None);
+        assert_eq!(unknown_codec.dpb_bytes(), None);
+        assert!(!unknown_codec.is_copy_safe());
     }
 }
