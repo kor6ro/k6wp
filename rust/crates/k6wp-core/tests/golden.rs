@@ -72,6 +72,12 @@ fn run_case(case: &Value) -> Result<Value, String> {
             let cfg = config::WallpaperConfig::default();
             return Ok(config_json(&cfg));
         }
+        // The round trip: the merge that preserves the unknown keys.
+        if id.starts_with("config.roundtrip.") {
+            let existing = &input["existing"];
+            let known = &input["known"];
+            return Ok(config::merge_unknown_keys(existing, known));
+        }
         let raw_text = input
             .as_str()
             .ok_or_else(|| "the config input must be the raw document text".to_string())?;

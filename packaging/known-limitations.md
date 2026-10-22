@@ -421,3 +421,29 @@ runtime beyond Qt + the vendor binaries listed in `vendor/VERSIONS.md`.
   (tooltip/menu storm volume judged not cheap).
   Residual: hide-via-API without focus change takes the same strand path
   (accepted: rarer than close, same pre-fix behavior).
+
+## 9. The config schema: an older engine ignores the newer settings
+
+- **The mechanism** (code-quoted): the config file carries a `version`
+  field. The current schema is **v6** (the `pause_unload_after_sec` key
+  came with task 1.1). `MigrateConfig` refuses a version it does not know:
+  a **negative** version is corrupt (an error), a version **higher** than
+  the engine's is read best-effort (the known fields keep their values, the
+  unknown ones take their defaults) and the file is rewritten at the
+  current schema.
+- **Live-proven (measured, task G4)**: the engine built from the
+  `baseline-pre-refactor` tag (schema **v5**) was given a **v6** file. It
+  refused the file ("unsupported config schema version: 6"), kept its
+  last-valid config, **left the file byte-identical** (the SHA-256 is
+  unchanged) and wrote a **`.bak` holding the same bytes**. So the file is
+  never damaged by the downgrade - but the old engine **does not use** the
+  v6 settings (it falls back to the defaults for that session).
+- **What the user sees**: after a downgrade, the wallpaper still plays and
+  the settings that the old engine does not know are simply not applied.
+  The user's data is not lost: it is in `config.json` and in
+  `config.json.bak`.
+- **The forward direction is safe** (task I3): when the current engine
+  rewrites a file, the keys it does not know are **PRESERVED** (the
+  round-trip merge), so an older engine can never drop a newer engine's
+  fields. The golden fixture `config.roundtrip.*` pins that on both sides
+  (the C++ and the Rust).

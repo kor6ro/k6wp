@@ -181,6 +181,40 @@ void DumpConfig() {
   }
 }
 
+// --- the config round trip (task I3) ---------------------------------------
+
+// The policy: when the config is written, the keys this engine does not
+// know are PRESERVED (a newer engine wrote them). The known keys always
+// win. The merge is pure, so it is a fixture.
+void DumpConfigRoundTrip() {
+  struct MergeCase {
+    const char* name;
+    const char* existing;
+    const char* known;
+  };
+  const MergeCase cases[] = {
+      {"unknown_keys_survive",
+       R"({"version":7,"crf":19,"a_key_from_the_future":42})",
+       R"({"version":6,"crf":19})"},
+      {"the_known_keys_win",
+       R"({"version":7,"crf":19})",
+       R"({"version":6,"crf":22})"},
+      {"an_empty_existing", R"({})", R"({"version":6,"crf":22})"},
+      {"a_non_object_existing", R"([1,2,3])", R"({"version":6,"crf":22})"},
+      {"a_nested_unknown_key",
+       R"({"version":7,"future":{"a":1}})",
+       R"({"version":6})"},
+      {"the_version_is_known", R"({"version":7})", R"({"version":6})"},
+  };
+  for (const auto& c : cases) {
+    const std::string id = std::string("config.roundtrip.") + c.name;
+    const json existing = ParseOrObject(c.existing);
+    const json known = ParseOrObject(c.known);
+    Ok(id, "MergeUnknownKeys", json{{"existing", existing}, {"known", known}},
+       k6wp::MergeUnknownKeys(existing, known));
+  }
+}
+
 // --- studio settings -------------------------------------------------------
 
 void DumpStudioSettings() {
@@ -534,6 +568,7 @@ void DumpIpc() {
 json BuildDocument() {
   g_cases.clear();
   DumpConfig();
+  DumpConfigRoundTrip();
   DumpStudioSettings();
   DumpPlaylist();
   DumpDisplays();

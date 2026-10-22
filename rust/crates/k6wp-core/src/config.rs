@@ -311,6 +311,33 @@ pub fn validate_config(cfg: &WallpaperConfig) -> Result<(), ConfigError> {
 ///
 /// This is the single definition site for the config field set, so the
 /// writer and the tests always agree on the key set.
+/// The merge that preserves the unknown keys (task I3).
+///
+/// The result is `known` plus every key of `existing` that `known` does not
+/// contain. The KNOWN keys always win: they are what this engine
+/// understands. The unknown keys are the fields a NEWER engine wrote - an
+/// older engine must not drop them when it rewrites the file.
+///
+/// A `existing` that is not a JSON object contributes nothing (a corrupt
+/// file must not break a save).
+///
+/// The golden fixture `config.roundtrip.*` pins this, and the C++ side
+/// replays the same cases.
+pub fn merge_unknown_keys(existing: &Value, known: &Value) -> Value {
+    let mut out = known.clone();
+    let Some(existing) = existing.as_object() else {
+        return out;
+    };
+    if let Some(out) = out.as_object_mut() {
+        for (key, value) in existing {
+            if !out.contains_key(key) {
+                out.insert(key.clone(), value.clone());
+            }
+        }
+    }
+    out
+}
+
 pub fn config_to_json(cfg: &WallpaperConfig) -> Value {
     let mut out = Map::new();
     out.insert("version".to_string(), Value::from(cfg.version));

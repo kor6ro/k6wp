@@ -133,6 +133,17 @@ void ValidateConfig(WallpaperConfig& cfg);
 // Throws ConfigError on unknown schema version or type-corrupt fields.
 WallpaperConfig MigrateConfig(const nlohmann::json& raw);
 
+// The merge that preserves the unknown keys (task I3).
+//
+// The result is `known` plus every key of `existing` that `known` does not
+// contain. The KNOWN keys always win: they are what this engine
+// understands. The unknown keys are the fields a NEWER engine wrote - an
+// older engine must not drop them when it rewrites the file.
+//
+// Pure: the golden fixture pins it, and the Rust port replays it.
+nlohmann::json MergeUnknownKeys(const nlohmann::json& existing,
+                                 const nlohmann::json& known);
+
 // %LOCALAPPDATA%/K6WP/config.json (falls back to %USERPROFILE%/AppData/Local).
 std::filesystem::path DefaultConfigPath();
 

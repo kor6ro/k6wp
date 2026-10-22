@@ -581,6 +581,114 @@
       "input": "{\"version\":5,"
     },
     {
+      "fn": "MergeUnknownKeys",
+      "id": "config.roundtrip.unknown_keys_survive",
+      "input": {
+        "existing": {
+          "a_key_from_the_future": 42,
+          "crf": 19,
+          "version": 7
+        },
+        "known": {
+          "crf": 19,
+          "version": 6
+        }
+      },
+      "output": {
+        "a_key_from_the_future": 42,
+        "crf": 19,
+        "version": 6
+      }
+    },
+    {
+      "fn": "MergeUnknownKeys",
+      "id": "config.roundtrip.the_known_keys_win",
+      "input": {
+        "existing": {
+          "crf": 19,
+          "version": 7
+        },
+        "known": {
+          "crf": 22,
+          "version": 6
+        }
+      },
+      "output": {
+        "crf": 22,
+        "version": 6
+      }
+    },
+    {
+      "fn": "MergeUnknownKeys",
+      "id": "config.roundtrip.an_empty_existing",
+      "input": {
+        "existing": {},
+        "known": {
+          "crf": 22,
+          "version": 6
+        }
+      },
+      "output": {
+        "crf": 22,
+        "version": 6
+      }
+    },
+    {
+      "fn": "MergeUnknownKeys",
+      "id": "config.roundtrip.a_non_object_existing",
+      "input": {
+        "existing": [
+          1,
+          2,
+          3
+        ],
+        "known": {
+          "crf": 22,
+          "version": 6
+        }
+      },
+      "output": {
+        "crf": 22,
+        "version": 6
+      }
+    },
+    {
+      "fn": "MergeUnknownKeys",
+      "id": "config.roundtrip.a_nested_unknown_key",
+      "input": {
+        "existing": {
+          "future": {
+            "a": 1
+          },
+          "version": 7
+        },
+        "known": {
+          "version": 6
+        }
+      },
+      "output": {
+        "future": {
+          "a": 1
+        },
+        "version": 6
+      }
+    },
+    {
+      "fn": "MergeUnknownKeys",
+      "id": "config.roundtrip.the_version_is_known",
+      "input": {
+        "existing": {
+          "version": 7
+        },
+        "known": {
+          "version": 6
+        }
+      },
+      "output": {
+        "version": 6
+      }
+    },
+    {
       "fn": "DefaultStudioSettings",
       "id": "settings.default",
       "input": {},

@@ -6,6 +6,8 @@
 #include <string>
 
 #include "config_schema.hpp"
+#include "displays_schema.hpp"
+#include "playlist.hpp"
 #include "studio_settings.hpp"
 #include "thirdparty/json.hpp"
 #include "version_compare.hpp"
@@ -1326,29 +1328,29 @@ int main(int argc, char* argv[]) {
     WriteJson(p, j);
     const std::string original = ReadText(p);
     k6wp::WallpaperConfig cfg;
-    if (ExpectLoadOk(p, "48. v5 file migrates to the current schema", &cfg)) {
+    if (ExpectLoadOk(p, "60. v5 file migrates to the current schema", &cfg)) {
       Check(cfg.version == k6wp::kConfigSchemaVersion,
-            "48. migrated to the current version");
+            "60. migrated to the current version");
       Check(cfg.pause_unload_after_sec == 30,
-            "48. the new key takes its default");
+            "60. the new key takes its default");
       Check(cfg.video_path == L"C:\\videos\\test.mp4" && cfg.crf == 23,
-            "48. the user's values are preserved");
+            "60. the user's values are preserved");
     }
     Check(std::filesystem::exists(BakPath(p)),
-          "48. the migration left a .bak");
+          "60. the migration left a .bak");
     Check(ReadText(BakPath(p)) == original,
-          "48. the .bak holds the original v5 bytes");
+          "60. the .bak holds the original v5 bytes");
     // The rewritten file is at the current schema, so the next load is a
     // clean one (no second .bak).
     std::filesystem::remove(BakPath(p));
     k6wp::WallpaperConfig again;
-    if (ExpectLoadOk(p, "48. the rewritten file loads clean", &again)) {
+    if (ExpectLoadOk(p, "60. the rewritten file loads clean", &again)) {
       Check(again.version == k6wp::kConfigSchemaVersion &&
                 again.pause_unload_after_sec == 30,
-            "48. the rewritten file is stable");
+            "60. the rewritten file is stable");
     }
     Check(!std::filesystem::exists(BakPath(p)),
-          "48. no second .bak on the clean load");
+          "60. no second .bak on the clean load");
   }
   {
     // An explicit value is preserved.
@@ -1357,15 +1359,15 @@ int main(int argc, char* argv[]) {
     j["pause_unload_after_sec"] = 120;
     WriteJson(p, j);
     k6wp::WallpaperConfig cfg;
-    if (ExpectLoadOk(p, "49. an explicit value loads", &cfg)) {
+    if (ExpectLoadOk(p, "61. an explicit value loads", &cfg)) {
       Check(cfg.pause_unload_after_sec == 120,
-            "49. the explicit value is preserved");
+            "61. the explicit value is preserved");
     }
     // 0 = never unload.
     j["pause_unload_after_sec"] = 0;
     WriteJson(p, j);
-    if (ExpectLoadOk(p, "49. zero (never unload) loads", &cfg)) {
-      Check(cfg.pause_unload_after_sec == 0, "49. zero is preserved");
+    if (ExpectLoadOk(p, "61. zero (never unload) loads", &cfg)) {
+      Check(cfg.pause_unload_after_sec == 0, "61. zero is preserved");
     }
   }
   {
@@ -1376,11 +1378,11 @@ int main(int argc, char* argv[]) {
       j["pause_unload_after_sec"] = bad;
       WriteJson(p, j);
       const std::string original = ReadText(p);
-      ExpectLoadThrows(p, "50. pause_unload_after_sec=" +
+      ExpectLoadThrows(p, "72. pause_unload_after_sec=" +
                               std::to_string(bad) + " is rejected");
       Check(std::filesystem::exists(BakPath(p)) &&
                 ReadText(BakPath(p)) == original,
-            "50. the .bak holds the original bytes for " +
+            "72. the .bak holds the original bytes for " +
                 std::to_string(bad));
     }
   }
@@ -1428,6 +1430,75 @@ int main(int argc, char* argv[]) {
 
   // 47. Schema-doc sync guard (see CheckSchemaDocInSync above).
   CheckSchemaDocInSync(argc > 1 ? argv[1] : "");
+
+  // 70. The round trip (task I3): the keys this engine does not know are
+  // PRESERVED when the file is rewritten. A newer engine's fields must
+  // not be lost by an older engine.
+  {
+    const auto p = dir / "t48_future.json";
+    auto j = ValidJson();
+    j["version"] = k6wp::kConfigSchemaVersion + 1;
+    j["a_key_from_the_future"] = 42;
+    j["another_future_key"] = "keep me";
+    WriteJson(p, j);
+    k6wp::WallpaperConfig cfg;
+    if (ExpectLoadOk(p, "73. a newer config loads", &cfg)) {
+      // The load rewrites the file at the current schema (the self-heal).
+      const auto rewritten = nlohmann::json::parse(ReadText(p));
+      Check(rewritten.value("version", -1) == k6wp::kConfigSchemaVersion,
+            "73. the rewrite is at the current schema");
+      Check(rewritten.value("a_key_from_the_future", -1) == 42,
+            "73. the unknown key survived the rewrite");
+      Check(rewritten.value("another_future_key", std::string()) == "keep me",
+            "73. the second unknown key survived the rewrite");
+      Check(rewritten.value("crf", -1) == 23, "73. the known fields survived");
+    }
+    // An explicit save preserves them too.
+    k6wp::SaveConfig(p, cfg);
+    const auto after_save = nlohmann::json::parse(ReadText(p));
+    Check(after_save.value("a_key_from_the_future", -1) == 42,
+          "73. the unknown key survived an explicit save");
+  }
+
+  // 71. The atomic write: the publish leaves no temp file behind, and the
+  // old file is replaced as a whole (a crash cannot leave a half file).
+  {
+    const auto p = dir / "t49_atomic.json";
+    WriteJson(p, ValidJson());
+    k6wp::WallpaperConfig cfg;
+    cfg = k6wp::LoadConfig(p);
+    const auto tmp = std::filesystem::path(p.wstring() + L".tmp");
+    Check(!std::filesystem::exists(tmp),
+          "74. the atomic write leaves no .tmp file behind");
+    Check(std::filesystem::exists(p), "74. the target file exists");
+    // A save over a file that does not exist must work too.
+    const auto fresh = dir / "t49_fresh.json";
+    k6wp::SaveConfig(fresh, cfg);
+    Check(std::filesystem::exists(fresh), "74. a save creates the file");
+    Check(!std::filesystem::exists(std::filesystem::path(fresh.wstring() + L".tmp")),
+          "74. a fresh save leaves no .tmp file behind");
+  }
+
+  // 72. The writer inventory (task I3): every JSON file of the app is
+  // written through the SAME atomic publish, so there is one writer path
+  // and no double writer that can truncate the other's work.
+  {
+    const auto playlist = dir / "t50_playlist.json";
+    k6wp::SavePlaylist(playlist, k6wp::PlaylistConfig{});
+    Check(std::filesystem::exists(playlist), "75. the playlist is written");
+    Check(!std::filesystem::exists(std::filesystem::path(playlist.wstring() + L".tmp")),
+          "75. the playlist write leaves no .tmp file behind");
+    const auto displays = dir / "t50_displays.json";
+    k6wp::SaveDisplays(displays, k6wp::DisplaysConfig{});
+    Check(std::filesystem::exists(displays), "75. the displays are written");
+    Check(!std::filesystem::exists(std::filesystem::path(displays.wstring() + L".tmp")),
+          "75. the displays write leaves no .tmp file behind");
+    const auto settings = dir / "t50_settings.json";
+    k6wp::SaveStudioSettings(settings, k6wp::DefaultStudioSettings());
+    Check(std::filesystem::exists(settings), "75. the settings are written");
+    Check(!std::filesystem::exists(std::filesystem::path(settings.wstring() + L".tmp")),
+          "75. the settings write leaves no .tmp file behind");
+  }
 
   std::cout << "\n" << g_checks << " checks, " << g_failures << " failures\n";
   std::cout << "DefaultConfigPath: " << k6wp::DefaultConfigPath().string() << "\n";

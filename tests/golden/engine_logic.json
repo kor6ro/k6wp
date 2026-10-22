@@ -2144,7 +2144,7 @@
     "retry_schedule": "baseline",
     "topology_diff": "baseline",
     "unload_state": "task-1.1",
-    "workerw_host": "baseline"
+    "workerw_host": "C7 (post-baseline: the rule was inline in desktop_inject.cpp)"
   },
   "version": 1
 }

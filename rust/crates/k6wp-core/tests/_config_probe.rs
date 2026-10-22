@@ -41,6 +41,14 @@ fn run_case(case: &Value) -> Result<Value, String> {
             &settings::StudioSettings::default(),
         ));
     }
+    // The round trip (task I3): the merge that preserves the unknown keys.
+    if id.starts_with("config.roundtrip.") {
+        let input = &case["input"];
+        return Ok(config::merge_unknown_keys(
+            &input["existing"],
+            &input["known"],
+        ));
+    }
     let raw_text = case["input"].as_str().unwrap_or_default();
     if id.starts_with("config.") {
         let cfg = config::migrate_config(raw_text).map_err(|e| e.to_string())?;

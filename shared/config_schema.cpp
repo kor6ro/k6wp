@@ -4,6 +4,7 @@
 #include <windows.h>
 
 #include <fstream>
+#include <sstream>
 #include <system_error>
 
 namespace k6wp {
@@ -32,6 +33,24 @@ bool NeedsMigration(const nlohmann::json& raw) {
     }
   }
   return false;
+}
+
+/// The document currently on disk - an empty object when the file is
+/// missing, unreadable or not a JSON object. The round-trip merge must
+/// never turn a save into a failure.
+nlohmann::json ReadExistingJson(const std::filesystem::path& path) {
+  std::ifstream in(path, std::ios::binary);
+  if (!in) {
+    return nlohmann::json::object();
+  }
+  std::stringstream ss;
+  ss << in.rdbuf();
+  try {
+    nlohmann::json parsed = nlohmann::json::parse(ss.str());
+    return parsed.is_object() ? parsed : nlohmann::json::object();
+  } catch (const nlohmann::json::exception&) {
+    return nlohmann::json::object();
+  }
 }
 
 }  // namespace
@@ -151,7 +170,24 @@ void SaveConfig(const std::filesystem::path& path, const WallpaperConfig& cfg) {
   // Never persist an invalid config: validate a copy first.
   WallpaperConfig copy = cfg;
   ValidateConfig(copy);
-  AtomicWriteJson(path, ConfigToJson(copy));
+  // The unknown keys of the file we are replacing are PRESERVED (task I3):
+  // an older engine must not drop the fields a newer engine wrote. The
+  // known keys always win - they are what this engine understands.
+  AtomicWriteJson(path, MergeUnknownKeys(ReadExistingJson(path), ConfigToJson(copy)));
+}
+
+nlohmann::json MergeUnknownKeys(const nlohmann::json& existing,
+                                 const nlohmann::json& known) {
+  nlohmann::json out = known;
+  if (!existing.is_object()) {
+    return out;
+  }
+  for (auto it = existing.begin(); it != existing.end(); ++it) {
+    if (!out.contains(it.key())) {
+      out[it.key()] = it.value();
+    }
+  }
+  return out;
 }
 
 bool PersistConfigField(const std::filesystem::path& path,
