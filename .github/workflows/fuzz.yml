@@ -1,0 +1,105 @@
+name: Fuzz
+
+# The scheduled fuzzing of the parsers (task I2).
+#
+# WHY
+#   The parsers read UNTRUSTED input: the SPS parser reads a video the user
+#   picked, the library codec reads a JSON file, the IPC codec reads a frame
+#   from another process. The engine is built with panic = "abort", so a
+#   panic in a parser takes the whole engine down. The fuzzing looks for the
+#   inputs that make a parser panic, hang or allocate without bound.
+#
+# HOW
+#   cargo-fuzz needs a NIGHTLY toolchain (it builds with -Zsanitizer). The
+#   nightly is installed by this workflow only - the stable toolchain of the
+#   project is untouched.
+#
+# THE SAMPLES
+#   A failing sample is written to rust/fuzz/artifacts/<target>/ and is
+#   uploaded as a workflow artifact. It MUST be moved into the regression
+#   fixtures (tests/golden/sps-regressions/ for the SPS parser) - the CI
+#   cannot do that automatically, because a sample is a decision.
+#
+on:
+  schedule:
+    # Every night (the fuzzing is cheap: four targets, a few minutes).
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      seconds:
+        description: "The seconds per target"
+        default: "120"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fuzz:
+    name: cargo-fuzz (the SPS parser, the box parser, the codecs)
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Install the nightly toolchain
+        run: |
+          rustup toolchain install nightly --profile minimal
+          rustup +nightly component add rust-src
+
+      - name: Install cargo-fuzz
+        run: cargo +nightly install cargo-fuzz --locked
+
+      # cargo-fuzz builds with -Zsanitizer=address, and on Windows the ASAN
+      # runtime DLL comes from LLVM - it is NOT part of the Rust toolchain.
+      # The runner image ships LLVM; if it is missing, it is installed here.
+      - name: The ASAN runtime (LLVM)
+        shell: pwsh
+        run: |
+          $llvmBin = 'C:\Program Files\LLVM\bin'
+          if (-not (Test-Path (Join-Path $llvmBin 'clang_rt.asan_dynamic-x86_64.dll'))) {
+            Write-Host '  LLVM is missing - installing it (the ASAN runtime lives there)'
+            choco install llvm -y --no-progress
+            $llvmBin = 'C:\Program Files\LLVM\bin'
+          }
+          if (-not (Test-Path (Join-Path $llvmBin 'clang_rt.asan_dynamic-x86_64.dll'))) {
+            Write-Error 'the ASAN runtime is still missing: the fuzzing cannot run'
+            exit 1
+          }
+          Write-Host "  the ASAN runtime: $llvmBin"
+          Add-Content -Path $env:GITHUB_PATH -Value $llvmBin
+
+      - name: The seed corpus
+        shell: pwsh
+        run: ./tools/seed_fuzz_corpus.ps1
+
+      - name: Fuzz the four targets
+        shell: pwsh
+        run: |
+          $seconds = if ("${{ inputs.seconds }}" -eq "") { 120 } else { "${{ inputs.seconds }}" }
+          $failed = $false
+          foreach ($target in @('sps_parser', 'box_parser', 'library_codec', 'ipc_codec')) {
+            Write-Host "=== $target ($seconds s) ==="
+            Push-Location rust/fuzz
+            try {
+              cargo +nightly fuzz run $target -- -max_total_time=$seconds -timeout=25
+              if ($LASTEXITCODE -ne 0) { $failed = $true }
+            } finally {
+              Pop-Location
+            }
+          }
+          if ($failed) {
+            Write-Host "A failing sample was found. The samples are in rust/fuzz/artifacts - move them into tests/golden/sps-regressions/ (the SPS parser) and commit them."
+            exit 1
+          }
+
+      - name: The failing samples (if any)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: the-fuzzing-samples
+          path: rust/fuzz/artifacts
+          if-no-files-found: ignore

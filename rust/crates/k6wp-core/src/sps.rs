@@ -29,6 +29,7 @@
 //! decoder switches to the in-band SPS, so the largest DPB in the file is
 //! the one that matters.
 
+use std::io::{Read, Seek};
 use std::path::Path;
 
 /// The codec the SPS belongs to.
@@ -59,9 +60,6 @@ impl Codec {
 /// or an "unknown" answer - never a panic, a huge allocation or an endless
 /// loop.
 mod limits {
-    /// The most bytes read from a file (the parameter sets live in the
-    /// header; a file whose header is further out falls back).
-    pub const MAX_INPUT_BYTES: u64 = 64 * 1024 * 1024;
     /// The most entries any container table may declare.
     pub const MAX_TABLE_ENTRIES: usize = 1 << 20;
     /// The most samples the sample table may declare.
@@ -76,6 +74,86 @@ mod limits {
     pub const MAX_SUB_LAYERS: u32 = 7;
     /// The most entries a box tree may hold on the stack.
     pub const MAX_BOX_STACK: usize = 64;
+    /// The most bytes the `moov` box may contribute. A `moov` bigger than
+    /// this is a corrupt (or hostile) file: it is skipped, not loaded.
+    pub const MAX_MOOV_BYTES: u64 = 32 * 1024 * 1024;
+    /// The most bytes the `ftyp` box may contribute (it is a brand + a few
+    /// compatible brands - a few dozen bytes in practice).
+    pub const MAX_FTYP_BYTES: u64 = 4096;
+}
+
+/// The container a file turned out to be.
+///
+/// The policy is EXPLICIT (task I2): this module parses the MP4 family
+/// (the parameter sets live in the `moov` box) and the raw Annex-B streams
+/// (the parameter sets are in band). Every other container - Matroska /
+/// WebM, AVI, MPEG-TS - FALLS BACK to ffmpeg's `trace_headers`: the parser
+/// never guesses, and it never rewrites the file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ContainerKind {
+    /// The MP4 family (isom, mp41, mp42, dash, avc1, ...).
+    Mp4,
+    /// A raw H.264 / HEVC Annex-B stream (the parameter sets are in band).
+    RawStream,
+    /// Matroska / WebM - not parsed: the fallback is used.
+    Matroska,
+    /// AVI - not parsed: the fallback is used.
+    Avi,
+    /// MPEG-TS - not parsed: the fallback is used.
+    MpegTs,
+    /// Something else - not parsed: the fallback is used.
+    Unknown,
+}
+
+impl ContainerKind {
+    /// The stable name of the container (the report and the logs).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ContainerKind::Mp4 => "mp4",
+            ContainerKind::RawStream => "raw",
+            ContainerKind::Matroska => "matroska",
+            ContainerKind::Avi => "avi",
+            ContainerKind::MpegTs => "mpeg-ts",
+            ContainerKind::Unknown => "unknown",
+        }
+    }
+
+    /// True when this module can parse the container itself.
+    pub fn is_parsed(self) -> bool {
+        matches!(self, ContainerKind::Mp4 | ContainerKind::RawStream)
+    }
+}
+
+/// Detects the container from the head of the file.
+pub fn detect_container(head: &[u8]) -> ContainerKind {
+    // The EBML magic (Matroska / WebM).
+    if head.len() >= 4 && head[0] == 0x1A && head[1] == 0x45 && head[2] == 0xDF && head[3] == 0xA3 {
+        return ContainerKind::Matroska;
+    }
+    // "RIFF"...."AVI " (AVI).
+    if head.len() >= 12 && &head[0..4] == b"RIFF" && &head[8..12] == b"AVI " {
+        return ContainerKind::Avi;
+    }
+    // The MPEG-TS sync byte at 0 and at the packet size (188 / 192).
+    if head.len() >= 189
+        && head[0] == 0x47
+        && (head[188] == 0x47 || head[192.min(head.len() - 1)] == 0x47)
+    {
+        return ContainerKind::MpegTs;
+    }
+    // "ftyp" at the offset 4 (the MP4 family).
+    if head.len() >= 8 && &head[4..8] == b"ftyp" {
+        return ContainerKind::Mp4;
+    }
+    // A raw Annex-B stream: a NAL start code (00 00 01 or 00 00 00 01).
+    if head.len() >= 3
+        && head[0] == 0
+        && head[1] == 0
+        && (head[2] == 1 || (head[2] == 0 && head.len() >= 4 && head[3] == 1))
+    {
+        return ContainerKind::RawStream;
+    }
+    ContainerKind::Unknown
 }
 
 /// What one SPS says.
@@ -203,6 +281,12 @@ pub struct DpbReport {
     pub max_dpb: Option<u32>,
     /// True when the file carries a codec this module does not parse.
     pub needs_fallback: bool,
+    /// How many bytes were read from the file. The container walk SEEKS over
+    /// the boxes it does not need, so a 4 GB file costs kilobytes.
+    pub bytes_read: u64,
+    /// The container the file turned out to be ("mp4", "raw", "matroska",
+    /// "avi", "mpeg-ts", "unknown").
+    pub container: String,
 }
 
 /// The error the probe reports.
@@ -911,6 +995,14 @@ fn parse_hvcc(payload: &[u8]) -> Option<Vec<Vec<u8>>> {
 /// stream can carry a deeper SPS than the container's avcC).
 fn inband_sps_nals(data: &[u8]) -> Vec<Vec<u8>> {
     let mut out = Vec::new();
+    out.extend(annexb_sps_nals(data));
+    out.extend(sample_sps_nals_in_memory(data));
+    out
+}
+
+/// The parameter sets of a start-coded (Annex-B) elementary stream.
+fn annexb_sps_nals(data: &[u8]) -> Vec<Vec<u8>> {
+    let mut out = Vec::new();
     let limit = data.len().min(MAX_SCAN_BYTES);
 
     // The Annex-B start codes (a start-coded elementary stream).
@@ -936,8 +1028,14 @@ fn inband_sps_nals(data: &[u8]) -> Vec<Vec<u8>> {
         }
         index += 1;
     }
+    out
+}
 
-    // The MP4 samples: located exactly through the sample table.
+/// The parameter sets inside the MP4 samples, when the samples are already
+/// in memory.
+fn sample_sps_nals_in_memory(data: &[u8]) -> Vec<Vec<u8>> {
+    let mut out = Vec::new();
+    let limit = data.len().min(MAX_SCAN_BYTES);
     let length_size = nal_length_size(data);
     for (offset, size) in sample_ranges(data) {
         let start = offset as usize;
@@ -962,6 +1060,52 @@ fn inband_sps_nals(data: &[u8]) -> Vec<Vec<u8>> {
         }
     }
     out
+}
+
+/// The parameter sets inside the MP4 samples, reading the samples from the
+/// file.
+///
+/// The samples are located EXACTLY through the sample table (stsz / stsc /
+/// stco) in the `moov`, so the parser reads the samples it needs - not the
+/// whole media data. The window is the same as before (the first
+/// `MAX_SCAN_BYTES` of the file), so the behaviour is unchanged.
+fn sample_sps_nals_from_file(
+    moov: &[u8],
+    reader: &mut CountingFile,
+) -> Result<Vec<Vec<u8>>, SpsError> {
+    let mut out = Vec::new();
+    let length_size = nal_length_size(moov);
+    let window = MAX_SCAN_BYTES as u64;
+    for (offset, size) in sample_ranges(moov) {
+        let end = offset.saturating_add(size as u64);
+        if end > window || size == 0 {
+            continue;
+        }
+        if offset.saturating_add(size as u64) > reader.length {
+            // A corrupt sample table (an offset past the end of the file):
+            // the sample is skipped, not read.
+            continue;
+        }
+        reader.seek_to(offset)?;
+        let mut data = vec![0u8; size as usize];
+        reader.read_exact_at(&mut data)?;
+        let mut pos = 0usize;
+        while pos + 4 <= data.len() {
+            let mut len = 0usize;
+            for i in 0..length_size {
+                len = (len << 8) | data[pos + i] as usize;
+            }
+            if len < 2 || pos + length_size + len > data.len() {
+                break;
+            }
+            let nal = &data[pos + length_size..pos + length_size + len];
+            if is_sps_nal(nal) {
+                out.push(nal.to_vec());
+            }
+            pos += length_size + len;
+        }
+    }
+    Ok(out)
 }
 
 /// The NAL length size (1, 2 or 4 bytes) the MP4 samples use - it is the
@@ -1161,28 +1305,266 @@ fn is_sps_nal(nal: &[u8]) -> bool {
 // the public probe
 // ---------------------------------------------------------------------------
 
+/// A file reader that COUNTS the bytes it reads and can SEEK over the parts
+/// it does not need (task I2).
+struct CountingFile {
+    file: std::fs::File,
+    bytes_read: u64,
+    /// The length of the file (cached at open).
+    length: u64,
+}
+
+impl CountingFile {
+    fn open(path: &Path) -> Result<Self, SpsError> {
+        let file = std::fs::File::open(path).map_err(|e| SpsError::Io(e.to_string()))?;
+        let length = file
+            .metadata()
+            .map_err(|e| SpsError::Io(e.to_string()))?
+            .len();
+        Ok(CountingFile {
+            file,
+            bytes_read: 0,
+            length,
+        })
+    }
+
+    fn read_exact_at(&mut self, buf: &mut [u8]) -> Result<(), SpsError> {
+        self.file
+            .read_exact(buf)
+            .map_err(|e| SpsError::Io(e.to_string()))?;
+        self.bytes_read += buf.len() as u64;
+        Ok(())
+    }
+
+    fn seek_to(&mut self, pos: u64) -> Result<(), SpsError> {
+        self.file
+            .seek(std::io::SeekFrom::Start(pos))
+            .map_err(|e| SpsError::Io(e.to_string()))?;
+        Ok(())
+    }
+
+    /// The length of the file (the position is restored).
+    fn length(&mut self) -> Result<u64, SpsError> {
+        let here = self
+            .file
+            .stream_position()
+            .map_err(|e| SpsError::Io(e.to_string()))?;
+        let end = self
+            .file
+            .seek(std::io::SeekFrom::End(0))
+            .map_err(|e| SpsError::Io(e.to_string()))?;
+        self.seek_to(here)?;
+        Ok(end)
+    }
+}
+
+/// The top-level boxes the parser needs: the `ftyp` (the brand) and the
+/// `moov` (the parameter sets).
+///
+/// The walk SEEKS over every box it does not need: a 4 GB file with the
+/// `moov` at the end costs a few kilobytes of reads.
+fn walk_top_level_boxes(reader: &mut CountingFile) -> Result<Vec<(String, Vec<u8>)>, SpsError> {
+    let file_len = reader.length()?;
+    let mut out: Vec<(String, Vec<u8>)> = Vec::new();
+    let mut pos: u64 = 0;
+    let mut visited = 0u32;
+    while pos + 8 <= file_len {
+        visited += 1;
+        if visited > 4096 {
+            // A file with thousands of top-level boxes is not a normal MP4.
+            break;
+        }
+        reader.seek_to(pos)?;
+        let mut header = [0u8; 8];
+        reader.read_exact_at(&mut header)?;
+        let raw_size = u32::from_be_bytes([header[0], header[1], header[2], header[3]]) as u64;
+        let kind = String::from_utf8_lossy(&header[4..8]).to_string();
+        let mut header_len: u64 = 8;
+        let mut size = raw_size;
+        if raw_size == 1 {
+            // The 64-bit size follows the header.
+            let mut ext = [0u8; 8];
+            reader.read_exact_at(&mut ext)?;
+            size = u64::from_be_bytes(ext);
+            header_len = 16;
+        } else if raw_size == 0 {
+            // The box extends to the end of the file.
+            size = file_len - pos;
+        }
+        if size < header_len {
+            // A corrupt size: the walk stops here.
+            break;
+        }
+        let _payload_start = pos + header_len;
+        let payload_len = size - header_len;
+        let cap = match kind.as_str() {
+            "ftyp" => Some(limits::MAX_FTYP_BYTES),
+            "moov" => Some(limits::MAX_MOOV_BYTES),
+            _ => None,
+        };
+        if let Some(cap) = cap {
+            if payload_len <= cap {
+                let mut payload = vec![0u8; payload_len as usize];
+                reader.read_exact_at(&mut payload)?;
+                out.push((kind, payload));
+            }
+        }
+        let Some(next) = pos.checked_add(size) else {
+            break;
+        };
+        if next <= pos {
+            break;
+        }
+        pos = next;
+    }
+    Ok(out)
+}
+
 /// Reads the DPB size of a video file.
 ///
 /// The result carries EVERY parameter set that was found (the container's
 /// plus the in-band ones - the decoder switches to the in-band SPS, so the
 /// largest DPB in the file is the one that matters) and the largest DPB.
+///
+/// HOW IT READS (task I2)
+/// The container is walked by SEEKING: the top-level box headers are read
+/// (8 bytes each) and every box the parser does not need is skipped without
+/// reading it. Only the `ftyp` (a few bytes) and the `moov` (the parameter
+/// sets) are loaded. A raw Annex-B stream is scanned in a bounded prefix.
+/// The report carries `bytes_read`, so the cost is observable - and a 4 GB
+/// file costs kilobytes.
 pub fn probe_dpb(path: &Path) -> Result<DpbReport, SpsError> {
-    // The file is read CAPPED: a 40 GB video must not be pulled into
-    // memory to look at its header.
-    let file = std::fs::File::open(path).map_err(|e| SpsError::Io(e.to_string()))?;
-    let mut data = Vec::new();
-    let mut read = std::io::Read::take(file, limits::MAX_INPUT_BYTES);
-    std::io::Read::read_to_end(&mut read, &mut data).map_err(|e| SpsError::Io(e.to_string()))?;
-    Ok(probe_dpb_bytes(&data))
+    let mut reader = CountingFile::open(path)?;
+
+    // The head decides the container (and the policy for it).
+    reader.seek_to(0)?;
+    let mut head = [0u8; 193];
+    let head_len = std::cmp::min(193, reader.length()? as usize);
+    reader.read_exact_at(&mut head[..head_len])?;
+    let container = detect_container(&head[..head_len]);
+
+    let mut nals: Vec<Vec<u8>> = Vec::new();
+    match container {
+        ContainerKind::Mp4 => {
+            // The parameter sets live in the `moov` box.
+            let boxes = walk_top_level_boxes(&mut reader)?;
+            let mut moov: Option<Vec<u8>> = None;
+            for (kind, payload) in boxes {
+                if kind == "moov" {
+                    moov = Some(payload);
+                }
+            }
+            if let Some(moov_bytes) = &moov {
+                for (codec_kind, nals_in) in find_parameter_set_boxes(moov_bytes) {
+                    match codec_kind {
+                        Codec::H264 => nals.extend(nals_in),
+                        Codec::Hevc => nals.extend(nals_in),
+                        Codec::Unknown => {}
+                    }
+                }
+                // The in-band parameter sets: the samples are located
+                // exactly through the sample table, so only the samples are
+                // read (not the whole media data).
+                nals.extend(sample_sps_nals_from_file(moov_bytes, &mut reader)?);
+            }
+        }
+        ContainerKind::RawStream => {
+            // A start-coded stream: the parameter sets are in band, so a
+            // BOUNDED PREFIX is scanned.
+            reader.seek_to(0)?;
+            let mut prefix = Vec::new();
+            let mut buf = vec![0u8; 64 * 1024];
+            let mut total = 0usize;
+            while total < MAX_SCAN_BYTES {
+                let want = std::cmp::min(buf.len(), MAX_SCAN_BYTES - total);
+                match reader.file.read(&mut buf[..want]) {
+                    Ok(0) => break,
+                    Ok(n) => {
+                        reader.bytes_read += n as u64;
+                        prefix.extend_from_slice(&buf[..n]);
+                        total += n;
+                    }
+                    Err(e) => return Err(SpsError::Io(e.to_string())),
+                }
+            }
+            nals.extend(annexb_sps_nals(&prefix));
+        }
+        // The other containers are NOT parsed: the caller falls back to
+        // ffmpeg's trace_headers.
+        _ => {
+            return Ok(DpbReport {
+                sps: Vec::new(),
+                max_dpb: None,
+                needs_fallback: true,
+                bytes_read: reader.bytes_read,
+                container: container.as_str().to_string(),
+            });
+        }
+    }
+
+    let mut sps: Vec<SpsInfo> = Vec::new();
+    for nal in &nals {
+        if nal.is_empty() {
+            continue;
+        }
+        let info = match is_sps_nal(nal) {
+            _ if (nal[0] & 0x1F) == 7 => parse_h264_sps(nal),
+            _ => parse_hevc_sps(nal),
+        };
+        if let Some(info) = info {
+            if !info.is_plausible() {
+                continue;
+            }
+            if !sps.contains(&info) {
+                sps.push(info);
+            }
+        }
+    }
+
+    if sps.is_empty() {
+        return Ok(DpbReport {
+            sps,
+            max_dpb: None,
+            needs_fallback: true,
+            bytes_read: reader.bytes_read,
+            container: container.as_str().to_string(),
+        });
+    }
+    let max_dpb = sps.iter().filter_map(|s| s.dpb_size()).max();
+    Ok(DpbReport {
+        sps,
+        max_dpb,
+        needs_fallback: false,
+        bytes_read: reader.bytes_read,
+        container: container.as_str().to_string(),
+    })
+}
+
+/// The parameter sets a container carries in its header - the public entry
+/// point of the box parser (the fuzzing drives it directly).
+///
+/// It walks the MP4 box tree in memory for the `avcC` / `hvcC` boxes and
+/// returns their parameter sets. The bytes are treated as UNTRUSTED: the
+/// walk is bounded and the counts are capped.
+pub fn container_parameter_sets(data: &[u8]) -> Vec<(Codec, Vec<Vec<u8>>)> {
+    let scanned = &data[..data.len().min(MAX_SCAN_BYTES)];
+    find_parameter_set_boxes(scanned)
 }
 
 /// The probe over bytes already in memory - the testable core (and what
 /// the fuzzing drives).
+///
+/// It applies the SAME container policy as the file probe: a Matroska, an
+/// AVI or an MPEG-TS file is not parsed here either (the caller falls back
+/// to ffmpeg's `trace_headers`).
 pub fn probe_dpb_bytes(data: &[u8]) -> DpbReport {
     let scanned = &data[..data.len().min(MAX_SCAN_BYTES)];
-
-    let mut nals = container_sps_nals(scanned);
-    nals.extend(inband_sps_nals(scanned));
+    let container = detect_container(scanned);
+    let mut nals: Vec<Vec<u8>> = Vec::new();
+    if container.is_parsed() {
+        nals = container_sps_nals(scanned);
+        nals.extend(inband_sps_nals(scanned));
+    }
 
     let mut sps: Vec<SpsInfo> = Vec::new();
     for nal in &nals {
@@ -1212,6 +1594,8 @@ pub fn probe_dpb_bytes(data: &[u8]) -> DpbReport {
             sps,
             max_dpb: None,
             needs_fallback: true,
+            bytes_read: scanned.len() as u64,
+            container: container.as_str().to_string(),
         };
     }
     let max_dpb = sps.iter().filter_map(|s| s.dpb_size()).max();
@@ -1219,6 +1603,8 @@ pub fn probe_dpb_bytes(data: &[u8]) -> DpbReport {
         sps,
         max_dpb,
         needs_fallback: false,
+        bytes_read: scanned.len() as u64,
+        container: container.as_str().to_string(),
     }
 }
 

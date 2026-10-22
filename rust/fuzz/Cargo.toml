@@ -1,0 +1,46 @@
+[package]
+name = "k6wp-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+license = "GPL-2.0-or-later"
+description = "The fuzz targets of the K6WP parsers (task I2)."
+
+# The fuzz crate is NOT part of the workspace: cargo-fuzz builds it with its
+# own flags (and it needs a nightly toolchain).
+[workspace]
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+k6wp-core = { path = "../crates/k6wp-core" }
+
+[[bin]]
+name = "sps_parser"
+path = "fuzz_targets/sps_parser.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "box_parser"
+path = "fuzz_targets/box_parser.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "library_codec"
+path = "fuzz_targets/library_codec.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ipc_codec"
+path = "fuzz_targets/ipc_codec.rs"
+test = false
+doc = false
+bench = false
