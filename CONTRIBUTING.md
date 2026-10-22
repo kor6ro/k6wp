@@ -27,6 +27,15 @@ repo docs), testing, and PR expectations.
 
 - The `release` preset sets `BUILD_TESTING=OFF` (no test targets) by design;
   use `msvc-dev` for test runs.
+- Install the tracked git hooks once per clone:
+
+  ```powershell
+  powershell -NoProfile -ExecutionPolicy Bypass -File tools\install_hooks.ps1
+  ```
+
+  It points `core.hooksPath` at `.githooks/`; the pre-commit hook runs
+  `tools/lint_nonlatin.ps1 -Staged` and rejects an accidental non-Latin
+  character (a CJK character inside a word, a `U+FFFD` from a broken decode).
 - Release packaging: `powershell -ExecutionPolicy Bypass -File packaging\make_zip.ps1`
   then makensis on `packaging\installer.nsi`. `make_zip.ps1` asserts (a) version
   consistency across `CMakeLists.txt` / `installer.nsi` / `app.rc` files and

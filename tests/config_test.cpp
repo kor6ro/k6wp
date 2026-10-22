@@ -1,5 +1,8 @@
 // Mini unit tests for shared/config_schema (Todo 5). No external test
 // framework: plain asserts with a pass/fail counter. Exit code 0 = all pass.
+//
+// nonlatin-allow: one test stores a non-Latin video path on purpose, to prove
+// the config writer survives it. Do not "fix" the string.
 #include <filesystem>
 #include <fstream>
 #include <iostream>

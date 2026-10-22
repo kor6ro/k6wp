@@ -1,0 +1,4 @@
+# Git for Windows defaults to core.autocrlf=true here, which would rewrite the
+# tracked shell hooks to CRLF on checkout; sh then fails with "$'\r': command
+# not found" and the hook stops guarding. Keep the hook directory LF.
+.githooks/* text eol=lf

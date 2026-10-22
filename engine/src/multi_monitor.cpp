@@ -1091,7 +1091,7 @@ std::vector<int> MultiMonitor::monitor_ids() const {
 
 
 
-// P3: free function TopologyDivergesFromMonitors (�R12.1)
+// P3: free function TopologyDivergesFromMonitors (review item R12.1)
 // Returns true when any monitor's geometry/scale/orientation/primary differs.
 // Key matching: stable_key if non-empty, else gdi_name.
 bool TopologyDivergesFromMonitors(const TopologySnapshot& snap,

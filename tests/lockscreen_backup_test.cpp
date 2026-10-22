@@ -2,6 +2,9 @@
 // (Todo 19 HIGH-2). No external test framework: plain asserts with a
 // pass/fail counter. Exit code 0 = all pass.
 //
+// nonlatin-allow: these tests deliberately round-trip CJK paths and an emoji
+// path, so the fixture strings must stay non-Latin. Do not "fix" them.
+//
 // The functions under test live in an anonymous namespace inside
 // launcher/main.cpp (single-TU dispatcher by design), so this test includes
 // the .cpp directly. wWinMain is compiled but unused (console subsystem

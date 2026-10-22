@@ -36,6 +36,22 @@ jobs:
       - name: The test override lint
         shell: pwsh
         run: ./tools/lint_test_overrides.ps1
+
+      # Task H4: a document or comment may not carry a non-Latin character
+      # that nobody typed on purpose (a CJK character inside a word, a
+      # U+FFFD from a broken decode). The same lint runs in the pre-commit
+      # hook over the staged files.
+      - name: The non-Latin text lint
+        shell: pwsh
+        run: ./tools/lint_nonlatin.ps1
+
+      # A lint that stops detecting is worse than no lint: this builds a
+      # scratch repository with known-bad files and asserts the detector
+      # fires (R1 replacement character, R2 mixed-script word) while clean
+      # typography and the explicit allow marker stay green.
+      - name: The non-Latin lint self-test
+        shell: pwsh
+        run: ./tools/lint_nonlatin_selftest.ps1
       - name: License guard (LICENSE + LICENSES/)
         shell: pwsh
         run: |

@@ -1,0 +1,16 @@
+#!/bin/sh
+# H4: refuse a commit that introduces an accidental non-Latin character
+# (a CJK character inside a word, or a U+FFFD left over from a broken decode).
+#
+# This hook is not installed by default. Run once, from the repository root:
+#
+#   powershell -NoProfile -ExecutionPolicy Bypass -File tools/install_hooks.ps1
+#
+# The same lint runs in CI over every tracked file; here it runs over the
+# staged files only, so a commit stays fast.
+set -e
+root=$(git rev-parse --show-toplevel)
+if command -v pwsh >/dev/null 2>&1; then
+    exec pwsh -NoProfile -ExecutionPolicy Bypass -File "$root/tools/lint_nonlatin.ps1" -Staged
+fi
+exec powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$root/tools/lint_nonlatin.ps1" -Staged
