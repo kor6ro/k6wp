@@ -18,6 +18,11 @@ struct CliOptions {
   int crf = k6wp::kCompressDefaultCrf;
   std::string encoder = k6wp::kCompressDefaultEncoder;
   bool force_long = false;
+  // --force-dpb-reencode: re-encode even when the DPB byte budget would
+  // allow the copy path. It exists so the A/B of the threshold decision can
+  // produce the "re-encoded" arm (the old reference-count rule's outcome)
+  // from the CURRENT binary - a measurement must not need a modified build.
+  bool force_dpb_reencode = false;
   bool dry_run = false;
   bool probe_encoders = false;
   // Lockframe mode: extract a single frame as a still image

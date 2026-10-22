@@ -196,6 +196,10 @@ impl SpsInfo {
     /// (`compressor/src/dpb_probe.hpp::kMaxDpbBytesForCopy`).
     pub const MAX_DPB_BYTES_FOR_COPY: u64 = 64 * 1024 * 1024;
 
+    /// The reference count the DPB-pinned re-encode holds (the encoder legs
+    /// pin `ref=2`).
+    pub const PINNED_REFS: u32 = 2;
+
     /// The reference frames the decoder actually holds: the smallest of
     /// `max_num_ref_frames` and the parameter set's own DPB bound (the VUI's
     /// `max_dec_frame_buffering` for H.264, `sps_max_dec_pic_buffering` for
@@ -231,6 +235,44 @@ impl SpsInfo {
             .checked_mul(u64::from(refs))?;
         // 1.5 bytes per pixel, without a float: pixels * 3 / 2.
         pixels.checked_mul(3)?.checked_div(2)
+    }
+
+    /// The size of ONE decoded frame in bytes.
+    ///
+    /// The frame is the **coded** size (the crop is a display concern and is
+    /// not what the decoder allocates) times the bytes per pixel.
+    ///
+    /// The bytes per pixel: 1.5 for the 8-bit 4:2:0 case (the luma plane
+    /// plus half the chroma). H2 generalises this to the bit depth and the
+    /// chroma format the SPS carries.
+    pub fn frame_bytes(&self) -> Option<u64> {
+        let width = self.width?;
+        let height = self.height?;
+        if width == 0 || height == 0 {
+            return None;
+        }
+        let pixels = u64::from(width).checked_mul(u64::from(height))?;
+        // 1.5 bytes per pixel, without a float: pixels * 3 / 2.
+        pixels.checked_mul(3)?.checked_div(2)
+    }
+
+    /// The RAM a DPB-pinned re-encode would actually RECOVER (task H1).
+    ///
+    /// `(effective_refs − pin_refs) × frame_bytes` - NOT the total DPB.
+    ///
+    /// The total says how big the decoder's pool is; the savings say how
+    /// much a re-encode would really give back. The two differ whenever the
+    /// pinned pool is not negligible (at 4K, 2 frames are already 24.9 MB),
+    /// so the threshold has to say which one it means.
+    ///
+    /// The pinned count is 2 (the encoder legs pin `ref=2`).
+    pub fn savings_obtainable(&self) -> Option<u64> {
+        let refs = self.effective_refs()?;
+        let frame = self.frame_bytes()?;
+        if refs <= Self::PINNED_REFS {
+            return Some(0);
+        }
+        u64::from(refs - Self::PINNED_REFS).checked_mul(frame)
     }
 
     /// May this file be COPIED (instead of re-encoded)?

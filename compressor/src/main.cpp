@@ -301,7 +301,7 @@ int main(int argc, char** argv) {
   const k6wp::compressor::VideoProps props =
       k6wp::compressor::ProbeVideoProps(opts.in);
   if (IsOptimal(props, opts.res_w, opts.res_h, opts.fps) &&
-      IsDpbAcceptable(opts.in)) {
+      IsDpbAcceptable(opts.in) && !opts.force_dpb_reencode) {
     std::error_code ec;
     std::filesystem::copy_file(opts.in, opts.out,
                                std::filesystem::copy_options::overwrite_existing,
@@ -327,7 +327,9 @@ int main(int argc, char** argv) {
 
   const std::string cache_key = k6wp::compressor::CacheKeyHex(
       opts.in, opts.res_w, opts.res_h, opts.fps, opts.crf, encoder_name);
-  if (!cache_key.empty() &&
+  // --force-dpb-reencode BYPASSES the cache: the flag exists to produce the
+  // re-encoded arm of a measurement, and a cached copy would defeat it.
+  if (!opts.force_dpb_reencode && !cache_key.empty() &&
       k6wp::compressor::CacheHas(cache_key)) {
     std::string cache_error;
     if (k6wp::compressor::CacheFetchToOut(cache_key, opts.out, cache_error) !=

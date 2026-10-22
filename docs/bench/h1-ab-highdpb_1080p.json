@@ -1,0 +1,148 @@
+﻿{
+    "tool":  "bench_dpb_ab",
+    "phase":  1,
+    "date":  "2026-10-22T12:03:14+07:00",
+    "label":  "live-proven (one machine)",
+    "method":  "ABAB alternating inside one session; C4 metrics (private bytes + GPU shared); the playback rate and the frame counters travel with every number",
+    "file_a":  "C:\\Users\\axioo\\Desktop\\k6wp\\tests\\corpus\\highdpb_1080p.mp4",
+    "file_b":  "C:\\Users\\axioo\\Desktop\\k6wp\\build\\h1-oldrule-highdpb_1080p.mp4",
+    "runs":  5,
+    "a":  {
+              "private_mb":  194.02,
+              "private_band_mb":  0.82,
+              "gpu_shared_band_mb":  0.7,
+              "n":  5,
+              "gpu_shared_mb":  157.58,
+              "playback_rate":  1
+          },
+    "b":  {
+              "private_mb":  158.28,
+              "private_band_mb":  2.05,
+              "gpu_shared_band_mb":  0.34,
+              "n":  5,
+              "gpu_shared_mb":  151.57,
+              "playback_rate":  1
+          },
+    "results":  [
+                    {
+                        "tag":  "A",
+                        "file":  "highdpb_1080p.mp4",
+                        "private_mb":  194.58,
+                        "gpu_shared_mb":  157.58,
+                        "gpu_total_pct":  22.12,
+                        "cpu_pct":  1.47,
+                        "max_thread_cpu_pct":  13.52,
+                        "playback_rate":  1.0007,
+                        "delivered_fps":  30.02,
+                        "vo_delayed":  0
+                    },
+                    {
+                        "tag":  "B",
+                        "file":  "h1-oldrule-highdpb_1080p.mp4",
+                        "private_mb":  158.79,
+                        "gpu_shared_mb":  151.91,
+                        "gpu_total_pct":  22.61,
+                        "cpu_pct":  1.88,
+                        "max_thread_cpu_pct":  17.78,
+                        "playback_rate":  0.9994,
+                        "delivered_fps":  29.98,
+                        "vo_delayed":  0
+                    },
+                    {
+                        "tag":  "A",
+                        "file":  "highdpb_1080p.mp4",
+                        "private_mb":  193.93,
+                        "gpu_shared_mb":  157.58,
+                        "gpu_total_pct":  21.3,
+                        "cpu_pct":  1.64,
+                        "max_thread_cpu_pct":  14.54,
+                        "playback_rate":  0.9981,
+                        "delivered_fps":  29.94,
+                        "vo_delayed":  0
+                    },
+                    {
+                        "tag":  "B",
+                        "file":  "h1-oldrule-highdpb_1080p.mp4",
+                        "private_mb":  157.38,
+                        "gpu_shared_mb":  151.57,
+                        "gpu_total_pct":  22.56,
+                        "cpu_pct":  1.25,
+                        "max_thread_cpu_pct":  13.12,
+                        "playback_rate":  1.0043,
+                        "delivered_fps":  30.13,
+                        "vo_delayed":  0
+                    },
+                    {
+                        "tag":  "A",
+                        "file":  "highdpb_1080p.mp4",
+                        "private_mb":  194.02,
+                        "gpu_shared_mb":  157.59,
+                        "gpu_total_pct":  21.78,
+                        "cpu_pct":  1.49,
+                        "max_thread_cpu_pct":  13.82,
+                        "playback_rate":  1.0005,
+                        "delivered_fps":  30.02,
+                        "vo_delayed":  0
+                    },
+                    {
+                        "tag":  "B",
+                        "file":  "h1-oldrule-highdpb_1080p.mp4",
+                        "private_mb":  158.28,
+                        "gpu_shared_mb":  151.57,
+                        "gpu_total_pct":  22.46,
+                        "cpu_pct":  1.98,
+                        "max_thread_cpu_pct":  16.88,
+                        "playback_rate":  1.0001,
+                        "delivered_fps":  30,
+                        "vo_delayed":  0
+                    },
+                    {
+                        "tag":  "A",
+                        "file":  "highdpb_1080p.mp4",
+                        "private_mb":  194.44,
+                        "gpu_shared_mb":  157.93,
+                        "gpu_total_pct":  21.84,
+                        "cpu_pct":  2.08,
+                        "max_thread_cpu_pct":  17.01,
+                        "playback_rate":  1.0016,
+                        "delivered_fps":  30.05,
+                        "vo_delayed":  0
+                    },
+                    {
+                        "tag":  "B",
+                        "file":  "h1-oldrule-highdpb_1080p.mp4",
+                        "private_mb":  159.43,
+                        "gpu_shared_mb":  151.57,
+                        "gpu_total_pct":  22.58,
+                        "cpu_pct":  1.58,
+                        "max_thread_cpu_pct":  13.82,
+                        "playback_rate":  0.999,
+                        "delivered_fps":  29.97,
+                        "vo_delayed":  0
+                    },
+                    {
+                        "tag":  "A",
+                        "file":  "highdpb_1080p.mp4",
+                        "private_mb":  193.76,
+                        "gpu_shared_mb":  157.23,
+                        "gpu_total_pct":  21.67,
+                        "cpu_pct":  1.58,
+                        "max_thread_cpu_pct":  13.14,
+                        "playback_rate":  1.0025,
+                        "delivered_fps":  30.08,
+                        "vo_delayed":  0
+                    },
+                    {
+                        "tag":  "B",
+                        "file":  "h1-oldrule-highdpb_1080p.mp4",
+                        "private_mb":  157.39,
+                        "gpu_shared_mb":  151.57,
+                        "gpu_total_pct":  22.42,
+                        "cpu_pct":  1.92,
+                        "max_thread_cpu_pct":  16.98,
+                        "playback_rate":  1.0003,
+                        "delivered_fps":  30.01,
+                        "vo_delayed":  0
+                    }
+                ]
+}

@@ -24,6 +24,10 @@ param(
 $ErrorActionPreference = 'Stop'
 $script:Here = Split-Path -Parent $MyInvocation.MyCommand.Path
 . (Join-Path $script:Here 'bench_lib.ps1')
+# C8: the A/B replaces the wallpaper (the engine plays another file), so the
+# live session is snapshotted and restored - and the user's engine is
+# restarted in the same `finally` (the A/B stops it to start its own).
+. (Join-Path $script:Here 'session_snapshot.ps1')
 
 if ([string]::IsNullOrWhiteSpace($EngineExe)) { $EngineExe = Join-Path $script:Here '..\build\release\engine.exe' }
 if ([string]::IsNullOrWhiteSpace($FileA)) { $FileA = Join-Path $script:Here '..\tests\corpus\highdpb_4k.mp4' }
@@ -116,12 +120,18 @@ $report = [ordered]@{
     file_b = $FileB
     runs = $Runs
     a = [ordered]@{
-        private_mb = (Get-Stats @($a | ForEach-Object { $_.private_mb })).median
+          private_mb = (Get-Stats @($a | ForEach-Object { $_.private_mb })).median
+          private_band_mb = (Get-Stats @($a | ForEach-Object { $_.private_mb })).band
+          gpu_shared_band_mb = (Get-Stats @($a | ForEach-Object { $_.gpu_shared_mb })).band
+          n = @($a).Count
         gpu_shared_mb = (Get-Stats @($a | ForEach-Object { $_.gpu_shared_mb })).median
         playback_rate = (Get-Stats @($a | ForEach-Object { $_.playback_rate })).median
     }
     b = [ordered]@{
-        private_mb = (Get-Stats @($b | ForEach-Object { $_.private_mb })).median
+          private_mb = (Get-Stats @($b | ForEach-Object { $_.private_mb })).median
+          private_band_mb = (Get-Stats @($b | ForEach-Object { $_.private_mb })).band
+          gpu_shared_band_mb = (Get-Stats @($b | ForEach-Object { $_.gpu_shared_mb })).band
+          n = @($b).Count
         gpu_shared_mb = (Get-Stats @($b | ForEach-Object { $_.gpu_shared_mb })).median
         playback_rate = (Get-Stats @($b | ForEach-Object { $_.playback_rate })).median
     }

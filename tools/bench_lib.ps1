@@ -169,12 +169,17 @@ function Get-Stats {
         return [pscustomobject]@{ n = 0; median = $null; mean = $null; min = $null; max = $null }
     }
     $m = Get-Median $clean
+    $min = ($clean | Measure-Object -Minimum).Minimum
+    $max = ($clean | Measure-Object -Maximum).Maximum
     return [pscustomobject]@{
         n = $clean.Count
         median = [math]::Round($m, 2)
         mean = [math]::Round((($clean | Measure-Object -Average).Average), 2)
-        min = [math]::Round((($clean | Measure-Object -Minimum).Minimum), 2)
-        max = [math]::Round((($clean | Measure-Object -Maximum).Maximum), 2)
+        min = [math]::Round($min, 2)
+        max = [math]::Round($max, 2)
+        # The noise band: the spread of the samples around the median. It is
+        # the tolerance a difference must exceed to mean something.
+        band = [math]::Round(($max - $min), 2)
     }
 }
 

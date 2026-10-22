@@ -114,6 +114,68 @@ fn the_sps_parser_agrees_with_ffmpeg() {
 /// measured engine RAM), so a change in the parser or in the rule shows up
 /// here.
 #[test]
+fn the_savings_a_reencode_can_obtain_are_pinned() {
+    // Task H1: the threshold is EVALUATED by the savings a re-encode can
+    // obtain - (effective_refs - pin_refs) x frame_bytes - and not only by
+    // the total DPB.
+    //
+    // The frame bytes (the CODED size, 4:2:0 8-bit = 1.5 byte/pixel):
+    //   1920 x 1088 x 1.5 = 3_133_440  (the coded height is 1088: the
+    //                                     macroblock alignment)
+    //   3840 x 2160 x 1.5 = 12_441_600  (4K)
+    //   1920 x 1080 x 1.5 = 3_110_400  (the HEVC sample)
+    // The pinned count is 2 (the encoder legs pin ref=2).
+    //
+    // file -> (the total DPB, the savings obtainable, the copy decision)
+    let expected: &[(&str, u64, u64, bool)] = &[
+        // 4 refs -> the total 12 533 760; the savings (4-2) x 3 133 440 = 6 266 880.
+        ("anime.mp4", 12_533_760, 6_266_880, true),
+        // 8 refs -> the savings (8-2) x 3 133 440 = 18 800 640.
+        ("meddpb_1080p.mp4", 25_067_520, 18_800_640, true),
+        // 16 refs -> the savings (16-2) x 3 133 440 = 43 868 160.
+        ("highdpb_1080p.mp4", 50_135_040, 43_868_160, true),
+        // 16 refs at 4K -> the savings (16-2) x 12 441 600 = 174 182 400 -
+        // the one case where the re-encode really pays.
+        ("highdpb_4k.mp4", 199_065_600, 174_182_400, false),
+        // HEVC: 5 refs -> the savings (5-2) x 3 110 400 = 9 331 200.
+        ("hevc_1080p.mp4", 15_552_000, 9_331_200, true),
+        // Two SPSs (4 and 16 refs): the LARGER one decides.
+        ("multi_sps.mp4", 50_135_040, 43_868_160, true),
+    ];
+    let corpus = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../tests/corpus");
+    let mut checked = 0usize;
+    for (name, want_total, want_savings, want_copy) in expected {
+        let file = corpus.join(name);
+        if !file.exists() {
+            eprintln!("[SKIP] {name} is not in the corpus");
+            continue;
+        }
+        let report = probe_dpb(&file).unwrap_or_else(|e| panic!("{name}: {e}"));
+        let total = report
+            .sps
+            .iter()
+            .filter_map(|s| s.dpb_bytes())
+            .max()
+            .unwrap_or(0);
+        assert_eq!(total, *want_total, "{name}: the total DPB changed");
+        let savings = report
+            .sps
+            .iter()
+            .filter_map(|s| s.savings_obtainable())
+            .max()
+            .unwrap_or(0);
+        assert_eq!(
+            savings, *want_savings,
+            "{name}: the savings obtainable changed"
+        );
+        let copy_safe = report.sps.iter().any(|s| s.is_copy_safe());
+        assert_eq!(copy_safe, *want_copy, "{name}: the copy decision changed");
+        checked += 1;
+    }
+    assert!(checked > 0, "no corpus file was available");
+}
+
+#[test]
 fn the_dpb_byte_budget_is_pinned() {
     // file -> (the DPB bytes, the copy decision)
     let expected: &[(&str, u64, bool)] = &[

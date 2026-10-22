@@ -141,6 +141,7 @@ const char* CliUsage() {
          "  --crf <n>            CRF quality 16-28 (default 22)\n"
          "  --encoder <name>     auto|nvenc|qsv|amf|x264 (default auto)\n"
          "  --force-long         Allow inputs longer than 10 minutes\n"
+  "  --force-dpb-reencode Re-encode even when the DPB budget would allow a copy\n"
          "  --dry-run            Validate only; do not compress\n"
          "  --probe-encoders     List available encoders and exit\n"
          "  --help               Show this help and exit\n"
@@ -227,7 +228,9 @@ CliResult ParseCli(int argc, char** argv, CliOptions& out,
       }
     } else if (arg == "--force-long") {
       out.force_long = true;
-    } else if (arg == "--dry-run") {
+    } else if (arg == "--force-dpb-reencode") {
+    out.force_dpb_reencode = true;
+  } else if (arg == "--dry-run") {
       out.dry_run = true;
     } else if (arg == "--probe-encoders") {
       out.probe_encoders = true;
