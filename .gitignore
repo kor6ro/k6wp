@@ -74,3 +74,6 @@ video/
 
 # The Rust workspace build output (Phase 2).
 rust/target/
+
+# The cargo-fuzz build artifacts (the seeds in rust/fuzz/corpus ARE tracked)
+rust/fuzz/target/
