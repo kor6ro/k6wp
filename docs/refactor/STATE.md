@@ -116,14 +116,15 @@ the budgets, the visual-parity gate.
 | I5 | `STATE.md` (this file) - the one page every session reads first |
 | H1 | the G1 verdict is an **owner-directed trade-off**; the held-back RAM measured (**n = 5**, the medians + the bands: +13.23 / +35.74 / +15.46 MB on the three 1080p H.264 cases, -158.59 MB saved on the 4K case); the threshold evaluated by the savings it can obtain -> the data does **not** support a change, so it stays at 64 MB |
 | J2 | the two flakes rooted: the still''s mtime collision **fixed** (the test sets the timestamp explicitly), the lint for the production pipe/mutex names (**0 violations**), and the gate: **10 consecutive full ctest runs with the live engine, 0 failures** |
-| K1 | the IPC defect **rooted and fixed**: the cause was a system-wide Toolhelp thread snapshot (75 ms per `get_state`, the p99 84 ms); it is cached now (**the p50 1 ms, the p99 3-4 ms, the max ~130 ms**) and the instrument that proved it (`K6WP_IPC_TRACE=1`) stays in the tree. **The defect is pre-existing** (the `baseline-pre-refactor` build has the same 78 ms p50) - not a refactor regression |
+| K1 | the IPC defect **rooted and fixed**: the cause was a system-wide Toolhelp thread snapshot (75 ms per `get_state`, the p99 84 ms); it was cached first (**the p50 went 1 ms, the p99 3-4 ms, the max 121-152 ms under churn**), and **L1 then deleted the field**: the max is **4-14 ms** (n = 5), **0 of 20,000 samples >= 20 ms**. The instrument that proved it (`K6WP_IPC_TRACE=1`) is now actually wired into the tree. **The defect is pre-existing** (the `baseline-pre-refactor` build has the same 78 ms p50) - not a refactor regression |
 
 ### The v1.10 hardening - **in progress**
 | task | the result |
 |---|---|
 | H4 | the non-Latin doc/code/commit lint (`tools/lint_nonlatin.ps1`, rules R1-R4, a 10-check self-test, the pre-commit hook, two CI steps); **569 tracked files, 0 errors** |
 | J3 | the config writers under **one cross-process lock** (`Local\K6WP-Config-Lock`) with the re-read inside the critical section, in C++ **and** Rust; the negative control **0/5** clean without the lock (one scene published invalid JSON) vs **5/5** with it; the foreign keys capped at **64 KiB** in sorted order, the known name always wins, no coercion; the golden dump **101 cases** |
-| next | L1 -> L2 -> L4 -> L5 (the order and the gates are in section 9) |
+| L1 | the `get_state` max **rooted and removed**: the K1 cache refreshed the Toolhelp snapshot inline once per second; the field had no consumer, so it was **deleted**. Same-tree A/B (n = 5, 4000 requests): **max 56 ms median -> 7 ms** (4-14); the before's slow samples sat **981 ms apart** = the 1 s TTL; **0 of 20,000 after-samples >= 20 ms**. Doc `phase2-l1-get-state-max.md`, raw in `docs/bench/l1/` |
+| next | L2 -> L4 -> L5 (the order and the gates are in section 9) |
 
 ### Phase 3 - the engine in Rust - **not started** (3.7 after J4's engine part)
 ### E4 - the lean ffmpeg/libmpv builds - **optional**, deferred (no build toolchain here)
@@ -154,7 +155,7 @@ the budgets, the visual-parity gate.
 | `ffprobe.exe` may not be removed before J6 passes | - | **open** (J6) |
 | the public release | held | the owner's Slint licence decision (F3) |
 | the 10 consecutive green ctest runs with the live engine | J2 | **done** (10/10, 0 failures, 50.7-59.1 s per run) |
-| the IPC ack latency must be bounded | K1 | **done** - the cause was the system-wide Toolhelp thread snapshot (75 ms per `get_state`); it is cached now: the p99 **3 ms**, the max **152 ms** under a 10-minute stress, 0 "ack write failed" |
+| the IPC ack latency must be bounded | K1 + L1 | **done** - the cause was the system-wide Toolhelp thread snapshot (75 ms per `get_state`); K1 cached it (the p99 **3 ms**, the max 152 ms under a 10-minute stress, 0 "ack write failed") and **L1 deleted the field** (no consumer): the max is now **4-14 ms** (n = 5), **0 of 20,000 samples >= 20 ms** |
 | the IPC server must serve the clients **concurrently** (one slow ack may never delay another client) | K1 | **open** - the cause fix removed the symptom (0 lost requests), the structural change (the per-connection workers) was reverted because it destabilised the pipe-instance accounting; it goes into the Rust engine (Phase 3) |
 
 ---
@@ -267,8 +268,8 @@ binaries clean (the release tree is `build/release`).
 |---|---|---|
 | J3 - the config writers under one lock, C++ and Rust | **done** | committed; the negative control **0/5** clean without the lock vs **5/5** with it |
 | STATE.md - this section | **done** | this section |
-| L1 - root the 152 ms `get_state` max | next | hypothesis: the cached thread count refreshes inline on the handler; the gate is max ≈ p99 with `n` + the noise band in `budgets.md` |
-| L2 - the poll-path cost audit -> `docs/refactor/ipc-poll-cost.md` | after L1 | every `get_state` field measured with the same accumulator; fix any field over 1 ms |
+| L1 - root the 152 ms `get_state` max | **done** | the field (no consumer) and its snapshot **deleted**: max median **56 -> 7 ms** (n = 5), **0 of 20,000 samples >= 20 ms**, the before's slow samples 981 ms apart = the 1 s TTL; `phase2-l1-get-state-max.md` |
+| L2 - the poll-path cost audit -> `docs/refactor/ipc-poll-cost.md` | next | every `get_state` field measured with the same accumulator; fix any field over 1 ms |
 | L4 - the Rust client `ERROR_PIPE_BUSY` bounded retry + the over-limit test | after L2 | also: `known-limitations.md` (the baseline loses ~0.25 %, 3/1200) and the Phase 3 per-worker design note |
 | L5 - prove the diagnostic overrides are compiled out | after L4 | `K6WP_IPC_TRACE` into `tools/check_release_overrides.ps1` + CI |
 | L3 - the engine CPU + wakeups with the Studio polling (before/after K1) | **parallel with 2.4** | `n ≥ 5`, the noise band, the rate + frame counters; if it passes it is a release-candidate trade-off claim, not a quality claim |
@@ -280,5 +281,11 @@ binaries clean (the release tree is `build/release`).
 | E4 - the lean ffmpeg/libmpv builds | optional | deferred |
 
 **The immediate order** (one task, one commit, a ledger verdict each):
-L1 -> L2 -> L4 -> L5 (L3 in parallel with 2.4) -> 2.4 -> 2.5 -> J1/J5/J6/J4
+L2 -> L4 -> L5 (L3 in parallel with 2.4) -> 2.4 -> 2.5 -> J1/J5/J6/J4
 per their deadlines -> F3 -> 2.7 -> **Gate 2** -> Phase 3 -> E4 optional.
+
+**A naming note:** the v1.10 tasks `L1`-`L5` (the IPC follow-ups) are **not**
+the locked decisions `L1`-`L10` in section 2 (`L1` there is the DPB byte
+budget, `L10` is the ZIP target). When a sentence says "L1" and it is about
+latency, it is the v1.10 task; when it is about the re-encode threshold, it
+is the locked decision.

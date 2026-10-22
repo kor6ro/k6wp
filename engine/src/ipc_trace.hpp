@@ -19,8 +19,16 @@
 //   measurement - the instrument would measure itself. The accumulator has
 //   no I/O at all.
 //
-//   With the variable UNSET the instrumentation costs one static bool: no
-//   timer, no branch and no log in the release build's hot path.
+//   The instrumentation is a DEBUG-ONLY facility (build_flags.hpp): in a
+//   release build `IpcTraceEnabled()` is a constant false, so the compiler
+//   removes the timers, the labels and the log calls - the shipped binary
+//   does not even contain the variable name. In a debug build with the
+//   variable unset it costs one static bool.
+//
+// CAVEAT (L1): the summary is logged from the scope's DESTRUCTOR, i.e. inside
+// the section it measures, every `kTraceSummaryEvery` samples. That is fine
+// for a MEAN and wrong for a MAX (the 200th request pays the log flush). Never
+// quote a max from a trace-on run: the L1 gate ran with the trace OFF.
 
 #include <algorithm>
 #include <chrono>
@@ -31,18 +39,28 @@
 #include <mutex>
 #include <string>
 
+#include "build_flags.hpp"
 #include "log_file.hpp"
 
 namespace k6wp {
 
 // True when the trace is on. The environment is read ONCE (the engine's
 // environment does not change while it runs).
+//
+// DEBUG ONLY: `K6WP_IPC_TRACE` is an environment override like the pipe and
+// mutex names, so it obeys the same rule (build_flags.hpp) - the release
+// build does not contain the getenv, the string or the branch, and
+// `check_release_overrides.ps1` can scan for the name.
 inline bool IpcTraceEnabled() {
+#if K6WP_ALLOW_ENV_OVERRIDES
   static const bool enabled = [] {
     const char* value = std::getenv("K6WP_IPC_TRACE");
     return value != nullptr && value[0] != '\0' && value[0] != '0';
   }();
   return enabled;
+#else
+  return false;
+#endif
 }
 
 // The shared log sink (the same one every engine TU writes to).

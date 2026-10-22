@@ -154,10 +154,16 @@ rows).
 - The **trace instrumentation** stays in the tree (it is off unless
   `K6WP_IPC_TRACE=1` is set, and it costs one static bool when it is off) -
   it is the instrument that proved the cause and the one that will show a
-  regression.
+  regression. **L1 wired it for real** (`ipc.handler`, `ipc.ack`,
+  `get_state.json`): this commit shipped the header without a single scope,
+  so the breakdown above came from a local patch. It is reproducible now.
+- **The cache was a stopgap.** L1 (`phase2-l1-get-state-max.md`) deleted
+  `thread_count` entirely: it had no consumer, and the 1 s TTL still put a
+  50-70 ms snapshot into the poll path once per second (measured: the slow
+  samples 981 ms apart; after deletion 0 of 20,000 samples >= 20 ms).
 - The `get_state` handler still does a **disk check** per poll (the
   "degraded" verdict for an assigned display whose file is gone). It is
   fast on a local path, but a path on a disconnected network drive would
-  block the IPC thread for seconds. The next step is to publish that
-  verdict from the main loop instead of asking the filesystem on every
+  block the IPC thread for seconds. The next step (**L2**) is to publish
+  that verdict from the main loop instead of asking the filesystem on every
   poll.

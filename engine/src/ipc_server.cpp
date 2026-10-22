@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "ipc_protocol.hpp"
+#include "ipc_trace.hpp"
 
 namespace k6wp {
 namespace {
@@ -343,11 +344,19 @@ struct IpcServer::Impl {
         }
       }
 
-      const std::string ack = HandleMessage(std::string(buf.data(), n));
+      std::string ack;
+      {
+        k6wp::TraceScope trace_handler("ipc.handler");
+        ack = HandleMessage(std::string(buf.data(), n));
+      }
       if (ack.empty()) continue;  // Frameless/empty: no reply by policy.
       DWORD written = 0;
-      const BOOL wok = WriteFile(pipe.h, ack.data(), static_cast<DWORD>(ack.size()),
-                                 &written, nullptr);
+      BOOL wok = FALSE;
+      {
+        k6wp::TraceScope trace_ack("ipc.ack");
+        wok = WriteFile(pipe.h, ack.data(), static_cast<DWORD>(ack.size()),
+                        &written, nullptr);
+      }
       if (!wok || written != ack.size()) {
         Log("ipc: ack write failed (error %lu), re-listening", GetLastError());
         DisconnectNamedPipe(pipe.h);

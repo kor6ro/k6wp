@@ -36,6 +36,7 @@ fn main() {
     let mut pipe = current_session_pipe_name();
     let mut image: Option<String> = None;
     let mut json_out: Option<String> = None;
+    let mut samples_out: Option<String> = None;
     let mut churn: Option<String> = None;
     let mut churn_every: usize = 25;
 
@@ -80,6 +81,13 @@ fn main() {
                 json_out = args.get(i + 1).cloned();
                 i += 2;
             }
+            // L1: write every sample as CSV (offset_ms,latency_ms), so a
+            // spike can be attributed in time instead of only summarised by
+            // the max. The offset is milliseconds since the run started.
+            "--samples" => {
+                samples_out = args.get(i + 1).cloned();
+                i += 2;
+            }
             other => {
                 eprintln!("stress_client: the unknown argument {other}");
                 std::process::exit(2);
@@ -108,7 +116,10 @@ fn main() {
         let stop = stop.clone();
         let failures = failures.clone();
         handles.push(std::thread::spawn(move || {
-            let mut samples: Vec<u64> = Vec::new();
+            // L1: (offset_ms, latency_ms) per sample, so the report can show
+            // WHEN a spike happened (a once-per-second spike has a shape).
+            let mut samples: Vec<(u64, u64)> = Vec::new();
+            let thread_started = started;
             let mut client = match IpcClient::connect(&pipe, options) {
                 Ok(client) => client,
                 Err(e) => {
@@ -154,14 +165,14 @@ fn main() {
                 match client.request(&message) {
                     Ok(ack) => {
                         let elapsed = t0.elapsed().as_millis() as u64;
-                        samples.push(elapsed);
+                        samples.push((thread_started.elapsed().as_millis() as u64, elapsed));
                         if ack.get("state").is_none() {
                             failures.fetch_add(1, Ordering::Relaxed);
                         }
                     }
                     Err(_) => {
                         let elapsed = t0.elapsed().as_millis() as u64;
-                        samples.push(elapsed);
+                        samples.push((thread_started.elapsed().as_millis() as u64, elapsed));
                         failures.fetch_add(1, Ordering::Relaxed);
                         // A broken pipe: reconnect for the next request.
                         let options = ConnectOptions {
@@ -181,9 +192,13 @@ fn main() {
         }));
     }
 
+    let mut series: Vec<(u64, u64)> = Vec::with_capacity(threads * requests);
     for handle in handles {
         if let Ok(samples) = handle.join() {
-            latencies.extend(samples);
+            for (offset_ms, latency_ms) in samples {
+                latencies.push(latency_ms);
+                series.push((offset_ms, latency_ms));
+            }
         }
     }
     let wall = started.elapsed();
@@ -220,6 +235,18 @@ fn main() {
         });
         if let Err(e) = std::fs::write(&path, format!("{report}\n")) {
             eprintln!("stress_client: the report could not be written: {e}");
+            std::process::exit(2);
+        }
+    }
+
+    if let Some(path) = samples_out {
+        series.sort_by_key(|sample| sample.0);
+        let mut text = String::from("offset_ms,latency_ms\n");
+        for (offset_ms, latency_ms) in &series {
+            text.push_str(&format!("{offset_ms},{latency_ms}\n"));
+        }
+        if let Err(e) = std::fs::write(&path, text) {
+            eprintln!("stress_client: the samples could not be written: {e}");
             std::process::exit(2);
         }
     }

@@ -379,7 +379,7 @@ Built by `EngineApp::BuildStateJson` (`engine/src/engine_app.cpp:1671-1793`). Th
 | `headless_slots` | int | number of headless slots | `engine/src/engine_app.cpp:1756` |
 | `live` | bool | `slot_count() > 0` | `engine/src/engine_app.cpp:1757` |
 | `monitor` | int | live monitor target, `-1` = all screens | `engine/src/engine_app.cpp:1759` |
-| `thread_count` | int | current thread count | `engine/src/engine_app.cpp:1760` |
+| ~~`thread_count`~~ | - | **REMOVED by L1** (v1.10): it was emitted but never parsed, and counting the threads cost a system-wide Toolhelp snapshot. `Get-Process` still reports the thread count from the outside | - |
 | `handle_count` | int | current handle count | `engine/src/engine_app.cpp:1761` |
 | `hwdec_active` | bool | mpv `hwdec-current` | `engine/src/engine_app.cpp:1762` |
 | `gpu_pin` | string | resolved d3d11-adapter pin (`""` = unpinned) | `engine/src/engine_app.cpp:1765` |
@@ -399,7 +399,7 @@ Built by `EngineApp::BuildStateJson` (`engine/src/engine_app.cpp:1671-1793`). Th
 
 **`display_coverage` verdict vocabulary:** `"covered"`, `"clipped-left"`, `"clipped-top"`, `"clipped-right"`, `"clipped-bottom"`, `"headless"`, and the additive `"degraded"` (the assignment is recorded but the file no longer exists on disk) (`engine/src/engine_app.cpp:86-96,1733-1742`).
 
-**Keys emitted by the engine but NOT consumed by `ParseEngineState`** (a port may keep them; the Studio's typed view ignores them): `running`, `pause_mask`, `wallpaper_mode`, `config`, `monitor`, `thread_count`, `handle_count`, `hwdec_active`, `gpu_pin`, `gpu_pin_reverts` — compare the emitted list (`engine/src/engine_app.cpp:1745-1791`) with the parsed list (`shared/ipc_protocol.cpp:221-302`).
+**Keys emitted by the engine but NOT consumed by `ParseEngineState`** (a port may keep them; the Studio's typed view ignores them): `running`, `pause_mask`, `wallpaper_mode`, `config`, `monitor`, `handle_count`, `hwdec_active`, `gpu_pin`, `gpu_pin_reverts` - compare the emitted list (`engine/src/engine_app.cpp:1745-1791`) with the parsed list (`shared/ipc_protocol.cpp:221-302`). `thread_count` was in this list until **L1 removed it** (v1.10): an unconsumed diagnostic does not justify a 50-75 ms system-wide snapshot on every poll (see `phase2-l1-get-state-max.md`).
 
 **`ParseEngineState` defaulting rules** (Studio-side, `shared/ipc_protocol.cpp:221-302`): a missing key or a wrong-typed value falls back to the documented default (`pid` 0, `video` `""`, `paused` false, `headless_slots` 0, `live` true, `display_capability` 0, empty maps, `playlist_enabled` false, `playlist_size` 0, `playlist_index` -1, `reconcile_*` empty/0). Parsing never throws (`shared/ipc_protocol.cpp:299-301`).
 

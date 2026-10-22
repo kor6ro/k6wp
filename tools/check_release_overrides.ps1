@@ -3,9 +3,10 @@
 #
 # WHY
 #   The overrides (K6WP_ENGINE_PIPE, K6WP_ENGINE_MUTEX, K6WP_LIBRARY_JSON,
-#   K6WP_TEST_NO_CONFIG_LOCK) exist so a TEST can talk to its own engine
-#   instead of the user's live session, or so the two-writer test can prove
-#   the config lock is what prevents the lost update. A shipped binary must
+#   K6WP_TEST_NO_CONFIG_LOCK, K6WP_IPC_TRACE) exist so a TEST can talk to its
+#   own engine instead of the user's live session, or so the two-writer test
+#   can prove the config lock is what prevents the lost update, or so the K1/L2
+#   instrument can accumulate the `get_state` cost. A shipped binary must
 #   not let an environment variable redirect the IPC endpoint, the singleton
 #   mutex or the library path: whoever can set an environment variable for
 #   the process would then be able to point the app at a pipe it controls.
@@ -52,7 +53,7 @@ if (-not (Test-Path $ReleaseDir)) {
 }
 
 $forbidden = @('K6WP_ENGINE_PIPE', 'K6WP_ENGINE_MUTEX', 'K6WP_LIBRARY_JSON',
-               'K6WP_TEST_NO_CONFIG_LOCK')
+               'K6WP_TEST_NO_CONFIG_LOCK', 'K6WP_IPC_TRACE')
 if (-not $RustReleaseDir) {
     $RustReleaseDir = Join-Path $root 'rust\target\release'
 }

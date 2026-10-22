@@ -4,6 +4,7 @@
 #include "displays_schema.hpp"
 #include "gpu_pin.hpp"
 #include "ipc_marshal.hpp"
+#include "ipc_trace.hpp"
 #include "links.hpp"
 #include "still.hpp"
 #include "log_file.hpp"
@@ -15,7 +16,6 @@
 #include "renderer_graveyard.hpp"
 
 #include <shellapi.h>
-#include <tlhelp32.h>
 #include <wtsapi32.h>
 #include <psapi.h>
 
@@ -36,45 +36,12 @@ namespace {
 
 std::atomic<HWND> g_message_hwnd{nullptr};
 
-unsigned long long CurrentThreadCount() {
-  const DWORD pid = GetCurrentProcessId();
-  HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
-  if (snap == INVALID_HANDLE_VALUE) return 0;
-  unsigned long long n = 0;
-  THREADENTRY32 te{};
-  te.dwSize = sizeof(te);
-  if (Thread32First(snap, &te)) {
-    do {
-      if (te.th32OwnerProcessID == pid) ++n;
-    } while (Thread32Next(snap, &te));
-  }
-  CloseHandle(snap);
-  return n;
-}
-
-// The thread count for the get_state, CACHED (task K1).
-//
-// Counting the threads means a SYSTEM-WIDE Toolhelp snapshot: it walks
-// every thread of every process in the machine, and it holds a kernel-wide
-// lock while it does it. MEASURED on this host: 75 ms per call, and the
-// get_state is polled by the Studio, so the snapshot was repeated on every
-// poll - and the IPC thread is serial, so it delayed EVERY other client
-// too (the Studio then showed "Disconnected" and the apply flow failed).
-//
-// The field is a diagnostic, so a second of staleness is invisible: the
-// snapshot now happens at most once per second.
-unsigned long long CurrentThreadCountCached() {
-  static std::mutex mutex;
-  static std::chrono::steady_clock::time_point next_refresh{};
-  static unsigned long long cached = 0;
-  std::lock_guard<std::mutex> lock(mutex);
-  const auto now = std::chrono::steady_clock::now();
-  if (now >= next_refresh) {
-    cached = CurrentThreadCount();
-    next_refresh = now + std::chrono::seconds(1);
-  }
-  return cached;
-}
+// L1: the thread-count helpers that used to live here are GONE. Counting the
+// threads needs a system-wide Toolhelp snapshot (~75 ms per call); it was the
+// source of the once-per-second `get_state` spike, and the field it fed had no
+// consumer (contract-inventory.md: emitted, never parsed). The live thread
+// count is still visible from the outside with `Get-Process`, which is where
+// the bench harness reads it.
 
 unsigned long long CurrentHandleCount() {
   DWORD n = 0;
@@ -2230,6 +2197,9 @@ void EngineApp::OnTrayQuickSwitch(std::size_t idx) {
 }
 
 std::string EngineApp::BuildStateJson() const {
+  // L1/L2: the `get_state` build measured with the K1 accumulator. The whole
+  // build is one label; the per-field labels come with L2.
+  k6wp::TraceScope trace_json("get_state.json");
   std::string video_utf8;
   {
     k6wp::lock_order::LeafGuard video_guard(video_mutex_);
@@ -2240,7 +2210,7 @@ std::string EngineApp::BuildStateJson() const {
   // CRIT-1: options_ + pin_reverted_total_ are cross-thread state — snapshot
   // under their mutexes (this runs on the IPC worker thread). The slot
   // census below (active_monitor atomic; slot counts) is a best-effort
-  // diagnostic read, same class as thread_count/handle_count.
+  // diagnostic read, same class as handle_count.
   std::string config_utf8;
   WallpaperMode wallpaper_mode_copy = WallpaperMode::kAuto;
   int reverts_copy = 0;
@@ -2332,7 +2302,11 @@ std::string EngineApp::BuildStateJson() const {
       {"live", multi_monitor_.slot_count() > 0},
       // Step 5, additive only: live monitor target (-1 = all screens).
       {"monitor", multi_monitor_.active_monitor()},
-      {"thread_count", CurrentThreadCountCached()},
+      // L1: `thread_count` was REMOVED here. It was emitted but never read by
+      // ParseEngineState (contract-inventory.md) - no product consumer - and
+      // the only way to count the threads is a system-wide Toolhelp snapshot
+      // (~75 ms), which put a once-per-second spike into the poll path. The
+      // field is gone, so the spike is gone.
       {"handle_count", CurrentHandleCount()},
       {"hwdec_active", renderer_snapshot ? renderer_snapshot->IsHwdecActive() : false},
       // P3L.3, additive only: resolved d3d11-adapter pin ("" = unpinned)
