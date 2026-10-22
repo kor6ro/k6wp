@@ -113,6 +113,9 @@ the budgets, the visual-parity gate.
 | I2 | the SPS parser seeks (a 512 MB non-faststart file costs **14 628 bytes**); the container policy is explicit (the fallback = **1 of 11** corpus files = 9.1 %); the 4 cargo-fuzz targets compile |
 | I3 | the config round trip (the unknown keys preserved, 6 fixture cases), the writer inventory, the atomic publish, the downgrade policy |
 | I4 | the overrides compiled out of the release build (**5 of 5** binaries clean); the G6 verification is not weakened |
+| I5 | `STATE.md` (this file) - the one page every session reads first |
+| H1 | the G1 verdict is an **owner-directed trade-off**; the held-back RAM measured (**n = 5**, the medians + the bands: +13.23 / +35.74 / +15.46 MB on the three 1080p H.264 cases, -158.59 MB saved on the 4K case); the threshold evaluated by the savings it can obtain -> the data does **not** support a change, so it stays at 64 MB |
+| J2 | the two flakes rooted: the still''s mtime collision **fixed** (the test sets the timestamp explicitly), the lint for the production pipe/mutex names (**0 violations**), and the gate: **10 consecutive full ctest runs with the live engine, 0 failures** |
 
 ### Phase 3 - the engine in Rust - **not started** (3.7 after J4's engine part)
 ### E4 - the lean ffmpeg/libmpv builds - **optional**, deferred (no build toolchain here)
@@ -142,7 +145,8 @@ the budgets, the visual-parity gate.
 | the C++ engine may not be deleted before its deadline | - | the C++ is still the reference |
 | `ffprobe.exe` may not be removed before J6 passes | - | **open** (J6) |
 | the public release | held | the owner's Slint licence decision (F3) |
-| the 10 consecutive green ctest runs with the live engine | J2 | **open** |
+| the 10 consecutive green ctest runs with the live engine | J2 | **done** (10/10, 0 failures, 50.7-59.1 s per run) |
+| the engine''s IPC ack latency must be bounded (the `get_state` handler must not block on the main loop''s locks) | J2 (the open finding) | **open** - a late ack makes the Studio show "Disconnected" |
 
 ---
 

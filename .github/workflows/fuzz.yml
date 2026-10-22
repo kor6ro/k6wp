@@ -103,3 +103,41 @@ jobs:
           name: the-fuzzing-samples
           path: rust/fuzz/artifacts
           if-no-files-found: ignore
+
+  stability:
+    name: the suite is green 10 times in a row (the live engine)
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Fetch vendored binaries
+        shell: pwsh
+        run: ./tools/fetch_vendor.ps1
+
+      - name: Install Qt 6.8.3 (msvc2022_64)
+        run: choco install qt6-default -y --no-progress
+
+      - name: Configure (Release, tests ON)
+        run: >
+          cmake -S . -B build
+          -DCMAKE_BUILD_TYPE=Release
+          -DBUILD_TESTING=ON
+          -DCMAKE_PREFIX_PATH="C:/Qt/6.8.3/msvc2022_64"
+
+      - name: Build Release
+        run: cmake --build build --config Release --parallel
+
+      # Task J2: the suite must be GREEN ten times in a row with the live
+      # engine running (the engine is started by the gate itself).
+      - name: The 10-run stability gate
+        shell: pwsh
+        run: ./tools/gate_ctest_stability.ps1 -Runs 10
+
+      - name: The stability report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: the-ctest-stability-report
+          path: docs/bench/ctest-stability.json
+          if-no-files-found: ignore

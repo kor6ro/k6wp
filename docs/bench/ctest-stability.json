@@ -1,0 +1,84 @@
+﻿{
+    "tool":  "gate_ctest_stability",
+    "task":  "J2",
+    "date":  "2026-10-22T12:20:02+07:00",
+    "label":  "live-proven (one machine)",
+    "method":  "the full ctest suite, 10 times in a row, with the live engine running; the wall time of every run is recorded",
+    "runs":  10,
+    "the_engine_was_running":  true,
+    "failures":  0,
+    "total_seconds":  534.4,
+    "the_median_seconds":  53.4,
+    "results":  [
+                    {
+                        "run":  1,
+                        "seconds":  53,
+                        "exit_code":  0,
+                        "ok":  true,
+                        "summary":  "100% tests passed out of 50"
+                    },
+                    {
+                        "run":  2,
+                        "seconds":  53.6,
+                        "exit_code":  0,
+                        "ok":  true,
+                        "summary":  "100% tests passed out of 50"
+                    },
+                    {
+                        "run":  3,
+                        "seconds":  52.1,
+                        "exit_code":  0,
+                        "ok":  true,
+                        "summary":  "100% tests passed out of 50"
+                    },
+                    {
+                        "run":  4,
+                        "seconds":  59.1,
+                        "exit_code":  0,
+                        "ok":  true,
+                        "summary":  "100% tests passed out of 50"
+                    },
+                    {
+                        "run":  5,
+                        "seconds":  53.1,
+                        "exit_code":  0,
+                        "ok":  true,
+                        "summary":  "100% tests passed out of 50"
+                    },
+                    {
+                        "run":  6,
+                        "seconds":  52.4,
+                        "exit_code":  0,
+                        "ok":  true,
+                        "summary":  "100% tests passed out of 50"
+                    },
+                    {
+                        "run":  7,
+                        "seconds":  53,
+                        "exit_code":  0,
+                        "ok":  true,
+                        "summary":  "100% tests passed out of 50"
+                    },
+                    {
+                        "run":  8,
+                        "seconds":  50.7,
+                        "exit_code":  0,
+                        "ok":  true,
+                        "summary":  "100% tests passed out of 50"
+                    },
+                    {
+                        "run":  9,
+                        "seconds":  50.7,
+                        "exit_code":  0,
+                        "ok":  true,
+                        "summary":  "100% tests passed out of 50"
+                    },
+                    {
+                        "run":  10,
+                        "seconds":  56.7,
+                        "exit_code":  0,
+                        "ok":  true,
+                        "summary":  "100% tests passed out of 50"
+                    }
+                ]
+}

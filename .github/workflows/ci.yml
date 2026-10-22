@@ -30,6 +30,12 @@ jobs:
         shell: pwsh
         run: ./tools/fetch_vendor.ps1
 
+      # Task J2: a test may not touch the PRODUCTION pipe or mutex name
+      # without claiming a unique one - that is how the suite once hung for
+      # 30 minutes and how a leg became flaky.
+      - name: The test override lint
+        shell: pwsh
+        run: ./tools/lint_test_overrides.ps1
       - name: License guard (LICENSE + LICENSES/)
         shell: pwsh
         run: |

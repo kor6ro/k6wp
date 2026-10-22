@@ -282,12 +282,40 @@ bool StubSpawn(const std::wstring& args) {
   return g_spawn_result;
 }
 
+// The settings file is written with an EXPLICIT mtime (task J2).
+//
+// The still's settings cache key is (size, mtime) - and the two writes of
+// this test have the SAME size. Without an explicit timestamp both writes
+// land in the same mtime tick and the second read returns the cached
+// (stale) value: the test then fails at random, depending on the
+// filesystem's timestamp granularity. Setting the mtime explicitly (and
+// moving it forward) makes the cache key change - the test no longer
+// depends on the clock, and it never waits for a tick.
 void WriteSettings(bool wallpaper, bool lockscreen, double offset) {
   k6wp::StudioSettings s = k6wp::DefaultStudioSettings();
   s.wallpaper_sync = wallpaper;
   s.lockscreen_sync = lockscreen;
   s.lockscreen_offset_sec = offset;
-  k6wp::SaveStudioSettings(k6wp::DefaultStudioSettingsPath(), s);
+  const auto path = k6wp::DefaultStudioSettingsPath();
+  k6wp::SaveStudioSettings(path, s);
+  // Move the mtime forward by a second per write (the stamp is in
+  // 100-ns units since the epoch).
+  static int counter = 0;
+  ++counter;
+  FILETIME ft;
+  GetSystemTimeAsFileTime(&ft);
+  ULARGE_INTEGER now{};
+  now.LowPart = ft.dwLowDateTime;
+  now.HighPart = ft.dwHighDateTime;
+  now.QuadPart += static_cast<ULONGLONG>(counter) * 10000000ULL;
+  HANDLE handle = CreateFileW(path.c_str(), FILE_WRITE_ATTRIBUTES,
+                               FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+                               OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+  if (handle != INVALID_HANDLE_VALUE) {
+    SetFileTime(handle, nullptr, nullptr,
+                reinterpret_cast<const FILETIME*>(&now));
+    CloseHandle(handle);
+  }
 }
 
 void TestSpawnContract() {
