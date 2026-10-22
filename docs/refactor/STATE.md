@@ -92,7 +92,7 @@ the budgets, the visual-parity gate.
 ### Phase 2 - the Studio in Slint - **in progress**
 | task | the result |
 |---|---|
-| 2.2 | `k6wp-core` (the Rust contracts): **99** shared golden cases + the per-module tests, all replayed against the C++ |
+| 2.2 | `k6wp-core` (the Rust contracts): **101** shared golden cases + the per-module tests, all replayed against the C++ |
 | 2.3 | the Slint shell (FemtoVG default; software and Skia **UNPROVEN**) |
 | 2.4 | **open** - the UX spec + the design system + the measurable flow script |
 | 2.5 | **open** - the pages; the Library first (F1 virtual grid + F2 lazy thumbnailer) |
@@ -117,6 +117,13 @@ the budgets, the visual-parity gate.
 | H1 | the G1 verdict is an **owner-directed trade-off**; the held-back RAM measured (**n = 5**, the medians + the bands: +13.23 / +35.74 / +15.46 MB on the three 1080p H.264 cases, -158.59 MB saved on the 4K case); the threshold evaluated by the savings it can obtain -> the data does **not** support a change, so it stays at 64 MB |
 | J2 | the two flakes rooted: the still''s mtime collision **fixed** (the test sets the timestamp explicitly), the lint for the production pipe/mutex names (**0 violations**), and the gate: **10 consecutive full ctest runs with the live engine, 0 failures** |
 | K1 | the IPC defect **rooted and fixed**: the cause was a system-wide Toolhelp thread snapshot (75 ms per `get_state`, the p99 84 ms); it is cached now (**the p50 1 ms, the p99 3-4 ms, the max ~130 ms**) and the instrument that proved it (`K6WP_IPC_TRACE=1`) stays in the tree. **The defect is pre-existing** (the `baseline-pre-refactor` build has the same 78 ms p50) - not a refactor regression |
+
+### The v1.10 hardening - **in progress**
+| task | the result |
+|---|---|
+| H4 | the non-Latin doc/code/commit lint (`tools/lint_nonlatin.ps1`, rules R1-R4, a 10-check self-test, the pre-commit hook, two CI steps); **569 tracked files, 0 errors** |
+| J3 | the config writers under **one cross-process lock** (`Local\K6WP-Config-Lock`) with the re-read inside the critical section, in C++ **and** Rust; the negative control **0/5** clean without the lock (one scene published invalid JSON) vs **5/5** with it; the foreign keys capped at **64 KiB** in sorted order, the known name always wins, no coercion; the golden dump **101 cases** |
+| next | L1 -> L2 -> L4 -> L5 (the order and the gates are in section 9) |
 
 ### Phase 3 - the engine in Rust - **not started** (3.7 after J4's engine part)
 ### E4 - the lean ffmpeg/libmpv builds - **optional**, deferred (no build toolchain here)
@@ -183,3 +190,95 @@ powershell -File tools/bench_studio_compare.ps1      # the Studio comparison
 - the named-pipe names are **per session** and must never be a bare literal;
 - the corpus lives in `tests/corpus/` (gitignored) - the regeneration commands are in `docs/refactor/phase1-4-sps-dpb.md`;
 - the `K6WP_ENGINE_PIPE` / `K6WP_ENGINE_MUTEX` overrides exist only in a **debug** build (I4) - a test that needs the real endpoint must be aware of that.
+
+---
+
+## 9. Cara melanjutkan sesi (how to continue a session)
+
+### The read order
+
+1. **This file** - the locked decisions, the evidence rules, the budgets, the open list.
+2. `docs/refactor/ledger.md` - one row per task, with the verdict and the numbers. If a claim is not in the ledger, it is not established.
+3. `docs/refactor/budgets.md` - every active budget with its gate, its `n` and its noise band.
+4. The per-task document of whatever you are about to touch (`docs/refactor/phase*.md`, `docs/refactor/adr-*.md`).
+5. `docs/refactor/g5-coverage.md` - which behaviour is frozen and which rows are still **TO FIXTURE** / **LIVE TEST**.
+6. `docs/bench/*.json` - the raw measurements; never quote a number that is not in one of these or in the ledger.
+
+### The 10-minute verification (run it before touching anything)
+
+```powershell
+# the C++ side (the engine link fails with LNK1168 while the live engine runs -
+# that is expected; everything else must build)
+cmake --preset msvc-dev
+cmake --build --preset msvc-dev
+ctest --preset msvc-dev                     # expect 50/50, 54-75 s
+
+# the Rust side (from rust/)
+cargo test --workspace --target x86_64-pc-windows-msvc
+cargo clippy --workspace --all-targets --target x86_64-pc-windows-msvc -- -D warnings
+cargo fmt --all -- --check
+```
+
+The expected state on this host (2026-10-22): `ctest` **50/50** in 54-75 s
+(the live engine up adds ~15 s); `config_test` **317 checks, 0 failures**;
+`golden_dump --check` **101 cases**; `cargo test --workspace` green with
+**75** `k6wp-core` unit tests; `check_release_overrides.ps1` **5/5** release
+binaries clean (the release tree is `build/release`).
+
+### The bench smoke (the ones that need a live session)
+
+- **Never** change the display mode, the wallpaper or the lock screen without
+  `tools/session_snapshot.ps1`: dot-source it and wrap the work in
+  `Invoke-SessionSafe`, which restores in a `finally` (success, thrown error,
+  Ctrl+C).
+- `tools/stress_ipc.ps1` (engine already running) - the gate is
+  `get_state` **p99 ≤ 100 ms, max ≤ 500 ms, 0 "ack write failed"**
+  (`budgets.md`). The instrument behind it is `K6WP_IPC_TRACE=1` (debug
+  builds only).
+- `tools/bench_unload_d2.ps1` - the black-frame gate (0 frames in 170 samples).
+- `tools/bench_dpb_ab.ps1` - the DPB A/B; it needs `tests/corpus/` and it
+  refuses a run whose playback rate leaves 0.97-1.03.
+- Any A-vs-B claim needs: identical state, the same metric, the same
+  measurement point, `n ≥ 5`, the noise band, and for playback the rate plus
+  the frame counters. Otherwise the verdict is **"tidak sebanding"**.
+
+### The traps that still bite (beyond section 8)
+
+- PowerShell 5.1: `"abc".IndexOf($stringNotPresent)` returns **0** - always
+  use `[StringComparison]::Ordinal`. Variables are case-insensitive: `-Root`
+  was clobbered by `$root` once.
+- `Set-Content -Encoding UTF8` writes a **BOM**; fixtures and commit messages
+  must be written without one. `git`'s `core.autocrlf=true` rewrites hooks to
+  CRLF - `.gitattributes` pins `.githooks/*` to LF.
+- `windows.h` pulls in `rpcndr.h`, which does `#define small char`; the
+  resulting error points at `auto`, not at the macro.
+- The `windows` crate gates `CreateMutexW` behind `Win32_Security` **and**
+  `Win32_System_Threading`.
+- libtest re-executes one test only with `--exact <module>::<test>` (a short
+  name runs the whole suite in every child).
+- The console prints U+FFFD / U+0394 as `?`; inspect the codepoint with
+  `[int][char]` before believing the output.
+- **Never** put `CurrentThreadCount()` / `CreateToolhelp32Snapshot` on a poll
+  path: it is a system-wide snapshot (~75 ms) and it was the K1 defect.
+
+### The deadline status
+
+| commitment | the deadline | the state |
+|---|---|---|
+| J3 - the config writers under one lock, C++ and Rust | **done** | committed; the negative control **0/5** clean without the lock vs **5/5** with it |
+| STATE.md - this section | **done** | this section |
+| L1 - root the 152 ms `get_state` max | next | hypothesis: the cached thread count refreshes inline on the handler; the gate is max ≈ p99 with `n` + the noise band in `budgets.md` |
+| L2 - the poll-path cost audit -> `docs/refactor/ipc-poll-cost.md` | after L1 | every `get_state` field measured with the same accumulator; fix any field over 1 ms |
+| L4 - the Rust client `ERROR_PIPE_BUSY` bounded retry + the over-limit test | after L2 | also: `known-limitations.md` (the baseline loses ~0.25 %, 3/1200) and the Phase 3 per-worker design note |
+| L5 - prove the diagnostic overrides are compiled out | after L4 | `K6WP_IPC_TRACE` into `tools/check_release_overrides.ps1` + CI |
+| L3 - the engine CPU + wakeups with the Studio polling (before/after K1) | **parallel with 2.4** | `n ≥ 5`, the noise band, the rate + frame counters; if it passes it is a release-candidate trade-off claim, not a quality claim |
+| J1 - the seeded random differential | **before 3.7** | open |
+| J4 - the Studio goldens / the 12 TO FIXTURE rows | Studio **before 2.7**, engine rows **before 3.7** | open |
+| J5 - a real fuzz run or an honest record | **before release** | open (the ASan runtime is still missing) |
+| J6 - the SPS probe budget before `ffprobe.exe` goes | **before the removal** | open |
+| F3 - the Slint licence decision | **the release stays held** | open |
+| E4 - the lean ffmpeg/libmpv builds | optional | deferred |
+
+**The immediate order** (one task, one commit, a ledger verdict each):
+L1 -> L2 -> L4 -> L5 (L3 in parallel with 2.4) -> 2.4 -> 2.5 -> J1/J5/J6/J4
+per their deadlines -> F3 -> 2.7 -> **Gate 2** -> Phase 3 -> E4 optional.
