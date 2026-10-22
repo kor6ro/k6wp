@@ -835,6 +835,13 @@ fn find_box_payloads(data: &[u8], four_cc: &[u8; 4]) -> Vec<Vec<u8>> {
             let size =
                 u32::from_be_bytes([data[pos], data[pos + 1], data[pos + 2], data[pos + 3]]) as u64;
             let kind = [data[pos + 4], data[pos + 5], data[pos + 6], data[pos + 7]];
+            // The box dump is compiled OUT of a release build (task L5, the
+            // same rule as the other diagnostic overrides): a shipped binary
+            // must not let an environment variable change its behaviour, and
+            // a stderr line per box has no place in a release build. The
+            // name is in tools/check_release_overrides.ps1, so a regression
+            // is caught by the CI scan.
+            #[cfg(debug_assertions)]
             if std::env::var_os("K6WP_SPS_DEBUG").is_some() {
                 eprintln!(
                     "DBG box {} at {} size={}",

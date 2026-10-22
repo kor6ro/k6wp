@@ -45,6 +45,21 @@ jobs:
         shell: pwsh
         run: ./tools/lint_nonlatin.ps1
 
+      # Task L5: every K6WP_* environment read must sit behind a build gate,
+      # so a release binary cannot be redirected by an environment variable.
+      # The lint is the source-level rule; the binary scan below is the
+      # proof on the artifacts that are about to be packaged.
+      - name: The environment override lint
+        shell: pwsh
+        run: ./tools/lint_env_overrides.ps1
+
+      # A lint that stops detecting is worse than no lint: the self-test
+      # builds a scratch directory with known-bad and known-good sources and
+      # asserts the detector fires (and stays quiet where it should).
+      - name: The environment override lint self-test
+        shell: pwsh
+        run: ./tools/lint_env_overrides_selftest.ps1
+
       # A lint that stops detecting is worse than no lint: this builds a
       # scratch repository with known-bad files and asserts the detector
       # fires (R1 replacement character, R2 mixed-script word) while clean
@@ -83,13 +98,15 @@ jobs:
         run: cmake --build build --config Release --parallel
 
       # The environment overrides (K6WP_ENGINE_PIPE, K6WP_ENGINE_MUTEX,
-      # K6WP_LIBRARY_JSON) are compiled out of the release build (task I4):
-      # a shipped binary must not let an environment variable redirect the
-      # IPC endpoint, the singleton mutex or the library path. The scan
-      # proves it on the binaries that are about to be packaged.
+      # K6WP_LIBRARY_JSON, K6WP_IPC_TRACE, ...) are compiled out of the
+      # release build (task I4, extended by L5): a shipped binary must not
+      # let an environment variable redirect the IPC endpoint, the singleton
+      # mutex or the library path. The scan proves it on the binaries that
+      # are about to be packaged. `-RequireBinaries` makes the step fail
+      # when there was nothing to scan - a gate must never pass vacuously.
       - name: The release binaries hold no environment override
         shell: pwsh
-        run: ./tools/check_release_overrides.ps1 -ReleaseDir "${{ github.workspace }}/build/Release"
+        run: ./tools/check_release_overrides.ps1 -ReleaseDir "${{ github.workspace }}/build/Release" -RequireBinaries
       - name: Test
         shell: pwsh
         run: ctest --test-dir build -C Release --output-on-failure
@@ -142,3 +159,32 @@ jobs:
           name: K6WP-portable
           path: dist/K6WP-portable-*.zip
           if-no-files-found: error
+
+  rust-release:
+    # Task L5: the Rust side needs the same proof as the C++ side - a
+    # release binary must not contain an environment override. The Rust
+    # workspace was not in CI at all; this job builds the crates that carry
+    # the overrides (k6wp-core, k6wp-ipc) in release and scans the binary.
+    #
+    # The Slint Studio is deliberately NOT built here: the GUI build is slow
+    # and it is not shipped yet. Its override (K6WP_LIBRARY_JSON) is behind
+    # `#[cfg(debug_assertions)]`, which the source lint proves, and its
+    # release binary was scanned locally (clean).
+    name: The Rust release build + the override scan
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: The Rust toolchain
+        shell: pwsh
+        run: |
+          rustc --version
+          cargo --version
+
+      - name: Build the Rust crates (release)
+        run: cargo build --release -p k6wp-core -p k6wp-ipc --examples
+
+      - name: The Rust release binaries hold no environment override
+        shell: pwsh
+        run: ./tools/check_release_overrides.ps1 -RustReleaseDir "${{ github.workspace }}/rust/target/release/examples" -RequireBinaries

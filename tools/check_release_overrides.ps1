@@ -1,26 +1,39 @@
 # tools/check_release_overrides.ps1 - the release binaries must NOT contain
-# the environment overrides (task I4).
+# the environment overrides (task I4, extended by L5).
 #
 # WHY
-#   The overrides (K6WP_ENGINE_PIPE, K6WP_ENGINE_MUTEX, K6WP_LIBRARY_JSON,
-#   K6WP_TEST_NO_CONFIG_LOCK, K6WP_IPC_TRACE) exist so a TEST can talk to its
-#   own engine instead of the user's live session, or so the two-writer test
-#   can prove the config lock is what prevents the lost update, or so the K1/L2
-#   instrument can accumulate the `get_state` cost. A shipped binary must
-#   not let an environment variable redirect the IPC endpoint, the singleton
-#   mutex or the library path: whoever can set an environment variable for
-#   the process would then be able to point the app at a pipe it controls.
+#   The overrides exist so a TEST can talk to its own engine instead of the
+#   user's live session, so the two-writer test can prove the config lock is
+#   what prevents the lost update, or so the K1/L2 instrument can accumulate
+#   the `get_state` cost. A shipped binary must not let an environment
+#   variable redirect the IPC endpoint, the singleton mutex or the library
+#   path: whoever can set an environment variable for the process would then
+#   be able to point the app at a pipe it controls.
 #
 # THE RULE
 #   The overrides are compiled in a DEBUG build only (the C++: `_DEBUG`; the
 #   Rust: `debug_assertions`). This script proves it for the RELEASE
-#   binaries: it scans them for the three variable names. A release binary
-#   that still contains one of them FAILS the check.
+#   binaries: it scans them for the variable names. A release binary that
+#   still contains one of them FAILS the check.
+#
+#   The list is the AUDIT of every override in the tree (L5, 2026-10-22):
+#   every `GetEnvironmentVariable*` / `std::env::var*` that reads a
+#   `K6WP_*` name. The test-only names (K6WP_TEST_CONFIG_PATH,
+#   K6WP_IPC_LIVE, K6WP_IPC_ENGINE_EXE, K6WP_RUST_WRITER_*) are NOT in the
+#   list: they live in test binaries, which are built into the same
+#   directory in a CI release build.
+#
+#   The scan must never pass vacuously: with `-RequireBinaries` the script
+#   FAILS when it found no binary to scan (a missing Rust release build must
+#   not look like a clean bill of health).
 #
 [CmdletBinding()]
 param(
     [string]$ReleaseDir = '',
-    [string]$RustReleaseDir = ''
+    [string]$RustReleaseDir = '',
+    # Fail when no binary was scanned at all (a CI gate must not pass
+    # because the build directory was empty or missing).
+    [switch]$RequireBinaries
 )
 
 function Contains-Bytes([byte[]]$haystack, [byte[]]$needle) {
@@ -47,32 +60,58 @@ $root = Split-Path -Parent $PSScriptRoot
 if (-not $ReleaseDir) {
     $ReleaseDir = Join-Path $root 'build\release'
 }
-if (-not (Test-Path $ReleaseDir)) {
-    Write-Error "the release directory is missing: $ReleaseDir (build it first)"
-    exit 2
+
+# The audit of every override in the tree (L5). Each one is compiled out of
+# a release build; the scan proves it.
+$forbidden = @('K6WP_ENGINE_PIPE',      # the IPC pipe name (C++)
+               'K6WP_ENGINE_MUTEX',     # the singleton mutex name (C++)
+               'K6WP_LIBRARY_JSON',     # the library index path (C++ and Rust)
+               'K6WP_TEST_NO_CONFIG_LOCK',  # the config lock bypass (C++)
+               'K6WP_IPC_TRACE',        # the IPC latency trace (C++)
+               'K6WP_DEV',              # the dev-engine fallback (the Studio)
+               'K6WP_SPS_DEBUG')        # the SPS box dump (the Rust core)
+
+$binaries = @()
+if (Test-Path -LiteralPath $ReleaseDir) {
+    $binaries += @(Get-ChildItem -LiteralPath $ReleaseDir -Filter '*.exe' -File)
 }
 
-$forbidden = @('K6WP_ENGINE_PIPE', 'K6WP_ENGINE_MUTEX', 'K6WP_LIBRARY_JSON',
-               'K6WP_TEST_NO_CONFIG_LOCK', 'K6WP_IPC_TRACE')
-if (-not $RustReleaseDir) {
-    $RustReleaseDir = Join-Path $root 'rust\target\release'
+# The Rust release binaries: `cargo build --release` writes to
+# `rust/target/release`, and with an explicit `--target` to
+# `rust/target/<triple>/release`. Both are scanned.
+$rustDirs = @()
+if ($RustReleaseDir) {
+    $rustDirs += $RustReleaseDir
+} else {
+    $rustDirs += (Join-Path $root 'rust\target\release')
+    $rustDirs += (Join-Path $root 'rust\target\x86_64-pc-windows-msvc\release')
 }
-$binaries = @(Get-ChildItem -Path $ReleaseDir -Filter '*.exe' -File)
-if (Test-Path $RustReleaseDir) {
-    # The Rust binaries (the Studio) carry the same rule: the override is
-    # compiled out of a release build (`debug_assertions`).
-    $binaries += @(Get-ChildItem -Path $RustReleaseDir -Filter '*.exe' -File)
+foreach ($dir in $rustDirs) {
+    if (Test-Path -LiteralPath $dir) {
+        $binaries += @(Get-ChildItem -LiteralPath $dir -Filter '*.exe' -File)
+    } else {
+        Write-Host ("  [skip] {0}: no such release directory" -f $dir)
+    }
 }
+
+# The same binary can be reached through two directories (the Rust target
+# and its explicit-triple twin): scan every path once.
+$seenPaths = @{}
+$unique = @()
+foreach ($binary in $binaries) {
+    if ($seenPaths.ContainsKey($binary.FullName)) { continue }
+    $seenPaths[$binary.FullName] = $true
+    $unique += $binary
+}
+$binaries = $unique
+
 if ($binaries.Count -eq 0) {
+    if ($RequireBinaries) {
+        Write-Error "no release binary to scan (the C++ dir '$ReleaseDir' and the Rust dirs are empty): the check would pass vacuously"
+        exit 2
+    }
     Write-Error "no release binary in $ReleaseDir"
     exit 2
-}
-
-# The UTF-16LE form (the Windows wide strings) and the ASCII form.
-$patterns = @()
-foreach ($name in $forbidden) {
-    $patterns += [Text.Encoding]::Unicode.GetBytes($name)
-    $patterns += [Text.Encoding]::ASCII.GetBytes($name)
 }
 
 $failures = 0
@@ -97,5 +136,5 @@ if ($failures -gt 0) {
     Write-Error "$failures release binary/binaries still contain an environment override"
     exit 1
 }
-Write-Host "check_release_overrides: OK ($($binaries.Count) release binaries scanned)"
+Write-Host "check_release_overrides: OK ($($binaries.Count) release binaries scanned, $($forbidden.Count) names)"
 exit 0

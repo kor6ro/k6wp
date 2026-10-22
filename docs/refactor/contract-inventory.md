@@ -576,7 +576,33 @@ All under `%LOCALAPPDATA%\K6WP\` unless noted. The path helper pattern is `LOCAL
 | `%PROGRAMDATA%\K6WP\lockscreen.jpg` + `lockscreen.backup` | LEGACY (old HKLM policy flow) | removed by `K6WP.exe --elevate-lockscreen off` | `launcher/lockscreen_policy.cpp:62`, `launcher/lockscreen_sync.cpp:86-91,177-178` |
 | `HKCU\Software\K6WP\WallpaperBackup` value `OsWallpaper` | NSIS installer | install-time OS-wallpaper backup, restored on uninstall | `packaging/installer.nsi:31,91,502-503` |
 
-**Env-var overrides that are externally observable:** `K6WP_RECONCILE_MODE` (`legacy`/`shadow`/`on`, wins over the config value and locks it) (`engine/src/engine_app.cpp:249-259`), `K6WP_CACHE_DIR`, `K6WP_CACHE_MAX_BYTES` (`compressor/src/cache_manager.cpp:29,47`), `K6WP_LIBRARY_JSON` (overrides the `library.json` path — `studio/src/thumbnailer.cpp:150-153`, `studio/src/library_manager.cpp:97`), `K6WP_PLAYLIST_JSON` (overrides the `playlist.json` path — `studio/src/playlist_bridge.cpp:19`).
+**Env-var overrides - the full audit (task L5, 2026-10-22).** The rule: a
+`K6WP_*` name that is READ from the environment must be behind a build gate
+(`#if K6WP_ALLOW_ENV_OVERRIDES`, `#ifdef _DEBUG`, `#[cfg(debug_assertions)]`,
+`#[cfg(test)]`) so a shipped binary cannot be redirected by an environment
+variable. `tools/lint_env_overrides.ps1` enforces it in the source (with a
+reason for every exception) and `tools/check_release_overrides.ps1` proves it
+on the release binaries; both run in CI.
+
+| name | effect | in a release build? |
+| --- | --- | --- |
+| `K6WP_ENGINE_PIPE` | the IPC pipe name | **no** - compiled out |
+| `K6WP_ENGINE_MUTEX` | the singleton mutex name | **no** - compiled out |
+| `K6WP_LIBRARY_JSON` | the `library.json` path (the Studio, the thumbnailer, the Rust Studio) | **no** - compiled out |
+| `K6WP_TEST_NO_CONFIG_LOCK` | the config-lock bypass (the two-writer test) | **no** - compiled out |
+| `K6WP_IPC_TRACE` | the IPC latency trace | **no** - compiled out |
+| `K6WP_DEV` | the dev-engine fallback (the Studio) | **no** - compiled out |
+| `K6WP_SPS_DEBUG` | the SPS parser's per-box stderr dump | **no** - compiled out (L5 added the gate; it was live in every build) |
+| `K6WP_RECONCILE_MODE` | `legacy`/`shadow`/`on` - wins over the config value and locks it (`engine/src/engine_app.cpp:256-269`) | **yes** - a documented feature switch of the released alpha (the CHANGELOG, alpha.3): it changes a behaviour, it redirects nothing |
+| `K6WP_CACHE_DIR` | the compressor's cache root (`compressor/src/cache_manager.cpp:29`) | **yes** - the Studio sets it itself when it spawns the compressor (`studio/src/compress_service.cpp:213`): an internal channel |
+| `K6WP_CACHE_MAX_BYTES` | the compressor's cache cap (`compressor/src/cache_manager.cpp:47`) | **yes** - a limit, not a redirection |
+| `K6WP_PLAYLIST_JSON` | the `playlist.json` path (`studio/src/playlist_bridge.cpp:19`) | **yes** - the release-mode test suite relies on it (`tests/playlist_bridge_test.cpp`) |
+| `K6WP_THUMBS_DIR` | the thumbnailer's scratch root (`studio/src/thumbnailer.cpp:270`) | **yes** - the release-mode test suite relies on it (`tests/studio_logic_test.cpp`, `tests/thumbnailer_test.cpp`) |
+
+The last four are **classified, not changed**: compiling them out would
+change the released alpha's behaviour and break the release-mode test suite.
+The open question (make the Studio's roots explicit, then compile the
+overrides out) is in `docs/refactor/phase2-l5-override-proof.md` §6.
 
 ---
 

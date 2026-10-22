@@ -46,6 +46,12 @@ public release is still **held** (the Slint licence decision, F3).
 - The IPC latency trace now logs its summary only when the outermost scope
   exits, so a trace-on maximum is meaningful (before, the log flush landed
   inside the measured scope and made the maximum 9-15 ms of fake cost).
+- The SPS parser's per-box debug dump (`K6WP_SPS_DEBUG`) is now **compiled
+  out of a release build** (it was live in every build, including the
+  release ones). A new lint, `tools/lint_env_overrides.ps1`, checks that
+  every `K6WP_*` environment read sits behind a build gate - or is on an
+  explicit allow-list with a reason - and a self-test proves the lint still
+  fires. Both run in CI, together with the release-binary scan.
 
 ### Known limitations
 
