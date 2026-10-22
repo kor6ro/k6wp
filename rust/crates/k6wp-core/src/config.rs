@@ -323,17 +323,42 @@ pub fn validate_config(cfg: &WallpaperConfig) -> Result<(), ConfigError> {
 ///
 /// The golden fixture `config.roundtrip.*` pins this, and the C++ side
 /// replays the same cases.
+/// The cap on what an older engine carries forward from a file it does not
+/// fully understand (task J3) - the same 64 KiB the C++ `MergeUnknownKeys`
+/// uses. The file read itself is bounded (1 MiB), but every rewrite would
+/// copy that payload forever, so the foreign part is bounded. Keys are
+/// visited in sorted order, so which ones fit is deterministic on both sides.
+pub const MAX_FOREIGN_KEY_BYTES: usize = 64 * 1024;
+
 pub fn merge_unknown_keys(existing: &Value, known: &Value) -> Value {
     let mut out = known.clone();
     let Some(existing) = existing.as_object() else {
         return out;
     };
-    if let Some(out) = out.as_object_mut() {
-        for (key, value) in existing {
-            if !out.contains_key(key) {
-                out.insert(key.clone(), value.clone());
-            }
+    let Some(out_obj) = out.as_object_mut() else {
+        return out;
+    };
+    let mut keys: Vec<&String> = existing.keys().collect();
+    keys.sort();
+    let mut budget = MAX_FOREIGN_KEY_BYTES;
+    for key in keys {
+        // A foreign value that collides with a KNOWN name is discarded,
+        // whatever its type: the known key keeps the known type. No coercion.
+        if out_obj.contains_key(key) {
+            continue;
         }
+        let value = &existing[key];
+        // The cost is the on-disk size: the key bytes plus the serialized
+        // value bytes - the same measurement the C++ side takes with dump().
+        let Ok(serialized) = serde_json::to_string(value) else {
+            continue;
+        };
+        let cost = key.len() + serialized.len();
+        if cost > budget {
+            continue;
+        }
+        budget -= cost;
+        out_obj.insert(key.clone(), value.clone());
     }
     out
 }

@@ -2,12 +2,13 @@
 # the environment overrides (task I4).
 #
 # WHY
-#   The overrides (K6WP_ENGINE_PIPE, K6WP_ENGINE_MUTEX, K6WP_LIBRARY_JSON)
-#   exist so a TEST can talk to its own engine instead of the user's live
-#   session. A shipped binary must not let an environment variable redirect
-#   the IPC endpoint, the singleton mutex or the library path: whoever can
-#   set an environment variable for the process would then be able to point
-#   the app at a pipe it controls.
+#   The overrides (K6WP_ENGINE_PIPE, K6WP_ENGINE_MUTEX, K6WP_LIBRARY_JSON,
+#   K6WP_TEST_NO_CONFIG_LOCK) exist so a TEST can talk to its own engine
+#   instead of the user's live session, or so the two-writer test can prove
+#   the config lock is what prevents the lost update. A shipped binary must
+#   not let an environment variable redirect the IPC endpoint, the singleton
+#   mutex or the library path: whoever can set an environment variable for
+#   the process would then be able to point the app at a pipe it controls.
 #
 # THE RULE
 #   The overrides are compiled in a DEBUG build only (the C++: `_DEBUG`; the
@@ -50,7 +51,8 @@ if (-not (Test-Path $ReleaseDir)) {
     exit 2
 }
 
-$forbidden = @('K6WP_ENGINE_PIPE', 'K6WP_ENGINE_MUTEX', 'K6WP_LIBRARY_JSON')
+$forbidden = @('K6WP_ENGINE_PIPE', 'K6WP_ENGINE_MUTEX', 'K6WP_LIBRARY_JSON',
+               'K6WP_TEST_NO_CONFIG_LOCK')
 if (-not $RustReleaseDir) {
     $RustReleaseDir = Join-Path $root 'rust\target\release'
 }

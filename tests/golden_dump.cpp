@@ -205,6 +205,15 @@ void DumpConfigRoundTrip() {
        R"({"version":7,"future":{"a":1}})",
        R"({"version":6})"},
       {"the_version_is_known", R"({"version":7})", R"({"version":6})"},
+      // Task J3: the type-collision policy. A foreign value that uses a
+      // KNOWN name never wins, whatever its type - the known key keeps the
+      // known type, with no coercion.
+      {"a_foreign_value_with_a_known_name",
+       R"({"version":7,"crf":"high","note":"kept"})",
+       R"({"version":6,"crf":22})"},
+      {"a_foreign_value_of_another_type",
+       R"({"version":7,"future_flag":"yes"})",
+       R"({"version":6})"},
   };
   for (const auto& c : cases) {
     const std::string id = std::string("config.roundtrip.") + c.name;

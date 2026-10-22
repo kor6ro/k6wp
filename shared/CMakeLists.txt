@@ -2,6 +2,7 @@
 # config schema, IPC protocol, monitor utils.
 add_library(k6wp_shared STATIC
   config_schema.cpp
+  config_lock.cpp
   studio_settings.cpp
   playlist.cpp
   displays_schema.cpp

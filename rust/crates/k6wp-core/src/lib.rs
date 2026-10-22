@@ -7,6 +7,8 @@
 
 pub mod compress_args;
 pub mod config;
+#[cfg(windows)]
+pub mod config_store;
 pub mod displays;
 pub mod engine_logic;
 pub mod ipc;
@@ -17,6 +19,10 @@ pub mod sps;
 pub mod version;
 
 pub use config::{ConfigError, WallpaperConfig};
+#[cfg(windows)]
+pub use config_store::{
+    persist_config_field, save_config, ConfigFileLock, LOCK_TIMEOUT, MAX_CONFIG_BYTES,
+};
 pub use library::{LibraryEntry, LibraryIndex};
 pub use settings::StudioSettings;
 pub use sps::{probe_dpb, Codec, DpbReport, SpsError, SpsInfo};

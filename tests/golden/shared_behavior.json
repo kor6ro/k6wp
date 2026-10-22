@@ -689,6 +689,43 @@
       }
     },
     {
+      "fn": "MergeUnknownKeys",
+      "id": "config.roundtrip.a_foreign_value_with_a_known_name",
+      "input": {
+        "existing": {
+          "crf": "high",
+          "note": "kept",
+          "version": 7
+        },
+        "known": {
+          "crf": 22,
+          "version": 6
+        }
+      },
+      "output": {
+        "crf": 22,
+        "note": "kept",
+        "version": 6
+      }
+    },
+    {
+      "fn": "MergeUnknownKeys",
+      "id": "config.roundtrip.a_foreign_value_of_another_type",
+      "input": {
+        "existing": {
+          "future_flag": "yes",
+          "version": 7
+        },
+        "known": {
+          "version": 6
+        }
+      },
+      "output": {
+        "future_flag": "yes",
+        "version": 6
+      }
+    },
+    {
       "fn": "DefaultStudioSettings",
       "id": "settings.default",
       "input": {},

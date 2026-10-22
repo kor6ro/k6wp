@@ -8,6 +8,19 @@
 #include <iostream>
 #include <string>
 
+#include <atomic>
+#include <chrono>
+#include <cstdlib>
+#include <thread>
+#include <vector>
+
+#include <windows.h>
+
+// rpcndr.h (pulled in by windows.h) defines `small` as a macro; this file has
+// a local variable with that name.
+#undef small
+
+#include "config_lock.hpp"
 #include "config_schema.hpp"
 #include "displays_schema.hpp"
 #include "playlist.hpp"
@@ -58,6 +71,79 @@ std::filesystem::path BakPath(const std::filesystem::path& p) {
   std::filesystem::path bak = p;
   bak += L".bak";
   return bak;
+}
+
+// J3: the two-writer test spawns THIS executable in its child mode, so the
+// two writers are genuinely two processes fighting over one file and one
+// named mutex - not two threads sharing a process. The config path travels
+// through an environment variable (wide) rather than argv, so a non-ASCII
+// user name in %TEMP% cannot corrupt it.
+struct Child {
+  PROCESS_INFORMATION pi{};
+  bool started = false;
+};
+
+Child StartChild(const std::wstring& args) {
+  Child child;
+  wchar_t exe[MAX_PATH] = {};
+  if (GetModuleFileNameW(nullptr, exe, MAX_PATH) == 0) {
+    return child;
+  }
+  std::wstring cmd = L"\"" + std::wstring(exe) + L"\" " + args;
+  std::vector<wchar_t> mutable_cmd(cmd.begin(), cmd.end());
+  mutable_cmd.push_back(L'\0');
+  STARTUPINFOW si{};
+  si.cb = sizeof(si);
+  child.started =
+      CreateProcessW(nullptr, mutable_cmd.data(), nullptr, nullptr, FALSE, 0,
+                     nullptr, nullptr, &si, &child.pi) != FALSE;
+  return child;
+}
+
+DWORD WaitChild(Child& child) {
+  if (!child.started) {
+    return 0xFFFFFFFFu;
+  }
+  WaitForSingleObject(child.pi.hProcess, INFINITE);
+  DWORD code = 0xFFFFFFFFu;
+  GetExitCodeProcess(child.pi.hProcess, &code);
+  CloseHandle(child.pi.hThread);
+  CloseHandle(child.pi.hProcess);
+  child.started = false;
+  return code;
+}
+
+// The child mode: --writer <field> <iterations> [no-lock]
+// The path comes from K6WP_TEST_CONFIG_PATH. "no-lock" sets the DEBUG-only
+// escape so the same scene can be measured with the lock disabled; it exists
+// to prove the lock is what prevents the lost update, and is never used by a
+// test that must pass.
+int RunWriterChild(int argc, char* argv[]) {
+  if (argc < 4) {
+    return 2;
+  }
+  wchar_t path_buf[32768] = {};
+  const DWORD len = GetEnvironmentVariableW(L"K6WP_TEST_CONFIG_PATH", path_buf,
+                                            32768);
+  if (len == 0 || len >= 32768) {
+    return 2;
+  }
+  if (argc >= 5 && std::string(argv[4]) == "no-lock") {
+    SetEnvironmentVariableA("K6WP_TEST_NO_CONFIG_LOCK", "1");
+  }
+  const std::filesystem::path path(path_buf);
+  const std::string field = argv[2];
+  const int iterations = std::atoi(argv[3]);
+  const k6wp::WallpaperConfig fallback;
+  try {
+    for (int i = 1; i <= iterations; ++i) {
+      k6wp::PersistConfigField(path, field, i, fallback);
+    }
+  } catch (const std::exception& e) {
+    std::cout << "[child] " << field << ": " << e.what() << "\n";
+    return 3;
+  }
+  return 0;
 }
 
 nlohmann::json ValidJson() {
@@ -168,6 +254,12 @@ void CheckSchemaDocInSync(const char* schema_path) {
 }
 
 int main(int argc, char* argv[]) {
+  // J3: the child side of the two-writer test (see StartChild). Handle it
+  // before anything else so the child never runs the suite.
+  if (argc >= 2 && std::string(argv[1]) == "--writer") {
+    return RunWriterChild(argc, argv);
+  }
+
   const auto dir = TempDir();
 
   // 1. Load valid config -> fields correct.
@@ -1461,6 +1553,103 @@ int main(int argc, char* argv[]) {
     const auto after_save = nlohmann::json::parse(ReadText(p));
     Check(after_save.value("a_key_from_the_future", -1) == 42,
           "73. the unknown key survived an explicit save");
+  }
+
+  // 76. The foreign-key policy (task J3): exactly what this engine carries
+  // forward from a file it does not fully understand.
+  {
+    const nlohmann::json known = {{"version", 6}, {"crf", 22}};
+    // (a) A type collision: the file says crf is a string. The known name
+    // keeps the known type - no coercion, the foreign value is discarded.
+    const nlohmann::json collide = {
+        {"version", 6}, {"crf", "high"}, {"note", "kept"}};
+    const auto merged = k6wp::MergeUnknownKeys(collide, known);
+    Check(merged.value("crf", -1) == 22,
+          "76. a foreign value with a known name cannot override the known type");
+    Check(merged.value("note", std::string()) == "kept",
+          "76. a non-colliding foreign key survives");
+    // (b) One foreign key larger than the whole budget is dropped.
+    nlohmann::json huge = {{"version", 6}};
+    huge["a_huge_foreign_key"] = std::string(70u * 1024u, 'x');
+    Check(!k6wp::MergeUnknownKeys(huge, known).contains("a_huge_foreign_key"),
+          "76. a foreign key over 64 KiB is dropped");
+    // (c) The budget is shared and the keys are visited in sorted order, so
+    // which ones fit is deterministic and the payload stays bounded.
+    nlohmann::json many = {{"version", 6}};
+    for (int i = 0; i < 100; ++i) {
+      many["k" + std::to_string(i)] = std::string(1024u, 'y');
+    }
+    const auto kept = k6wp::MergeUnknownKeys(many, known);
+    std::size_t carried = 0;
+    for (auto it = kept.begin(); it != kept.end(); ++it) {
+      if (!known.contains(it.key())) {
+        carried += it.key().size() + it.value().dump().size();
+      }
+    }
+    Check(carried <= 64u * 1024u,
+          "76. the carried foreign payload never exceeds 64 KiB");
+    Check(kept.contains("k0") && !kept.contains("k99"),
+          "76. which keys fit is deterministic (sorted order)");
+  }
+
+  // 77. Two PROCESSES, two writers, one file (task J3). Both children read,
+  // bump their own field and publish, 150 times each. Without the lock the
+  // classic lost update appears: one child's read is stale by the time the
+  // other publishes, so a field vanishes. With the lock every read happens
+  // inside the critical section and both final values are on disk.
+  {
+    const auto p = dir / "t51_twowriter.json";
+    k6wp::SaveConfig(p, k6wp::WallpaperConfig{});
+    SetEnvironmentVariableW(L"K6WP_TEST_CONFIG_PATH", p.c_str());
+    const int kIterations = 150;
+    auto a = StartChild(L"--writer field_a " + std::to_wstring(kIterations));
+    auto b = StartChild(L"--writer field_b " + std::to_wstring(kIterations));
+    const DWORD code_a = WaitChild(a);
+    const DWORD code_b = WaitChild(b);
+    SetEnvironmentVariableW(L"K6WP_TEST_CONFIG_PATH", nullptr);
+    Check(code_a == 0 && code_b == 0,
+          "77. both writer processes exit cleanly (the lock never timed out)");
+    if (code_a == 0 && code_b == 0) {
+      const auto doc = nlohmann::json::parse(ReadText(p));
+      Check(doc.value("field_a", -1) == kIterations,
+            "77. writer A's last value survived (no lost update)");
+      Check(doc.value("field_b", -1) == kIterations,
+            "77. writer B's last value survived (no lost update)");
+      Check(doc.value("version", -1) == k6wp::kConfigSchemaVersion,
+            "77. the merged file is still at the current schema");
+      Check(!std::filesystem::exists(std::filesystem::path(p.wstring() + L".tmp")),
+            "77. no .tmp file is left behind");
+    }
+  }
+
+  // 78. The lock is a real bounded wait, not a no-op: while another THREAD
+  // holds it, an acquisition with a zero timeout reports the lock as busy
+  // instead of blocking forever, and the lock is free again after release.
+  {
+    std::atomic<bool> held{false};
+    std::thread other([&] {
+      k6wp::detail::ConfigFileLock lock;
+      held = true;
+      std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    });
+    while (!held.load()) {
+      std::this_thread::yield();
+    }
+    bool timed_out = false;
+    try {
+      k6wp::detail::ConfigFileLock second(std::chrono::milliseconds(0));
+    } catch (const k6wp::ConfigError&) {
+      timed_out = true;
+    }
+    Check(timed_out, "78. a second acquisition times out while the lock is held");
+    other.join();
+    bool acquired = true;
+    try {
+      k6wp::detail::ConfigFileLock again(std::chrono::milliseconds(1000));
+    } catch (const k6wp::ConfigError&) {
+      acquired = false;
+    }
+    Check(acquired, "78. the lock is available again after release");
   }
 
   // 71. The atomic write: the publish leaves no temp file behind, and the

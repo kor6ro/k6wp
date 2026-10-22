@@ -1,4 +1,5 @@
 #include "config_schema.hpp"
+#include "config_lock.hpp"
 #include "settings_io.hpp"
 
 #include <windows.h>
@@ -63,6 +64,13 @@ nlohmann::json ReadExistingJson(const std::filesystem::path& path) {
 // the same crash-safety contract.
 void AtomicWriteJson(const std::filesystem::path& path,
                      const nlohmann::json& j) {
+  // J3: one cross-process lock serializes every writer of the settings family.
+  // It makes the shared "<path>.tmp" name safe (two processes writing it at
+  // once could truncate each other's payload) and it is what turns a
+  // read-merge-write in the caller into one critical section. Nested
+  // acquisition by the same thread is allowed, so the callers that already
+  // hold the lock (SaveConfig, PersistConfigField) pay nothing extra.
+  detail::ConfigFileLock lock;
   std::error_code ec;
   if (!path.parent_path().empty()) {
     std::filesystem::create_directories(path.parent_path(), ec);
@@ -167,6 +175,11 @@ WallpaperConfig LoadConfig(const std::filesystem::path& path) {
 }
 
 void SaveConfig(const std::filesystem::path& path, const WallpaperConfig& cfg) {
+  // J3: the read-merge-write below is one critical section against the other
+  // writers (the engine's PersistConfigField, the Studio's settings bridge).
+  // Without this, two writers that both read the old file publish in turn and
+  // the first one's fields are lost.
+  detail::ConfigFileLock lock;
   // Never persist an invalid config: validate a copy first.
   WallpaperConfig copy = cfg;
   ValidateConfig(copy);
@@ -178,14 +191,38 @@ void SaveConfig(const std::filesystem::path& path, const WallpaperConfig& cfg) {
 
 nlohmann::json MergeUnknownKeys(const nlohmann::json& existing,
                                  const nlohmann::json& known) {
+  // J3: the cap on what this engine carries forward from a file it does not
+  // fully understand. The file read is already bounded by kMaxConfigBytes
+  // (1 MiB), but EVERY rewrite would copy that payload forever, so the
+  // foreign part is bounded to 64 KiB - generous for the handful of scalar
+  // keys a newer engine adds, small enough that a hostile file cannot bloat
+  // every subsequent write. Keys are visited in sorted order (nlohmann's
+  // object is a std::map), so which keys fit is deterministic.
+  static constexpr std::size_t kMaxForeignKeyBytes = 64u * 1024u;
+
   nlohmann::json out = known;
   if (!existing.is_object()) {
     return out;
   }
+  std::size_t budget = kMaxForeignKeyBytes;
   for (auto it = existing.begin(); it != existing.end(); ++it) {
-    if (!out.contains(it.key())) {
-      out[it.key()] = it.value();
+    // A foreign value that collides with a KNOWN name is discarded, whatever
+    // its type: the known key keeps the known type. No coercion, ever - a
+    // coerced value is a silently different setting.
+    if (out.contains(it.key())) {
+      continue;
     }
+    std::size_t cost = 0;
+    try {
+      cost = it.key().size() + it.value().dump().size();
+    } catch (const nlohmann::json::exception&) {
+      continue;
+    }
+    if (cost > budget) {
+      continue;
+    }
+    budget -= cost;
+    out[it.key()] = it.value();
   }
   return out;
 }
@@ -193,6 +230,11 @@ nlohmann::json MergeUnknownKeys(const nlohmann::json& existing,
 bool PersistConfigField(const std::filesystem::path& path,
                         const std::string& field, const nlohmann::json& value,
                         const WallpaperConfig& fallback) {
+  // J3: hold the config lock across the read, the merge and the publish. The
+  // re-read inside the critical section is the whole point: the previous
+  // writer's change is on disk by the time we read, so it is preserved
+  // instead of overwritten by our older view of the file.
+  detail::ConfigFileLock lock;
   nlohmann::json raw;
   bool have_valid = false;
   try {

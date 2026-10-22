@@ -117,7 +117,7 @@ fn main() {
                     return samples;
                 }
             };
-        let churn_file = churn_shared.clone();
+            let churn_file = churn_shared.clone();
             for index in 0..requests {
                 if stop.load(Ordering::Relaxed) {
                     break;
