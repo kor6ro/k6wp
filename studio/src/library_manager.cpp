@@ -1,3 +1,4 @@
+#include "../shared/build_flags.hpp"
 #include "library_manager.hpp"
 
 #include <algorithm>
@@ -92,12 +93,14 @@ LibraryManager::LibraryManager(std::filesystem::path json_path) {
 
 std::filesystem::path LibraryManager::DefaultLibraryJsonPath() {
   // Test override wins when set (never pollute the real library.json).
-  char override_buf[MAX_PATH];
-  const DWORD override_len =
-      GetEnvironmentVariableA("K6WP_LIBRARY_JSON", override_buf, MAX_PATH);
-  if (override_len > 0 && override_len < MAX_PATH) {
-    return std::filesystem::path(override_buf);
-  }
+#if K6WP_ALLOW_ENV_OVERRIDES
+    char override_buf[MAX_PATH];
+    const DWORD override_len =
+        GetEnvironmentVariableA("K6WP_LIBRARY_JSON", override_buf, MAX_PATH);
+    if (override_len > 0 && override_len < MAX_PATH) {
+      return std::filesystem::path(override_buf);
+    }
+#endif
   wchar_t buf[MAX_PATH];
   const DWORD local = GetEnvironmentVariableW(L"LOCALAPPDATA", buf, MAX_PATH);
   if (local > 0 && local < MAX_PATH) {

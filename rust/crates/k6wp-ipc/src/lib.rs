@@ -66,10 +66,45 @@ impl std::error::Error for IpcError {}
 /// The environment variable that overrides the pipe name (the same one the
 /// C++ engine reads - E5). A test that starts its own engine uses a unique
 /// name so it can never talk to the user's live session.
+///
+/// **The override is compiled OUT of the release build** (task I4): a
+/// shipped binary must not let an environment variable redirect the IPC
+/// endpoint - whoever can set an environment variable for the process would
+/// then be able to point the app at a pipe it controls. The release
+/// binaries are scanned by `tools/check_release_overrides.ps1`.
 pub const PIPE_ENV_OVERRIDE: &str = "K6WP_ENGINE_PIPE";
 
 /// The base of the pipe name (`\\.\pipe\k6wp-engine`).
 pub const PIPE_NAME_BASE: &str = r"\\.\pipe\k6wp-engine";
+
+/// The image names a client accepts as the engine (task I4).
+///
+///   - `engine.exe` - the resident engine (today);
+///   - `K6WP.exe` - the merged binary (Phase 3: the engine and the launcher
+///     become one process).
+pub const ACCEPTED_SERVER_IMAGE_NAMES: &[&str] = &["engine.exe", "k6wp.exe"];
+
+/// True when the path is an accepted server image: the file name must be one
+/// of the accepted ones, and the directory must be the expected one (the
+/// caller passes the full expected path, so the dev path can be allowed
+/// only in a debug build - see `dev_server_image_allowed`).
+pub fn is_accepted_server_image(actual: &std::path::Path, expected: &std::path::Path) -> bool {
+    let Some(name) = actual.file_name() else {
+        return false;
+    };
+    let name = name.to_string_lossy().to_lowercase();
+    if !ACCEPTED_SERVER_IMAGE_NAMES.contains(&name.as_str()) {
+        return false;
+    }
+    actual.parent() == expected.parent()
+}
+
+/// The DEV image paths (the repository's build directory) are accepted only
+/// in a DEBUG build: a release build must talk to the installed engine, not
+/// to a developer's build.
+pub const fn dev_server_image_allowed() -> bool {
+    cfg!(debug_assertions)
+}
 
 /// The pipe name for THIS process's session.
 ///
@@ -80,9 +115,14 @@ pub const PIPE_NAME_BASE: &str = r"\\.\pipe\k6wp-engine";
 /// static: a static would be initialized before `main()` and the client and
 /// the server would disagree about the name).
 pub fn current_session_pipe_name() -> String {
-    if let Ok(name) = std::env::var(PIPE_ENV_OVERRIDE) {
-        if !name.is_empty() {
-            return name;
+    // The override exists for the tests only, and it is compiled out of the
+    // release build (task I4).
+    #[cfg(debug_assertions)]
+    {
+        if let Ok(name) = std::env::var(PIPE_ENV_OVERRIDE) {
+            if !name.is_empty() {
+                return name;
+            }
         }
     }
     let session = current_session_id();

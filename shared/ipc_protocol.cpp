@@ -1,3 +1,4 @@
+#include "build_flags.hpp"
 #include "ipc_protocol.hpp"
 
 #include <windows.h>
@@ -175,6 +176,7 @@ std::wstring CurrentSessionPipeName() {
   // the variable - and the client and the fake server would then disagree
   // about the name (the client would talk to the live engine while the
   // server waits forever for a connection that never comes).
+#if K6WP_ALLOW_ENV_OVERRIDES
   wchar_t buffer[256] = {};
   const DWORD n = ::GetEnvironmentVariableW(L"K6WP_ENGINE_PIPE", buffer,
                                             static_cast<DWORD>(
@@ -182,6 +184,7 @@ std::wstring CurrentSessionPipeName() {
   if (n > 0 && n < std::size(buffer)) {
     return std::wstring(buffer, n);
   }
+#endif
   return RealSessionPipeName();
 }
 
@@ -198,11 +201,15 @@ void UseUniquePipeNameForTest(const char* tag) {
   if (name.empty()) name = L"x";
   const std::wstring full = std::wstring(PipeNameBase) + L"-test-" + name +
                             L"-" + std::to_wstring(GetCurrentProcessId());
+#if K6WP_ALLOW_ENV_OVERRIDES
   ::SetEnvironmentVariableW(L"K6WP_ENGINE_PIPE", full.c_str());
+#endif
 }
 
 void UseRealPipeNameForTest() {
+#if K6WP_ALLOW_ENV_OVERRIDES
   ::SetEnvironmentVariableW(L"K6WP_ENGINE_PIPE", nullptr);
+#endif
 }
 
 PSECURITY_ATTRIBUTES MakeCurrentUserOnlySA() {

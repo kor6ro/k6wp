@@ -40,19 +40,6 @@ fn the_pipe_name_is_the_per_session_one() {
 }
 
 #[test]
-fn the_env_override_wins() {
-    // The override is read on EVERY call (never cached in a static: a static
-    // is initialised before main() and the client and the server would
-    // disagree about the name - that is what caused the 30-minute hang in
-    // the C++ suite).
-    let unique = r"\\.\pipe\k6wp-engine-test-override-42";
-    std::env::set_var("K6WP_ENGINE_PIPE", unique);
-    assert_eq!(current_session_pipe_name(), unique);
-    std::env::remove_var("K6WP_ENGINE_PIPE");
-    assert_ne!(current_session_pipe_name(), unique);
-}
-
-#[test]
 fn a_missing_pipe_fails_fast() {
     let options = ConnectOptions {
         timeout: Duration::from_millis(500),

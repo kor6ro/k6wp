@@ -1,3 +1,4 @@
+#include "../shared/build_flags.hpp"
 #include "thumbnailer.hpp"
 
 #include "ffmpeg_path.hpp"
@@ -147,10 +148,12 @@ std::string ThumbCacheKeyMaterial(const std::filesystem::path& abs,
 //   * Mutex-guarded: CachedThumb runs on the UI thread while GetThumb runs
 //     on the async worker.
 std::filesystem::path ResolveLibraryJsonPath() {
+#if K6WP_ALLOW_ENV_OVERRIDES
   const std::string override = GetEnvStr("K6WP_LIBRARY_JSON");
   if (!override.empty()) {
     return std::filesystem::path(override);
   }
+#endif
   const std::string local = GetEnvStr("LOCALAPPDATA");
   if (!local.empty()) {
     return std::filesystem::path(local) / "K6WP" / "library.json";

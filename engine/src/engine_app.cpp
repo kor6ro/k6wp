@@ -1,3 +1,4 @@
+#include "build_flags.hpp"
 #include "engine_app.hpp"
 #include "bench_hook.hpp"
 #include "displays_schema.hpp"
@@ -148,14 +149,16 @@ bool EngineApp::Init(int argc, char** argv) {
   // would make the test's engine exit immediately, and the test would then
   // wait forever for a pipe answer that never comes).
   const std::wstring mutex_name = [] {
+#if K6WP_ALLOW_ENV_OVERRIDES
     wchar_t buffer[256] = {};
     const DWORD n = ::GetEnvironmentVariableW(L"K6WP_ENGINE_MUTEX", buffer,
                                               static_cast<DWORD>(
                                                   std::size(buffer)));
-    if (n == 0 || n >= std::size(buffer)) {
-      return std::wstring(kSingletonMutexName);
+    if (n > 0 && n < std::size(buffer)) {
+      return std::wstring(buffer, n);
     }
-    return std::wstring(buffer, n);
+#endif
+    return std::wstring(kSingletonMutexName);
   }();
   singleton_mutex_.handle =
       CreateMutexW(nullptr, FALSE, mutex_name.c_str());

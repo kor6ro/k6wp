@@ -60,6 +60,14 @@ jobs:
         shell: pwsh
         run: cmake --build build --config Release --parallel
 
+      # The environment overrides (K6WP_ENGINE_PIPE, K6WP_ENGINE_MUTEX,
+      # K6WP_LIBRARY_JSON) are compiled out of the release build (task I4):
+      # a shipped binary must not let an environment variable redirect the
+      # IPC endpoint, the singleton mutex or the library path. The scan
+      # proves it on the binaries that are about to be packaged.
+      - name: The release binaries hold no environment override
+        shell: pwsh
+        run: ./tools/check_release_overrides.ps1 -ReleaseDir "${{ github.workspace }}/build/Release"
       - name: Test
         shell: pwsh
         run: ctest --test-dir build -C Release --output-on-failure

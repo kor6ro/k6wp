@@ -21,9 +21,16 @@ use std::path::PathBuf;
 /// The override is what makes the Phase 2 comparison (E1) possible: both
 /// Studios are pointed at ONE index file, so the state is identical.
 fn library_index_path() -> Option<PathBuf> {
-    if let Ok(override_path) = std::env::var("K6WP_LIBRARY_JSON") {
-        if !override_path.is_empty() {
-            return Some(PathBuf::from(override_path));
+    // The override is compiled OUT of the release build (task I4): a
+    // shipped binary must not let an environment variable redirect the
+    // library path. The release binaries are scanned by
+    // tools/check_release_overrides.ps1.
+    #[cfg(debug_assertions)]
+    {
+        if let Ok(override_path) = std::env::var("K6WP_LIBRARY_JSON") {
+            if !override_path.is_empty() {
+                return Some(PathBuf::from(override_path));
+            }
         }
     }
     let local = std::env::var("LOCALAPPDATA").ok()?;
