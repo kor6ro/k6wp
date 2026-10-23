@@ -1,9 +1,12 @@
-name: CI
+﻿name: CI
 
 on:
   push:
     branches: [main, master]
   pull_request:
+  schedule:
+    # Nightly at 02:30 UTC: build corpus deterministically and run full suite
+    - cron: '30 2 * * *'
 
 # Least privilege: the job only needs to read the repo and upload an artifact.
 permissions:
@@ -159,6 +162,65 @@ jobs:
           name: K6WP-portable
           path: dist/K6WP-portable-*.zip
           if-no-files-found: error
+
+  nightly-corpus-test:
+    # Nightly job: build the corpus deterministically and run the full test suite.
+    # Tests that require the corpus report SKIPPED when files are missing.
+    # This job runs on a schedule and on manual dispatch.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    name: Nightly corpus + full test
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Fetch vendored binaries
+        shell: pwsh
+        run: ./tools/fetch_vendor.ps1
+
+      - name: Install Qt 6.8.3 (msvc2022_64)
+        uses: jurplel/install-qt-action@a9c63c7c123f3069cff414e7e482d95dfa9d8125 # v4.4.1
+        with:
+          version: "6.8.3"
+          arch: "win64_msvc2022_64"
+          cache: true
+
+      - name: Configure (Release, tests ON)
+        shell: pwsh
+        run: >
+          cmake -S . -B build -A x64
+          "-DCMAKE_PREFIX_PATH=$env:QT_ROOT_DIR"
+          -DBUILD_TESTING=ON
+
+      - name: Build Release
+        shell: pwsh
+        run: cmake --build build --config Release --parallel
+
+      # Build the corpus deterministically (uses vendor\ffmpeg\ffmpeg.exe)
+      - name: Build corpus
+        shell: pwsh
+        run: ./tools/make_corpus.ps1 -DurationSec 60 -Width 3840 -Height 2160
+
+      - name: Test (C++)
+        shell: pwsh
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Install cargo-nextest
+        shell: pwsh
+        run: cargo install cargo-nextest --locked
+
+      - name: Test (Rust)
+        shell: pwsh
+        run: cargo nextest run --workspace --target x86_64-pc-windows-msvc
+
+      - name: Upload corpus build log
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: nightly-corpus-test
+          path: |
+            build/Testing/Temporary/LastTest.log
+            rust/target/x86_64-pc-windows-msvc/debug/deps/*.dll
+          if-no-files-found: ignore
 
   rust-release:
     # Task L5: the Rust side needs the same proof as the C++ side - a
