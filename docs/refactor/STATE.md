@@ -315,6 +315,7 @@ is the locked decision.
 
 
 ## NEXT TASK
-NEXT TASK: A1 (golden studio_logic real extraction)
+NEXT TASK: A2 (tokens + screenshots)
+
 
 

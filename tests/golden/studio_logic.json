@@ -1,56 +1,125 @@
 ﻿{
-    "provenance":  "Extracted from studio/src (Qt Studio C++). Pure logic only; writer+checker C++ and replayer Rust.",
-    "to_fixture_engine":  12,
     "modules":  [
+                    {
+                        "name":  "user_errors",
+                        "cases":  [
+                                      {
+                                          "input":  {
+                                                        "technical":  "cancelled by user"
+                                                    },
+                                          "id":  "ue.cancelled",
+                                          "output":  {
+                                                         "friendly":  "Kompresi dibatalkan."
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "technical":  "video longer than 10 minutes"
+                                                    },
+                                          "id":  "ue.long",
+                                          "output":  {
+                                                         "friendly":  "Video lebih dari 10 menit. Izinkan video panjang lalu coba lagi, atau pilih video yang lebih pendek."
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "technical":  "failed to read duration: corrupt"
+                                                    },
+                                          "id":  "ue.corrupt",
+                                          "output":  {
+                                                         "friendly":  "Tidak bisa membaca video ini (file rusak atau format tak dikenal)."
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "technical":  "ffmpeg tidak ditemukan"
+                                                    },
+                                          "id":  "ue.ffmpeg_notfound",
+                                          "output":  {
+                                                         "friendly":  "ffmpeg tidak ditemukan di folder aplikasi. Ekstrak ulang atau pasang ulang K6WP."
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "technical":  "ffmpeg failed"
+                                                    },
+                                          "id":  "ue.ffmpeg_failed",
+                                          "output":  {
+                                                         "friendly":  "Gagal menjalankan ffmpeg. Coba lagi."
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "technical":  "compressor error"
+                                                    },
+                                          "id":  "ue.compressor",
+                                          "output":  {
+                                                         "friendly":  "Terjadi kesalahan tidak diketahui."
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "technical":  "something else"
+                                                    },
+                                          "id":  "ue.unknown",
+                                          "output":  {
+                                                         "friendly":  "Terjadi kesalahan tidak diketahui."
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "technical":  ""
+                                                    },
+                                          "id":  "ue.empty",
+                                          "output":  {
+                                                         "friendly":  "Terjadi kesalahan tidak diketahui."
+                                                     }
+                                      }
+                                  ],
+                        "note":  "compressor/IPC exit code -\u003e friendly message (compress_errors.cpp)"
+                    },
                     {
                         "name":  "library_manager",
                         "cases":  [
 
                                   ],
-                        "note":  "import, dedup, ordering, sort/search, broken-item detection"
+                        "note":  "TODO: extract pure logic from studio/src"
                     },
                     {
                         "name":  "thumbnailer_decision",
                         "cases":  [
 
                                   ],
-                        "note":  "cache key, size, regen trigger"
-                    },
-                    {
-                        "name":  "user_errors",
-                        "cases":  [
-
-                                  ],
-                        "note":  "compressor/IPC exit code -\u003e message"
+                        "note":  "TODO: extract pure logic from studio/src"
                     },
                     {
                         "name":  "compress_progress",
                         "cases":  [
 
                                   ],
-                        "note":  "parsing compressor progress"
+                        "note":  "TODO: extract pure logic from studio/src"
                     },
                     {
                         "name":  "studio_settings",
                         "cases":  [
 
                                   ],
-                        "note":  "settings schema v6"
+                        "note":  "TODO: extract pure logic from studio/src"
                     },
                     {
                         "name":  "cache_stats",
                         "cases":  [
 
                                   ],
-                        "note":  "cache statistics"
+                        "note":  "TODO: extract pure logic from studio/src"
                     },
                     {
                         "name":  "optimize_on_import",
                         "cases":  [
 
                                   ],
-                        "note":  "Optimize? decision on import"
+                        "note":  "TODO: extract pure logic from studio/src"
                     }
                 ],
-    "to_fixture_studio":  "before 2.7"
+    "provenance":  "Extracted from studio/src (Qt Studio C++). Pure logic only."
 }
