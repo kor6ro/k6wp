@@ -315,7 +315,8 @@ is the locked decision.
 
 
 ## NEXT TASK
-NEXT TASK: A2 (tokens + screenshots)
+NEXT TASK: A1 (extract Qt-bound pure logic + C++ writer/checker + Rust replayer)
+
 
 
 
