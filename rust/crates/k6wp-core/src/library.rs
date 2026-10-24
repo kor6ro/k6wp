@@ -119,6 +119,11 @@ impl LibraryIndex {
     /// side returns the same three kinds of error, so the callers report
     /// the same messages.
     pub fn parse(text: &str) -> Result<Self, LibraryError> {
+        // The C++ side reads the file through nlohmann, which skips a UTF-8
+        // BOM; serde_json rejects it. A file written by an older tool (or by
+        // PowerShell) must not make the two Studios disagree, so the BOM is
+        // dropped before parsing.
+        let text = text.strip_prefix('\u{feff}').unwrap_or(text);
         let value: serde_json::Value =
             serde_json::from_str(text).map_err(|e| LibraryError::Json(e.to_string()))?;
         if !value.is_object() {
@@ -182,6 +187,14 @@ mod tests {
         assert_eq!(e.width, 1920);
         assert_eq!(e.duration, 12.5);
         assert!(!e.broken);
+    }
+
+    #[test]
+    fn a_utf8_bom_is_accepted_like_the_cpp_side() {
+        let text = "\u{feff}{\"version\":1,\"entries\":[]}";
+        let index = LibraryIndex::parse(text).expect("the BOM must not break the parse");
+        assert_eq!(index.version, 1);
+        assert!(index.entries.is_empty());
     }
 
     #[test]

@@ -18,6 +18,7 @@
 #include <string>
 
 #include "../studio/src/thumbnailer.cpp"
+#include "../shared/build_flags.hpp"
 
 namespace {
 
@@ -199,6 +200,16 @@ void WriteLibraryJson(const std::filesystem::path& lib,
 }  // namespace
 
 void TestLibraryMetaCache() {
+#if !K6WP_ALLOW_ENV_OVERRIDES
+  // Task I4: K6WP_LIBRARY_JSON is compiled out of a Release build, so the
+  // resolver would read the user's real index and the snapshot under test
+  // would not be the one this function wrote. The section therefore only
+  // runs where the override exists (Debug); Release reports a skip instead
+  // of three failures that measure the override, not the cache.
+  std::cout << "[SKIP] meta-cache: K6WP_LIBRARY_JSON is compiled out of this "
+               "configuration (Debug tests the snapshot)\n";
+  return;
+#else
   auto dir = std::filesystem::temp_directory_path() / "k6wp_thumb_meta_test";
   std::error_code ec;
   std::filesystem::remove_all(dir, ec);
@@ -249,6 +260,7 @@ void TestLibraryMetaCache() {
 
   _putenv_s("K6WP_LIBRARY_JSON", "");
   std::filesystem::remove_all(dir, ec);
+#endif
 }
 
 }  // namespace

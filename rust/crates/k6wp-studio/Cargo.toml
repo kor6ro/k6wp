@@ -9,6 +9,20 @@ description = "The K6WP Studio: the wallpapers, the library and the settings, in
 [dependencies]
 k6wp-core = { path = "../k6wp-core", version = "0.1.0" }
 slint = { workspace = true }
+# The minimal decoders: the Studio reads thumbnails, it is not an image editor.
+# Default features off - jpeg-decoder's `rayon` would pull a thread pool for a
+# 160x90 thumbnail.
+jpeg-decoder = { version = "0.3", default-features = false }
+png = { version = "0.17", default-features = false }
+
+# The system light/dark preference, read on the worker thread. Same crate and
+# version the other two crates already build, so no new DLL surface.
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = [
+  "Win32_Foundation",
+  "Win32_System_Registry",
+  "Win32_UI_WindowsAndMessaging",
+] }
 
 [build-dependencies]
 slint-build = "1"

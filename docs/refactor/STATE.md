@@ -315,7 +315,7 @@ is the locked decision.
 
 
 ## NEXT TASK
-NEXT TASK: A1 (extract Qt-bound pure logic + C++ writer/checker + Rust replayer)
+NEXT TASK: set wallpaper via IPC from Library → thumbnailer from video (ADR) → import + compress queue → playlist → settings/onboarding → playback health telemetry → golden Studio per module → parity & Gate 2
 
 
 

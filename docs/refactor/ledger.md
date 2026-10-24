@@ -102,5 +102,16 @@ Evidence labels: **live-proven** (observed on this machine), **test-proven**
 | R1 | Shared N-monitor decode needs an upstream/vendor build; likely DEFER | pending | |
 
 ## Phase 2 run (this session)
-VERDICT: PARTIAL — T0-T3,T15 docs created; T4-T11 BLOCKED (env/impl); C++ build blocked by missing nlohmann/json.hpp; Rust 104/106 tests pass (2 corpus-dependent). — docs/refactor/RUN-REPORT-phase2.md
+VERDICT: PARTIAL - T0-T3,T15 docs created; T4-T11 BLOCKED (env/impl); C++ build blocked by missing nlohmann/json.hpp; Rust 104/106 tests pass (2 corpus-dependent). - docs/refactor/RUN-REPORT-phase2.md
+
+## Blok A-5 (this session)
+| ID | Hypothesis | Status | Evidence |
+|---|---|---|---|
+| A5-0 | Langkah 0: Studio release build green, ctest Release 51/51, cargo tree -i tokio/bincode/zbus no Windows graph | **accepted** | `docs/refactor/run-phase2/blok-a5-checks.txt` (live-proven) |
+| A5-1 | `tools/gen_library_200.ps1`: 200-entry library.json (BOM-free), 200 synthetic JPG/PNG thumbs, 11 missing + 4 UNC | **accepted** | `tools/gen_library_200.ps1` output "missing: 11 unc: 4 thumbs: 200" (live-proven) |
+| A5-2 | Library page: virtual ListView (rows +1 buffer), worker thread decode (jpeg-decoder 0.3 + png 0.17), LRU 64 MB cap, unavailable cards render "Tidak tersedia" without UI freeze | **accepted** | `rust/crates/k6wp-studio/src/{grid,thumbs,worker,main}.rs`, `ui/app.slint`, `ui/design-tokens.slint` (code-quoted); `lint_ui_thread.ps1` clean (test-proven); 17/17 cargo tests pass (test-proven) |
+| A5-3 | Measurement n=5 (release build): first frame 929 ms median, private 60.5 MB -> 86.6 MB, UIBLOCK 1 median scroll/0 idle, idle CPU 0% | **accepted** | `docs/bench/studio-library-200.json` (live-proven); screenshots `docs/img/library-200-light.png`, `library-200-dark.png` (live-proven) |
+| A5-4 | Decoder crates pass deny/audit; binary 8.42 MB | **accepted** | `cargo deny check advisories` 0, `cargo audit` 0 (live-proven) |
+
+VERDICT: ACCEPT - Blok A-5 deliverable complete with measured evidence.
 

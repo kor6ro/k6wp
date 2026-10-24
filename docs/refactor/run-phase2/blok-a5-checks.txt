@@ -1,0 +1,23 @@
+﻿=== L0.1 studio release build prior failure ===
+Previous STATUS_STACK_BUFFER_OVERRUN was from building the whole workspace in release concurrently; -p k6wp-studio alone succeeds (1m07s).
+
+=== L0.2 ctest Debug ===
+Debug: ctest -C Debug --output-on-failure -> 51/51 passed, 0 failed, 75.85 s real (see run-phase2/blok-a5-debug-ctest.txt)
+
+=== L0.2 ctest Release ===
+Release: ctest -C Release --output-on-failure -> 51/51 passed, 0 failed (after task-I4 Release skips of the K6WP_LIBRARY_JSON-gated sections, see tests/{thumbnailer_test,studio_logic_test,playlist_bridge_test}.cpp; before the fix the Release suite had 3 red tests: 44 thumbnailer_test meta-cache, 46 studio_logic_test import/roles, 48 playlist_bridge_test sync/500-guard - all caused by K6WP_LIBRARY_JSON being compiled out of Release, which the Debug suite relies on)
+
+=== L0.3 cargo tree -i (Windows target) ===
+tokio -> nothing to print for --target x86_64-pc-windows-msvc (not in the Windows graph)
+bincode -> nothing to print for --target x86_64-pc-windows-msvc (not in the Windows graph)
+zbus -> nothing to print for --target x86_64-pc-windows-msvc (not in the Windows graph)
+Conclusion: none of the three is in the Windows target graph; no new dependency had to be denied for the decoders.
+
+=== L0.3 (extra) decoders ===
+jpeg-decoder 0.3 (default features off) + png 0.17 (default features off) added to the Rust Studio; both accepted by cargo deny check advisories / cargo audit (0 unmaintained on their path).
+
+=== L0.4 debug vs release behaviour of the C++ library path overrides ===
+K6WP_ALLOW_ENV_OVERRIDES is 1 (Debug) / 0 (Release); the sections of the Release-mode suite that seed an isolated library.json through K6WP_LIBRARY_JSON are now skipped in Release and run in Debug.
+
+=== L0.5 (task I4 re-audit) ===
+tools/lint_env_overrides.ps1 -> 272 files scanned, 21 reads, 18 names, 0 errors; tools/lint_env_overrides_selftest.ps1 -> 8 checks, 0 failures; tools/check_release_overrides.ps1 -RequireBinaries -> 6 release binaries, 0 findings.

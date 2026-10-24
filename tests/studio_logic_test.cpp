@@ -38,6 +38,10 @@
 // SKIP when a live engine answers (never steal the real endpoint).
 
 #include "apply_manager.hpp"
+// Task I4: the environment overrides are compiled out of a Release build, so a
+// section that isolates itself with K6WP_LIBRARY_JSON / K6WP_THUMBS_DIR must
+// know which configuration it is in.
+#include "../shared/build_flags.hpp"
 #include "compress_bridge.hpp"
 #include "compress_controller.hpp"
 #include "compress_errors.hpp"
@@ -65,6 +69,7 @@
 #include <cstring>
 #include <fstream>
 #include <functional>
+#include <iostream>
 #include <string>
 #include <thread>
 #include <vector>
@@ -1177,6 +1182,7 @@ int main(int argc, char** argv) {
           "and it reports no result (resultChanged stays silent)");
   }
 
+#if K6WP_ALLOW_ENV_OVERRIDES
   // 16. Studio import path: the per-file subprocess waits are OFF the calling
   //     thread. Each leg arms a fake ffmpeg/ffprobe that blocks 3s (the real
   //     budget is 10s) and measures the event loop of the thread that calls
@@ -1304,6 +1310,14 @@ int main(int argc, char** argv) {
     (void)SetEnvironmentVariableW(L"K6WP_LIBRARY_JSON", nullptr);
     (void)SetEnvironmentVariableW(L"K6WP_THUMBS_DIR", nullptr);
   }
+#else
+  // Release: K6WP_LIBRARY_JSON and K6WP_THUMBS_DIR are compiled out (task I4),
+  // so this section would read and write the user's real library instead of
+  // the seeded one. It is a Debug-mode section; reporting a skip keeps the
+  // Release suite honest about what it did not check.
+  std::cout << "[SKIP] 16. studio import path: env overrides compiled out of "
+               "this configuration (Debug covers it)\n";
+#endif
 
   // 17. First-run wizard reachability. An over-threshold first pick used to
   //     produce an EMPTY firstRunFile, because the only source QML had was
@@ -2260,6 +2274,7 @@ int main(int argc, char** argv) {
   //     badge text byte for byte; QML consumes the structured roles instead.
   //     Failure drill: a clean SMALL-res label must be optimized=false —
   //     optimized tracks the resolution floor, NOT the absence of a badge.
+#if K6WP_ALLOW_ENV_OVERRIDES
   {
     const std::string bullet = "\xE2\x80\xA2";   // •
     const std::string emdash = "\xE2\x80\x94";    // —
@@ -2480,6 +2495,13 @@ int main(int argc, char** argv) {
       (void)SetEnvironmentVariableW(L"K6WP_LIBRARY_JSON", nullptr);
     }
   }
+#else
+  // Release: K6WP_LIBRARY_JSON is compiled out (task I4), so the seeded
+  // library below would not be read and the grid would fall back to the real
+  // %LOCALAPPDATA% library. The section is Debug-only; Release reports a skip.
+  std::cout << "[SKIP] 23. library card roles: K6WP_LIBRARY_JSON is compiled "
+               "out of this configuration (Debug covers it)\n";
+#endif
 
   // 24. Studio settings plan todo 8 (GAP-7): closeToTray / playlistSource /
   //     performancePreset are additive inside schema v3 with safe old-file

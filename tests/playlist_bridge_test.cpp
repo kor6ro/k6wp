@@ -19,6 +19,9 @@
 
 #include "library_manager.hpp"
 #include "playlist_bridge.hpp"
+// Task I4: K6WP_LIBRARY_JSON is compiled out of a Release build, so the
+// sections that seed an isolated library must know the configuration.
+#include "../shared/build_flags.hpp"
 
 namespace {
 
@@ -155,6 +158,7 @@ int main(int argc, char** argv) {
     Check(bridge.enabled(), "7. enabled flag survives clear");
   }
 
+#if K6WP_ALLOW_ENV_OVERRIDES
   // 8. syncOrderFromLibrary materialization (plan todo 9): library dst
   //    paths (existing only) become cfg_.order via the atomic Save();
   //    missing files (exists == false) are skipped.
@@ -180,6 +184,10 @@ int main(int argc, char** argv) {
     Check(fresh.count() == 2,
           "8. materialized order persists across bridge instances");
   }
+#else
+  std::cout << "[SKIP] 8. syncOrderFromLibrary materialization: K6WP_LIBRARY_JSON "
+               "is compiled out of this configuration (Debug covers it)\n";
+#endif
 
   // 9. Idempotence: two consecutive syncs over an unchanged library leave
   //    playlist.json byte-identical (hash proof).
@@ -195,6 +203,7 @@ int main(int argc, char** argv) {
     std::cout << "[INFO] idempotence hash1=" << h1 << " hash2=" << h2 << "\n";
   }
 
+#if K6WP_ALLOW_ENV_OVERRIDES
   // 10. >500 guard: 501 valid library files -> false + message, and
   //     playlist.json stays byte-identical (hash proof).
   {
@@ -235,6 +244,10 @@ int main(int argc, char** argv) {
     Check(FileHash(pl) == after,
           "10. playlist.json still byte-identical after second reject");
   }
+#else
+  std::cout << "[SKIP] 10. >500 guard: K6WP_LIBRARY_JSON is compiled out of "
+               "this configuration (Debug covers it)\n";
+#endif
 
   std::cout << "\n" << g_checks << " checks, " << g_failures << " failures\n";
   return g_failures == 0 ? 0 : 1;

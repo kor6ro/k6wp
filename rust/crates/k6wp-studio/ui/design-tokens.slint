@@ -1,35 +1,51 @@
-﻿// design-tokens.slint - shared tokens for Studio Rust (Slint).
-// Light/dark follow the system color scheme; font = Segoe UI Variable.
-export global Tokens {
-    // Colors (light; overridden at runtime via palette when dark)
-    in-out property <color> bg: #ffffff;
-    in-out property <color> fg: #1f1f1f;
-    in-out property <color> muted: #6b6b6b;
-    in-out property <color> accent: #0067c0;
-    in-out property <color> card: #f3f3f3;
-    in-out property <color> border: #d0d0d0;
+﻿// design-tokens.slint - the shared tokens for the Rust Studio.
+//
+// Every colour, spacing and duration the Studio uses lives here, so the
+// light and the dark theme are one binding each and not two layouts. The
+// values follow the Fluent palette the Qt Studio used (accent #0067C0 in
+// light, the lighter accent in dark) so the two Studios read as one product.
+//
+// `dark` and `reduced-motion` are set from Rust: the system preference is
+// read on the worker thread (never on the UI thread) and pushed in.
 
-    // Spacing
+export global Tokens {
+    // Set by Rust from HKCU ...Themes\Personalize.
+    in-out property <bool> dark: false;
+    // Set by Rust from SPI_GETCLIENTAREAANIMATION.
+    in-out property <bool> reduced-motion: false;
+
+    // Colours.
+    in-out property <color> bg: dark ? #1b1b1b : #ffffff;
+    in-out property <color> fg: dark ? #f2f2f2 : #1f1f1f;
+    in-out property <color> muted: dark ? #a6a6a6 : #6b6b6b;
+    in-out property <color> accent: dark ? #4cc2ff : #0067c0;
+    in-out property <color> card: dark ? #262626 : #f6f6f6;
+    in-out property <color> card-muted: dark ? #1f1f1f : #ededed;
+    in-out property <color> thumb-bg: dark ? #141414 : #e3e3e3;
+    in-out property <color> border: dark ? #3a3a3a : #dcdcdc;
+    in-out property <color> unavailable-text: dark ? #8a8a8a : #7a7a7a;
+
+    // Spacing.
     in-out property <length> space-xs: 4px;
     in-out property <length> space-sm: 8px;
     in-out property <length> space-md: 12px;
     in-out property <length> space-lg: 16px;
     in-out property <length> space-xl: 24px;
 
-    // Radius
+    // Radius.
     in-out property <length> radius-sm: 4px;
     in-out property <length> radius-md: 6px;
     in-out property <length> radius-lg: 8px;
 
-    // Typography
-    in-out property <string> font-family: "Segoe UI Variable";
+    // Typography. The system font, no bundled font file: a 200-item grid
+    // must not cost a megabyte of glyphs.
+    in-out property <string> font-family: "Segoe UI Variable Text";
     in-out property <length> font-sm: 12px;
     in-out property <length> font-md: 14px;
     in-out property <length> font-lg: 16px;
     in-out property <length> font-xl: 20px;
 
-    // Motion
-    in-out property <duration> motion-fast: 120ms;
-    in-out property <duration> motion-med: 200ms;
-    in-out property <bool> reduced-motion: false;
+    // Motion. Zero when the user asked Windows for reduced motion.
+    in-out property <duration> motion-fast: reduced-motion ? 0ms : 120ms;
+    in-out property <duration> motion-med: reduced-motion ? 0ms : 200ms;
 }

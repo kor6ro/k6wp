@@ -1,0 +1,77 @@
+{
+    "schema":  "k6wp.bench.studio-library/1",
+    "created":  "2026-10-24T23:50:10+07:00",
+    "binary":  {
+                   "path":  "D:\\cargo-target2\\x86_64-pc-windows-msvc\\release\\k6wp-studio.exe",
+                   "bytes":  8833024,
+                   "sha256":  "ca5c250d27f8bf6bc0e2caacc8f14fd405e22cb30fc487efec54398e6921fbee"
+               },
+    "input":  {
+                  "library":  "C:\\Users\\axioo\\AppData\\Local\\K6WP\\library.json",
+                  "items":  200,
+                  "unavailable":  15,
+                  "grid_columns":  4,
+                  "card_width_px":  208,
+                  "row_height_px":  173
+              },
+    "host":  {
+                 "os":  "Microsoft Windows 11 Home",
+                 "build":  "26300",
+                 "cpu":  "12th Gen Intel(R) Core(TM) i7-12650H",
+                 "ram_gb":  15.7,
+                 "session_dpi":  96
+             },
+    "method":  {
+                   "first_frame":  "poll PrintWindow(PW_RENDERFULLCONTENT) every 25 ms; first frame with \u003e1 colour in the client area; resolution 25 ms",
+                   "lib_ready":  "app-side: stderr \u0027LIBREADY \u003cms\u003e\u0027 under --ui-watch, printed when the library model is filled",
+                   "private_bytes":  "Process.PrivateMemorySize64 after the first frame and after an end-to-end scroll",
+                   "gpu_shared":  "perf counter \u0027\\GPU Process Memory(pid_N)\\Shared Usage\u0027",
+                   "uiblock":  "app-side watchdog: post to own event loop every 8 ms, print \u0027UIBLOCK \u003cms\u003e\u0027 when an answer takes \u003e16 ms; counted over the scroll and over 1 s of idle",
+                   "idle_cpu":  "run without --ui-watch: TotalProcessorTime delta over 5 s, percent of one core",
+                   "scroll":  "400 wheel notches, 8 ms apart, pointer over the client area centre",
+                   "runs":  5
+               },
+    "runs":  5,
+    "summary":  {
+                    "first_frame_ms":  {
+                                           "median":  929,
+                                           "min":  851,
+                                           "max":  1005,
+                                           "n":  5
+                                       },
+                    "lib_ready_ms":  null,
+                    "private_mb_first":  {
+                                             "median":  60.5,
+                                             "min":  57.9,
+                                             "max":  60.9,
+                                             "n":  5
+                                         },
+                    "private_mb_after_scroll":  {
+                                                    "median":  86.6,
+                                                    "min":  84.9,
+                                                    "max":  87.4,
+                                                    "n":  5
+                                                },
+                    "gpu_shared_mb_first":  null,
+                    "gpu_shared_mb_after_scroll":  null,
+                    "uiblock_count_scroll":  {
+                                                 "median":  1,
+                                                 "min":  1,
+                                                 "max":  1,
+                                                 "n":  5
+                                             },
+                    "uiblock_count_idle":  {
+                                               "median":  1,
+                                               "min":  1,
+                                               "max":  1,
+                                               "n":  5
+                                           }
+                },
+    "idle":  {
+                 "cpu_pct_of_one_core":  0,
+                 "private_mb":  60.6,
+                 "gpu_shared_mb":  null,
+                 "uiblock_count":  0,
+                 "seconds":  5
+             }
+}

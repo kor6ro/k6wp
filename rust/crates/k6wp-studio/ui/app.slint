@@ -1,76 +1,218 @@
-// The K6WP Studio shell (Phase 2).
+﻿// The K6WP Studio - the Library page (Phase 2, Blok A-5).
 //
-// The shape follows the Qt Studio: a header with the version, a library
-// list, and a status line. The Slint version drops the QML/Qt runtime,
-// which is the point of the phase (Studio RAM 337 MB -> <= 150 MB,
-// startup 1290 ms -> <= 700 ms).
+// One page: a header, a virtualised grid of cards and a status line. The grid
+// is a ListView, which instantiates only the rows that fit the viewport; Rust
+// adds one row of buffer above and below and asks the worker for exactly those
+// thumbnails. Nothing here reads a file.
+//
+// Structs and their fields are updated from Rust, never bound to the disk:
+// a card's `thumb` is an already-decoded image handed over by the worker.
 
-import { Button, ScrollView, VerticalBox, HorizontalBox } from "std-widgets.slint";
+import { VerticalBox, HorizontalBox, ListView } from "std-widgets.slint";
+import { Tokens } from "design-tokens.slint";
+
+// Re-exported so Rust can set `dark` / `reduced-motion` on the global; a
+// private import is inlined by the compiler and has no Rust accessor.
+export { Tokens }
+
+export struct LibraryCard {
+    name: string,
+    meta: string,
+    unavailable: bool,
+    thumb: image,
+    index: int,
+}
 
 export struct LibraryRow {
-    name: string,
-    path: string,
-    duration-s: float,
+    cards: [LibraryCard],
+}
+
+// One card: the thumbnail band on top, the title and the metadata below.
+component CardItem inherits Rectangle {
+    in property <LibraryCard> card;
+    in property <length> card-width: 208px;
+    in property <length> band-height: 117px;
+
+    width: card-width;
+    border-radius: Tokens.radius-md;
+    background: card.unavailable ? Tokens.card-muted : Tokens.card;
+    border-width: 1px;
+    border-color: Tokens.border;
+
+    VerticalLayout {
+        // The thumbnail band. `cover` crops; the worker already scaled the
+        // image to the drawn size, so this is a blit, not a resample.
+        Rectangle {
+            height: band-height;
+            clip: true;
+            border-radius: Tokens.radius-md;
+            background: Tokens.thumb-bg;
+
+            if card.thumb.width > 0 : Image {
+                source: card.thumb;
+                image-fit: cover;
+                width: 100%;
+                height: 100%;
+            }
+
+            if card.unavailable : Rectangle {
+                background: Tokens.card-muted;
+                border-radius: Tokens.radius-md;
+                Text {
+                    text: "Tidak tersedia";
+                    color: Tokens.unavailable-text;
+                    font-size: Tokens.font-sm;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        // The text block: the title, then the metadata line.
+        VerticalLayout {
+            padding-left: Tokens.space-sm;
+            padding-right: Tokens.space-sm;
+            padding-top: Tokens.space-xs;
+            padding-bottom: Tokens.space-xs;
+            spacing: 2px;
+
+            Text {
+                text: card.name;
+                color: card.unavailable ? Tokens.muted : Tokens.fg;
+                font-size: Tokens.font-md;
+                font-family: Tokens.font-family;
+                overflow: elide;
+            }
+            Text {
+                text: card.meta;
+                color: Tokens.muted;
+                font-size: Tokens.font-sm;
+                font-family: Tokens.font-family;
+                overflow: elide;
+            }
+        }
+        // Absorbs the slack so the two lines sit at the top of the block
+        // instead of being pushed to the bottom edge.
+        Rectangle { vertical-stretch: 1; }
+    }
 }
 
 export component AppWindow inherits Window {
-    in-out property <[LibraryRow]> library: [];
-    in-out property <int> library-count: 0;
+    in-out property <[LibraryRow]> rows: [];
+    in-out property <int> columns: 4;
+    in-out property <length> card-width: 208px;
+    in-out property <length> row-height: 173px;
+    in-out property <int> count: 0;
+    in-out property <string> footer: "";
+    in-out property <string> empty-message: "Memuat library...";
     in-out property <string> version: "";
+
+    // Rust rebuilds the row model when the column count changes.
+    callback rebuild-grid(width: length);
+    // Rust asks the worker for the thumbnails of the visible band.
+    callback viewport-changed(scroll-y: length, viewport-height: length);
 
     title: "K6WP Studio";
     preferred-width: 960px;
     preferred-height: 640px;
     min-width: 640px;
     min-height: 420px;
+    background: Tokens.bg;
 
-    VerticalBox {
-        padding: 12px;
-        spacing: 10px;
+    // The band is 16:9 of the card width; the text block is the rest.
+    property <length> band-height: card-width * 9 / 16;
 
-        HorizontalBox {
-            spacing: 8px;
+    VerticalLayout {
+        padding: Tokens.space-lg;
+        spacing: Tokens.space-md;
+
+        // Header: title on the left, the counters on the right.
+        HorizontalLayout {
+            spacing: Tokens.space-sm;
             Text {
-                text: "K6WP Studio";
-                font-size: 20px;
+                text: "Library";
+                color: Tokens.fg;
+                font-size: Tokens.font-xl;
+                font-family: Tokens.font-family;
+                font-weight: 600;
+                vertical-alignment: center;
             }
             Rectangle { horizontal-stretch: 1; }
             Text {
-                text: "v" + root.version;
-                color: #808080;
+                text: count + " item";
+                color: Tokens.muted;
+                font-size: Tokens.font-sm;
+                font-family: Tokens.font-family;
+                vertical-alignment: center;
+            }
+            Text {
+                text: "v" + version;
+                color: Tokens.muted;
+                font-size: Tokens.font-sm;
+                font-family: Tokens.font-family;
+                vertical-alignment: center;
             }
         }
 
-        ScrollView {
+        // The grid. ListView is lazy: a row exists only while it is close to
+        // the viewport, so 200 items cost the same as 12 painted cards.
+        Rectangle {
             vertical-stretch: 1;
-            VerticalBox {
-                spacing: 4px;
-                for row in root.library: Rectangle {
-                    height: 44px;
-                    background: #1e1e1e;
-                    border-radius: 6px;
-                    HorizontalBox {
-                        padding: 8px;
-                        spacing: 12px;
-                        Text {
-                            text: row.name;
-                            horizontal-stretch: 1;
+
+            grid := ListView {
+                for row in rows : Rectangle {
+                    height: row-height;
+                    HorizontalLayout {
+                        spacing: Tokens.space-md;
+                        for card in row.cards : CardItem {
+                            card: card;
+                            card-width: root.card-width;
+                            band-height: root.band-height;
                         }
-                        Text {
-                            text: row.duration-s + "s";
-                            color: #909090;
-                        }
+                        Rectangle { horizontal-stretch: 1; }
                     }
+                }
+            }
+
+            // The empty state shares the grid's space: the same page, no dialog.
+            if count == 0 : Rectangle {
+                background: Tokens.bg;
+                Text {
+                    text: empty-message;
+                    color: Tokens.muted;
+                    font-size: Tokens.font-md;
+                    font-family: Tokens.font-family;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
                 }
             }
         }
 
-        HorizontalBox {
-            alignment: end;
-            Button {
-                text: "Settings";
-                clicked => { }
-            }
+        // Footer: what the grid is showing, and what it costs.
+        Text {
+            text: footer;
+            color: Tokens.muted;
+            font-size: Tokens.font-sm;
+            font-family: Tokens.font-family;
         }
+    }
+
+    // Report the viewport to Rust whenever it moves or resizes. These are
+    // property mirrors, not I/O: the callback only posts to the worker.
+    // `content-y` is negative once scrolled down (Slint's convention).
+    out property <length> scroll-y <=> grid.content-y;
+    out property <length> viewport-h <=> grid.height;
+
+    changed scroll-y => {
+        root.viewport-changed(self.scroll-y, self.viewport-h);
+    }
+    changed viewport-h => {
+        root.viewport-changed(self.scroll-y, self.viewport-h);
+    }
+    changed width => {
+        root.rebuild-grid(self.width - Tokens.space-lg * 2);
+    }
+    init => {
+        root.rebuild-grid(self.width - Tokens.space-lg * 2);
     }
 }
