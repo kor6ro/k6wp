@@ -81,42 +81,556 @@
                     {
                         "name":  "library_manager",
                         "cases":  [
+                                      {
+                                          "input":  {
+                                                        "existing":  [
 
+                                                                     ],
+                                                        "path":  "a.mp4"
+                                                    },
+                                          "id":  "lm.import_new",
+                                          "output":  {
+                                                         "added":  true
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "existing":  [
+                                                                         "a.mp4"
+                                                                     ],
+                                                        "path":  "a.mp4"
+                                                    },
+                                          "id":  "lm.import_dup",
+                                          "output":  {
+                                                         "added":  false
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "items":  [
+                                                                      "b",
+                                                                      "a"
+                                                                  ],
+                                                        "sort":  "name"
+                                                    },
+                                          "id":  "lm.sort_name",
+                                          "output":  {
+                                                         "ordered":  [
+                                                                         "a",
+                                                                         "b"
+                                                                     ]
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "items":  [
+                                                                      "System.Collections.Hashtable",
+                                                                      "System.Collections.Hashtable"
+                                                                  ],
+                                                        "sort":  "date"
+                                                    },
+                                          "id":  "lm.sort_date",
+                                          "output":  {
+                                                         "ordered":  [
+                                                                         1,
+                                                                         2
+                                                                     ]
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "items":  [
+                                                                      "foo",
+                                                                      "bar"
+                                                                  ],
+                                                        "q":  "fo"
+                                                    },
+                                          "id":  "lm.search",
+                                          "output":  {
+                                                         "matches":  [
+                                                                         "foo"
+                                                                     ]
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "path":  "missing.mp4"
+                                                    },
+                                          "id":  "lm.broken",
+                                          "output":  {
+                                                         "status":  "unavailable"
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "from":  0,
+                                                        "to":  1,
+                                                        "items":  [
+                                                                      "a",
+                                                                      "b"
+                                                                  ]
+                                                    },
+                                          "id":  "lm.reorder",
+                                          "output":  {
+                                                         "ordered":  [
+                                                                         "b",
+                                                                         "a"
+                                                                     ]
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "items":  [
+
+                                                                  ],
+                                                        "q":  "x"
+                                                    },
+                                          "id":  "lm.empty_search",
+                                          "output":  {
+                                                         "matches":  [
+
+                                                                     ]
+                                                     }
+                                      }
                                   ],
                         "note":  "TODO: extract pure logic from studio/src"
                     },
                     {
                         "name":  "thumbnailer_decision",
                         "cases":  [
-
+                                      {
+                                          "input":  {
+                                                        "path":  "a.mp4",
+                                                        "mtime":  123,
+                                                        "size":  100
+                                                    },
+                                          "id":  "th.cache_key",
+                                          "output":  {
+                                                         "key":  "a.mp4|100|123"
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "path":  "a.mp4",
+                                                        "mtime":  124,
+                                                        "size":  100
+                                                    },
+                                          "id":  "th.regen_mtime",
+                                          "output":  {
+                                                         "regenerate":  true
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "path":  "a.mp4",
+                                                        "mtime":  123,
+                                                        "size":  101
+                                                    },
+                                          "id":  "th.regen_size",
+                                          "output":  {
+                                                         "regenerate":  true
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "path":  "a.mp4",
+                                                        "mtime":  123,
+                                                        "size":  100
+                                                    },
+                                          "id":  "th.no_regen",
+                                          "output":  {
+                                                         "regenerate":  false
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "in_viewport":  false
+                                                    },
+                                          "id":  "th.viewport_only",
+                                          "output":  {
+                                                         "decode":  false
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "in_viewport":  true
+                                                    },
+                                          "id":  "th.viewport_decode",
+                                          "output":  {
+                                                         "decode":  true
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "cache_bytes":  1000,
+                                                        "cap":  500
+                                                    },
+                                          "id":  "th.lru_evict",
+                                          "output":  {
+                                                         "evict":  true
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "cache_bytes":  400,
+                                                        "cap":  500
+                                                    },
+                                          "id":  "th.no_evict",
+                                          "output":  {
+                                                         "evict":  false
+                                                     }
+                                      }
                                   ],
                         "note":  "TODO: extract pure logic from studio/src"
                     },
                     {
                         "name":  "compress_progress",
                         "cases":  [
-
+                                      {
+                                          "input":  {
+                                                        "line":  "progress=0.0"
+                                                    },
+                                          "id":  "cp.0",
+                                          "output":  {
+                                                         "percent":  0
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "line":  "progress=0.5"
+                                                    },
+                                          "id":  "cp.50",
+                                          "output":  {
+                                                         "percent":  50
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "line":  "progress=1.0"
+                                                    },
+                                          "id":  "cp.100",
+                                          "output":  {
+                                                         "percent":  100
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "line":  "out_time_ms=5000000"
+                                                    },
+                                          "id":  "cp.out_time",
+                                          "output":  {
+                                                         "ms":  5000000
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "line":  "frame=120"
+                                                    },
+                                          "id":  "cp.frame",
+                                          "output":  {
+                                                         "frame":  120
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "line":  "speed=2.5x"
+                                                    },
+                                          "id":  "cp.speed",
+                                          "output":  {
+                                                         "speed":  2.5
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "line":  ""
+                                                    },
+                                          "id":  "cp.empty",
+                                          "output":  {
+                                                         "percent":  null
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "line":  "garbage"
+                                                    },
+                                          "id":  "cp.malformed",
+                                          "output":  {
+                                                         "percent":  null
+                                                     }
+                                      }
                                   ],
                         "note":  "TODO: extract pure logic from studio/src"
                     },
                     {
                         "name":  "studio_settings",
                         "cases":  [
+                                      {
+                                          "input":  {
+                                                        "version":  0
+                                                    },
+                                          "id":  "ss.defaults",
+                                          "output":  {
+                                                         "lockscreen_sync":  true,
+                                                         "auto_compress_on_import":  true,
+                                                         "default_fps":  30,
+                                                         "default_crf":  22,
+                                                         "wallpaper_sync":  true,
+                                                         "lockscreen_offset_sec":  0
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "version":  4,
+                                                        "lockscreen_offset_sec":  1
+                                                    },
+                                          "id":  "ss.v4_migrate_offset",
+                                          "output":  {
+                                                         "lockscreen_offset_sec":  0
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "version":  4,
+                                                        "lockscreen_offset_sec":  2.5
+                                                    },
+                                          "id":  "ss.v4_keep_offset",
+                                          "output":  {
+                                                         "lockscreen_offset_sec":  2.5
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "version":  5,
+                                                        "lockscreen_offset_sec":  1.5
+                                                    },
+                                          "id":  "ss.v5_keep",
+                                          "output":  {
+                                                         "lockscreen_offset_sec":  1.5
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "default_crf":  22
+                                                    },
+                                          "id":  "ss.crf_range",
+                                          "output":  {
+                                                         "valid":  true
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "default_fps":  30
+                                                    },
+                                          "id":  "ss.fps_range",
+                                          "output":  {
+                                                         "valid":  true
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "mode":  "match_monitor"
+                                                    },
+                                          "id":  "ss.resolution_mode",
+                                          "output":  {
+                                                         "valid":  true
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
 
+                                                    },
+                                          "id":  "ss.version_current",
+                                          "output":  {
+                                                         "version":  5
+                                                     }
+                                      }
                                   ],
                         "note":  "TODO: extract pure logic from studio/src"
                     },
                     {
                         "name":  "cache_stats",
                         "cases":  [
+                                      {
+                                          "input":  {
+                                                        "files":  [
 
+                                                                  ]
+                                                    },
+                                          "id":  "cs.empty",
+                                          "output":  {
+                                                         "count":  0,
+                                                         "bytes":  0
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "files":  [
+                                                                      "System.Collections.Hashtable"
+                                                                  ]
+                                                    },
+                                          "id":  "cs.one",
+                                          "output":  {
+                                                         "count":  1,
+                                                         "bytes":  100
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "files":  [
+                                                                      "System.Collections.Hashtable",
+                                                                      "System.Collections.Hashtable"
+                                                                  ]
+                                                    },
+                                          "id":  "cs.sum",
+                                          "output":  {
+                                                         "count":  2,
+                                                         "bytes":  300
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "access":  [
+                                                                       "a",
+                                                                       "b",
+                                                                       "a"
+                                                                   ]
+                                                    },
+                                          "id":  "cs.lru_order",
+                                          "output":  {
+                                                         "evict":  "b"
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "path":  "x"
+                                                    },
+                                          "id":  "cs.missing",
+                                          "output":  {
+                                                         "exists":  false
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "path":  "y"
+                                                    },
+                                          "id":  "cs.present",
+                                          "output":  {
+                                                         "exists":  true
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "file":  "bad"
+                                                    },
+                                          "id":  "cs.corrupt",
+                                          "output":  {
+                                                         "error":  true
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "file":  "ok"
+                                                    },
+                                          "id":  "cs.valid",
+                                          "output":  {
+                                                         "error":  false
+                                                     }
+                                      }
                                   ],
                         "note":  "TODO: extract pure logic from studio/src"
                     },
                     {
                         "name":  "optimize_on_import",
                         "cases":  [
-
+                                      {
+                                          "input":  {
+                                                        "bit_depth":  8,
+                                                        "hdr":  false,
+                                                        "dpb_bytes":  12533760
+                                                    },
+                                          "id":  "opt.8bit_small",
+                                          "output":  {
+                                                         "default_optimize":  true
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "bit_depth":  8,
+                                                        "hdr":  false,
+                                                        "dpb_bytes":  199065600
+                                                    },
+                                          "id":  "opt.8bit_large",
+                                          "output":  {
+                                                         "default_optimize":  true
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "bit_depth":  10,
+                                                        "hdr":  false,
+                                                        "dpb_bytes":  12533760
+                                                    },
+                                          "id":  "opt.10bit",
+                                          "output":  {
+                                                         "default_optimize":  false
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "bit_depth":  8,
+                                                        "hdr":  true,
+                                                        "dpb_bytes":  12533760
+                                                    },
+                                          "id":  "opt.hdr",
+                                          "output":  {
+                                                         "default_optimize":  false
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "bit_depth":  0,
+                                                        "hdr":  false,
+                                                        "dpb_bytes":  0
+                                                    },
+                                          "id":  "opt.unknown",
+                                          "output":  {
+                                                         "default_optimize":  false
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "bit_depth":  8,
+                                                        "hdr":  false,
+                                                        "dpb_bytes":  67108864
+                                                    },
+                                          "id":  "opt.threshold_boundary",
+                                          "output":  {
+                                                         "default_optimize":  true
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "bit_depth":  8,
+                                                        "hdr":  false,
+                                                        "dpb_bytes":  1000
+                                                    },
+                                          "id":  "opt.below_threshold",
+                                          "output":  {
+                                                         "default_optimize":  true
+                                                     }
+                                      },
+                                      {
+                                          "input":  {
+                                                        "bit_depth":  10,
+                                                        "hdr":  false,
+                                                        "dpb_bytes":  15552000,
+                                                        "codec":  "hevc"
+                                                    },
+                                          "id":  "opt.hevc_10bit",
+                                          "output":  {
+                                                         "default_optimize":  false
+                                                     }
+                                      }
                                   ],
                         "note":  "TODO: extract pure logic from studio/src"
                     }
