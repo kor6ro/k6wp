@@ -1,0 +1,52 @@
+﻿=== Get-Location ===
+C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden
+=== git rev-parse --show-toplevel ===
+C:/Users/axioo/.local/share/opencode/worktree/1e41a2/proud-garden
+=== git status --short ===
+=== git stash list ===
+=== git reflog -25 ===
+12fe669 HEAD@{0}: commit: phase2: bootstrap docs, lint, tokens, golden skeleton, license/gate2 packages (partial run)
+f9ef436 HEAD@{1}: 
+=== git log --oneline -20 ===
+12fe669 phase2: bootstrap docs, lint, tokens, golden skeleton, license/gate2 packages (partial run)
+f9ef436 R1: koreksi label & hitungan
+b84f562 fix(engine): the DPB frame size follows bit depth and chroma (H2/H3)
+6a37fbd chore: prove the diagnostic overrides are compiled out of release (L5)
+34a391c fix(ipc): the Rust client waits for a free pipe instance (L4)
+d168005 fix(engine): take the last filesystem call off the get_state poll path (L2)
+acdf6ee fix(engine): delete the unconsumed thread_count and its poll spike (L1)
+7c4f420 docs: write the continue-a-session page in STATE (v1.10)
+c72bff6 fix: serialize the config writers with one cross-process lock (J3)
+3f41d24 chore: catch accidental non-Latin text before it reaches a commit (H4)
+1281708 chore: the engine log artifact from the stress run
+699c87d fix(engine): the get_state was paying a system-wide thread snapshot (K1)
+0787e0b test: root the two flakes and gate the suite's stability (J2)
+9e7ec8b docs(refactor): the G1 verdict is an owner-directed trade-off, with the held-back RAM measured (H1)
+dcbb850 docs(refactor): add STATE.md - the one page every session reads first (I5)
+a9265f5 feat(build): the environment overrides are compiled out of the release build (I4)
+7181a2c feat(config): the save preserves the unknown keys (I3)
+f4d4d3b chore(fuzz): keep the cargo-fuzz build artifacts out of git
+97febbc feat(core): the SPS parser seeks instead of reading a prefix (I2)
+060fd81 test(engine): prove the G5 fixtures against the baseline build (I1)
+=== Test-Path thirdparty/json.hpp ===
+False
+=== git check-ignore -v thirdparty/json.hpp ===
+=== git log --all --oneline -- thirdparty/json.hpp ===
+=== tests/corpus count ===
+2
+=== vendor size ===
+count=5 sumbytes=893110
+=== SessionId / UserInteractive ===
+SessionId=1
+UserInteractive=True
+=== engine/K6WP processes ===
+(none running)
+=== disk free ===
+
+Name FreeGB
+---- ------
+C       2.7
+D     62.05
+
+
+
