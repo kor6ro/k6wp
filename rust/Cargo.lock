@@ -2466,7 +2466,9 @@ version = "0.1.0"
 dependencies = [
  "jpeg-decoder",
  "k6wp-core",
+ "k6wp-ipc",
  "png 0.17.16",
+ "serde_json",
  "slint",
  "slint-build",
  "windows",

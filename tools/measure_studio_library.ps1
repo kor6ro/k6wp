@@ -117,13 +117,19 @@ Remove-Item $csPath -Force
 
 [void][BenchCap]::SetProcessDpiAwarenessContext([BenchCap]::PER_MONITOR_AWARE_V2)
 
-function Get-GpuSharedMb([int]$ProcessId) {
+function Get-GpuMemoryMb([int]$ProcessId) {
+    $result = @{ shared = $null; dedicated = $null; available = $false }
     try {
         $sample = Get-Counter "\GPU Process Memory(pid_$ProcessId)\Shared Usage" -ErrorAction Stop
-        return [math]::Round($sample.CounterSamples[0].CookedValue / 1MB, 1)
-    } catch {
-        return $null
-    }
+        $result.shared = [math]::Round($sample.CounterSamples[0].CookedValue / 1MB, 1)
+        $result.available = $true
+    } catch { }
+    try {
+        $sample = Get-Counter "\GPU Process Memory(pid_$ProcessId)\Dedicated Usage" -ErrorAction Stop
+        $result.dedicated = [math]::Round($sample.CounterSamples[0].CookedValue / 1MB, 1)
+        $result.available = $true
+    } catch { }
+    return $result
 }
 
 function Stop-Studio {
@@ -209,7 +215,8 @@ for ($i = 1; $i -le $Runs; $i++) {
     $first = @{
         private_mb = [math]::Round($started.Process.PrivateMemorySize64 / 1MB, 1)
         working_set_mb = [math]::Round($started.Process.WorkingSet64 / 1MB, 1)
-        gpu_shared_mb = Get-GpuSharedMb $started.Process.Id
+        gpu_shared_mb = (Get-GpuMemoryMb $started.Process.Id).shared
+        gpu_dedicated_mb = (Get-GpuMemoryMb $started.Process.Id).dedicated
         window = "$($content.Width)x$($content.Height)"
     }
 
@@ -219,7 +226,8 @@ for ($i = 1; $i -le $Runs; $i++) {
     $after = @{
         private_mb = [math]::Round($started.Process.PrivateMemorySize64 / 1MB, 1)
         working_set_mb = [math]::Round($started.Process.WorkingSet64 / 1MB, 1)
-        gpu_shared_mb = Get-GpuSharedMb $started.Process.Id
+        gpu_shared_mb = (Get-GpuMemoryMb $started.Process.Id).shared
+        gpu_dedicated_mb = (Get-GpuMemoryMb $started.Process.Id).dedicated
     }
     $stalls = Read-Stalls $started.ErrorFile
     # Let the watchdog see one more idle second: an idle Studio must not stall.
@@ -234,16 +242,18 @@ for ($i = 1; $i -le $Runs; $i++) {
         private_mb_first = $first.private_mb
         working_set_mb_first = $first.working_set_mb
         gpu_shared_mb_first = $first.gpu_shared_mb
+        gpu_dedicated_mb_first = $first.gpu_dedicated_mb
         private_mb_after_scroll = $after.private_mb
         working_set_mb_after_scroll = $after.working_set_mb
         gpu_shared_mb_after_scroll = $after.gpu_shared_mb
+        gpu_dedicated_mb_after_scroll = $after.gpu_dedicated_mb
         uiblock_count = $stalls.Count
         uiblock_max_ms = $stalls.Max
         uiblock_count_idle = $idleStalls.Count
         window = $first.window
     }
-    Write-Host ("run {0}: first frame {1} ms, lib ready {2} ms, private {3} MB -> {4} MB, gpu {5} -> {6} MB, stalls {7}" -f `
-            $i, $firstFrame, $libReady, $first.private_mb, $after.private_mb, $first.gpu_shared_mb, $after.gpu_shared_mb, $stalls.Count)
+    Write-Host ("run {0}: first frame {1} ms, lib ready {2} ms, private {3} MB -> {4} MB, gpu shared {5} -> {6} MB, gpu dedicated {7} -> {8} MB, stalls {9}" -f `
+            $i, $firstFrame, $libReady, $first.private_mb, $after.private_mb, $first.gpu_shared_mb, $after.gpu_shared_mb, $first.gpu_dedicated_mb, $after.gpu_dedicated_mb, $stalls.Count)
 }
 
 # Idle CPU: without the watchdog, because the watchdog is what wakes the loop.
@@ -260,7 +270,7 @@ $cpuUsed = ($idle.Process.TotalProcessorTime - $cpuStart).TotalMilliseconds
 $wallMs = $wall.ElapsedMilliseconds
 $idleCpu = [math]::Round(100.0 * $cpuUsed / $wallMs, 2)
 $idlePrivate = [math]::Round($idle.Process.PrivateMemorySize64 / 1MB, 1)
-$idleGpu = Get-GpuSharedMb $idle.Process.Id
+$idleGpu = Get-GpuMemoryMb $idle.Process.Id
 $idleStalls = Read-Stalls $idle.ErrorFile
 Stop-Studio
 
@@ -288,6 +298,8 @@ $summary = [ordered]@{
     private_mb_after_scroll = Summarize $runResults.private_mb_after_scroll
     gpu_shared_mb_first = Summarize $runResults.gpu_shared_mb_first
     gpu_shared_mb_after_scroll = Summarize $runResults.gpu_shared_mb_after_scroll
+    gpu_dedicated_mb_first = Summarize $runResults.gpu_dedicated_mb_first
+    gpu_dedicated_mb_after_scroll = Summarize $runResults.gpu_dedicated_mb_after_scroll
     uiblock_count_scroll = Summarize $runResults.uiblock_count
     uiblock_count_idle = Summarize $runResults.uiblock_count_idle
 }
@@ -322,7 +334,7 @@ $doc = [ordered]@{
         first_frame = "poll PrintWindow(PW_RENDERFULLCONTENT) every 25 ms; first frame with >1 colour in the client area; resolution 25 ms"
         lib_ready = "app-side: stderr 'LIBREADY <ms>' under --ui-watch, printed when the library model is filled"
         private_bytes = "Process.PrivateMemorySize64 after the first frame and after an end-to-end scroll"
-        gpu_shared = "perf counter '\GPU Process Memory(pid_N)\Shared Usage'"
+        gpu_shared = "perf counter '\GPU Process Memory(pid_N)\Shared Usage' and '\GPU Process Memory(pid_N)\Dedicated Usage'"
         uiblock = "app-side watchdog: post to own event loop every 8 ms, print 'UIBLOCK <ms>' when an answer takes >16 ms; counted over the scroll and over 1 s of idle"
         idle_cpu = "run without --ui-watch: TotalProcessorTime delta over $IdleSeconds s, percent of one core"
         scroll = "$ScrollNotches wheel notches, 8 ms apart, pointer over the client area centre"
@@ -333,7 +345,8 @@ $doc = [ordered]@{
     idle = [ordered]@{
         cpu_pct_of_one_core = $idleCpu
         private_mb = $idlePrivate
-        gpu_shared_mb = $idleGpu
+        gpu_shared_mb = $idleGpu.shared
+        gpu_dedicated_mb = $idleGpu.dedicated
         uiblock_count = $idleStalls.Count
         seconds = $IdleSeconds
     }
@@ -347,6 +360,6 @@ $summary.GetEnumerator() | ForEach-Object {
     $s = $_.Value
     if ($s) { Write-Host ("  {0}: median {1} (min {2}, max {3}, n {4})" -f $_.Key, $s.median, $s.min, $s.max, $s.n) }
 }
-Write-Host ("  idle cpu: {0}% of one core, private {1} MB, uiblock {2}" -f $idleCpu, $idlePrivate, $idleStalls.Count)
+Write-Host ("  idle cpu: {0}% of one core, private {1} MB, gpu shared {2}, dedicated {3}, uiblock {4}" -f $idleCpu, $idlePrivate, $idleGpu.shared, $idleGpu.dedicated, $idleStalls.Count)
 
 

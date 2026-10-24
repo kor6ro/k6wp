@@ -1,4 +1,4 @@
-﻿// The K6WP Studio - the Library page (Phase 2, Blok A-5).
+﻿// The K6WP Studio - the Library page (Phase 2, Blok A-6).
 //
 // One page: a header, a virtualised grid of cards and a status line. The grid
 // is a ListView, which instantiates only the rows that fit the viewport; Rust
@@ -8,7 +8,7 @@
 // Structs and their fields are updated from Rust, never bound to the disk:
 // a card's `thumb` is an already-decoded image handed over by the worker.
 
-import { VerticalBox, HorizontalBox, ListView } from "std-widgets.slint";
+import { VerticalBox, HorizontalBox, ListView, Button } from "std-widgets.slint";
 import { Tokens } from "design-tokens.slint";
 
 // Re-exported so Rust can set `dark` / `reduced-motion` on the global; a
@@ -21,23 +21,57 @@ export struct LibraryCard {
     unavailable: bool,
     thumb: image,
     index: int,
+    media_path: string,  // for the "Pasang" action
 }
 
 export struct LibraryRow {
     cards: [LibraryCard],
 }
 
+// A hoverable overlay that shows "Pasang" on hover for available items.
+component HoverOverlay inherits Rectangle {
+    in property <bool> show: false;
+    in property <string> text: "Pasang";
+    in property <color> text-color: #ffffff;
+    in property <color> bg-color: #000000aa;
+    in property <length> radius: 6px;
+
+    background: show ? bg-color : transparent;
+    border-radius: radius;
+    opacity: show ? 1.0 : 0.0;
+    animate opacity { duration: 150ms; easing: ease-out; }
+
+    Text {
+        text: text;
+        color: text-color;
+        font-size: 14px;
+        font-family: "Segoe UI Variable";
+        font-weight: 600;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
 // One card: the thumbnail band on top, the title and the metadata below.
-component CardItem inherits Rectangle {
+// Hover shows a "Pasang" button for available items.
+// Forwards the set-wallpaper callback to the root AppWindow.
+export component CardItem inherits Rectangle {
     in property <LibraryCard> card;
     in property <length> card-width: 208px;
     in property <length> band-height: 117px;
+
+    // Forward the set-wallpaper callback to the root AppWindow
+    callback set-wallpaper(index: int, media_path: string);
 
     width: card-width;
     border-radius: Tokens.radius-md;
     background: card.unavailable ? Tokens.card-muted : Tokens.card;
     border-width: 1px;
     border-color: Tokens.border;
+
+    // Touch area for the whole card to detect hover and click
+    hover_area := TouchArea {
+    }
 
     VerticalLayout {
         // The thumbnail band. `cover` crops; the worker already scaled the
@@ -65,6 +99,11 @@ component CardItem inherits Rectangle {
                     horizontal-alignment: center;
                     vertical-alignment: center;
                 }
+            }
+
+            // "Pasang" overlay on hover (only for available items)
+            HoverOverlay {
+                show: !card.unavailable && hover_area.has-hover;
             }
         }
 
@@ -95,6 +134,39 @@ component CardItem inherits Rectangle {
         // instead of being pushed to the bottom edge.
         Rectangle { vertical-stretch: 1; }
     }
+    
+    // Click on the card sends the set_wallpaper callback (only for available)
+    TouchArea {
+        clicked => {
+            if !card.unavailable {
+                root.set_wallpaper(card.index, card.media_path);
+            }
+        }
+    }
+}
+
+// A hoverable overlay that shows "Pasang" on hover for available items.
+component HoverOverlay inherits Rectangle {
+    in property <bool> show: false;
+    in property <string> text: "Pasang";
+    in property <color> text-color: #ffffff;
+    in property <color> bg-color: #000000aa;
+    in property <length> radius: 6px;
+
+    background: show ? bg-color : transparent;
+    border-radius: radius;
+    opacity: show ? 1.0 : 0.0;
+    animate opacity { duration: 150ms; easing: ease-out; }
+
+    Text {
+        text: text;
+        color: text-color;
+        font-size: 14px;
+        font-family: "Segoe UI Variable";
+        font-weight: 600;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
 }
 
 export component AppWindow inherits Window {
@@ -107,10 +179,27 @@ export component AppWindow inherits Window {
     in-out property <string> empty-message: "Memuat library...";
     in-out property <string> version: "";
 
+    // IPC connection status
+    in-out property <string> connection-status: "Terputus";
+    in-out property <brush> connection-color: #d32f2f;
+
+    // Current engine state
+    in-out property <string> current-video: "—";
+    in-out property <bool> is-paused: false;
+
+    // Toast notification
+    in-out property <string> toast: "";
+
     // Rust rebuilds the row model when the column count changes.
     callback rebuild-grid(width: length);
     // Rust asks the worker for the thumbnails of the visible band.
     callback viewport-changed(scroll-y: length, viewport-height: length);
+    // User clicked "Pasang" on a card (forwarded from CardItem).
+    callback set-wallpaper(index: int, media_path: string);
+    // User clicked "Jeda" in the header.
+    callback pause();
+    // User clicked "Lanjut" in the header.
+    callback resume();
 
     title: "K6WP Studio";
     preferred-width: 960px;
@@ -126,9 +215,11 @@ export component AppWindow inherits Window {
         padding: Tokens.space-lg;
         spacing: Tokens.space-md;
 
-        // Header: title on the left, the counters on the right.
+        // Header: title, connection status, current video, pause/resume buttons.
         HorizontalLayout {
             spacing: Tokens.space-sm;
+
+            // Left: title
             Text {
                 text: "Library";
                 color: Tokens.fg;
@@ -137,7 +228,59 @@ export component AppWindow inherits Window {
                 font-weight: 600;
                 vertical-alignment: center;
             }
+
             Rectangle { horizontal-stretch: 1; }
+
+            // Center: connection status
+            Rectangle {
+                background: connection-color;
+                border-radius: Tokens.radius-sm;
+                padding: Tokens.space-xs;
+                padding-left: Tokens.space-sm;
+                padding-right: Tokens.space-sm;
+                Text {
+                    text: connection-status;
+                    color: #ffffff;
+                    font-size: Tokens.font-sm;
+                    font-family: Tokens.font-family;
+                    font-weight: 500;
+                }
+            }
+
+            // Center-right: current video
+            Rectangle {
+                background: Tokens.card;
+                border-width: 1px;
+                border-color: Tokens.border;
+                border-radius: Tokens.radius-sm;
+                padding: Tokens.space-xs;
+                padding-left: Tokens.space-sm;
+                padding-right: Tokens.space-sm;
+                min-width: 200px;
+                Text {
+                    text: "Sedang: " + current-video;
+                    color: Tokens.fg;
+                    font-size: Tokens.font-sm;
+                    font-family: Tokens.font-family;
+                    overflow: elide;
+                }
+            }
+
+            // Right: pause/resume buttons
+            HorizontalLayout {
+                spacing: Tokens.space-xs;
+                Button {
+                    text: "Jeda";
+                    enabled: !is-paused;
+                    clicked => { root.pause(); }
+                }
+                Button {
+                    text: "Lanjut";
+                    enabled: is-paused;
+                    clicked => { root.resume(); }
+                }
+            }
+
             Text {
                 text: count + " item";
                 color: Tokens.muted;
@@ -168,6 +311,8 @@ export component AppWindow inherits Window {
                             card: card;
                             card-width: root.card-width;
                             band-height: root.band-height;
+                            // Forward the set-wallpaper callback from CardItem to AppWindow
+                            set-wallpaper(index, media_path) => { root.set_wallpaper(index, media_path); }
                         }
                         Rectangle { horizontal-stretch: 1; }
                     }
@@ -185,6 +330,19 @@ export component AppWindow inherits Window {
                     horizontal-alignment: center;
                     vertical-alignment: center;
                 }
+            }
+        }
+
+        // Toast notification (bottom-right overlay)
+        if toast != "" : Rectangle {
+            background: #333333ee;
+            border-radius: Tokens.radius-md;
+            padding: Tokens.space-md;
+            Text {
+                text: toast;
+                color: #ffffff;
+                font-size: Tokens.font-md;
+                font-family: Tokens.font-family;
             }
         }
 

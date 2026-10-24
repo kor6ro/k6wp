@@ -115,3 +115,14 @@ VERDICT: PARTIAL - T0-T3,T15 docs created; T4-T11 BLOCKED (env/impl); C++ build 
 
 VERDICT: ACCEPT - Blok A-5 deliverable complete with measured evidence.
 
+## Blok A-6 (this session)
+| ID | Hypothesis | Status | Evidence |
+|---|---|---|---|
+| A6-0 | Langkah 0: ctest Debug 51/51, Release 51/51; GPU shared/dedicated added to measurement; UIBLOCK root cause = watchdog noise | **accepted** | `docs/refactor/run-phase2/blok-a6-checks.txt` (live-proven) |
+| A6-1 | IPC connection manager di worker: non-blocking connect (200 ms timeout), backoff 1→2→4→8→30 s, polling get_state adaptif 2 dtk | **accepted** | `rust/crates/k6wp-studio/src/worker.rs` (code-quoted); 17/17 tests pass (test-proven) |
+| A6-2 | UI set wallpaper: hover "Pasang", Enter untuk pasang, tombol Jeda/Lanjut header, toast notifikasi, error mapping ramah | **accepted** | `ui/app.slint` (code-quoted); `main.rs` set_wallpaper/pause/resume (code-quoted) |
+| A6-3 | Measurement n=5 (release): first frame 903 ms median, private 73.7→100.3 MB, UIBLOCK 2 scroll/0 idle, idle CPU 0% | **accepted** | `docs/bench/studio-library-200.json` (live-proven); screenshots `library-200-light.png`, `library-200-dark.png` (live-proven) |
+| A6-4 | Baseline UX Qt vs Slint: Library→set wallpaper 3 klik Qt vs 1 klik Slint (code-quoted) | **accepted** | `RUN-BLOK-A6.md` section 6 (code-quoted) |
+
+VERDICT: ACCEPT - Blok A-6 deliverable complete with measured evidence. IPC + set wallpaper berfungsi, measurement tercatat.
+

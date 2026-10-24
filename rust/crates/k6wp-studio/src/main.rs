@@ -24,7 +24,7 @@ use std::time::{Duration, Instant};
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use crate::thumbs::{ImageCache, Pixels, CACHE_CAP_BYTES};
-use crate::worker::{Entry, Event, Request};
+use crate::worker::{EngineState, Entry, Event, IpcStatus, Request};
 
 /// The rows kept alive above and below the viewport. One row of buffer is
 /// enough to hide a scroll step; two would double the decode work.
@@ -59,6 +59,12 @@ struct Studio {
     visible: (usize, usize),
     last_width: f32,
     cli_theme: Option<bool>,
+    /// Current IPC connection status.
+    ipc_status: IpcStatus,
+    /// Current engine state from get_state polling.
+    engine_state: EngineState,
+    /// Toast message to show (auto-clears after a delay).
+    toast: Option<String>,
 }
 
 thread_local! {
@@ -145,6 +151,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ui.on_viewport_changed(|scroll_y, viewport_h| {
         with_studio(|studio| studio.on_viewport(scroll_y, viewport_h))
     });
+    ui.on_set_wallpaper(|index, media_path| {
+        with_studio(|studio| studio.set_wallpaper(index, media_path))
+    });
+    ui.on_pause(|| with_studio(|studio| studio.pause()));
+    ui.on_resume(|| with_studio(|studio| studio.resume()));
 
     STUDIO.with(|slot| {
         *slot.borrow_mut() = Some(Studio {
@@ -160,6 +171,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             visible: (0, 0),
             last_width: 0.0,
             cli_theme,
+            ipc_status: IpcStatus::Disconnected,
+            engine_state: EngineState::default(),
+            toast: None,
         });
     });
 
@@ -238,6 +252,17 @@ impl Studio {
                 if self.cli_theme.is_none() {
                     tokens.set_dark(dark);
                 }
+            }
+            Event::IpcStatus(status) => {
+                self.ipc_status = status;
+                self.update_connection_ui();
+            }
+            Event::EngineState(state) => {
+                self.engine_state = state;
+                self.update_engine_ui();
+            }
+            Event::IpcError(message) => {
+                self.show_toast(message);
             }
         }
     }
@@ -345,6 +370,7 @@ impl Studio {
             unavailable: card.unavailable,
             thumb,
             index: index as i32,
+            media_path: SharedString::from(card.media.to_string_lossy().as_ref()),
         }
     }
 
@@ -438,6 +464,75 @@ impl Studio {
             "{total} item - {missing} tidak tersedia - cache {used:.2} MB dari {cap:.0} MB ({} gambar)",
             self.cache.len()
         )));
+    }
+
+    /// Updates the connection status indicator in the header.
+    fn update_connection_ui(&mut self) {
+        use slint::{Brush, Color};
+        let (text, color) = match self.ipc_status {
+            worker::IpcStatus::Disconnected => ("Terputus", 0xFF_d32f2f),
+            worker::IpcStatus::Connecting => ("Menghubungkan...", 0xFF_f57c00),
+            worker::IpcStatus::Connected => ("Terhubung", 0xFF_388e3c),
+            worker::IpcStatus::Reconnecting => ("Menghubungkan ulang...", 0xFF_f57c00),
+        };
+        self.ui.set_connection_status(SharedString::from(text));
+        let c = Color::from_argb_encoded(color);
+        self.ui.set_connection_color(Brush::SolidColor(c));
+    }
+
+    /// Updates the engine state display (video name, pause status).
+    fn update_engine_ui(&mut self) {
+        if let Some(video) = &self.engine_state.video_name {
+            self.ui.set_current_video(SharedString::from(video));
+        } else {
+            self.ui.set_current_video(SharedString::from("—"));
+        }
+        self.ui.set_is_paused(self.engine_state.is_paused);
+    }
+
+    /// Shows a toast message that auto-clears after a delay.
+    fn show_toast(&mut self, message: String) {
+        self.toast = Some(message.clone());
+        self.ui.set_toast(SharedString::from(message));
+        // Auto-clear after 3 seconds
+        let ui_weak = self.ui.as_weak();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_secs(3));
+            let _ = slint::invoke_from_event_loop(move || {
+                if let Some(ui) = ui_weak.upgrade() {
+                    ui.set_toast(SharedString::from(""));
+                }
+            });
+        });
+    }
+
+    /// Callback: user clicked "Pasang" on a library card.
+    fn set_wallpaper(&mut self, index: i32, media_path: SharedString) {
+        let index = index as usize;
+        if index >= self.cards.len() {
+            return;
+        }
+        let media = media_path.to_string();
+        if media.is_empty() {
+            self.show_toast("Path media kosong".to_string());
+            return;
+        }
+        // Check if file exists (the worker will do the real probe with timeout)
+        let _ = self.tx.send(Request::SetWallpaper {
+            index,
+            media: media.into(),
+        });
+        self.show_toast(format!("Memasang {}...", self.cards[index].name));
+    }
+
+    /// Callback: user clicked "Jeda" in the header.
+    fn pause(&mut self) {
+        let _ = self.tx.send(Request::Pause);
+    }
+
+    /// Callback: user clicked "Lanjut" in the header.
+    fn resume(&mut self) {
+        let _ = self.tx.send(Request::Resume);
     }
 }
 

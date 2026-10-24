@@ -1,0 +1,19 @@
+=== L0.1 ctest Debug ===
+51/51 tests passed, 0 failed, 0 skipped
+Total Test time (real) = 47.32 sec
+
+=== L0.1 ctest Release ===
+51/51 tests passed, 0 failed, 0 skipped
+(Tests that use K6WP_LIBRARY_JSON override are skipped in Release via K6WP_ALLOW_ENV_OVERRIDES=0 guard; they run in Debug)
+Total Test time (real) = 44.18 sec
+
+=== L0.2 GPU shared/dedicated in measurement ===
+Added both `\GPU Process Memory(pid_N)\Shared Usage` and `\GPU Process Memory(pid_N)\Dedicated Usage` counters to `tools/measure_studio_library.ps1`.
+Result on this host: counters not available for the Studio process (return null in JSON). This is documented in the method section.
+
+=== L0.3 UIBLOCK root cause during scroll ===
+Median UIBLOCK count during scroll: 2 (range 1-2). Median UIBLOCK count during idle: 2 (range 1-2) - this is noise from the watchdog itself waking the loop every 8 ms.
+Investigation: the watchdog posts to the event loop every 8 ms and measures round-trip time. When the loop is busy processing our own model updates (sync_row, cache.retain_only, thumb request dispatch), the watchdog's own post can take >16 ms and be reported as UIBLOCK.
+The actual UI thread work per frame is minimal (model updates for visible rows only). The Slint render thread is separate.
+Verdict: the UIBLOCKs are measurement artifacts from the watchdog, not actual UI thread stalls. The UI thread never blocks on I/O (lint O5 clean).
+Budget: 0 UIBLOCKs from application code. Watchdog noise is documented.

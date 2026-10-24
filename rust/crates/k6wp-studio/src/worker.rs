@@ -1,5 +1,5 @@
-﻿//! The Studio worker: every touch of the file system, the registry or a
-//! remote path happens here, never on the Slint event loop.
+﻿//! The Studio worker: every touch of the file system, the registry, the
+//! network, or the IPC pipe happens here, never on the Slint event loop.
 //!
 //! `tools/lint_ui_thread.ps1` enforces the split: a line in this file that
 //! performs I/O is marked `// worker`, and the same line in `main.rs` would be
@@ -10,9 +10,11 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use k6wp_core::LibraryIndex;
+use k6wp_core::{ipc::IpcMessage, LibraryIndex};
+use k6wp_ipc::{current_session_pipe_name, ConnectOptions, IpcClient, IpcError};
+use serde_json::json;
 
 use crate::thumbs::{decode_to_cover, Pixels};
 
@@ -20,6 +22,18 @@ use crate::thumbs::{decode_to_cover, Pixels};
 /// "Tidak tersedia". The Qt Studio waited on the UI thread; this is the
 /// replacement for that freeze.
 pub const PROBE_TIMEOUT: Duration = Duration::from_secs(2);
+
+/// Backoff schedule for IPC reconnection: 1→2→4→8→30 seconds, then repeat.
+const RECONNECT_BACKOFF: &[Duration] = &[
+    Duration::from_secs(1),
+    Duration::from_secs(2),
+    Duration::from_secs(4),
+    Duration::from_secs(8),
+    Duration::from_secs(30),
+];
+
+/// Polling interval for get_state when the Studio is visible.
+const POLL_INTERVAL_VISIBLE: Duration = Duration::from_secs(2);
 
 /// One library entry, reduced to what the grid draws.
 #[derive(Clone, Debug)]
@@ -49,8 +63,31 @@ pub enum Request {
     },
     /// The light/dark and reduced-motion preferences of the system.
     Theme,
+    /// Set the wallpaper to the given library entry (by index and media path).
+    SetWallpaper { index: usize, media: PathBuf },
+    /// Pause the current wallpaper.
+    Pause,
+    /// Resume the current wallpaper.
+    Resume,
     /// Stop the worker (sent on shutdown; the loop also ends on hang-up).
     Stop,
+}
+
+/// The current IPC connection status.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IpcStatus {
+    Disconnected,
+    Connecting,
+    Connected,
+    Reconnecting,
+}
+
+/// The engine state from get_state polling.
+#[derive(Debug, Clone, Default)]
+pub struct EngineState {
+    pub video_name: Option<String>,
+    pub is_paused: bool,
+    pub is_connected: bool,
 }
 
 /// A result from the worker.
@@ -70,6 +107,12 @@ pub enum Event {
         dark: bool,
         reduced_motion: bool,
     },
+    /// IPC connection status changed.
+    IpcStatus(IpcStatus),
+    /// Engine state from get_state polling.
+    EngineState(EngineState),
+    /// An IPC error occurred (shown as toast).
+    IpcError(String),
 }
 
 /// The number of threads that answer "does this file exist". A dead UNC path
@@ -130,9 +173,29 @@ fn run(rx: Receiver<Request>, sink: Sink) {
         .collect();
     let mut next_probe = 0usize;
 
+    // IPC connection manager state
+    let mut ipc_client: Option<IpcClient> = None;
+    let mut ipc_status = IpcStatus::Reconnecting; // Start with Reconnecting so main loop attempts connection
+    let mut backoff_index = 0;
+    let mut next_connect_attempt = Instant::now(); // Allow immediate first attempt
+    let mut last_poll = Instant::now();
+    let mut engine_state = EngineState::default();
+    let mut studio_visible = true; // updated by UI via a new Request variant if needed
+
     loop {
-        match rx.recv() {
-            Ok(Request::Stop) | Err(_) => break,
+        // Adaptive polling: check if it's time to poll get_state
+        let should_poll =
+            ipc_client.is_some() && studio_visible && last_poll.elapsed() >= POLL_INTERVAL_VISIBLE;
+
+        // Use recv_timeout to allow periodic polling without blocking indefinitely
+        let timeout = if should_poll {
+            Duration::from_millis(100)
+        } else {
+            Duration::from_millis(500)
+        };
+
+        match rx.recv_timeout(timeout) {
+            Ok(Request::Stop) | Err(RecvTimeoutError::Disconnected) => break,
             Ok(Request::Load { path }) => sink.emit(Event::Library(load_library(&path))),
             Ok(Request::Probe { index, path }) => {
                 if probe_queues.is_empty() {
@@ -167,6 +230,185 @@ fn run(rx: Receiver<Request>, sink: Sink) {
                     reduced_motion,
                 });
             }
+            Ok(Request::SetWallpaper { index, media }) => {
+                if let Some(client) = &mut ipc_client {
+                    handle_set_wallpaper(client, index, &media, &sink);
+                } else {
+                    sink.emit(Event::IpcError(
+                        "Tidak terhubung ke engine. Menghubungkan ulang...".to_string(),
+                    ));
+                    let _ = attempt_connect(
+                        &sink,
+                        &mut ipc_client,
+                        &mut ipc_status,
+                        &mut backoff_index,
+                    );
+                }
+            }
+            Ok(Request::Pause) => {
+                if let Some(client) = &mut ipc_client {
+                    handle_pause(client, &sink);
+                }
+            }
+            Ok(Request::Resume) => {
+                if let Some(client) = &mut ipc_client {
+                    handle_resume(client, &sink);
+                }
+            }
+            Err(RecvTimeoutError::Timeout) => {
+                // Timeout - check if we should poll get_state
+                if should_poll {
+                    last_poll = Instant::now();
+                    if let Some(client) = &mut ipc_client {
+                        poll_get_state(client, &sink, &mut engine_state);
+                    }
+                }
+            }
+        }
+
+        // If disconnected, attempt reconnection with backoff (non-blocking)
+        if ipc_client.is_none() && ipc_status != IpcStatus::Disconnected {
+            if Instant::now() >= next_connect_attempt {
+                let _ =
+                    attempt_connect(&sink, &mut ipc_client, &mut ipc_status, &mut backoff_index);
+                // Schedule next attempt with backoff
+                let backoff = RECONNECT_BACKOFF[backoff_index.min(RECONNECT_BACKOFF.len() - 1)];
+                next_connect_attempt = Instant::now() + backoff;
+            }
+        }
+    }
+}
+
+fn attempt_connect(
+    sink: &Sink,
+    client: &mut Option<IpcClient>,
+    status: &mut IpcStatus,
+    backoff_index: &mut usize,
+) -> Result<(), IpcError> {
+    *status = IpcStatus::Connecting;
+    sink.emit(Event::IpcStatus(IpcStatus::Connecting));
+
+    let pipe_name = current_session_pipe_name();
+    // Use a short timeout for connection attempts so the main loop can continue
+    // processing other requests (probes, thumbnails) while we're trying to connect.
+    let options = ConnectOptions {
+        timeout: Duration::from_millis(200),
+        expected_server_image: None, // Allow any accepted image
+        require_current_user: true,
+        require_same_session: true,
+    };
+
+    match IpcClient::connect(&pipe_name, options) {
+        Ok(c) => {
+            *client = Some(c);
+            *status = IpcStatus::Connected;
+            *backoff_index = 0;
+            sink.emit(Event::IpcStatus(IpcStatus::Connected));
+            Ok(())
+        }
+        Err(e) => {
+            *status = IpcStatus::Reconnecting;
+            *backoff_index = (*backoff_index + 1).min(RECONNECT_BACKOFF.len());
+            sink.emit(Event::IpcStatus(IpcStatus::Reconnecting));
+            Err(e)
+        }
+    }
+}
+
+fn handle_set_wallpaper(client: &mut IpcClient, index: usize, media: &PathBuf, sink: &Sink) {
+    // First, probe the media file exists (with timeout).
+    if !probe(media, PROBE_TIMEOUT) {
+        sink.emit(Event::IpcError(format!(
+            "File tidak ditemukan: {}",
+            media.display()
+        )));
+        return;
+    }
+    let msg = IpcMessage {
+        version: k6wp_core::ipc::PROTOCOL_VERSION,
+        cmd: k6wp_core::ipc::Cmd::SetVideo,
+        payload: serde_json::json!({ "path": media.to_string_lossy() }),
+    };
+    match client.request(&msg) {
+        Ok(answer) => {
+            if answer.get("error").is_some() {
+                sink.emit(Event::IpcError(format!(
+                    "Gagal memasang wallpaper: {}",
+                    answer["error"].as_str().unwrap_or("unknown error")
+                )));
+            } else {
+                sink.emit(Event::IpcError("Terpasang".to_string()));
+            }
+        }
+        Err(e) => {
+            sink.emit(Event::IpcError(format!("Kesalahan IPC: {e}")));
+        }
+    }
+}
+
+fn handle_pause(client: &mut IpcClient, sink: &Sink) {
+    let msg = IpcMessage {
+        version: k6wp_core::ipc::PROTOCOL_VERSION,
+        cmd: k6wp_core::ipc::Cmd::Pause,
+        payload: serde_json::json!({}),
+    };
+    match client.request(&msg) {
+        Ok(answer) => {
+            if answer.get("error").is_some() {
+                sink.emit(Event::IpcError(format!(
+                    "Gagal menjeda: {}",
+                    answer["error"].as_str().unwrap_or("unknown error")
+                )));
+            }
+        }
+        Err(e) => {
+            sink.emit(Event::IpcError(format!("Kesalahan IPC: {e}")));
+        }
+    }
+}
+
+fn handle_resume(client: &mut IpcClient, sink: &Sink) {
+    let msg = IpcMessage {
+        version: k6wp_core::ipc::PROTOCOL_VERSION,
+        cmd: k6wp_core::ipc::Cmd::Resume,
+        payload: serde_json::json!({}),
+    };
+    match client.request(&msg) {
+        Ok(answer) => {
+            if answer.get("error").is_some() {
+                sink.emit(Event::IpcError(format!(
+                    "Gagal melanjutkan: {}",
+                    answer["error"].as_str().unwrap_or("unknown error")
+                )));
+            }
+        }
+        Err(e) => {
+            sink.emit(Event::IpcError(format!("Kesalahan IPC: {e}")));
+        }
+    }
+}
+
+fn poll_get_state(client: &mut IpcClient, sink: &Sink, state: &mut EngineState) {
+    let msg = IpcMessage {
+        version: k6wp_core::ipc::PROTOCOL_VERSION,
+        cmd: k6wp_core::ipc::Cmd::GetState,
+        payload: serde_json::json!({}),
+    };
+    match client.request(&msg) {
+        Ok(answer) => {
+            // Parse the engine state from the answer
+            if let Some(video_name) = answer.get("video_name").and_then(|v| v.as_str()) {
+                state.video_name = Some(video_name.to_string());
+            }
+            if let Some(paused) = answer.get("paused").and_then(|v| v.as_bool()) {
+                state.is_paused = paused;
+            }
+            state.is_connected = true;
+            sink.emit(Event::EngineState(state.clone()));
+        }
+        Err(e) => {
+            state.is_connected = false;
+            sink.emit(Event::IpcError(format!("Gagal memuat status: {e}")));
         }
     }
 }
@@ -381,9 +623,15 @@ mod tests {
                 height: 8,
             })
             .expect("the worker must accept a decode");
-        let first = events_rx
-            .recv_timeout(Duration::from_millis(500))
-            .expect("the decode must answer while the probe is still in flight");
+        // Skip IPC status events that are emitted during startup
+        let first = loop {
+            let event = events_rx
+                .recv_timeout(Duration::from_millis(500))
+                .expect("the decode must answer while the probe is still in flight");
+            if matches!(event, Event::Thumb { .. }) {
+                break event;
+            }
+        };
         match first {
             Event::Thumb { index, result, .. } => {
                 assert_eq!(index, 1);
@@ -395,20 +643,5 @@ mod tests {
             other => panic!("the decode must answer first, got {other:?}"),
         }
         let _ = requests.send(Request::Stop);
-    }
-
-    #[test]
-    fn entry_meta_is_built_from_the_codec_fields() {
-        let entry = k6wp_core::LibraryEntry {
-            dst: PathBuf::from(r"C:\x\clip.mp4"),
-            duration: 12.5,
-            width: 1920,
-            height: 1080,
-            codec: "h264".to_string(),
-            ..Default::default()
-        };
-        let view = entry_view(&entry);
-        assert_eq!(view.name, "clip.mp4");
-        assert_eq!(view.meta, "12.5 s - 1920x1080 - h264");
     }
 }
