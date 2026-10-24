@@ -315,7 +315,7 @@ is the locked decision.
 
 
 ## NEXT TASK
-NEXT TASK: set wallpaper via IPC from Library → thumbnailer from video (ADR) → import + compress queue → playlist → settings/onboarding → playback health telemetry → golden Studio per module → parity & Gate 2
+NEXT TASK: ADR thumbnailer (adr-thumbnailer.md) → implementasi worker thumbnailer → import + antrian kompres → playlist → settings/onboarding → playback health telemetry → golden Studio per modul → parity & Gate 2
 
 
 

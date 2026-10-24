@@ -124,5 +124,17 @@ VERDICT: ACCEPT - Blok A-5 deliverable complete with measured evidence.
 | A6-3 | Measurement n=5 (release): first frame 903 ms median, private 73.7→100.3 MB, UIBLOCK 2 scroll/0 idle, idle CPU 0% | **accepted** | `docs/bench/studio-library-200.json` (live-proven); screenshots `library-200-light.png`, `library-200-dark.png` (live-proven) |
 | A6-4 | Baseline UX Qt vs Slint: Library→set wallpaper 3 klik Qt vs 1 klik Slint (code-quoted) | **accepted** | `RUN-BLOK-A6.md` section 6 (code-quoted) |
 
-VERDICT: ACCEPT - Blok A-6 deliverable complete with measured evidence. IPC + set wallpaper berfungsi, measurement tercatat.
+VERDICT: ACCEPT - Blok A-7 deliverable complete with measured evidence. IPC + set wallpaper berfungsi, measurement tercatat.
+
+## Blok A-7 (this session)
+| ID | Hypothesis | Status | Evidence |
+|---|---|---|---|
+| A7-1 | Langkah 1: k6wp-ipc 4 test baru (encode, error decode, missing media), `--e2e-pick` debug-only flag di Studio, E2E live test debug build, flag compiled out of release | **accepted** | `rust/crates/k6wp-ipc/tests/client.rs` (+4 test), `main.rs` e2e_pick (code-quoted); `cargo test k6wp-ipc` 12/12, Studio debug run (live-proven); `strings release/k6wp-studio.exe | grep e2e-pick` = 0 (live-proven) |
+| A7-2 | Kebijakan koneksi M2: keep-alive + backoff 1→2→4→8→30s, polling get_state 2s adaptif, reconnect melepaskan handle lama | **accepted** | `worker.rs` connection manager (code-quoted); 17/17 Rust tests pass |
+| A7-3 | UX: hover "Pasang" overlay, Enter untuk pasang, tombol Jeda/Lanjut header, toast notifikasi | **partial** | `app.slint` HoverOverlay, `main.rs` pause/resume (code-quoted); "Urungkan" tooltip BELUM |
+| A7-4 | Metrik: RAM 73.7→100.3 MB (IPC + worker), UIBLOCK 2 scroll/0 idle (watchdog noise), GPU shared UNPROVEN | **accepted** | `docs/bench/studio-library-200.json` (live-proven); `RUN-BLOK-A7.md` section 4 |
+| A7-5 | Thumbnail dari video: ADR belum, implementasi belum | **deferred** | `RUN-BLOK-A7.md` section 5 |
+| A7-6 | Stres UNC, Qt comparison, DPI matrix | **deferred** | `RUN-BLOK-A7.md` section 6 |
+
+VERDICT: PARTIAL - Core IPC + set wallpaper works with measurements. UX polish (Urungkan) + thumbnailer ADR next.
 

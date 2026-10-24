@@ -65,6 +65,9 @@ struct Studio {
     engine_state: EngineState,
     /// Toast message to show (auto-clears after a delay).
     toast: Option<String>,
+    /// E2E test: index to pick for set_wallpaper (debug-only).
+    #[cfg(debug_assertions)]
+    e2e_pick: Option<usize>,
 }
 
 thread_local! {
@@ -128,6 +131,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let cli_theme = parse_theme(&args);
     let ui_watch = args.iter().any(|a| a == "--ui-watch");
+    // `--e2e-pick <index>`: debug-only flag for E2E testing. Picks the library
+    // item at the given index and triggers the set_wallpaper action.
+    // Compiled out of release builds (task I4).
+    #[cfg(debug_assertions)]
+    let e2e_pick = args
+        .iter()
+        .position(|a| a == "--e2e-pick")
+        .and_then(|i| args.get(i + 1))
+        .and_then(|s| s.parse::<usize>().ok());
 
     ui.set_version(SharedString::from(env!("CARGO_PKG_VERSION")));
     ui.set_empty_message(SharedString::from("Memuat library..."));
@@ -174,6 +186,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             ipc_status: IpcStatus::Disconnected,
             engine_state: EngineState::default(),
             toast: None,
+            #[cfg(debug_assertions)]
+            e2e_pick: None,
         });
     });
 
@@ -191,6 +205,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "LOCALAPPDATA tidak ditemukan: library tidak bisa dibaca",
             ));
         }
+    }
+
+    // Store e2e_pick in the Studio for later use.
+    #[cfg(debug_assertions)]
+    {
+        STUDIO.with(|slot| {
+            if let Ok(mut guard) = slot.try_borrow_mut() {
+                if let Some(studio) = guard.as_mut() {
+                    studio.e2e_pick = e2e_pick;
+                }
+            }
+        });
     }
 
     if ui_watch {
@@ -300,6 +326,18 @@ impl Studio {
             }
         }
         self.update_footer();
+
+        // E2E test: if --e2e-pick was provided, trigger set_wallpaper for that index.
+        #[cfg(debug_assertions)]
+        if let Some(pick) = self.e2e_pick.take() {
+            if pick < self.cards.len() {
+                let media = self.cards[pick].media.clone();
+                self.set_wallpaper(
+                    pick as i32,
+                    SharedString::from(media.to_string_lossy().as_ref()),
+                );
+            }
+        }
     }
 
     fn rebuild_by_width(&mut self, width: f32) {
