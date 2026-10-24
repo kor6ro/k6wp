@@ -1,0 +1,4 @@
+﻿Branch created: refactor/rust-wt at aa6ef87b178e55d6b5b6cd47ee65436de8eb9c8d
+Backup: C:\Users\axioo\k6wp-backups\desktop-wip-20261024 (patch + 13 untracked files)
+Desktop WIP review: modified Rust files (displays.rs, lib.rs, client.rs, env_override.rs, app.slint, Cargo.toml, Cargo.lock, config_test.cpp, sps-dpb.json, STATE.md, .gitignore). Untracked: design-tokens.slint, ux-spec.md, ux_flow.ps1, fix scripts. Most already replicated in worktree recovery commits.
+Decision: did not merge desktop WIP wholesale; only corpus+vendor copied earlier. Rust source WIP left in backup for manual review.

@@ -1,0 +1,61 @@
+﻿=== WORKTREE (current) ===
+toplevel: C:/Users/axioo/.local/share/opencode/worktree/1e41a2/proud-garden
+remote: origin	https://github.com/kor6ro/k6wp.git (fetch) origin	https://github.com/kor6ro/k6wp.git (push)
+branch: 
+HEAD: 4dd41d32196c4a35797523d1c38f8c16c2d59a10
+log:
+4dd41d3 docs: Blok A recovery report + NEXT TASK A1
+7a76985 fix(build): restore vendored nlohmann/json.hpp (3.11.3) so C++ builds
+12fe669 phase2: bootstrap docs, lint, tokens, golden skeleton, license/gate2 packages (partial run)
+f9ef436 R1: koreksi label & hitungan
+b84f562 fix(engine): the DPB frame size follows bit depth and chroma (H2/H3)
+6a37fbd chore: prove the diagnostic overrides are compiled out of release (L5)
+34a391c fix(ipc): the Rust client waits for a free pipe instance (L4)
+d168005 fix(engine): take the last filesystem call off the get_state poll path (L2)
+acdf6ee fix(engine): delete the unconsumed thread_count and its poll spike (L1)
+7c4f420 docs: write the continue-a-session page in STATE (v1.10)
+status:
+?? docs/refactor/run-phase2/json-search.txt
+
+=== DESKTOP k6wp ===
+toplevel: C:/Users/axioo/Desktop/k6wp
+remote: origin	https://github.com/kor6ro/k6wp.git (fetch) origin	https://github.com/kor6ro/k6wp.git (push)
+branch: refactor/rust
+HEAD: f9ef436b5b85baa50970c89655f7d879a4029c46
+log:
+f9ef436 R1: koreksi label & hitungan
+b84f562 fix(engine): the DPB frame size follows bit depth and chroma (H2/H3)
+6a37fbd chore: prove the diagnostic overrides are compiled out of release (L5)
+34a391c fix(ipc): the Rust client waits for a free pipe instance (L4)
+d168005 fix(engine): take the last filesystem call off the get_state poll path (L2)
+acdf6ee fix(engine): delete the unconsumed thread_count and its poll spike (L1)
+7c4f420 docs: write the continue-a-session page in STATE (v1.10)
+c72bff6 fix: serialize the config writers with one cross-process lock (J3)
+3f41d24 chore: catch accidental non-Latin text before it reaches a commit (H4)
+1281708 chore: the engine log artifact from the stress run
+status:
+ M .gitignore
+ M docs/refactor/STATE.md
+ M rust/Cargo.lock
+ M rust/crates/k6wp-core/src/displays.rs
+ M rust/crates/k6wp-core/src/lib.rs
+ M rust/crates/k6wp-ipc/src/lib.rs
+ M rust/crates/k6wp-ipc/tests/client.rs
+ M rust/crates/k6wp-ipc/tests/env_override.rs
+ M rust/crates/k6wp-studio/Cargo.toml
+ D rust/crates/k6wp-studio/src/main.rs
+ M rust/crates/k6wp-studio/ui/app.slint
+ M tests/config_test.cpp
+ M tests/golden/sps-dpb.json
+?? .github/workflows/fix_ci2.ps1
+?? .github/workflows/update_ci.ps1
+?? docs/bench/ux-baseline-qt.json
+?? docs/ux-spec.md
+?? rust/crates/k6wp-ipc/src/lib.rs.new
+?? rust/crates/k6wp-ipc/src/lib.rs.old
+?? rust/crates/k6wp-ipc/tests/append_test.txt
+?? rust/crates/k6wp-ipc/tests/fix_test.ps1
+?? rust/crates/k6wp-ipc/tests/read_timeout_test.txt
+?? rust/crates/k6wp-ipc/tests/test_append.txt
+?? rust/crates/k6wp-studio/ui/design-tokens.slint
+?? tools/ux_flow.ps1

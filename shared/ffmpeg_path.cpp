@@ -38,13 +38,20 @@ bool ExistsNoThrow(const std::filesystem::path& p) {
 std::filesystem::path FindTool(const wchar_t* env_name,
                                const wchar_t* file_name) {
   try {
-    // (a) env override, only when it points at an existing file.
+#ifdef _DEBUG
+    // (a) env override, only in a DEBUG build. It exists so a test can point
+    // at a vendored ffmpeg that is not next to the test binary; a shipped
+    // release binary must not let an environment variable redirect tool
+    // resolution (L5 / I4). Compiled out of the release build.
     wchar_t env[32768];
     const DWORD len = GetEnvironmentVariableW(env_name, env, 32768);
     if (len > 0 && len < 32768) {
       const std::filesystem::path p(std::wstring(env, len));
       if (ExistsNoThrow(p)) return p;
     }
+#else
+    (void)env_name;  // the override is compiled out of the release build
+#endif
     const std::filesystem::path exe_dir = ExeDir();
     if (exe_dir.empty()) return {};
     // (b) FLAT — release layout: ffmpeg/ffprobe sit next to the exe.

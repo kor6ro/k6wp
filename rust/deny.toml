@@ -1,4 +1,4 @@
-# cargo-deny configuration (Phase 2).
+﻿# cargo-deny configuration (Phase 2).
 #
 # The Rust tree is new code in a GPL project, so the dependency policy is
 # written down instead of being implicit:
@@ -20,7 +20,16 @@ all-features = false
 
 [advisories]
 version = 2
-ignore = []
+ignore = [
+    # Unmaintained transitive deps in the Cargo.lock (NOT in the Windows target
+    # graph: cargo tree -i <crate> --target x86_64-pc-windows-msvc shows
+    # nothing), so they do not ship. Review by 2027-01-01.
+    "RUSTSEC-2025-0141",  # bincode 2.0.1 unmaintained
+    "RUSTSEC-2026-0192",  # ttf-parser 0.25.1 unmaintained
+    "RUSTSEC-2026-0371",  # zbus_names 4.3.5 unmaintained
+    "RUSTSEC-2026-0370",  # zvariant 5.15.1 unmaintained
+    "RUSTSEC-2026-0372",  # zvariant_derive unmaintained
+]
 
 [licenses]
 version = 2
@@ -67,3 +76,5 @@ unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 allow-git = []
+
+
