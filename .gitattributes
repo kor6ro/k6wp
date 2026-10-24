@@ -2,3 +2,5 @@
 # tracked shell hooks to CRLF on checkout; sh then fails with "$'\r': command
 # not found" and the hook stops guarding. Keep the hook directory LF.
 .githooks/* text eol=lf
+tests/golden/*.json text eol=lf
+
