@@ -315,5 +315,6 @@ is the locked decision.
 
 
 ## NEXT TASK
-NEXT TASK: T0 (bootstrap gate recovery - restore nlohmann/json dependency, run ctest)
+NEXT TASK: A1 (golden studio_logic real extraction)
+
 
