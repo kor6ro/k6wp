@@ -1,0 +1,56 @@
+﻿{
+    "provenance":  "Extracted from studio/src (Qt Studio C++). Pure logic only; writer+checker C++ and replayer Rust.",
+    "to_fixture_engine":  12,
+    "modules":  [
+                    {
+                        "name":  "library_manager",
+                        "cases":  [
+
+                                  ],
+                        "note":  "import, dedup, ordering, sort/search, broken-item detection"
+                    },
+                    {
+                        "name":  "thumbnailer_decision",
+                        "cases":  [
+
+                                  ],
+                        "note":  "cache key, size, regen trigger"
+                    },
+                    {
+                        "name":  "user_errors",
+                        "cases":  [
+
+                                  ],
+                        "note":  "compressor/IPC exit code -\u003e message"
+                    },
+                    {
+                        "name":  "compress_progress",
+                        "cases":  [
+
+                                  ],
+                        "note":  "parsing compressor progress"
+                    },
+                    {
+                        "name":  "studio_settings",
+                        "cases":  [
+
+                                  ],
+                        "note":  "settings schema v6"
+                    },
+                    {
+                        "name":  "cache_stats",
+                        "cases":  [
+
+                                  ],
+                        "note":  "cache statistics"
+                    },
+                    {
+                        "name":  "optimize_on_import",
+                        "cases":  [
+
+                                  ],
+                        "note":  "Optimize? decision on import"
+                    }
+                ],
+    "to_fixture_studio":  "before 2.7"
+}

@@ -1,0 +1,505 @@
+﻿=== git log --oneline -15 ===
+f9ef436 R1: koreksi label & hitungan
+b84f562 fix(engine): the DPB frame size follows bit depth and chroma (H2/H3)
+6a37fbd chore: prove the diagnostic overrides are compiled out of release (L5)
+34a391c fix(ipc): the Rust client waits for a free pipe instance (L4)
+d168005 fix(engine): take the last filesystem call off the get_state poll path (L2)
+acdf6ee fix(engine): delete the unconsumed thread_count and its poll spike (L1)
+7c4f420 docs: write the continue-a-session page in STATE (v1.10)
+c72bff6 fix: serialize the config writers with one cross-process lock (J3)
+3f41d24 chore: catch accidental non-Latin text before it reaches a commit (H4)
+1281708 chore: the engine log artifact from the stress run
+699c87d fix(engine): the get_state was paying a system-wide thread snapshot (K1)
+0787e0b test: root the two flakes and gate the suite's stability (J2)
+9e7ec8b docs(refactor): the G1 verdict is an owner-directed trade-off, with the held-back RAM measured (H1)
+dcbb850 docs(refactor): add STATE.md - the one page every session reads first (I5)
+a9265f5 feat(build): the environment overrides are compiled out of the release build (I4)
+
+=== git status --short ===
+
+=== cargo fmt --check ===
+
+=== cargo clippy ===
+cargo.exe :    Compiling proc-macro2 v1.0.107
+At line:14 char:12
++ $lines += (& cargo clippy --workspace --all-targets --target x86_64-p ...
++            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (   Compiling proc-macro2 v1.0.107:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.27
+   Compiling autocfg v1.5.1
+    Checking windows-link v0.2.1
+   Compiling serde_core v1.0.229
+   Compiling libm v0.2.16
+   Compiling portable-atomic v1.15.0
+    Checking critical-section v1.2.0
+   Compiling crc32fast v1.5.3
+   Compiling zmij v1.0.23
+   Compiling version_check v0.9.5
+    Checking cfg-if v1.0.5
+    Checking memchr v2.8.3
+   Compiling serde_json v1.0.154
+    Checking stable_deref_trait v1.2.1
+    Checking windows-strings v0.5.1
+    Checking windows-result v0.4.1
+    Checking windows-threading v0.2.1
+   Compiling icu_properties_data v2.3.0
+   Compiling log v0.4.34
+   Compiling icu_normalizer_data v2.3.0
+   Compiling icu_locale_fallback_data v2.3.0
+    Checking writeable v0.6.4
+   Compiling serde v1.0.229
+   Compiling smallvec v1.16.3
+   Compiling icu_decimal_data v2.3.0
+    Checking litemap v0.8.3
+   Compiling simd-adler32 v0.3.10
+   Compiling unicode-segmentation v1.13.3
+   Compiling pulldown-cmark v0.13.4
+   Compiling arrayvec v0.7.8
+    Checking windows-sys v0.61.2
+   Compiling num-traits v0.2.19
+   Compiling memoffset v0.9.1
+   Compiling adler2 v2.0.1
+   Compiling unicode-xid v0.2.6
+   Compiling convert_case v0.10.0
+   Compiling foldhash v0.2.0
+   Compiling bitflags v2.13.2
+    Checking itoa v1.0.18
+   Compiling cfg_aliases v0.2.2
+   Compiling once_cell v1.21.4
+   Compiling heck v0.5.0
+   Compiling hashbrown v0.17.1
+   Compiling miniz_oxide v0.9.1
+   Compiling syn v3.0.9
+   Compiling syn v2.0.119
+    Checking fnv v1.0.7
+    Checking utf8_iter v1.0.4
+   Compiling slotmap v1.1.1
+   Compiling float-cmp v0.9.0
+   Compiling flate2 v1.1.10
+   Compiling strict-num v0.1.1
+   Compiling miniz_oxide v0.8.9
+   Compiling polycool v0.4.0
+   Compiling fdeflate v0.3.7
+   Compiling arrayref v0.3.9
+   Compiling khronos_api v3.1.0
+    Checking rand_core v0.10.1
+   Compiling kurbo v0.13.1
+   Compiling png v0.18.1
+   Compiling siphasher v1.0.4
+   Compiling tinyvec v1.13.3
+   Compiling getrandom v0.4.3
+   Compiling byteorder-lite v0.1.0
+   Compiling zune-core v0.5.3
+   Compiling roxmltree v0.21.1
+   Compiling zune-jpeg v0.5.15
+   Compiling simplecss v0.2.2
+   Compiling fontdb v0.24.0
+   Compiling windows_x86_64_msvc v0.52.6
+   Compiling color_quant v1.1.0
+   Compiling weezl v0.1.12
+   Compiling svgtypes v0.16.1
+   Compiling xmlwriter v0.1.0
+   Compiling unicode-script v0.5.8
+   Compiling xml-rs v0.8.29
+   Compiling quick-error v2.0.1
+   Compiling unicode-vo v0.1.0
+   Compiling data-url v0.3.2
+   Compiling semver v1.0.28
+   Compiling pico-args v0.5.0
+   Compiling unicode-bidi v0.3.18
+   Compiling crossbeam-utils v0.8.23
+   Compiling imagesize v0.15.0
+   Compiling base64 v0.23.1
+   Compiling gl_generator v0.14.0
+   Compiling rustc_version v0.4.1
+   Compiling image-webp v0.2.4
+   Compiling gif v0.14.2
+   Compiling memmap2 v0.9.11
+   Compiling unicase v2.10.0
+   Compiling crossbeam-epoch v0.9.21
+    Checking equivalent v1.0.3
+   Compiling winnow v1.0.4
+    Checking uuid v1.28.0
+   Compiling linebender_resource_handle v0.1.1
+   Compiling parlance v0.1.1
+    Checking allocator-api2 v0.2.21
+    Checking accesskit v0.24.1
+   Compiling indexmap v2.14.2
+    Checking hashbrown v0.16.1
+   Compiling field-offset v0.3.6
+    Checking euclid v0.22.14
+    Checking fastrand v2.5.0
+   Compiling htmlparser v0.2.1
+   Compiling toml_datetime v1.1.2+spec-1.1.0
+   Compiling toml_writer v1.1.3+spec-1.1.0
+   Compiling icu_segmenter_data v2.3.0
+   Compiling synstructure v0.14.0
+   Compiling crossbeam-deque v0.8.8
+   Compiling thiserror v2.0.21
+   Compiling toml_parser v1.1.5+spec-1.1.0
+    Checking lyon_geom v1.0.20
+    Checking tempfile v3.27.0
+    Checking windows-targets v0.52.6
+   Compiling toml_edit v0.25.17+spec-1.1.0
+   Compiling rustversion v1.0.23
+    Checking wait-timeout v0.2.1
+    Checking quick-error v1.2.3
+    Checking cpufeatures v0.3.1
+   Compiling rayon-core v1.13.0
+    Checking bit-vec v0.10.1
+    Checking chacha20 v0.10.2
+    Checking rusty-fork v0.3.1
+   Compiling proc-macro-crate v3.5.0
+    Checking bit-set v0.11.1
+    Checking windows-sys v0.52.0
+    Checking lyon_path v1.0.19
+    Checking rand v0.10.3
+    Checking rand_xorshift v0.5.0
+    Checking pxfm v0.1.30
+   Compiling percent-encoding v2.3.2
+    Checking yazi v0.2.1
+   Compiling unicode-width v0.2.2
+   Compiling rspolib v0.1.2
+    Checking regex-syntax v0.8.11
+   Compiling either v1.19.0
+    Checking core_detect v1.0.0
+    Checking pin-project-lite v0.2.17
+    Checking raw-window-handle v0.6.2
+    Checking tracing-core v0.1.36
+    Checking zeno v0.3.3
+    Checking unarray v0.1.4
+   Compiling form_urlencoded v1.2.2
+    Checking tracing v0.1.44
+   Compiling glutin_egl_sys v0.7.1
+   Compiling glutin_wgl_sys v0.6.1
+   Compiling winit v0.30.13
+   Compiling natord v1.0.9
+   Compiling lazy_static v1.5.1
+   Compiling countme v3.0.1
+   Compiling i-slint-compiler v1.18.1
+   Compiling hashbrown v0.14.5
+   Compiling rustc-hash v1.1.0
+   Compiling text-size v1.1.1
+   Compiling anstyle v1.0.14
+   Compiling unicode-linebreak v0.1.5
+    Checking dpi v0.1.2
+   Compiling rowan v0.17.0
+   Compiling annotate-snippets v0.12.17
+   Compiling rayon v1.12.0
+   Compiling itertools v0.15.0
+    Checking lyon_algorithms v1.0.22
+    Checking proptest v1.12.0
+    Checking clru v0.6.3
+    Checking taffy v0.10.1
+    Checking chrono v0.4.45
+   Compiling glutin v0.32.3
+    Checking moxcms v0.8.1
+   Compiling pin-utils v0.1.1
+    Checking slab v0.4.12
+   Compiling typed-index-collections v3.5.0
+    Checking cursor-icon v1.2.0
+    Checking smol_str v0.2.2
+    Checking pin-weak v1.1.0
+    Checking sys-locale v0.3.2
+   Compiling smol_str v0.3.7
+   Compiling by_address v1.2.1
+    Checking scopeguard v1.2.0
+   Compiling spin_on v0.1.1
+    Checking accesskit_consumer v0.38.0
+   Compiling glutin-winit v0.5.0
+   Compiling windows-implement v0.60.2
+   Compiling windows-interface v0.59.3
+   Compiling derive_more-impl v2.1.1
+   Compiling strum_macros v0.28.0
+   Compiling snafu-derive v0.8.9
+   Compiling num_enum_derive v0.7.6
+   Compiling pin-project-internal v1.1.13
+   Compiling zerofrom-derive v0.1.8
+   Compiling yoke-derive v0.8.4
+   Compiling displaydoc v0.2.7
+   Compiling zerovec-derive v0.11.6
+   Compiling bytemuck_derive v1.12.1
+    Checking windows-core v0.62.2
+    Checking windows-future v0.3.2
+    Checking windows-numerics v0.3.1
+rustc-LLVM ERROR: IO failure on output stream: no space on device
+error: could not compile `zerovec-derive` (lib)
+
+Caused by:
+  process didn't exit successfully: `C:\Users\axioo\.rustup\toolchains\stable-x86_64-pc-windows-msvc\bin\rustc.exe 
+--crate-name zerovec_derive --edition=2021 
+C:\Users\axioo\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\zerovec-derive-0.11.6\src\lib.rs 
+--error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --crate-type proc-macro 
+--emit=dep-info,link -C prefer-dynamic -C embed-bitcode=no -C debuginfo=2 --warn=clippy::wildcard_dependencies 
+--warn=clippy::useless_transmute --warn=unused_qualifications --warn=unused_macro_rules --warn=unused_lifetimes 
+--warn=clippy::unnecessary_wraps --warn=unexpected_cfgs --deny=clippy::trivially_copy_pass_by_ref 
+--deny=trivial_numeric_casts --warn=clippy::transmutes_expressible_as_ptr_casts 
+--warn=clippy::transmute_undefined_repr --warn=clippy::transmute_ptr_to_ref --warn=clippy::transmute_ptr_to_ptr 
+--warn=clippy::transmute_int_to_non_zero --warn=clippy::transmute_int_to_bool --warn=clippy::transmute_bytes_to_str 
+--warn=clippy::todo --warn=clippy::same_functions_in_if_condition --warn=clippy::or_fun_call 
+--warn=clippy::negative_feature_names --warn=clippy::missing_transmute_annotations 
+--warn=clippy::missing_fields_in_debug --deny=missing_debug_implementations 
+--warn=clippy::mismatching_type_param_order --warn=clippy::large_stack_arrays --warn=clippy::infinite_loop 
+--warn=clippy::fn_to_numeric_cast_any --deny=clippy::exhaustive_structs --deny=clippy::exhaustive_enums 
+--warn=clippy::doc_markdown --warn=clippy::debug_assert_with_mut_call --warn=clippy::dbg_macro 
+--warn=clippy::crosspointer_transmute --warn=clippy::collection_is_never_read --warn=clippy::branches_sharing_code 
+--allow=clippy::bool_assert_comparison --warn=clippy::alloc_instead_of_core --check-cfg cfg(icu4c_enable_renaming) 
+--check-cfg cfg(needs_alloc_error_handler) --check-cfg cfg(icu4x_nightly_tests) --check-cfg cfg(icu4x_run_size_tests) 
+--check-cfg cfg(icu4x_unstable_fast_trie_only) --check-cfg cfg(docsrs,test) --check-cfg "cfg(feature, values())" -C 
+metadata=2e8d054fd2c6b9db -C extra-filename=-7c069b0009dd72dd --out-dir 
+C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\target\debug\deps -L 
+dependency=C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\target\debug\deps --extern proc_macro
+2=C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\target\debug\deps\libproc_macro2-c202555fd9e08
+bcc.rlib --extern quote=C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\target\debug\deps\libquo
+te-c0850dbc59818beb.rlib --extern syn=C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\target\deb
+ug\deps\libsyn-3d02ca37eaaaef81.rlib --extern proc_macro --cap-lints allow` (exit code: 101)
+warning: build failed, waiting for other jobs to finish...
+rustc-LLVM ERROR: IO failure on output stream: no space on device
+rustc-LLVM ERROR: IO failure on output stream: no space on device
+error: could not compile `bytemuck_derive` (lib)
+
+Caused by:
+  process didn't exit successfully: `C:\Users\axioo\.rustup\toolchains\stable-x86_64-pc-windows-msvc\bin\rustc.exe 
+--crate-name bytemuck_derive --edition=2018 
+C:\Users\axioo\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\bytemuck_derive-1.12.1\src\lib.rs 
+--error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --crate-type proc-macro 
+--emit=dep-info,link -C prefer-dynamic -C embed-bitcode=no -C debuginfo=2 --check-cfg cfg(docsrs,test) --check-cfg 
+"cfg(feature, values())" -C metadata=77594619114bd217 -C extra-filename=-7015e27f9f7f8249 --out-dir 
+C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\target\debug\deps -L 
+dependency=C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\target\debug\deps --extern proc_macro
+2=C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\target\debug\deps\libproc_macro2-c202555fd9e08
+bcc.rlib --extern quote=C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\target\debug\deps\libquo
+te-c0850dbc59818beb.rlib --extern syn=C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\target\deb
+ug\deps\libsyn-3d02ca37eaaaef81.rlib --extern proc_macro --cap-lints allow` (exit code: 101)
+rustc-LLVM ERROR: IO failure on output stream: no space on device
+error: could not compile `zerofrom-derive` (lib)
+
+Caused by:
+  process didn't exit successfully: `C:\Users\axioo\.rustup\toolchains\stable-x86_64-pc-windows-msvc\bin\rustc.exe 
+--crate-name zerofrom_derive --edition=2021 
+C:\Users\axioo\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\zerofrom-derive-0.1.8\src\lib.rs 
+--error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --crate-type proc-macro 
+--emit=dep-info,link -C prefer-dynamic -C embed-bitcode=no -C debuginfo=2 --warn=clippy::wildcard_dependencies 
+--warn=clippy::useless_transmute --warn=unused_qualifications --warn=unused_macro_rules --warn=unused_lifetimes 
+--warn=clippy::unnecessary_wraps --warn=unexpected_cfgs --deny=clippy::trivially_copy_pass_by_ref 
+--deny=trivial_numeric_casts --warn=clippy::transmutes_expressible_as_ptr_casts 
+--warn=clippy::transmute_undefined_repr --warn=clippy::transmute_ptr_to_ref --warn=clippy::transmute_ptr_to_ptr 
+--warn=clippy::transmute_int_to_non_zero --warn=clippy::transmute_int_to_bool --warn=clippy::transmute_bytes_to_str 
+--warn=clippy::todo --warn=clippy::same_functions_in_if_condition --warn=clippy::or_fun_call 
+--warn=clippy::negative_feature_names --warn=clippy::missing_transmute_annotations 
+--warn=clippy::missing_fields_in_debug --deny=missing_debug_implementations 
+--warn=clippy::mismatching_type_param_order --warn=clippy::large_stack_arrays --warn=clippy::infinite_loop 
+--warn=clippy::fn_to_numeric_cast_any --deny=clippy::exhaustive_structs --deny=clippy::exhaustive_enums 
+--warn=clippy::doc_markdown --warn=clippy::debug_assert_with_mut_call --warn=clippy::dbg_macro 
+--warn=clippy::crosspointer_transmute --warn=clippy::collection_is_never_read --warn=clippy::branches_sharing_code 
+--allow=clippy::bool_assert_comparison --warn=clippy::alloc_instead_of_core --check-cfg cfg(icu4c_enable_renaming) 
+--check-cfg cfg(needs_alloc_error_handler) --check-cfg cfg(icu4x_nightly_tests) --check-cfg cfg(icu4x_run_size_tests) 
+--check-cfg cfg(icu4x_unstable_fast_trie_only) --check-cfg cfg(docsrs,test) --check-cfg "cfg(feature, values())" -C 
+metadata=2f141624a9b06493 -C extra-filename=-e06c3991fd047695 --out-dir 
+C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\target\debug\deps -L 
+dependency=C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\target\debug\deps --extern proc_macro
+2=C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\target\debug\deps\libproc_macro2-c202555fd9e08
+bcc.rlib --extern quote=C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\target\debug\deps\libquo
+te-c0850dbc59818beb.rlib --extern syn=C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\target\deb
+ug\deps\libsyn-3d02ca37eaaaef81.rlib --extern synstructure=C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-g
+arden\rust\target\debug\deps\libsynstructure-5903915a64f76157.rlib --extern proc_macro --cap-lints allow` (exit code: 
+101)
+error: could not compile `snafu-derive` (lib)
+
+Caused by:
+  process didn't exit successfully: `C:\Users\axioo\.rustup\toolchains\stable-x86_64-pc-windows-msvc\bin\rustc.exe 
+--crate-name snafu_derive --edition=2018 
+C:\Users\axioo\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\snafu-derive-0.8.9\src\lib.rs --error-format=json 
+--json=diagnostic-rendered-ansi,artifacts,future-incompat --crate-type proc-macro --emit=dep-info,link -C 
+prefer-dynamic -C embed-bitcode=no -C debuginfo=2 --cfg "feature=\"rust_1_61\"" --check-cfg cfg(docsrs,test) 
+--check-cfg "cfg(feature, values(\"rust_1_61\", \"unstable-provider-api\"))" -C metadata=54a078734c7cfb38 -C 
+extra-filename=-b571e6d45031e99b --out-dir 
+C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\target\debug\deps -L 
+dependency=C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\target\debug\deps --extern heck=C:\Us
+ers\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\target\debug\deps\libheck-ae80485671ce8d77.rlib 
+--extern proc_macro2=C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\target\debug\deps\libproc_m
+acro2-c202555fd9e08bcc.rlib --extern quote=C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\targe
+t\debug\deps\libquote-c0850dbc59818beb.rlib --extern syn=C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-gar
+den\rust\target\debug\deps\libsyn-a821249235a194cb.rlib --extern proc_macro --cap-lints allow` (exit code: 101)
+error: failed to write 
+C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\target\debug\deps\rustccpQ0n0\lib.rmeta: There 
+is not enough space on the disk. (os error 112)
+
+rustc-LLVM ERROR: IO failure on output stream: no space on device
+error: could not compile `pxfm` (lib) due to 1 previous error
+error: could not compile `strum_macros` (lib)
+
+Caused by:
+  process didn't exit successfully: `C:\Users\axioo\.rustup\toolchains\stable-x86_64-pc-windows-msvc\bin\rustc.exe 
+--crate-name strum_macros --edition=2021 
+C:\Users\axioo\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\strum_macros-0.28.0\src\lib.rs --error-format=json 
+--json=diagnostic-rendered-ansi,artifacts,future-incompat --crate-type proc-macro --emit=dep-info,link -C 
+prefer-dynamic -C embed-bitcode=no -C debuginfo=2 --check-cfg cfg(docsrs,test) --check-cfg "cfg(feature, values())" -C 
+metadata=311f2f3cd7174095 -C extra-filename=-ba4498510f974db5 --out-dir 
+C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\target\debug\deps -L 
+dependency=C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\target\debug\deps --extern heck=C:\Us
+ers\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\target\debug\deps\libheck-ae80485671ce8d77.rlib 
+--extern proc_macro2=C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\target\debug\deps\libproc_m
+acro2-c202555fd9e08bcc.rlib --extern quote=C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\targe
+t\debug\deps\libquote-c0850dbc59818beb.rlib --extern syn=C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-gar
+den\rust\target\debug\deps\libsyn-a821249235a194cb.rlib --extern proc_macro --cap-lints allow` (exit code: 101)
+error: failed to write to `C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\target\x86_64-pc-wind
+ows-msvc\debug\deps\rmetaNiOZO7\full.rmeta`: There is not enough space on the disk. (os error 112)
+
+rustc-LLVM ERROR: IO failure on output stream: no space on device
+error: could not compile `windows-numerics` (lib) due to 1 previous error
+error: could not compile `yoke-derive` (lib)
+
+Caused by:
+  process didn't exit successfully: `C:\Users\axioo\.rustup\toolchains\stable-x86_64-pc-windows-msvc\bin\rustc.exe 
+--crate-name yoke_derive --edition=2021 
+C:\Users\axioo\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\yoke-derive-0.8.4\src\lib.rs --error-format=json 
+--json=diagnostic-rendered-ansi,artifacts,future-incompat --crate-type proc-macro --emit=dep-info,link -C 
+prefer-dynamic -C embed-bitcode=no -C debuginfo=2 --warn=clippy::wildcard_dependencies 
+--warn=clippy::useless_transmute --warn=unused_qualifications --warn=unused_macro_rules --warn=unused_lifetimes 
+--warn=clippy::unnecessary_wraps --warn=unexpected_cfgs --deny=clippy::trivially_copy_pass_by_ref 
+--deny=trivial_numeric_casts --warn=clippy::transmutes_expressible_as_ptr_casts 
+--warn=clippy::transmute_undefined_repr --warn=clippy::transmute_ptr_to_ref --warn=clippy::transmute_ptr_to_ptr 
+--warn=clippy::transmute_int_to_non_zero --warn=clippy::transmute_int_to_bool --warn=clippy::transmute_bytes_to_str 
+--warn=clippy::todo --warn=clippy::same_functions_in_if_condition --warn=clippy::or_fun_call 
+--warn=clippy::negative_feature_names --warn=clippy::missing_transmute_annotations 
+--warn=clippy::missing_fields_in_debug --deny=missing_debug_implementations 
+--warn=clippy::mismatching_type_param_order --warn=clippy::large_stack_arrays --warn=clippy::infinite_loop 
+--warn=clippy::fn_to_numeric_cast_any --deny=clippy::exhaustive_structs --deny=clippy::exhaustive_enums 
+--warn=clippy::doc_markdown --warn=clippy::debug_assert_with_mut_call --warn=clippy::dbg_macro 
+--warn=clippy::crosspointer_transmute --warn=clippy::collection_is_never_read --warn=clippy::branches_sharing_code 
+--allow=clippy::bool_assert_comparison --warn=clippy::alloc_instead_of_core --check-cfg cfg(icu4c_enable_renaming) 
+--check-cfg cfg(needs_alloc_error_handler) --check-cfg cfg(icu4x_nightly_tests) --check-cfg cfg(icu4x_run_size_tests) 
+--check-cfg cfg(icu4x_unstable_fast_trie_only) --check-cfg cfg(docsrs,test) --check-cfg "cfg(feature, values())" -C 
+metadata=d9ba1d0771cc4dc7 -C extra-filename=-2a2ef914fde680b5 --out-dir 
+C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\target\debug\deps -L 
+dependency=C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\target\debug\deps --extern proc_macro
+2=C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\target\debug\deps\libproc_macro2-c202555fd9e08
+bcc.rlib --extern quote=C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\target\debug\deps\libquo
+te-c0850dbc59818beb.rlib --extern syn=C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\target\deb
+ug\deps\libsyn-3d02ca37eaaaef81.rlib --extern synstructure=C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-g
+arden\rust\target\debug\deps\libsynstructure-5903915a64f76157.rlib --extern proc_macro --cap-lints allow` (exit code: 
+101)
+error: failed to write to `C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\target\x86_64-pc-wind
+ows-msvc\debug\deps\rmetaaRrINd\full.rmeta`: There is not enough space on the disk. (os error 112)
+
+error: linking with `link.exe` failed: exit code: 1318
+  |
+  = note: "C:\\Program Files (x86)\\Microsoft Visual 
+Studio\\18\\BuildTools\\VC\\Tools\\MSVC\\14.51.36231\\bin\\HostX64\\x64\\link.exe" "/DEF:C:\\Users\\axioo\\.local\\shar
+e\\opencode\\worktree\\1e41a2\\proud-garden\\rust\\target\\debug\\deps\\rustcdcFsPk\\lib.def" "/NOLOGO" "C:\\Users\\axi
+oo\\.local\\share\\opencode\\worktree\\1e41a2\\proud-garden\\rust\\target\\debug\\deps\\rustcdcFsPk\\symbols.o" "<5 
+object files omitted>" "C:\\Users\\axioo\\.local\\share\\opencode\\worktree\\1e41a2\\proud-garden\\rust\\target\\debug\
+\deps\\rustcdcFsPk\\rmeta.o" "<1 object files omitted>" "C:\\Users\\axioo\\.local\\share\\opencode\\worktree\\1e41a2\\p
+roud-garden\\rust\\target\\debug\\deps/{libsyn-3d02ca37eaaaef81,libquote-c0850dbc59818beb,libproc_macro2-c202555fd9e08b
+cc,libunicode_ident-c0fa74d96f3c4a4c}.rlib" "<sysroot>\\lib\\rustlib\\x86_64-pc-windows-msvc\\lib/{libproc_macro-*,libr
+ustc_literal_escaper-*,libstd-*,libpanic_unwind-*,libcfg_if-*,libwindows_link-*,librustc_demangle-*,libstd_detect-*,lib
+hashbrown-*,librustc_std_workspace_alloc-*,libunwind-*,librustc_std_workspace_core-*,liballoc-*,libcore-*,libcompiler_b
+uiltins-*}.rlib" "kernel32.lib" "kernel32.lib" "kernel32.lib" "ntdll.lib" "userenv.lib" "ws2_32.lib" "dbghelp.lib" 
+"/defaultlib:msvcrt" "/NXCOMPAT" "/OUT:C:\\Users\\axioo\\.local\\share\\opencode\\worktree\\1e41a2\\proud-garden\\rust\
+\target\\debug\\deps\\displaydoc-6a9d3c88e9fb41f2.dll" "/OPT:REF,NOICF" "/DLL" "/IMPLIB:C:\\Users\\axioo\\.local\\share
+\\opencode\\worktree\\1e41a2\\proud-garden\\rust\\target\\debug\\deps\\displaydoc-6a9d3c88e9fb41f2.dll.lib" "/DEBUG" 
+"/PDBALTPATH:%_PDB%" "/NATVIS:<sysroot>\\lib\\rustlib\\etc\\intrinsic.natvis" 
+"/NATVIS:<sysroot>\\lib\\rustlib\\etc\\liballoc.natvis" "/NATVIS:<sysroot>\\lib\\rustlib\\etc\\libcore.natvis" 
+"/NATVIS:<sysroot>\\lib\\rustlib\\etc\\libstd.natvis"
+  = note: some arguments are omitted. use `--verbose` to show all linker arguments
+  = note: LINK : fatal error LNK1318: Unexpected PDB error; LIMIT (12) 'C:\Users\axioo\.local\share\opencode\worktree\1
+e41a2\proud-garden\rust\target\debug\deps\displaydoc-6a9d3c88e9fb41f2.pdb'
+          
+
+error: could not compile `displaydoc` (lib) due to 1 previous error
+error: could not compile `windows-future` (lib) due to 1 previous error
+error: linking with `link.exe` failed: exit code: 1318
+  |
+  = note: "C:\\Program Files (x86)\\Microsoft Visual 
+Studio\\18\\BuildTools\\VC\\Tools\\MSVC\\14.51.36231\\bin\\HostX64\\x64\\link.exe" "/DEF:C:\\Users\\axioo\\.local\\shar
+e\\opencode\\worktree\\1e41a2\\proud-garden\\rust\\target\\debug\\deps\\rustcj2wIPK\\lib.def" "/NOLOGO" "C:\\Users\\axi
+oo\\.local\\share\\opencode\\worktree\\1e41a2\\proud-garden\\rust\\target\\debug\\deps\\rustcj2wIPK\\symbols.o" "<8 
+object files omitted>" "C:\\Users\\axioo\\.local\\share\\opencode\\worktree\\1e41a2\\proud-garden\\rust\\target\\debug\
+\deps\\rustcj2wIPK\\rmeta.o" "<1 object files omitted>" "C:\\Users\\axioo\\.local\\share\\opencode\\worktree\\1e41a2\\p
+roud-garden\\rust\\target\\debug\\deps/{libproc_macro_crate-5d240e8020d5a6d0,libtoml_edit-27bd54fc4a4ce32a,libtoml_pars
+er-74a786a9fa89825c,libwinnow-e1819ad417b74028,libindexmap-6c705cebc6f25b59,libequivalent-99632c56735279b5,libhashbrown
+-6d64eb0bf53461a7,libfoldhash-e568ad96bae62535,libtoml_writer-8ffac0e9390ae14a,libtoml_datetime-cf73ebde5e175636,libsyn
+-a821249235a194cb,libquote-c0850dbc59818beb,libproc_macro2-c202555fd9e08bcc,libunicode_ident-c0fa74d96f3c4a4c}.rlib" "<
+sysroot>\\lib\\rustlib\\x86_64-pc-windows-msvc\\lib/{libproc_macro-*,librustc_literal_escaper-*,libstd-*,libpanic_unwin
+d-*,libcfg_if-*,libwindows_link-*,librustc_demangle-*,libstd_detect-*,libhashbrown-*,librustc_std_workspace_alloc-*,lib
+unwind-*,librustc_std_workspace_core-*,liballoc-*,libcore-*,libcompiler_builtins-*}.rlib" "kernel32.lib" 
+"kernel32.lib" "kernel32.lib" "ntdll.lib" "userenv.lib" "ws2_32.lib" "dbghelp.lib" "/defaultlib:msvcrt" "/NXCOMPAT" "/O
+UT:C:\\Users\\axioo\\.local\\share\\opencode\\worktree\\1e41a2\\proud-garden\\rust\\target\\debug\\deps\\num_enum_deriv
+e-99a42d4948c50422.dll" "/OPT:REF,NOICF" "/DLL" "/IMPLIB:C:\\Users\\axioo\\.local\\share\\opencode\\worktree\\1e41a2\\p
+roud-garden\\rust\\target\\debug\\deps\\num_enum_derive-99a42d4948c50422.dll.lib" "/DEBUG" "/PDBALTPATH:%_PDB%" 
+"/NATVIS:<sysroot>\\lib\\rustlib\\etc\\intrinsic.natvis" "/NATVIS:<sysroot>\\lib\\rustlib\\etc\\liballoc.natvis" 
+"/NATVIS:<sysroot>\\lib\\rustlib\\etc\\libcore.natvis" "/NATVIS:<sysroot>\\lib\\rustlib\\etc\\libstd.natvis"
+  = note: some arguments are omitted. use `--verbose` to show all linker arguments
+  = note: LINK : fatal error LNK1318: Unexpected PDB error; LIMIT (12) 'C:\Users\axioo\.local\share\opencode\worktree\1
+e41a2\proud-garden\rust\target\debug\deps\num_enum_derive-99a42d4948c50422.pdb'
+          
+
+error: could not compile `num_enum_derive` (lib) due to 1 previous error
+rustc-LLVM ERROR: IO failure on output stream: no space on device
+error: could not compile `pin-project-internal` (lib)
+
+Caused by:
+  process didn't exit successfully: `C:\Users\axioo\.rustup\toolchains\stable-x86_64-pc-windows-msvc\bin\rustc.exe 
+--crate-name pin_project_internal --edition=2021 
+C:\Users\axioo\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\pin-project-internal-1.1.13\src\lib.rs 
+--error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --crate-type proc-macro 
+--emit=dep-info,link -C prefer-dynamic -C embed-bitcode=no -C debuginfo=2 --warn=clippy::unused_trait_names 
+--warn=unsafe_op_in_unsafe_fn --warn=unreachable_pub --warn=unnameable_types --warn=unexpected_cfgs 
+--warn=clippy::undocumented_unsafe_blocks --warn=clippy::transmute_undefined_repr --warn=clippy::trailing_empty_array 
+--warn=single_use_lifetimes --warn=rust_2018_idioms --warn=clippy::pedantic --warn=non_ascii_idents 
+--warn=clippy::inline_asm_x86_att_syntax --warn=improper_ctypes_definitions --warn=improper_ctypes 
+--warn=deprecated_safe --warn=clippy::default_union_representation --warn=clippy::as_underscore 
+--warn=clippy::as_ptr_cast_mut --warn=clippy::all --allow=clippy::type_complexity --allow=clippy::too_many_lines 
+--allow=clippy::too_many_arguments --allow=clippy::struct_field_names --allow=clippy::struct_excessive_bools 
+--allow=clippy::single_match_else --allow=clippy::single_match --allow=clippy::similar_names 
+--allow=clippy::range_plus_one --allow=clippy::nonminimal_bool --allow=clippy::naive_bytecount 
+--allow=clippy::module_name_repetitions --allow=clippy::missing_errors_doc --allow=clippy::manual_range_contains 
+--allow=clippy::manual_assert --allow=clippy::incompatible_msrv --allow=clippy::float_cmp --allow=clippy::doc_markdown 
+--allow=clippy::declare_interior_mutable_const --allow=clippy::collapsible_match --allow=clippy::cast_lossless 
+--allow=clippy::borrow_as_ptr --allow=clippy::bool_assert_comparison --check-cfg cfg(docsrs,test) --check-cfg 
+"cfg(feature, values())" -C metadata=1e749a310576e595 -C extra-filename=-502ab7674abd0556 --out-dir 
+C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\target\debug\deps -L 
+dependency=C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\target\debug\deps --extern proc_macro
+2=C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\target\debug\deps\libproc_macro2-c202555fd9e08
+bcc.rlib --extern quote=C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\target\debug\deps\libquo
+te-c0850dbc59818beb.rlib --extern syn=C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\target\deb
+ug\deps\libsyn-a821249235a194cb.rlib --extern proc_macro --cap-lints allow` (exit code: 101)
+error: failed to write to `C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\target\x86_64-pc-wind
+ows-msvc\debug\deps\rmetaiZCKca\full.rmeta`: There is not enough space on the disk. (os error 112)
+
+error: could not compile `proptest` (lib) due to 1 previous error
+rustc-LLVM ERROR: IO failure on output stream: no space on device
+error: could not compile `derive_more-impl` (lib)
+
+Caused by:
+  process didn't exit successfully: `C:\Users\axioo\.rustup\toolchains\stable-x86_64-pc-windows-msvc\bin\rustc.exe 
+--crate-name derive_more_impl --edition=2021 
+C:\Users\axioo\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\derive_more-impl-2.1.1\src\lib.rs 
+--error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --crate-type proc-macro 
+--emit=dep-info,link -C prefer-dynamic -C embed-bitcode=no -C debuginfo=2 --warn=unexpected_cfgs --check-cfg cfg(ci) 
+--check-cfg cfg(error_generic_member_access) --check-cfg cfg(nightly) --cfg "feature=\"add\"" --cfg 
+"feature=\"add_assign\"" --cfg "feature=\"default\"" --cfg "feature=\"deref\"" --cfg "feature=\"deref_mut\"" --cfg 
+"feature=\"display\"" --cfg "feature=\"error\"" --cfg "feature=\"from\"" --cfg "feature=\"into\"" --cfg 
+"feature=\"mul\"" --cfg "feature=\"not\"" --check-cfg cfg(docsrs,test) --check-cfg "cfg(feature, values(\"add\", 
+\"add_assign\", \"as_ref\", \"constructor\", \"debug\", \"default\", \"deref\", \"deref_mut\", \"display\", \"eq\", 
+\"error\", \"from\", \"from_str\", \"full\", \"index\", \"index_mut\", \"into\", \"into_iterator\", \"is_variant\", 
+\"mul\", \"mul_assign\", \"not\", \"sum\", \"testing-helpers\", \"try_from\", \"try_into\", \"try_unwrap\", 
+\"unwrap\"))" -C metadata=8b5ad288120e0ce5 -C extra-filename=-b8a9656007244882 --out-dir 
+C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\target\debug\deps -L 
+dependency=C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\target\debug\deps --extern convert_ca
+se=C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\target\debug\deps\libconvert_case-734cdf54c20
+ccf84.rlib --extern proc_macro2=C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\target\debug\dep
+s\libproc_macro2-c202555fd9e08bcc.rlib --extern quote=C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden
+\rust\target\debug\deps\libquote-c0850dbc59818beb.rlib --extern syn=C:\Users\axioo\.local\share\opencode\worktree\1e41a
+2\proud-garden\rust\target\debug\deps\libsyn-a821249235a194cb.rlib --extern unicode_xid=C:\Users\axioo\.local\share\ope
+ncode\worktree\1e41a2\proud-garden\rust\target\debug\deps\libunicode_xid-923442445a98a5c3.rlib --extern proc_macro 
+--cap-lints allow` (exit code: 101)
+error: failed to write to 
+`C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\target\debug\deps\rmetaVfmoOG\full.rmeta`: 
+There is not enough space on the disk. (os error 112)
+
+error: could not compile `moxcms` (lib) due to 1 previous error
