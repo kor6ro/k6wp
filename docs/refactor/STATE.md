@@ -86,6 +86,40 @@ private + 150.9 MB shared, CPU 1.74 % (max thread 10.8 %), GPU 21.6 %, rate
 
 ---
 
+## 3b. Gate A — Studio Rust parity / Gate B — Release-safe (Run 2, wip-a11-snapshot)
+
+Definisi eksplisit (lock setelah `refactor/rust-wt` + `wip-a11-snapshot`). Tanpa ini, "selesai" ambigu.
+
+### Gate A — Studio Rust parity (wajib sebelum rilis)
+| # | Item | Status (Run 2) | Bukti / NEXT |
+|---|---|---|---|
+| A1 | Thumbnailer video (ADR thumbnailer) | P0 — Run 3 | `docs/refactor/adr-thumbnailer.md` belum ada |
+| A2 | Import flow (media picker + probe) | P0 — Run 4 | — |
+| A3 | Compress queue (compressor Rust / IPC) | P0 — Run 5 | — |
+| A4 | Settings page | P0 — Run 6 | — |
+| A5 | Assign per-monitor + playlist UI | P0 — Run 7 | — |
+| A6 | Preview Studio Rust | `deferred` (owner 2026-10-27) | via IPC = effort besar; subprocess mpv = melanggar L5; tidak menyentuh core flow |
+| A7 | i18n | `OK` — single-language id (owner 2026-10-27) | string saat ini sudah id; tidak butuh infra i18n |
+| A8 | J4 Studio goldens (12 TO FIXTURE) | P0 — Run 8 | `g5-coverage.md` |
+| A9 | `parity-checklist.md` final | P0 — Run 9 | semua baris berlabel `done` / `P0 — Run N` / `deferred` / `UNPROVEN` / `code-quoted — test pending` |
+| A10 | G6 image check (`expected_server_image`) | `code-quoted — test pending (Run 10)` | `worker.rs::expected_engine_image()` (Run 1); `tests/live_engine.rs` butuh `K6WP_IPC_LIVE=1` |
+
+### Gate B — Release-safe (wajib sebelum rilis publik — F3 belum diputus)
+| # | Item | Status (Run 2) | Bukti / NEXT |
+|---|---|---|---|
+| B1 | Temuan #2 (Urungkan kontradiksi) | `done` (Run 1) | `RUN-1.md`: `STATE.md` + `ledger.md` + `HANDOFF-DIGEST.md` konsisten |
+| B2 | Temuan #3 (VUI proxy jujur) | `done` (Run 1) | `sps.rs` komentar (l.702) + `HANDOFF-DIGEST.md` L2 + `ledger.md` E3 |
+| B3 | 2-monitor rig artifact | `P0 — Run 10` / `UNPROVEN` | `docs/refactor/g5-coverage.md`: 10/24 H.2 belum teruji |
+| B4 | Real machine sleep / resume latency | `P0 — Run 10` / `UNPROVEN` | `docs/bench/resume-real-sleep.json` atau bukti manual |
+| B5 | G6 image check test-proven | `P0 — Run 10` | `tests/live_engine.rs` (`K6WP_IPC_LIVE=1`) |
+| B6 | Fail-open residual (`engine.exe` hilang → image check skip) | `evaluasi Run 12` | defense-in-depth tetap: `require_current_user` + `require_same_session`; catat di checklist |
+| B7 | F3 Slint licence (royalty-free) | `P0 — Run 11` | verifikasi `LICENSES/README.md` + `slint-royalty-free-2.0.md`; jika kondisi tidak kompatibel GPL-2.0, eskalasi ke owner |
+| B8 | J5 fuzz run / honest record | `P0 — Run 11` | `tests/golden/` regression + proptest (`docs/refactor/I2.md`) sebagai kompensasi |
+| B9 | ZIP size 148.13 MB (≤115 MB deferred Phase 3) | `deferred` (`budgets.md` L10) | dicatat eksplisit; tidak "hampir" |
+| B10 | `STATE.md` NEXT TASK = owner sign-off | `P0 — Run 12` | `parity-checklist.md` final + `RUN-12.md` |
+
+---
+
 ## 4. The status per phase and task
 
 ### Phase 0 - the baseline and the contracts - **done**
