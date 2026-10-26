@@ -65,6 +65,23 @@ K6WP — engine C++ (reference) + Studio Slint (separate process, L5). Refactor:
 
 ---
 
+## 5. Klaim yang ditarik / UNPROVEN (singkat — lengkap: `docs/refactor/g5-coverage.md`, `STATE.md` §5, `ledger.md`)
+- M2 (0 vs 3): ditarik (`UNPROVEN`, `docs/bench/studio-ipc-policy.json` dibuat setelah koreksi).
+- UIBLOCK: `UNPROVEN` (watchdog belum diuji tanpa noise).
+- GPU shared Studio Slint: `UNPROVEN` (iGPU host).
+- `studio_logic_test` readywait >2s: open (`docs/bench/l4/`: 5/5 bersih 20k req setelah fix client).
+- Software + Skia: `UNPROVEN` (`adr-slint-backend.md`: kondisi buka sebelum 2.7).
+- Q1a (`timeout` overlapped-I/O): `UNPROVEN` (`tests/live_engine.rs` belum `K6WP_IPC_LIVE=1`).
+- Q1b (`race` determinism): `UNPROVEN`.
+- Q1d (`nextest` CI): `UNPROVEN` (belum terpasang CI, `Cargo.toml` ada).
+- 5 `LIVE TEST` (`g5-coverage.md`): `UNPROVEN` (fullscreen/occlusion, device-lost watch, watchdog, launcher lock-screen).
+- 12 `TO FIXTURE` (`g5-coverage.md`): `UNPROVEN` (sebelum 3.7).
+- `ffprobe.exe`: syarat J6 belum terpenuhi (`ZIP` 148.13 MB).
+- ZIP ≤115 MB: `DEFERRED` Phase 3 (`budget.md` L10).
+- Roadmap.md: `UNPROVEN` (tidak ada).
+
+---
+
 ## 6. Catatan verifikasi (wajib sebelum Run 2)
 - **A — G6 `code-quoted`**: `tests/live_engine.rs` (`K6WP_IPC_LIVE=1`) wajib `Run 10`. Tanpa ini, `B5` tidak bisa `test-proven`.
 - **B — Fail-open** (`engine.exe` hilang → `None` → image check skip). Residual risk rendah (`user+session` tetap). Evaluasi `P0` Run 12 (`parity-checklist.md` `B6`).
