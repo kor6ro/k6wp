@@ -12,7 +12,7 @@ replays the C++'s frozen behaviour; it does not redefine it.
 
 ---
 
-## 0. Lokasi kerja resmi (A-12b, 2026-10-26)
+## 0. Lokasi kerja resmi (A-12c, 2026-10-26)
 
 **Branch resmi: `refactor/rust-wt`. Folder resmi:
 `C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden`.**
@@ -361,3 +361,6 @@ NEXT TASK: "Urungkan" toast (test server palsu + e2e) → ADR thumbnailer (adr-t
 
 
 
+
+
+**Worktree resmi:** C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden | branch refactor/rust-wt. Desktop (C:\Users\axioo\Desktop\k6wp) bukan kanonik.
