@@ -1,0 +1,30 @@
+﻿ docs/refactor/RUN-BLOK-A10.md                      |  81 +++
+ docs/refactor/RUN-BLOK-A11.md                      |  82 +++
+ docs/refactor/RUN-BLOK-A8.md                       | 102 +++
+ docs/refactor/RUN-BLOK-A9.md                       |  95 +++
+ docs/refactor/STATE.md                             |  42 +-
+ docs/refactor/ledger.md                            |  47 ++
+ docs/refactor/run-phase2/a12b-locate.txt           | 161 +++++
+ docs/refactor/run-phase2/a12c-wip-log.txt          | Bin 0 -> 180 bytes
+ docs/refactor/run-phase2/a12c-wip-status.txt       | Bin 0 -> 3172 bytes
+ docs/refactor/run-phase2/a12c-worktree.txt         | Bin 0 -> 3534 bytes
+ docs/refactor/run-phase2/blok-a8-checks.txt        |  17 +
+ docs/refactor/run-phase2/blok-a9-checks.txt        | 406 ++++++++++++
+ docs/ux-spec.md                                    |   8 +
+ rust/crates/k6wp-ipc/examples/get_state_once.rs    |  71 +++
+ rust/crates/k6wp-ipc/examples/stress_client.rs     |   2 +-
+ .../k6wp-ipc/examples/stress_pause_resume.rs       | 267 ++++++++
+ rust/crates/k6wp-ipc/src/lib.rs                    |  22 +-
+ rust/crates/k6wp-ipc/tests/client.rs               |   2 +-
+ rust/crates/k6wp-ipc/tests/env_override.rs         |  25 +-
+ rust/crates/k6wp-ipc/tests/live_engine.rs          |   2 +-
+ rust/crates/k6wp-studio/src/history.rs             |  94 +++
+ rust/crates/k6wp-studio/src/main.rs                |  95 ++-
+ rust/crates/k6wp-studio/src/thumbs.rs              |   2 +-
+ rust/crates/k6wp-studio/src/worker.rs              | 695 +++++++++++++++++++--
+ rust/crates/k6wp-studio/ui/app.slint               |  25 +-
+ tools/e2e_a12b_undo.ps1                            | 303 +++++++++
+ tools/measure_a12b_coexistence.ps1                 | 120 ++++
+ tools/measure_studio_library.ps1                   |  48 +-
+ tools/session_snapshot.ps1                         |  46 +-
+ 41 files changed, 3035 insertions(+), 129 deletions(-)

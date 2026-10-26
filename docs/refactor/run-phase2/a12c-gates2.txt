@@ -1,0 +1,30 @@
+﻿test thumbs::tests::a_short_file_is_not_an_image ... ok
+test thumbs::tests::box_resize_averages_a_solid_image ... ok
+test history::tests::the_first_install_offers_no_undo ... ok
+test thumbs::tests::cache_evicts_the_coldest_when_over_the_cap ... ok
+test thumbs::tests::a_solid_png_decodes_and_is_scaled_to_cover ... ok
+test worker::tests::a_drive_letter_path_is_probed_inline ... ok
+test worker::tests::engine_state_ignores_a_missing_video ... ok
+test worker::tests::a_missing_index_is_an_error_not_a_panic ... ok
+test worker::tests::a_dead_unc_probe_does_not_block_the_decode_behind_it ... ok
+test worker::tests::engine_state_reads_the_real_get_state_shape ... ok
+test worker::tests::an_unreachable_probe_gives_up_after_the_timeout ... ok
+test worker::tests::set_wallpaper_missing_media_no_ipc_sent ... ok
+test worker::tests::set_wallpaper_success_with_fake_server ... ok
+test worker::tests::set_wallpaper_engine_error ... ok
+test worker::tests::set_wallpaper_engine_timeout ... ok
+
+test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 20.02s
+
+   Doc-tests k6wp_core
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests k6wp_ipc
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
