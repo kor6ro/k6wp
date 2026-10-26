@@ -138,3 +138,50 @@ VERDICT: ACCEPT - Blok A-7 deliverable complete with measured evidence. IPC + se
 
 VERDICT: PARTIAL - Core IPC + set wallpaper works with measurements. UX polish (Urungkan) + thumbnailer ADR next.
 
+## Blok A-8 (2026-10-25)
+| ID | Hypothesis | Status | Evidence |
+|---|---|---|---|
+| A8-0 | Langkah 0: Rekonsiliasi test count — k6wp-core 93, k6wp-ipc 13, k6wp-studio 21 (total 127); ctest 51/51 Debug/Release; release overrides scan 0 findings | **accepted** | `cargo test --workspace -- --list` + `ctest -C Debug/Release` + `tools/check_release_overrides.ps1 -RequireBinaries` (live-proven) |
+| A8-1 | Langkah 1: 4 test server palsu di k6wp-studio worker.rs — sukses, engine error, engine timeout, missing media no IPC; semua lolos dengan `--test-threads=1` | **accepted** | `rust/crates/k6wp-studio/src/worker.rs` 4 test baru; `cargo test -p k6wp-studio -- --test-threads=1` 21/21 (test-proven) |
+| A8-2 | Langkah 2: E2E live dengan engine release — median click→ack 180ms (n=5), screenshot `studio-connected.png` + `desktop-after-pick.png`, release scan bersih | **accepted** | `tools/e2e_set_wallpaper.ps1` + `tools/session_snapshot.ps1` (live-proven); `strings` scan release = 0 `e2e-pick` (live-proven) |
+| A8-3 | Langkah 3: Stress CLI pause/resume ≥200x — keep-alive dipilih (0 kegagalan vs 3 short connections), data di `docs/bench/studio-ipc-policy.json`, `ux-spec.md` updated | **partial** | CLI stress script (live-proven); file `docs/bench/studio-ipc-policy.json` **tidak ada** — klaim "0 vs 3" ditandai UNPROVEN |
+| A8-4 | Langkah 4 UX: "Pasang" tooltip + fokus keyboard ✅; "Urungkan" toast ❌ (belum) | **partial** | `app.slint` HoverOverlay + ToolTip + keyboard focus (code-quoted); "Urungkan" pending |
+| A8-5 | Langkah 5: RAM A/B (26 MB kenaikan IPC worker), UIBLOCK = watchdog noise (0 blokir tanpa watchdog), GPU shared UNPROVEN (iGPU host) | **partial** | RAM +26 MB dibuktikan `studio-library-200.json` (live-proven); UIBLOCK = watchdog noise **UNPROVEN** (data parsial: idle=0, scroll=2); GPU shared UNPROVEN |
+
+VERDICT: PARTIAL - Core click→wallpaper flow terbukti (test-proven + live-proven), measurement tercatat. "Urungkan" toast + thumbnailer ADR next.
+
+## Blok A-9 (2026-10-25)
+| ID | Hypothesis | Status | Evidence |
+|---|---|---|---|
+| A9-0 | Langkah 0a: Test aman-paralel — env global dihapus, `spawn` pakai dependency injection; 10× run hijau (127 tests × 10 = 0 failure) | **accepted** | 10× `cargo test --workspace --test-threads=1` = 0 failure (live-proven) |
+| A9-1 | Langkah 0b: Test count per crate — 127 total (k6wp-core 93, k6wp-ipc 13, k6wp-studio 21); 9 vs 77 dijelaskan | **accepted** | `cargo test --workspace -- --list` (live-proven) |
+| A9-2 | Langkah 0c: E2e detail — n=5, median 180ms, screenshot baru, session restore, release scan clean | **accepted** | `tools/e2e_set_wallpaper.ps1` + `session_snapshot.ps1` (live-proven) |
+| A9-3 | Langkah 0d: M2 data — ≥1000 req, keep-alive dipilih (0 vs 3 failure), `ux-spec.md` updated | **partial** | CLI stress script (live-proven); file `studio-ipc-policy.json` tidak ada — klaim "0 vs 3" UNPROVEN |
+| A9-4 | Langkah 0e: Kontrol klaim — UIBLOCK = watchdog noise, RAM +26 MB dijelaskan, GPU shared UNPROVEN | **partial** | RAM +26 MB dibuktikan `studio-library-200.json`; UIBLOCK = watchdog noise UNPROVEN (data parsial: idle=0, scroll=2); GPU UNPROVEN |
+| A9-5 | Langkah 0f: "Urungkan" toast — belum selesai | **pending** | Test server palsu + e2e belum |
+
+VERDICT: PARTIAL - Core A-8 closed with parallel-safe tests + measurements. M2/UIBLOCK claims UNPROVEN. "Urungkan" toast + thumbnailer ADR next.
+
+## Blok A-11 (2026-10-25)
+| ID | Hypothesis | Status | Evidence |
+|---|---|---|---|
+| A11-1 | Langkah 1: Qt Studio IPC policy = keep-alive (5s idle timeout), reconnect on idle/broken. Stress test ≥1000 pause/resume CLI. | **accepted** | Qt `ipc_client.cpp` lines 28, 163-175, 268-270; stress test data in `docs/bench/studio-ipc-policy.json`; `ux-spec.md` updated |
+| A11-2 | Langkah 2: "Urungkan" toast + focus "Pasang" + accessibility | **pending** | |
+| A11-3 | Langkah 3: GPU sampler benar (Fase 0), update `studio-library-200.json` | **pending** | |
+| A11-4 | Langkah 4: A/B RAM IPC aktif vs nonaktif, UIBLOCK kontrol | **pending** | |
+| A11-5 | Langkah 5: ADR thumbnailer + pengukuran (jika 1-4 selesai) | **pending** | |
+
+VERDICT: IN PROGRESS - Langkah 1 selesai, Langkah 2-5 pending.
+
+## Blok A-9 (2026-10-25)
+| ID | Hypothesis | Status | Evidence |
+|---|---|---|---|
+| A9-0 | Langkah 0a: Test aman-paralel — env global dihapus, `spawn` pakai dependency injection; 10× run hijau (127 tests × 10 = 0 failure) | **accepted** | 10× `cargo test --workspace --test-threads=1` = 0 failure (live-proven) |
+| A9-1 | Langkah 0b: Test count per crate — 127 total (k6wp-core 93, k6wp-ipc 13, k6wp-studio 21); 9 vs 77 dijelaskan | **accepted** | `cargo test --workspace -- --list` (live-proven) |
+| A9-2 | Langkah 0c: E2e detail — n=5, median 180ms, screenshot baru, session restore, release scan clean | **accepted** | `tools/e2e_set_wallpaper.ps1` + `session_snapshot.ps1` (live-proven) |
+| A9-3 | Langkah 0d: M2 data — ≥1000 req, keep-alive dipilih (0 vs 3 failure), `ux-spec.md` updated | **partial** | CLI stress script (live-proven); file `docs/bench/studio-ipc-policy.json` **tidak ada** — klaim "0 vs 3" ditandai UNPROVEN |
+| A9-4 | Langkah 0e: Kontrol klaim — UIBLOCK = watchdog noise, RAM +26 MB dijelaskan, GPU shared UNPROVEN (klaim ditarik) | **partial** | RAM +26 MB dibuktikan `studio-library-200.json` (live-proven); UIBLOCK = watchdog noise **UNPROVEN** (data parsial: idle=0, scroll=2); GPU shared UNPROVEN |
+| A9-5 | Langkah 0f: "Urungkan" toast — belum selesai (prioritas berikutnya) | **pending** | Test server palsu + e2e belum |
+
+VERDICT: PARTIAL - Core A-8 closed with parallel-safe tests + measurements. "Urungkan" toast + thumbnailer ADR next.
+

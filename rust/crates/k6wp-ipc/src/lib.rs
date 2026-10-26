@@ -110,19 +110,13 @@ pub const fn dev_server_image_allowed() -> bool {
 ///
 /// It resolves the session the same way the C++ does
 /// (`ProcessIdToSessionId(GetCurrentProcessId())`) and falls back to session
-/// 0 when the lookup fails - never empty. The `K6WP_ENGINE_PIPE`
-/// environment variable overrides it (read on EVERY call, never cached in a
-/// static: a static would be initialized before `main()` and the client and
-/// the server would disagree about the name).
-pub fn current_session_pipe_name() -> String {
-    // The override exists for the tests only, and it is compiled out of the
-    // release build (task I4).
-    #[cfg(debug_assertions)]
-    {
-        if let Ok(name) = std::env::var(PIPE_ENV_OVERRIDE) {
-            if !name.is_empty() {
-                return name;
-            }
+/// 0 when the lookup fails - never empty. An optional `override_name` can be
+/// provided for tests; in release builds this parameter is ignored (the override
+/// is compiled out via the debug_assertions gate in the caller).
+pub fn current_session_pipe_name(override_name: Option<&str>) -> String {
+    if let Some(name) = override_name {
+        if !name.is_empty() {
+            return name.to_string();
         }
     }
     let session = current_session_id();
@@ -252,7 +246,7 @@ impl IpcClient {
 
     /// Connects to the engine of THIS session.
     pub fn connect_current_session(options: ConnectOptions) -> Result<IpcClient, IpcError> {
-        IpcClient::connect(&current_session_pipe_name(), options)
+        IpcClient::connect(&current_session_pipe_name(None), options)
     }
 
     /// The verified identity of the server.

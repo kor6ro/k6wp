@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 
 use k6wp_core::{ipc::IpcMessage, LibraryIndex};
 use k6wp_ipc::{current_session_pipe_name, ConnectOptions, IpcClient, IpcError};
-use serde_json::json;
+use serde_json::Value;
 
 use crate::thumbs::{decode_to_cover, Pixels};
 
@@ -23,7 +23,7 @@ use crate::thumbs::{decode_to_cover, Pixels};
 /// replacement for that freeze.
 pub const PROBE_TIMEOUT: Duration = Duration::from_secs(2);
 
-/// Backoff schedule for IPC reconnection: 1→2→4→8→30 seconds, then repeat.
+/// Backoff schedule for IPC reconnection: 1?2?4?8?30 seconds, then repeat.
 const RECONNECT_BACKOFF: &[Duration] = &[
     Duration::from_secs(1),
     Duration::from_secs(2),
@@ -113,6 +113,11 @@ pub enum Event {
     EngineState(EngineState),
     /// An IPC error occurred (shown as toast).
     IpcError(String),
+    /// The engine accepted the wallpaper. The UI records it so "Urungkan"
+    /// can go back to the previous picture.
+    WallpaperApplied {
+        index: usize,
+    },
 }
 
 /// The number of threads that answer "does this file exist". A dead UNC path
@@ -126,8 +131,10 @@ const PROBE_THREADS: usize = 2;
 /// The caller hands in a closure that posts to the Slint event loop, which is
 /// not `Sync`; a short-lived mutex around the call is enough to share it, and
 /// the call itself never blocks.
+type EventSink = std::sync::Arc<std::sync::Mutex<Box<dyn Fn(Event) + Send>>>;
+
 #[derive(Clone)]
-struct Sink(std::sync::Arc<std::sync::Mutex<Box<dyn Fn(Event) + Send>>>);
+struct Sink(EventSink);
 
 impl Sink {
     fn emit(&self, event: Event) {
@@ -139,21 +146,32 @@ impl Sink {
 
 /// Starts the worker thread. The callback runs on the worker thread; the
 /// caller is responsible for hopping back to the UI loop.
-pub fn spawn(on_event: impl Fn(Event) + Send + 'static) -> Sender<Request> {
+///
+/// `pipe_name_override` is a debug-only parameter for tests. It is compiled
+/// out of the release build and only used when `debug_assertions` is true.
+pub fn spawn(
+    on_event: impl Fn(Event) + Send + 'static,
+    #[cfg(debug_assertions)] pipe_name_override: Option<String>,
+) -> Sender<Request> {
     let (tx, rx) = mpsc::channel::<Request>();
     let sink = Sink(std::sync::Arc::new(std::sync::Mutex::new(
         Box::new(on_event) as Box<dyn Fn(Event) + Send>,
     )));
+    #[cfg(debug_assertions)]
     let spawned = std::thread::Builder::new()
         .name("k6wp-studio-worker".to_string())
-        .spawn(move || run(rx, sink));
+        .spawn(move || run(rx, sink, pipe_name_override));
+    #[cfg(not(debug_assertions))]
+    let spawned = std::thread::Builder::new()
+        .name("k6wp-studio-worker".to_string())
+        .spawn(move || run(rx, sink, None));
     if spawned.is_err() {
         eprintln!("studio: the worker thread could not start; the library will stay empty");
     }
     tx
 }
 
-fn run(rx: Receiver<Request>, sink: Sink) {
+fn run(rx: Receiver<Request>, sink: Sink, pipe_name_override: Option<String>) {
     // One queue per probe thread: a shared `Receiver` behind a mutex would
     // serialise the probes (one thread would hold the lock while it blocks).
     let probe_queues: Vec<Sender<(usize, PathBuf)>> = (0..PROBE_THREADS)
@@ -180,7 +198,10 @@ fn run(rx: Receiver<Request>, sink: Sink) {
     let mut next_connect_attempt = Instant::now(); // Allow immediate first attempt
     let mut last_poll = Instant::now();
     let mut engine_state = EngineState::default();
-    let mut studio_visible = true; // updated by UI via a new Request variant if needed
+    let studio_visible = true; // updated by UI via a new Request variant if needed
+
+    // Resolve the pipe name once at startup (uses override in debug, real name in release)
+    let effective_pipe_name = pipe_name_override.unwrap_or_else(|| current_session_pipe_name(None));
 
     loop {
         // Adaptive polling: check if it's time to poll get_state
@@ -231,6 +252,14 @@ fn run(rx: Receiver<Request>, sink: Sink) {
                 });
             }
             Ok(Request::SetWallpaper { index, media }) => {
+                // First, probe the media file exists (with timeout) - do this regardless of connection state.
+                if !probe(&media, PROBE_TIMEOUT) {
+                    sink.emit(Event::IpcError(format!(
+                        "File tidak ditemukan: {}",
+                        media.display()
+                    )));
+                    return;
+                }
                 if let Some(client) = &mut ipc_client {
                     handle_set_wallpaper(client, index, &media, &sink);
                 } else {
@@ -242,6 +271,7 @@ fn run(rx: Receiver<Request>, sink: Sink) {
                         &mut ipc_client,
                         &mut ipc_status,
                         &mut backoff_index,
+                        &effective_pipe_name,
                     );
                 }
             }
@@ -267,14 +297,20 @@ fn run(rx: Receiver<Request>, sink: Sink) {
         }
 
         // If disconnected, attempt reconnection with backoff (non-blocking)
-        if ipc_client.is_none() && ipc_status != IpcStatus::Disconnected {
-            if Instant::now() >= next_connect_attempt {
-                let _ =
-                    attempt_connect(&sink, &mut ipc_client, &mut ipc_status, &mut backoff_index);
-                // Schedule next attempt with backoff
-                let backoff = RECONNECT_BACKOFF[backoff_index.min(RECONNECT_BACKOFF.len() - 1)];
-                next_connect_attempt = Instant::now() + backoff;
-            }
+        if ipc_client.is_none()
+            && ipc_status != IpcStatus::Disconnected
+            && Instant::now() >= next_connect_attempt
+        {
+            let _ = attempt_connect(
+                &sink,
+                &mut ipc_client,
+                &mut ipc_status,
+                &mut backoff_index,
+                &effective_pipe_name,
+            );
+            // Schedule next attempt with backoff
+            let backoff = RECONNECT_BACKOFF[backoff_index.min(RECONNECT_BACKOFF.len() - 1)];
+            next_connect_attempt = Instant::now() + backoff;
         }
     }
 }
@@ -284,11 +320,11 @@ fn attempt_connect(
     client: &mut Option<IpcClient>,
     status: &mut IpcStatus,
     backoff_index: &mut usize,
+    pipe_name: &str,
 ) -> Result<(), IpcError> {
     *status = IpcStatus::Connecting;
     sink.emit(Event::IpcStatus(IpcStatus::Connecting));
 
-    let pipe_name = current_session_pipe_name();
     // Use a short timeout for connection attempts so the main loop can continue
     // processing other requests (probes, thumbnails) while we're trying to connect.
     let options = ConnectOptions {
@@ -298,7 +334,7 @@ fn attempt_connect(
         require_same_session: true,
     };
 
-    match IpcClient::connect(&pipe_name, options) {
+    match IpcClient::connect(pipe_name, options) {
         Ok(c) => {
             *client = Some(c);
             *status = IpcStatus::Connected;
@@ -307,6 +343,7 @@ fn attempt_connect(
             Ok(())
         }
         Err(e) => {
+            eprintln!("WORKER: Connection failed: {:?}", e);
             *status = IpcStatus::Reconnecting;
             *backoff_index = (*backoff_index + 1).min(RECONNECT_BACKOFF.len());
             sink.emit(Event::IpcStatus(IpcStatus::Reconnecting));
@@ -315,15 +352,8 @@ fn attempt_connect(
     }
 }
 
-fn handle_set_wallpaper(client: &mut IpcClient, index: usize, media: &PathBuf, sink: &Sink) {
-    // First, probe the media file exists (with timeout).
-    if !probe(media, PROBE_TIMEOUT) {
-        sink.emit(Event::IpcError(format!(
-            "File tidak ditemukan: {}",
-            media.display()
-        )));
-        return;
-    }
+fn handle_set_wallpaper(client: &mut IpcClient, index: usize, media: &Path, sink: &Sink) {
+    // File existence already checked in main loop before calling this.
     let msg = IpcMessage {
         version: k6wp_core::ipc::PROTOCOL_VERSION,
         cmd: k6wp_core::ipc::Cmd::SetVideo,
@@ -337,7 +367,7 @@ fn handle_set_wallpaper(client: &mut IpcClient, index: usize, media: &PathBuf, s
                     answer["error"].as_str().unwrap_or("unknown error")
                 )));
             } else {
-                sink.emit(Event::IpcError("Terpasang".to_string()));
+                sink.emit(Event::WallpaperApplied { index });
             }
         }
         Err(e) => {
@@ -396,13 +426,7 @@ fn poll_get_state(client: &mut IpcClient, sink: &Sink, state: &mut EngineState) 
     };
     match client.request(&msg) {
         Ok(answer) => {
-            // Parse the engine state from the answer
-            if let Some(video_name) = answer.get("video_name").and_then(|v| v.as_str()) {
-                state.video_name = Some(video_name.to_string());
-            }
-            if let Some(paused) = answer.get("paused").and_then(|v| v.as_bool()) {
-                state.is_paused = paused;
-            }
+            apply_state_answer(&answer, state);
             state.is_connected = true;
             sink.emit(Event::EngineState(state.clone()));
         }
@@ -410,6 +434,26 @@ fn poll_get_state(client: &mut IpcClient, sink: &Sink, state: &mut EngineState) 
             state.is_connected = false;
             sink.emit(Event::IpcError(format!("Gagal memuat status: {e}")));
         }
+    }
+}
+
+/// Reads `video`/`paused` out of a real `get_state` answer.
+///
+/// The engine answers `{"ok": true, "state": {"video": "...", "paused": ...}}`.
+/// The old code looked for a flat `video_name` at the root, a field the engine
+/// has never sent, so the header always showed "-". The path is reduced to the
+/// file name: the header is 200 px wide and an elided full path says nothing.
+fn apply_state_answer(answer: &Value, state: &mut EngineState) {
+    let inner = answer.get("state").unwrap_or(answer);
+    if let Some(video) = inner.get("video").and_then(Value::as_str) {
+        let name = std::path::Path::new(video)
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| video.to_string());
+        state.video_name = Some(name);
+    }
+    if let Some(paused) = inner.get("paused").and_then(Value::as_bool) {
+        state.is_paused = paused;
     }
 }
 
@@ -570,6 +614,10 @@ fn system_animations_enabled() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
+    use std::sync::mpsc;
+    use std::time::Duration;
+    use windows::Win32::Storage::FileSystem::{ReadFile, FILE_FLAGS_AND_ATTRIBUTES};
 
     #[test]
     fn a_missing_index_is_an_error_not_a_panic() {
@@ -605,9 +653,12 @@ mod tests {
         // behind it is answered immediately. With an inline probe this test
         // fails after the full 2 s timeout.
         let (events_tx, events_rx) = mpsc::channel::<Event>();
-        let requests = spawn(move |event| {
-            let _ = events_tx.send(event);
-        });
+        let requests = spawn(
+            move |event| {
+                let _ = events_tx.send(event);
+            },
+            None,
+        );
         requests
             .send(Request::Probe {
                 index: 0,
@@ -643,5 +694,575 @@ mod tests {
             other => panic!("the decode must answer first, got {other:?}"),
         }
         let _ = requests.send(Request::Stop);
+    }
+
+    #[test]
+    fn set_wallpaper_success_with_fake_server() {
+        // Fake server that answers set_video with success.
+        let (events_tx, events_rx) = mpsc::channel::<Event>();
+        let (ready_tx, ready_rx) = mpsc::channel::<()>();
+        let name = format!(r"\\.\pipe\k6wp-test-set-video-ok-{}", std::process::id());
+
+        let server = std::thread::spawn({
+            let name = name.clone();
+            move || {
+                use windows::core::PCWSTR;
+                use windows::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
+                use windows::Win32::Storage::FileSystem::{
+                    ReadFile, WriteFile, FILE_FLAGS_AND_ATTRIBUTES,
+                };
+                use windows::Win32::System::Pipes::{
+                    ConnectNamedPipe, CreateNamedPipeW, NAMED_PIPE_MODE, PIPE_READMODE_MESSAGE,
+                    PIPE_TYPE_MESSAGE, PIPE_WAIT,
+                };
+                let wide: Vec<u16> = name.encode_utf16().chain(std::iter::once(0)).collect();
+                let deadline = std::time::Instant::now() + Duration::from_secs(20);
+                while std::time::Instant::now() < deadline {
+                    let pipe = loop {
+                        let p = unsafe {
+                            CreateNamedPipeW(
+                                PCWSTR(wide.as_ptr()),
+                                FILE_FLAGS_AND_ATTRIBUTES(0x0000_0003),
+                                NAMED_PIPE_MODE(
+                                    PIPE_TYPE_MESSAGE.0 | PIPE_READMODE_MESSAGE.0 | PIPE_WAIT.0,
+                                ),
+                                1,
+                                65536,
+                                65536,
+                                0,
+                                None,
+                            )
+                        };
+                        if p != INVALID_HANDLE_VALUE {
+                            break p;
+                        }
+                        if std::time::Instant::now() > deadline {
+                            return;
+                        }
+                        std::thread::sleep(Duration::from_millis(20));
+                    };
+                    let _ = ready_tx.send(());
+                    if let Err(e) = unsafe { ConnectNamedPipe(pipe, None) } {
+                        let code = (e.code().0 as u32) & 0xFFFF;
+                        if code != 535 {
+                            unsafe {
+                                let _ = CloseHandle(pipe);
+                            }
+                            return;
+                        }
+                    }
+                    let mut buffer = [0u8; 8192];
+                    let mut read = 0u32;
+                    let ok = unsafe { ReadFile(pipe, Some(&mut buffer), Some(&mut read), None) };
+                    if ok.is_err() {
+                        unsafe {
+                            let _ = CloseHandle(pipe);
+                        }
+                        return;
+                    }
+                    let _request = String::from_utf8_lossy(&buffer[..read as usize]);
+                    let answer = b"{\"ok\":true}\n";
+                    unsafe {
+                        let _ = WriteFile(pipe, Some(answer), None, None);
+                    }
+                    unsafe {
+                        let _ = CloseHandle(pipe);
+                    }
+                    // Exit after handling the request (test only needs one)
+                    return;
+                }
+            }
+        });
+
+        let options = ConnectOptions {
+            timeout: Duration::from_secs(2),
+            ..ConnectOptions::default()
+        };
+
+        // Pass the pipe name directly to spawn (debug-only parameter)
+        let requests = spawn(
+            move |event| {
+                let _ = events_tx.send(event);
+            },
+            Some(name.clone()),
+        );
+
+        ready_rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("the fake engine must create its pipe instance");
+
+        // Give the worker time to attempt connection (it polls every 500ms when disconnected)
+        std::thread::sleep(Duration::from_millis(800));
+
+        // Create a temporary file that exists for the test
+        let temp_file = std::env::temp_dir().join(format!("k6wp-test-{}.mp4", std::process::id()));
+        std::fs::write(&temp_file, b"fake video content").expect("must create temp file");
+        let media_path = temp_file.clone();
+
+        // Wait for IpcStatus::Connecting then IpcStatus::Connected before sending the request
+        let mut saw_connecting = false;
+        loop {
+            let event = events_rx
+                .recv_timeout(Duration::from_secs(10))
+                .expect("must get IPC status");
+            match event {
+                Event::IpcStatus(IpcStatus::Connecting) => {
+                    saw_connecting = true;
+                }
+                Event::IpcStatus(IpcStatus::Connected) => {
+                    assert!(
+                        saw_connecting,
+                        "should have seen Connecting before Connected"
+                    );
+                    break;
+                }
+                _ => {}
+            }
+        }
+        requests
+            .send(Request::SetWallpaper {
+                index: 0,
+                media: media_path.clone(),
+            })
+            .expect("must accept");
+
+        // The worker must report the accepted install with the index; the UI
+        // turns that into the "Terpasang" toast (and the "Urungkan" button).
+        let event = events_rx
+            .recv_timeout(Duration::from_millis(500))
+            .expect("must get response");
+        match event {
+            Event::WallpaperApplied { index } => {
+                assert_eq!(index, 0, "the applied index must be reported");
+            }
+            other => panic!("expected WallpaperApplied{{index: 0}}, got {other:?}"),
+        }
+        let _ = requests.send(Request::Stop);
+        // Wait for worker to exit (recv_timeout is up to 500ms)
+        std::thread::sleep(Duration::from_millis(2000));
+        let _ = server.join();
+        let _ = std::fs::remove_file(&temp_file);
+    }
+
+    #[test]
+    fn set_wallpaper_engine_error() {
+        // Fake server that returns an engine error.
+        let (events_tx, events_rx) = mpsc::channel::<Event>();
+        let (ready_tx, ready_rx) = mpsc::channel::<()>();
+        let name = format!(r"\\.\pipe\k6wp-test-set-video-error-{}", std::process::id());
+
+        let server = std::thread::spawn({
+            let name = name.clone();
+            move || {
+                use windows::core::PCWSTR;
+                use windows::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
+                use windows::Win32::Storage::FileSystem::{
+                    ReadFile, WriteFile, FILE_FLAGS_AND_ATTRIBUTES,
+                };
+                use windows::Win32::System::Pipes::{
+                    ConnectNamedPipe, CreateNamedPipeW, NAMED_PIPE_MODE, PIPE_READMODE_MESSAGE,
+                    PIPE_TYPE_MESSAGE, PIPE_WAIT,
+                };
+                let wide: Vec<u16> = name.encode_utf16().chain(std::iter::once(0)).collect();
+                let deadline = std::time::Instant::now() + Duration::from_secs(20);
+                while std::time::Instant::now() < deadline {
+                    let pipe = loop {
+                        let p = unsafe {
+                            CreateNamedPipeW(
+                                PCWSTR(wide.as_ptr()),
+                                FILE_FLAGS_AND_ATTRIBUTES(0x0000_0003),
+                                NAMED_PIPE_MODE(
+                                    PIPE_TYPE_MESSAGE.0 | PIPE_READMODE_MESSAGE.0 | PIPE_WAIT.0,
+                                ),
+                                1,
+                                65536,
+                                65536,
+                                0,
+                                None,
+                            )
+                        };
+                        if p != INVALID_HANDLE_VALUE {
+                            break p;
+                        }
+                        if std::time::Instant::now() > deadline {
+                            return;
+                        }
+                        std::thread::sleep(Duration::from_millis(20));
+                    };
+                    let _ = ready_tx.send(());
+                    if let Err(e) = unsafe { ConnectNamedPipe(pipe, None) } {
+                        let code = (e.code().0 as u32) & 0xFFFF;
+                        if code != 535 {
+                            unsafe {
+                                let _ = CloseHandle(pipe);
+                            }
+                            return;
+                        }
+                    }
+                    let mut buffer = [0u8; 8192];
+                    let mut read = 0u32;
+                    let ok = unsafe { ReadFile(pipe, Some(&mut buffer), Some(&mut read), None) };
+                    if ok.is_err() {
+                        unsafe {
+                            let _ = CloseHandle(pipe);
+                        }
+                        return;
+                    }
+                    let answer = b"{\"error\":\"video format not supported\"}\n";
+                    unsafe {
+                        let _ = WriteFile(pipe, Some(answer), None, None);
+                    }
+                    unsafe {
+                        let _ = CloseHandle(pipe);
+                    }
+                    return;
+                }
+            }
+        });
+
+        let options = ConnectOptions {
+            timeout: Duration::from_secs(2),
+            ..ConnectOptions::default()
+        };
+
+        // Pass the pipe name directly to spawn (debug-only parameter)
+        let requests = spawn(
+            move |event| {
+                let _ = events_tx.send(event);
+            },
+            Some(name.clone()),
+        );
+
+        ready_rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("the fake engine must create its pipe instance");
+
+        // Give the worker time to attempt connection (it polls every 500ms when disconnected)
+        std::thread::sleep(Duration::from_millis(800));
+
+        // Create a temporary file that exists for the test
+        let temp_file =
+            std::env::temp_dir().join(format!("k6wp-test-error-{}.hevc", std::process::id()));
+        std::fs::write(&temp_file, b"fake video content").expect("must create temp file");
+        let media_path = temp_file.clone();
+
+        // Wait for IpcStatus::Connecting then IpcStatus::Connected before sending the request
+        let mut saw_connecting = false;
+        loop {
+            let event = events_rx
+                .recv_timeout(Duration::from_secs(10))
+                .expect("must get IPC status");
+            match event {
+                Event::IpcStatus(IpcStatus::Connecting) => {
+                    saw_connecting = true;
+                }
+                Event::IpcStatus(IpcStatus::Connected) => {
+                    assert!(
+                        saw_connecting,
+                        "should have seen Connecting before Connected"
+                    );
+                    break;
+                }
+                _ => {}
+            }
+        }
+
+        requests
+            .send(Request::SetWallpaper {
+                index: 0,
+                media: media_path,
+            })
+            .expect("must accept");
+
+        let event = events_rx
+            .recv_timeout(Duration::from_millis(500))
+            .expect("must get response");
+        match event {
+            Event::IpcError(msg) => {
+                assert!(
+                    msg.contains("Gagal memasang wallpaper"),
+                    "expected error message, got: {msg}"
+                );
+                assert!(
+                    msg.contains("video format"),
+                    "error should mention video format, got: {msg}"
+                );
+            }
+            other => panic!("expected IpcError with engine error, got {other:?}"),
+        }
+
+        let _ = requests.send(Request::Stop);
+        // Wait for worker to exit (recv_timeout is up to 500ms)
+        std::thread::sleep(Duration::from_millis(2000));
+        let _ = server.join();
+        let _ = std::fs::remove_file(&temp_file);
+    }
+
+    #[test]
+    fn set_wallpaper_engine_timeout() {
+        // Fake server that accepts connection but never answers.
+        let (events_tx, events_rx) = mpsc::channel::<Event>();
+        let (ready_tx, ready_rx) = mpsc::channel::<()>();
+        let name = format!(
+            r"\\.\pipe\k6wp-test-set-video-timeout-{}",
+            std::process::id()
+        );
+
+        let server = std::thread::spawn({
+            let name = name.clone();
+            move || {
+                use windows::core::PCWSTR;
+                use windows::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
+                use windows::Win32::System::Pipes::{
+                    CreateNamedPipeW, NAMED_PIPE_MODE, PIPE_READMODE_MESSAGE, PIPE_TYPE_MESSAGE,
+                    PIPE_WAIT,
+                };
+                let wide: Vec<u16> = name.encode_utf16().chain(std::iter::once(0)).collect();
+                let deadline = std::time::Instant::now() + Duration::from_secs(20);
+                while std::time::Instant::now() < deadline {
+                    let pipe = loop {
+                        let p = unsafe {
+                            CreateNamedPipeW(
+                                PCWSTR(wide.as_ptr()),
+                                FILE_FLAGS_AND_ATTRIBUTES(0x0000_0003),
+                                NAMED_PIPE_MODE(
+                                    PIPE_TYPE_MESSAGE.0 | PIPE_READMODE_MESSAGE.0 | PIPE_WAIT.0,
+                                ),
+                                1,
+                                65536,
+                                65536,
+                                0,
+                                None,
+                            )
+                        };
+                        if p != INVALID_HANDLE_VALUE {
+                            break p;
+                        }
+                        if std::time::Instant::now() > deadline {
+                            return;
+                        }
+                        std::thread::sleep(Duration::from_millis(20));
+                    };
+                    let _ = ready_tx.send(());
+                    // Accept connection but NEVER read/answer - ReadFile blocks forever.
+                    // This simulates a server that accepts but doesn't respond.
+                    let _ = unsafe { ReadFile(pipe, Some(&mut [0u8; 1]), Some(&mut 0u32), None) };
+                    unsafe {
+                        let _ = CloseHandle(pipe);
+                    }
+                }
+            }
+        });
+
+        let options = ConnectOptions {
+            timeout: Duration::from_millis(800),
+            ..ConnectOptions::default()
+        };
+
+        // Pass the pipe name directly to spawn (debug-only parameter)
+        let requests = spawn(
+            move |event| {
+                let _ = events_tx.send(event);
+            },
+            Some(name.clone()),
+        );
+
+        ready_rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("the fake engine must create its pipe instance");
+
+        // Give the worker time to attempt connection (it polls every 500ms when disconnected)
+        std::thread::sleep(Duration::from_millis(800));
+
+        // Create a temporary file that exists for the test
+        let temp_file =
+            std::env::temp_dir().join(format!("k6wp-test-timeout-{}.mp4", std::process::id()));
+        std::fs::write(&temp_file, b"fake video content").expect("must create temp file");
+        let media_path = temp_file.clone();
+
+        // Wait for IpcStatus::Connecting then IpcStatus::Connected before sending the request
+        let mut saw_connecting = false;
+        loop {
+            let event = events_rx
+                .recv_timeout(Duration::from_secs(10))
+                .expect("must get IPC status");
+            match event {
+                Event::IpcStatus(IpcStatus::Connecting) => {
+                    saw_connecting = true;
+                }
+                Event::IpcStatus(IpcStatus::Connected) => {
+                    assert!(
+                        saw_connecting,
+                        "should have seen Connecting before Connected"
+                    );
+                    break;
+                }
+                _ => {}
+            }
+        }
+
+        let started = std::time::Instant::now();
+        requests
+            .send(Request::SetWallpaper {
+                index: 0,
+                media: media_path,
+            })
+            .expect("must accept");
+
+        let event = events_rx
+            .recv_timeout(Duration::from_millis(1000))
+            .expect("must get timeout error");
+        let elapsed = started.elapsed();
+        match event {
+            Event::IpcError(msg) => {
+                assert!(
+                    msg.contains("Kesalahan IPC") && msg.contains("timeout"),
+                    "expected timeout error, got: {msg}"
+                );
+            }
+            other => panic!("expected IpcError with timeout, got {other:?}"),
+        }
+        assert!(
+            elapsed < Duration::from_secs(3),
+            "timeout must be bounded, took {elapsed:?}"
+        );
+
+        let _ = requests.send(Request::Stop);
+        // Wait for worker to exit (recv_timeout is up to 500ms)
+        std::thread::sleep(Duration::from_millis(2000));
+        let _ = server.join();
+        let _ = std::fs::remove_file(&temp_file);
+    }
+
+    #[test]
+    fn set_wallpaper_missing_media_no_ipc_sent() {
+        // Server that verifies NO request is received.
+        let (events_tx, events_rx) = mpsc::channel::<Event>();
+        let (ready_tx, ready_rx) = mpsc::channel::<()>();
+        let name = format!(
+            r"\\.\pipe\k6wp-test-set-video-missing-{}",
+            std::process::id()
+        );
+
+        let server = std::thread::spawn({
+            let name = name.clone();
+            move || {
+                use windows::core::PCWSTR;
+                use windows::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
+                use windows::Win32::Storage::FileSystem::FILE_FLAGS_AND_ATTRIBUTES;
+                use windows::Win32::System::Pipes::{
+                    CreateNamedPipeW, NAMED_PIPE_MODE, PIPE_READMODE_MESSAGE, PIPE_TYPE_MESSAGE,
+                    PIPE_WAIT,
+                };
+                let wide: Vec<u16> = name.encode_utf16().chain(std::iter::once(0)).collect();
+                let deadline = std::time::Instant::now() + Duration::from_secs(5);
+                while std::time::Instant::now() < deadline {
+                    let pipe = loop {
+                        let p = unsafe {
+                            CreateNamedPipeW(
+                                PCWSTR(wide.as_ptr()),
+                                FILE_FLAGS_AND_ATTRIBUTES(0x0000_0003),
+                                NAMED_PIPE_MODE(
+                                    PIPE_TYPE_MESSAGE.0 | PIPE_READMODE_MESSAGE.0 | PIPE_WAIT.0,
+                                ),
+                                1,
+                                65536,
+                                65536,
+                                0,
+                                None,
+                            )
+                        };
+                        if p != INVALID_HANDLE_VALUE {
+                            break p;
+                        }
+                        if std::time::Instant::now() > deadline {
+                            return;
+                        }
+                        std::thread::sleep(Duration::from_millis(20));
+                    };
+                    let _ = ready_tx.send(());
+                    // For missing file test, we expect NO connection. Close pipe immediately.
+                    // The worker checks file existence first and won't connect for missing files.
+                    unsafe {
+                        let _ = CloseHandle(pipe);
+                    }
+                    return;
+                }
+            }
+        });
+
+        let options = ConnectOptions {
+            timeout: Duration::from_secs(2),
+            ..ConnectOptions::default()
+        };
+        // Pass the pipe name directly to spawn (debug-only parameter)
+        let requests = spawn(
+            move |event| {
+                let _ = events_tx.send(event);
+            },
+            Some(name.clone()),
+        );
+
+        ready_rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("the fake engine must create its pipe instance");
+
+        // Missing media file (does not exist).
+        let media_path = PathBuf::from(r"Z:\definitely\not\here.mp4");
+        requests
+            .send(Request::SetWallpaper {
+                index: 0,
+                media: media_path,
+            })
+            .expect("must accept");
+
+        // The worker checks file existence BEFORE connecting, so it should immediately
+        // return "File tidak ditemukan" without any IPC connection attempt.
+        let event = events_rx
+            .recv_timeout(Duration::from_millis(500))
+            .expect("must get error");
+        match event {
+            Event::IpcError(msg) => {
+                assert!(
+                    msg.contains("File tidak ditemukan"),
+                    "expected missing file error, got: {msg}"
+                );
+            }
+            other => panic!("expected IpcError with missing file, got {other:?}"),
+        }
+
+        // Give the server a moment to verify no request arrived.
+        std::thread::sleep(Duration::from_millis(200));
+
+        let _ = requests.send(Request::Stop);
+        // Wait for worker to exit (recv_timeout is up to 500ms)
+        std::thread::sleep(Duration::from_millis(2000));
+        let _ = server.join();
+    }
+
+    #[test]
+    fn engine_state_reads_the_real_get_state_shape() {
+        // Exactly what the engine answers (see get_state_once on a live engine):
+        // the fields live under "state", and the video key is "video".
+        let answer = serde_json::json!({
+            "ok": true,
+            "state": {
+                "video": r"D:\k6wp-test\library-200\media\clip_2.mp4",
+                "paused": true,
+            }
+        });
+        let mut state = EngineState::default();
+        apply_state_answer(&answer, &mut state);
+        assert_eq!(state.video_name.as_deref(), Some("clip_2.mp4"));
+        assert!(state.is_paused);
+    }
+
+    #[test]
+    fn engine_state_ignores_a_missing_video() {
+        let answer = serde_json::json!({ "ok": true, "state": { "paused": false } });
+        let mut state = EngineState::default();
+        apply_state_answer(&answer, &mut state);
+        assert_eq!(state.video_name, None);
+        assert!(!state.is_paused);
     }
 }

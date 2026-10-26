@@ -189,6 +189,10 @@ export component AppWindow inherits Window {
 
     // Toast notification
     in-out property <string> toast: "";
+    /// Show the "Urungkan" action inside the toast.
+    in-out property <bool> undo-available: false;
+    /// Guards the auto-clear: only the toast that set this value may clear it.
+    in-out property <int> toast-generation: 0;
 
     // Rust rebuilds the row model when the column count changes.
     callback rebuild-grid(width: length);
@@ -200,6 +204,8 @@ export component AppWindow inherits Window {
     callback pause();
     // User clicked "Lanjut" in the header.
     callback resume();
+    // User clicked "Urungkan" in the toast: go back to the previous wallpaper.
+    callback undo();
 
     title: "K6WP Studio";
     preferred-width: 960px;
@@ -338,11 +344,20 @@ export component AppWindow inherits Window {
             background: #333333ee;
             border-radius: Tokens.radius-md;
             padding: Tokens.space-md;
-            Text {
-                text: toast;
-                color: #ffffff;
-                font-size: Tokens.font-md;
-                font-family: Tokens.font-family;
+            HorizontalLayout {
+                spacing: Tokens.space-md;
+                Text {
+                    text: toast;
+                    color: #ffffff;
+                    font-size: Tokens.font-md;
+                    font-family: Tokens.font-family;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
+                if undo-available : Button {
+                    text: "Urungkan";
+                    clicked => { root.undo(); }
+                }
             }
         }
 

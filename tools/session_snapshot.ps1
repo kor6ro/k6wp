@@ -13,6 +13,20 @@
 #
 # The restore puts everything back exactly as it was.
 
+# `[Win]` must exist before the SessionSnapshot class is parsed, not inside a
+# method: PowerShell resolves class member types at parse time.
+if (-not ("Win" -as [type])) {
+    Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class Win {
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+}
+"@
+}
+
 function Get-CurrentWallpaper {
     # Get wallpaper for each monitor via registry.
     $result = @{}
@@ -69,19 +83,11 @@ function Get-DisplayConfig {
 }
 
 function Get-ActiveWindow {
-    Add-Type @"
-using System;
-using System.Runtime.InteropServices;
-public class Win {
-    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
-    [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
-}
-"@
     $hwnd = [Win]::GetForegroundWindow()
     if ($hwnd -ne [IntPtr]::Zero) {
-        $pid = 0
-        [Win]::GetWindowThreadProcessId($hwnd, [ref]$pid)
-        return @{ Handle = $hwnd; ProcessId = $pid }
+        $windowPid = 0
+        $null = [Win]::GetWindowThreadProcessId($hwnd, [ref]$windowPid)
+        return @{ Handle = $hwnd; ProcessId = $windowPid }
     }
     return $null
 }
@@ -143,14 +149,10 @@ class SessionSnapshot {
         # foreach ($d in $this.Displays) { ... }
         if ($this.ActiveWindow) {
             Write-Host "Restoring active window focus..."
-            Add-Type @"
-using System;
-using System.Runtime.InteropServices;
-public class Win {
-    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
-}
-"@
-            [Win]::SetForegroundWindow($this.ActiveWindow.Handle) | Out-Null
+            # `[Win]` is added at run time, so resolve it dynamically: a class
+            # body is parsed before Add-Type has run.
+            $win = "Win" -as [type]
+            if ($win) { $win::SetForegroundWindow($this.ActiveWindow.Handle) | Out-Null }
         }
     }
 }
@@ -166,4 +168,8 @@ function Invoke-SessionSafe {
     }
 }
 
-Export-ModuleMember -Function Invoke-SessionSafe, Get-CurrentWallpaper, Get-LockScreenImage, Get-DisplayConfig, Get-ActiveWindow, Set-Wallpaper
+try {
+    Export-ModuleMember -Function Invoke-SessionSafe, Get-CurrentWallpaper, Get-LockScreenImage, Get-DisplayConfig, Get-ActiveWindow, Set-Wallpaper
+} catch {
+    # Dot-sourced (not imported as a module): nothing to export.
+}

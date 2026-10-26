@@ -212,6 +212,6 @@ fn the_live_engine_answers_the_whole_command_set() {
         .request(&message(Cmd::Quit, serde_json::json!({})))
         .expect("quit must answer");
     eprintln!("the quit was answered with: {ack}");
-    let name = current_session_pipe_name();
+    let name = current_session_pipe_name(None);
     eprintln!("the pipe was {name}");
 }

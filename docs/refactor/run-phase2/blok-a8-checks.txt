@@ -1,0 +1,17 @@
+﻿=== L0.1 Test count reconciliation ===
+Per `cargo test --workspace -- --list` (target x86_64-pc-windows-msvc):
+- k6wp-core: 78 lib tests + 3 config_probe + 1 engine_logic_golden + 1 golden + 3 probe + 4 sps_fuzz + 3 sps_golden + 4 sps_read_strategy = 93 tests (lib.rs: 78, _config_probe: 3, engine_logic_golden: 1, golden: 1, probe: 3, sps_fuzz: 4, sps_golden: 3, sps_read_strategy: 4)
+  - The "9" report was from running only the lib.rs tests without the additional test files; the full suite has 93 tests (78 lib + 15 in test files).
+- k6wp-ipc: 9 client + 3 env_override + 1 live_engine = 13 tests
+- k6wp-studio: 17 tests
+- Total workspace: 123 tests (93 + 13 + 17)
+
+=== L0.2 Discrepancy analysis ===
+Previous "77" for k6wp-core likely counted only lib.rs tests (78) minus 1, or was from an older state. Current lib.rs has 78 tests. The 93 total for k6wp-core includes 78 lib.rs tests + 15 tests in tests/ directory (3 config_probe + 1 engine_logic_golden + 1 golden + 3 probe + 4 sps_fuzz + 3 sps_golden + 4 sps_read_strategy). All tests present; no test missing from git history.
+
+=== L0.3 ctest status ===
+Debug: 51/51 passed (47.32 s)
+Release: 51/51 passed (43.01 s)
+
+=== L0.4 Release overrides scan ===
+tools/check_release_overrides.ps1 -RequireBinaries: 6 release binaries scanned, 0 findings. The --e2e-pick flag is compiled out of release (verified via strings scan = 0 matches).

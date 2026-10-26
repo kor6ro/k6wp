@@ -192,7 +192,7 @@ fn box_resize(src: &[u8], sw: u32, sh: u32, dw: u32, dh: u32) -> Vec<u8> {
                 out[o + 3] = 0;
             } else {
                 for c in 0..4 {
-                    out[o + c] = (acc[c] / n) as u8;
+                    out[o + c] = acc[c].checked_div(n).unwrap_or(0) as u8;
                 }
             }
         }

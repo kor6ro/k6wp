@@ -1,0 +1,12 @@
+{
+  "failures": 3,
+  "max_ms": 9,
+  "p50_ms": 2,
+  "p95_ms": 3,
+  "p99_ms": 6,
+  "pipe_busy_failures": 0,
+  "policy": "keep-alive",
+  "requests": 150,
+  "threads": 4,
+  "total_requests": 600
+}

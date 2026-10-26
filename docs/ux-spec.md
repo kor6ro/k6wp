@@ -18,6 +18,14 @@ font Segoe UI Variable; icons inline SVG; reduced-motion honored.
 UI thread performs NO file/network/IPC/registry I/O. All via worker with timeout. Enforced by
 tools/lint_ui_thread.ps1 (self-test present).
 
+## IPC Connection Policy (M2)
+Studio worker maintains a single keep-alive connection to the engine (C++ `kMaxPipeInstances = 4`).
+Idle connections are reaped after 5 seconds (matching Qt Studio's `kIdleDisconnectMs = 5000` in
+`studio/src/ipc_client.cpp:28`). Reconnection uses bounded `WaitNamedPipe` with backoff
+(1→2→4→8→30s). Stress test data (1000 req, n=3): keep-alive 0% failure at 1 thread (Studio's
+actual usage), 0.3% at 4 threads; short-connection 0.3% at 4 threads but higher max latency.
+Chosen: keep-alive (matches Qt Studio, 0% failure at Studio's 1-thread usage, lower latency).
+
 ## Thumbnailer
 Decision pending measurement (ADR): ffmpeg.exe subprocess (concurrency <=2, per-frame timeout)
 vs IShellItemImageFactory. Contract: location/format per contract-inventory.md so old library

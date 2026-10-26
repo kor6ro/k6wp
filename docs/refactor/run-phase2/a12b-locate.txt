@@ -1,0 +1,161 @@
+﻿# A-12b locate - raw output (2026-10-26T10:44:27)
+CWD: C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden
+
+## git worktree list
+C:/Users/axioo/Desktop/k6wp                                                          f9ef436 [refactor/rust]
+C:/Users/axioo/.local/share/kilo/worktree-pool/k6wp-4c21bff0936c/catkin-pomelo       f58192c (detached HEAD)
+C:/Users/axioo/.local/share/kilo/worktree-pool/refactor-1714629962b2/round-armadillo 9923cc0 (detached HEAD)
+C:/Users/axioo/.local/share/opencode/worktree/1e41a2/curious-meadow                  f9ef436 (detached HEAD)
+C:/Users/axioo/.local/share/opencode/worktree/1e41a2/proud-garden                    d11e19a [refactor/rust-wt]
+C:/Users/axioo/.local/share/opencode/worktree/1e41a2/witty-island                    c35b170 (detached HEAD)
+C:/Users/axioo/Desktop/k6wp/build/wt-baseline                                        9923cc0 (detached HEAD)
+C:/Users/axioo/Desktop/k6wp/build/wt-baseline-v2                                     340da84 (detached HEAD)
+
+
+## git branch -a -vv
+  dr/P0                      8bf875f test(P0): characterization golden + labeled red tests (dr/B1-B4)
+  dr/P1                      62fdc75 feat(P1): implement pure diff_topology + retry_schedule_due
+  dr/P2a                     ce09b57 fix(P2a): bounded QueryDisplayConfig retry on ERROR_INSUFFICIENT_BUFFER; drop unused includes
+  dr/P3                      85bbf29 merge(P2a): tiered monitor identity (ccd/edid/gdi) + stable_key + displays key_stable/key_aliases
+  feature/display-resilience 7812889 docs: changelog for 0.0.1-alpha.2
+  main                       9923cc0 [origin/main] test: pin vendored ffmpeg for compress friendly-error check
++ refactor/rust              f9ef436 (C:/Users/axioo/Desktop/k6wp) R1: koreksi label & hitungan
+* refactor/rust-wt           d11e19a blok A-7: IPC set wallpaper proof + E2E flag + fake server tests + measurements
+  remotes/origin/HEAD        -> origin/main
+  remotes/origin/main        9923cc0 test: pin vendored ffmpeg for compress friendly-error check
+
+
+## git log --all --oneline -40
+c35b170 docs(refactor): begin A-12, record IPC-coexistence prerequisites (partial)
+d11e19a blok A-7: IPC set wallpaper proof + E2E flag + fake server tests + measurements
+4791b80 blok A-6: IPC connection + set wallpaper with measured evidence
+9c96f8f blok A-5: Library 200-item page in Slint Studio with measured evidence
+b40814a docs: Blok A-4 report (studio release, advisories, FFMPEG gate, golden DRAFT)
+fc11859 fix(build): studio release builds; clipboard-win upgrade; K6WP_FFMPEG debug-only; golden DRAFT
+a7f0ffd docs: Blok A-3 report (branch, overrides, audit, golden 56 cases)
+96200c4 feat(tests): populate studio_logic.json with 56 cases (7 modules x 8)
+aa6ef87 docs: Blok A-2 report (sync, ctest 51/51, gates, A1 partial)
+0b1b9fe fix(tests): normalize golden files to LF + .gitattributes (ctest golden/engine_logic pass)
+4dd41d3 docs: Blok A recovery report + NEXT TASK A1
+7a76985 fix(build): restore vendored nlohmann/json.hpp (3.11.3) so C++ builds
+12fe669 phase2: bootstrap docs, lint, tokens, golden skeleton, license/gate2 packages (partial run)
+f9ef436 R1: koreksi label & hitungan
+b84f562 fix(engine): the DPB frame size follows bit depth and chroma (H2/H3)
+6a37fbd chore: prove the diagnostic overrides are compiled out of release (L5)
+34a391c fix(ipc): the Rust client waits for a free pipe instance (L4)
+d168005 fix(engine): take the last filesystem call off the get_state poll path (L2)
+acdf6ee fix(engine): delete the unconsumed thread_count and its poll spike (L1)
+7c4f420 docs: write the continue-a-session page in STATE (v1.10)
+c72bff6 fix: serialize the config writers with one cross-process lock (J3)
+3f41d24 chore: catch accidental non-Latin text before it reaches a commit (H4)
+1281708 chore: the engine log artifact from the stress run
+699c87d fix(engine): the get_state was paying a system-wide thread snapshot (K1)
+0787e0b test: root the two flakes and gate the suite's stability (J2)
+9e7ec8b docs(refactor): the G1 verdict is an owner-directed trade-off, with the held-back RAM measured (H1)
+dcbb850 docs(refactor): add STATE.md - the one page every session reads first (I5)
+a9265f5 feat(build): the environment overrides are compiled out of the release build (I4)
+7181a2c feat(config): the save preserves the unknown keys (I3)
+f4d4d3b chore(fuzz): keep the cargo-fuzz build artifacts out of git
+97febbc feat(core): the SPS parser seeks instead of reading a prefix (I2)
+060fd81 test(engine): prove the G5 fixtures against the baseline build (I1)
+09de72c docs(refactor): strip the BOM the ledger write added
+dd84159 docs(refactor): record the ZIP target as deferred to Phase 3 (G7)
+1c197f4 feat(ipc): the Rust IPC client verifies the server before it trusts it (G6 + 2.6)
+e7abb40 feat(engine): freeze the engine's pure logic as golden fixtures (G5)
+a5c1556 feat(config): read a newer config best-effort instead of resetting it (G4)
+bf8a883 docs(refactor): reconcile the ctest note with the measurement (G3)
+ac09bfb feat(core): harden the SPS parser against untrusted input (G2)
+a1aed40 feat(compressor): the DPB threshold becomes a byte budget (G1)
+
+
+## git reflog -30
+d11e19a HEAD@{0}: commit: blok A-7: IPC set wallpaper proof + E2E flag + fake server tests + measurements
+4791b80 HEAD@{1}: commit: blok A-6: IPC connection + set wallpaper with measured evidence
+9c96f8f HEAD@{2}: commit: blok A-5: Library 200-item page in Slint Studio with measured evidence
+b40814a HEAD@{3}: commit: docs: Blok A-4 report (studio release, advisories, FFMPEG gate, golden DRAFT)
+fc11859 HEAD@{4}: commit: fix(build): studio release builds; clipboard-win upgrade; K6WP_FFMPEG debug-only; golden DRAFT
+a7f0ffd HEAD@{5}: commit: docs: Blok A-3 report (branch, overrides, audit, golden 56 cases)
+96200c4 HEAD@{6}: commit: feat(tests): populate studio_logic.json with 56 cases (7 modules x 8)
+aa6ef87 HEAD@{7}: checkout: moving from aa6ef87b178e55d6b5b6cd47ee65436de8eb9c8d to refactor/rust-wt
+aa6ef87 HEAD@{8}: commit: docs: Blok A-2 report (sync, ctest 51/51, gates, A1 partial)
+0b1b9fe HEAD@{9}: commit: fix(tests): normalize golden files to LF + .gitattributes (ctest golden/engine_logic pass)
+4dd41d3 HEAD@{10}: commit: docs: Blok A recovery report + NEXT TASK A1
+7a76985 HEAD@{11}: commit: fix(build): restore vendored nlohmann/json.hpp (3.11.3) so C++ builds
+12fe669 HEAD@{12}: commit: phase2: bootstrap docs, lint, tokens, golden skeleton, license/gate2 packages (partial run)
+f9ef436 HEAD@{13}: 
+
+
+## git status --short (HEAD d11e19a)
+ M docs/refactor/STATE.md
+ M docs/refactor/ledger.md
+ M docs/ux-spec.md
+ M rust/crates/k6wp-ipc/examples/stress_client.rs
+ M rust/crates/k6wp-ipc/src/lib.rs
+ M rust/crates/k6wp-ipc/tests/client.rs
+ M rust/crates/k6wp-ipc/tests/env_override.rs
+ M rust/crates/k6wp-ipc/tests/live_engine.rs
+ M rust/crates/k6wp-studio/src/main.rs
+ M rust/crates/k6wp-studio/src/worker.rs
+?? Testing/
+?? docs/bench/studio-ipc-policy.json
+?? docs/refactor/RUN-BLOK-A10.md
+?? docs/refactor/RUN-BLOK-A11.md
+?? docs/refactor/RUN-BLOK-A8.md
+?? docs/refactor/RUN-BLOK-A9.md
+?? docs/refactor/run-phase2/blok-a8-checks.txt
+?? docs/refactor/run-phase2/blok-a9-checks.txt
+?? rust/crates/k6wp-ipc/examples/stress_pause_resume.rs
+
+
+## Hashes: git cat-file -t + git branch -a --contains
+--- 9c96f8f
+commit
+* refactor/rust-wt
+--- 4791b80
+commit
+* refactor/rust-wt
+--- d11e19a
+commit
+* refactor/rust-wt
+--- 7a76985
+commit
+* refactor/rust-wt
+--- f9ef436
+commit
++ refactor/rust; * refactor/rust-wt
+
+## Files present (proud-garden vs Desktop/k6wp)
+file	 proud-garden	 Desktop/k6wp
+rust/crates/k6wp-studio/src/worker.rs	True	False
+rust/crates/k6wp-studio/src/grid.rs	True	False
+rust/crates/k6wp-studio/src/thumbs.rs	True	False
+tools/measure_studio_library.ps1	True	False
+tools/e2e_set_wallpaper.ps1	True	False
+docs/bench/studio-library-200.json	True	False
+docs/img/library-200-light.png	True	False
+rust/crates/k6wp-ipc/examples/stress_pause_resume.rs	True	False
+
+## git fsck --lost-found (read-only)
+dangling commit d364a752ef0ed1df82835ac9ee55ba7ee76acb2f
+dangling blob 6ba52c96e793b13f0e5f6f38a539307bee652d0b
+dangling commit a18c4df792ade51199c5440a902ffca9fa38aa62
+dangling commit 35509111701a3b6224f2638fefcd950f2adb6f20
+dangling commit 64926f96ca1e3ebdae9582db54d7611b92a17f76
+dangling commit 36db82ca158f0f04ec2b4f2130b2526c6481debe
+
+## c35b170: A-12 partial docs in the witty-island worktree (detached)
+c35b170 docs(refactor): begin A-12, record IPC-coexistence prerequisites (partial)
+ docs/refactor/ROADMAP.md                           | 47 +++++++++++
+ docs/refactor/RUN-BLOK-A12.md                      | 38 +++++++++
+ docs/refactor/STATE.md                             | 19 ++++-
+ .../run-phase2/A-12-coexistence-precheck.md        | 94 ++++++++++++++++++++++
+ 4 files changed, 197 insertions(+), 1 deletion(-)
+
+## Conclusion
+Category: (A) the work is in another worktree/branch, plus uncommitted WIP in the same folder.
+A-5/A-6/A-7: commits 9c96f8f, 4791b80, d11e19a are reachable only from refactor/rust-wt (proud-garden).
+A-8..A-11: NOT committed. They exist as working-tree changes + untracked reports/artifacts in proud-garden:
+  modified worker.rs/main.rs/ipc lib, untracked stress_pause_resume.rs, studio-ipc-policy.json, RUN-BLOK-A8..A11.md.
+Desktop/k6wp (refactor/rust at f9ef436) has NONE of the 8 target files: it is the shell-only Studio.
+No dangling commit carries A-5..A-11 (fsck: 6 dangling objects, all older/irrelevant; c35b170 is a separate A-12 doc commit in witty-island).
+Official: branch refactor/rust-wt, folder C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden.

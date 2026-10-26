@@ -118,16 +118,32 @@ Remove-Item $csPath -Force
 [void][BenchCap]::SetProcessDpiAwarenessContext([BenchCap]::PER_MONITOR_AWARE_V2)
 
 function Get-GpuMemoryMb([int]$ProcessId) {
-    $result = @{ shared = $null; dedicated = $null; available = $false }
+    # The counter instances are named `pid_<n>_luid_..._phys_...`, one per
+    # adapter/engine, so a bare `pid_<n>` path never matches. Enumerate the
+    # wildcard set, keep this pid's instances, and SUM them: a process can hold
+    # memory on more than one adapter.
+    $result = @{ shared = $null; dedicated = $null; available = $false; instances = 0; reason = $null }
+    $pattern = "^pid_$ProcessId(_|$)"
     try {
-        $sample = Get-Counter "\GPU Process Memory(pid_$ProcessId)\Shared Usage" -ErrorAction Stop
-        $result.shared = [math]::Round($sample.CounterSamples[0].CookedValue / 1MB, 1)
-        $result.available = $true
-    } catch { }
+        $samples = (Get-Counter "\GPU Process Memory(*)\Shared Usage" -ErrorAction Stop).CounterSamples
+        $mine = @($samples | Where-Object { $_.InstanceName -match $pattern -and $_.Status -eq 0 })
+        if ($mine.Count -gt 0) {
+            $result.shared = [math]::Round((($mine | Measure-Object -Property CookedValue -Sum).Sum) / 1MB, 1)
+            $result.instances = $mine.Count
+            $result.available = $true
+        } else {
+            $result.reason = "no GPU Process Memory instance for pid $ProcessId"
+        }
+    } catch {
+        $result.reason = $_.Exception.Message
+    }
     try {
-        $sample = Get-Counter "\GPU Process Memory(pid_$ProcessId)\Dedicated Usage" -ErrorAction Stop
-        $result.dedicated = [math]::Round($sample.CounterSamples[0].CookedValue / 1MB, 1)
-        $result.available = $true
+        $samples = (Get-Counter "\GPU Process Memory(*)\Dedicated Usage" -ErrorAction Stop).CounterSamples
+        $mine = @($samples | Where-Object { $_.InstanceName -match $pattern -and $_.Status -eq 0 })
+        if ($mine.Count -gt 0) {
+            $result.dedicated = [math]::Round((($mine | Measure-Object -Property CookedValue -Sum).Sum) / 1MB, 1)
+            $result.available = $true
+        }
     } catch { }
     return $result
 }
@@ -212,22 +228,26 @@ for ($i = 1; $i -le $Runs; $i++) {
     $libReady = Read-LibReady $started.ErrorFile
     Start-Sleep -Milliseconds 600
     $started.Process.Refresh()
+    $gpuFirst = Get-GpuMemoryMb $started.Process.Id
     $first = @{
         private_mb = [math]::Round($started.Process.PrivateMemorySize64 / 1MB, 1)
         working_set_mb = [math]::Round($started.Process.WorkingSet64 / 1MB, 1)
-        gpu_shared_mb = (Get-GpuMemoryMb $started.Process.Id).shared
-        gpu_dedicated_mb = (Get-GpuMemoryMb $started.Process.Id).dedicated
+        gpu_shared_mb = $gpuFirst.shared
+        gpu_dedicated_mb = $gpuFirst.dedicated
+        gpu_instances = $gpuFirst.instances
+        gpu_reason = $gpuFirst.reason
         window = "$($content.Width)x$($content.Height)"
     }
 
     [BenchCap]::ScrollDown($started.Process.MainWindowHandle, $ScrollNotches, 8)
     Start-Sleep -Milliseconds 2000
     $started.Process.Refresh()
+    $gpuAfter = Get-GpuMemoryMb $started.Process.Id
     $after = @{
         private_mb = [math]::Round($started.Process.PrivateMemorySize64 / 1MB, 1)
         working_set_mb = [math]::Round($started.Process.WorkingSet64 / 1MB, 1)
-        gpu_shared_mb = (Get-GpuMemoryMb $started.Process.Id).shared
-        gpu_dedicated_mb = (Get-GpuMemoryMb $started.Process.Id).dedicated
+        gpu_shared_mb = $gpuAfter.shared
+        gpu_dedicated_mb = $gpuAfter.dedicated
     }
     $stalls = Read-Stalls $started.ErrorFile
     # Let the watchdog see one more idle second: an idle Studio must not stall.
@@ -243,6 +263,8 @@ for ($i = 1; $i -le $Runs; $i++) {
         working_set_mb_first = $first.working_set_mb
         gpu_shared_mb_first = $first.gpu_shared_mb
         gpu_dedicated_mb_first = $first.gpu_dedicated_mb
+        gpu_instances_first = $first.gpu_instances
+        gpu_reason_first = $first.gpu_reason
         private_mb_after_scroll = $after.private_mb
         working_set_mb_after_scroll = $after.working_set_mb
         gpu_shared_mb_after_scroll = $after.gpu_shared_mb
@@ -334,7 +356,7 @@ $doc = [ordered]@{
         first_frame = "poll PrintWindow(PW_RENDERFULLCONTENT) every 25 ms; first frame with >1 colour in the client area; resolution 25 ms"
         lib_ready = "app-side: stderr 'LIBREADY <ms>' under --ui-watch, printed when the library model is filled"
         private_bytes = "Process.PrivateMemorySize64 after the first frame and after an end-to-end scroll"
-        gpu_shared = "perf counter '\GPU Process Memory(pid_N)\Shared Usage' and '\GPU Process Memory(pid_N)\Dedicated Usage'"
+        gpu_shared = "Get-Counter '\GPU Process Memory(*)\Shared Usage' and '...\Dedicated Usage'; instances matching '^pid_<pid>_' are summed (one per adapter/engine); a missing instance is reported as gpu_reason, never silently 0"
         uiblock = "app-side watchdog: post to own event loop every 8 ms, print 'UIBLOCK <ms>' when an answer takes >16 ms; counted over the scroll and over 1 s of idle"
         idle_cpu = "run without --ui-watch: TotalProcessorTime delta over $IdleSeconds s, percent of one core"
         scroll = "$ScrollNotches wheel notches, 8 ms apart, pointer over the client area centre"

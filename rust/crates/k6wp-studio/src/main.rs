@@ -11,6 +11,7 @@
 slint::include_modules!();
 
 mod grid;
+mod history;
 mod thumbs;
 mod worker;
 
@@ -65,6 +66,8 @@ struct Studio {
     engine_state: EngineState,
     /// Toast message to show (auto-clears after a delay).
     toast: Option<String>,
+    /// The accepted install plus the picture "Urungkan" returns to.
+    history: history::WallpaperHistory,
     /// E2E test: index to pick for set_wallpaper (debug-only).
     #[cfg(debug_assertions)]
     e2e_pick: Option<usize>,
@@ -89,17 +92,14 @@ fn with_studio(f: impl FnOnce(&mut Studio)) {
 
 /// The library index the Studio reads - the SAME file the Qt Studio reads
 /// (the C++ override first, then %LOCALAPPDATA%\K6WP\library.json).
-fn library_index_path() -> Option<PathBuf> {
+fn library_index_path(library_override: Option<&str>) -> Option<PathBuf> {
     // The override is compiled OUT of the release build (task I4): a
     // shipped binary must not let an environment variable redirect the
     // library path. The release binaries are scanned by
     // tools/check_release_overrides.ps1.
-    #[cfg(debug_assertions)]
-    {
-        if let Ok(override_path) = std::env::var("K6WP_LIBRARY_JSON") {
-            if !override_path.is_empty() {
-                return Some(PathBuf::from(override_path));
-            }
+    if let Some(override_path) = library_override {
+        if !override_path.is_empty() {
+            return Some(PathBuf::from(override_path));
         }
     }
     let local = std::env::var("LOCALAPPDATA").ok()?;
@@ -150,6 +150,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // The worker talks back through the event loop: nothing it computes is
     // applied to a Slint property off the UI thread.
     let weak = ui.as_weak();
+    #[cfg(debug_assertions)]
+    let tx = worker::spawn(
+        move |event| {
+            let weak = weak.clone();
+            let _ = slint::invoke_from_event_loop(move || {
+                if weak.upgrade().is_some() {
+                    with_studio(|studio| studio.on_event(event));
+                }
+            });
+        },
+        None,
+    );
+    #[cfg(not(debug_assertions))]
     let tx = worker::spawn(move |event| {
         let weak = weak.clone();
         let _ = slint::invoke_from_event_loop(move || {
@@ -168,6 +181,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
     ui.on_pause(|| with_studio(|studio| studio.pause()));
     ui.on_resume(|| with_studio(|studio| studio.resume()));
+    ui.on_undo(|| with_studio(|studio| studio.undo()));
 
     STUDIO.with(|slot| {
         *slot.borrow_mut() = Some(Studio {
@@ -186,6 +200,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             ipc_status: IpcStatus::Disconnected,
             engine_state: EngineState::default(),
             toast: None,
+            history: history::WallpaperHistory::default(),
             #[cfg(debug_assertions)]
             e2e_pick: None,
         });
@@ -196,7 +211,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let _ = tx.send(Request::Theme);
 
-    match library_index_path() {
+    match library_index_path(
+        #[cfg(debug_assertions)]
+        std::env::var("K6WP_LIBRARY_JSON").ok().as_deref(),
+        #[cfg(not(debug_assertions))]
+        None,
+    ) {
         Some(path) => {
             let _ = tx.send(Request::Load { path });
         }
@@ -288,7 +308,23 @@ impl Studio {
                 self.update_engine_ui();
             }
             Event::IpcError(message) => {
-                self.show_toast(message);
+                self.show_toast(message, false);
+            }
+            Event::WallpaperApplied { index } => {
+                let Some(card) = self.cards.get(index) else {
+                    return;
+                };
+                let undo = self.history.record(history::WallpaperRef {
+                    index,
+                    name: card.name.clone(),
+                    media: card.media.clone(),
+                });
+                let name = self
+                    .history
+                    .applied()
+                    .map(|a| a.name.clone())
+                    .unwrap_or_default();
+                self.show_toast(format!("Terpasang: {name}"), undo);
             }
         }
     }
@@ -508,10 +544,10 @@ impl Studio {
     fn update_connection_ui(&mut self) {
         use slint::{Brush, Color};
         let (text, color) = match self.ipc_status {
-            worker::IpcStatus::Disconnected => ("Terputus", 0xFF_d32f2f),
-            worker::IpcStatus::Connecting => ("Menghubungkan...", 0xFF_f57c00),
-            worker::IpcStatus::Connected => ("Terhubung", 0xFF_388e3c),
-            worker::IpcStatus::Reconnecting => ("Menghubungkan ulang...", 0xFF_f57c00),
+            worker::IpcStatus::Disconnected => ("Terputus", 0xFF_D32F2F),
+            worker::IpcStatus::Connecting => ("Menghubungkan...", 0xFF_F57C00),
+            worker::IpcStatus::Connected => ("Terhubung", 0xFF_388E3C),
+            worker::IpcStatus::Reconnecting => ("Menghubungkan ulang...", 0xFF_F57C00),
         };
         self.ui.set_connection_status(SharedString::from(text));
         let c = Color::from_argb_encoded(color);
@@ -528,20 +564,41 @@ impl Studio {
         self.ui.set_is_paused(self.engine_state.is_paused);
     }
 
-    /// Shows a toast message that auto-clears after a delay.
-    fn show_toast(&mut self, message: String) {
+    /// Shows a toast message that auto-clears after a delay. `undo` shows the
+    /// "Urungkan" button; a newer toast (or a newer message) wins the timeout.
+    fn show_toast(&mut self, message: String, undo: bool) {
         self.toast = Some(message.clone());
         self.ui.set_toast(SharedString::from(message));
-        // Auto-clear after 3 seconds
+        self.ui.set_undo_available(undo);
+        let generation = self.ui.get_toast_generation().wrapping_add(1);
+        self.ui.set_toast_generation(generation);
+        // Auto-clear after 3 seconds, unless another toast replaced this one.
         let ui_weak = self.ui.as_weak();
         std::thread::spawn(move || {
             std::thread::sleep(Duration::from_secs(3));
             let _ = slint::invoke_from_event_loop(move || {
                 if let Some(ui) = ui_weak.upgrade() {
-                    ui.set_toast(SharedString::from(""));
+                    if ui.get_toast_generation() == generation {
+                        ui.set_toast(SharedString::from(""));
+                        ui.set_undo_available(false);
+                    }
                 }
             });
         });
+    }
+
+    /// Callback: user clicked "Urungkan" in the toast. Re-applies the picture
+    /// that was live before the last successful install.
+    fn undo(&mut self) {
+        let Some(previous) = self.history.take_undo() else {
+            return;
+        };
+        self.ui.set_undo_available(false);
+        let _ = self.tx.send(Request::SetWallpaper {
+            index: previous.index,
+            media: previous.media.clone(),
+        });
+        self.show_toast(format!("Mengembalikan: {}", previous.name), false);
     }
 
     /// Callback: user clicked "Pasang" on a library card.
@@ -552,7 +609,7 @@ impl Studio {
         }
         let media = media_path.to_string();
         if media.is_empty() {
-            self.show_toast("Path media kosong".to_string());
+            self.show_toast("Path media kosong".to_string(), false);
             return;
         }
         // Check if file exists (the worker will do the real probe with timeout)
@@ -560,7 +617,7 @@ impl Studio {
             index,
             media: media.into(),
         });
-        self.show_toast(format!("Memasang {}...", self.cards[index].name));
+        self.show_toast(format!("Memasang {}...", self.cards[index].name), false);
     }
 
     /// Callback: user clicked "Jeda" in the header.

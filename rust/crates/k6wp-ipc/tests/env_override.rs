@@ -23,26 +23,19 @@ use std::time::Duration;
 use k6wp_ipc::{current_session_pipe_name, ConnectOptions, IpcClient};
 #[test]
 fn the_env_override_wins() {
-    // The override is read on EVERY call (never cached in a static: a static
-    // is initialised before main() and the client and the server would
-    // disagree about the name - that is what caused the 30-minute hang in
-    // the C++ suite).
-    //
-    // It is a DEBUG-only feature (task I4): the release build has it
-    // compiled out, so this test only holds in a debug/test build.
+    // The override is now passed as a parameter (dependency injection).
+    // The release build ignores the override parameter (compiled out via
+    // debug_assertions gate in the caller).
     let unique = r"\\.\pipe\k6wp-engine-test-override-42";
-    std::env::set_var("K6WP_ENGINE_PIPE", unique);
     if cfg!(debug_assertions) {
-        // A DEBUG build: the override wins.
-        assert_eq!(current_session_pipe_name(), unique);
+        // A DEBUG build: the override wins when passed as parameter.
+        assert_eq!(current_session_pipe_name(Some(unique)), unique);
     } else {
-        // A RELEASE build: the override is compiled OUT, so the name is
-        // the real per-session one (the shipped binary cannot be
-        // redirected).
-        assert_ne!(current_session_pipe_name(), unique);
+        // A RELEASE build: the override is ignored, so we get the real per-session name.
+        assert_ne!(current_session_pipe_name(None), unique);
     }
-    std::env::remove_var("K6WP_ENGINE_PIPE");
-    assert_ne!(current_session_pipe_name(), unique);
+    // Without override, we get the real per-session name.
+    assert_ne!(current_session_pipe_name(None), unique);
 }
 
 #[test]

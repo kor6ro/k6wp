@@ -30,7 +30,7 @@ use windows::Win32::System::Pipes::{
 #[test]
 fn the_pipe_name_is_the_per_session_one() {
     // The name must never be a bare literal: it carries the session id.
-    let name = current_session_pipe_name();
+    let name = current_session_pipe_name(None);
     assert!(
         name.starts_with(r"\\.\pipe\k6wp-engine"),
         "the pipe name must carry the base: {name}"

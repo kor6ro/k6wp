@@ -33,7 +33,7 @@ use k6wp_ipc::{current_session_pipe_name, ConnectOptions, IpcClient};
 fn main() {
     let mut threads: usize = 4;
     let mut requests: usize = 200;
-    let mut pipe = current_session_pipe_name();
+    let mut pipe = current_session_pipe_name(None);
     let mut image: Option<String> = None;
     let mut json_out: Option<String> = None;
     let mut samples_out: Option<String> = None;

@@ -1,0 +1,406 @@
+﻿cargo : warning: unused import: `windows::core::PCWSTR`
+At line:1 char:82
++ ... o-target2"; cargo test --workspace --target x86_64-pc-windows-msvc -- ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (warning: unused...::core::PCWSTR`:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  --> crates\k6wp-ipc\tests\client.rs:22:5
+   |
+22 | use windows::core::PCWSTR;
+   |     ^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused imports: `CloseHandle`, `HANDLE`, and `INVALID_HANDLE_VALUE`
+  --> crates\k6wp-ipc\tests\client.rs:23:34
+   |
+23 | use windows::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
+   |                                  ^^^^^^^^^^^  ^^^^^^  ^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `FILE_FLAGS_AND_ATTRIBUTES`, `ReadFile`, and `WriteFile`
+  --> crates\k6wp-ipc\tests\client.rs:24:43
+   |
+24 | use windows::Win32::Storage::FileSystem::{ReadFile, WriteFile, FILE_FLAGS_AND_ATTRIBUTES};
+   |                                           ^^^^^^^^  ^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `ConnectNamedPipe`, `CreateNamedPipeW`, `DisconnectNamedPipe`, `NAMED_PIPE_MODE`, 
+`PIPE_READMODE_MESSAGE`, `PIPE_TYPE_MESSAGE`, and `PIPE_WAIT`
+  --> crates\k6wp-ipc\tests\client.rs:26:5
+   |
+26 |     ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe, NAMED_PIPE_MODE,
+   |     ^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^
+27 |     PIPE_READMODE_MESSAGE, PIPE_TYPE_MESSAGE, PIPE_WAIT,
+   |     ^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^  ^^^^^^^^^
+
+warning: `k6wp-ipc` (test "client") generated 4 warnings (run `cargo fix --test "client" -p k6wp-ipc` to apply 4 
+suggestions)
+warning: k6wp-studio@0.1.0: warning: Component 'HoverOverlay' is replacing a previously defined component with the 
+same name
+warning: k6wp-studio@0.1.0:    --> 
+C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\crates\k6wp-studio\ui\app.slint:149:11
+warning: k6wp-studio@0.1.0:     |
+warning: k6wp-studio@0.1.0: 149 | component HoverOverlay inherits Rectangle {
+warning: k6wp-studio@0.1.0:     |           ^^^^^^^^^^^^
+warning: k6wp-studio@0.1.0:     |
+warning: k6wp-studio@0.1.0: warning: Component is neither used nor exported
+warning: k6wp-studio@0.1.0:    --> 
+C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\crates\k6wp-studio\ui\app.slint:149:1
+warning: k6wp-studio@0.1.0:     |
+warning: k6wp-studio@0.1.0: 149 | / component HoverOverlay inherits Rectangle {
+warning: k6wp-studio@0.1.0: 150 | |     in property <bool> show: false;
+warning: k6wp-studio@0.1.0: 151 | |     in property <string> text: "Pasang";
+warning: k6wp-studio@0.1.0: 152 | |     in property <color> text-color: #ffffff;
+warning: k6wp-studio@0.1.0: ...   |
+warning: k6wp-studio@0.1.0: 170 | | }
+warning: k6wp-studio@0.1.0:     | |_^
+warning: k6wp-studio@0.1.0: warning: Exported component 'CardItem' doesn't inherit Window. No code will be generated 
+for it
+warning: k6wp-studio@0.1.0:    --> 
+C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\crates\k6wp-studio\ui\app.slint:58:18
+warning: k6wp-studio@0.1.0:     |
+warning: k6wp-studio@0.1.0:  58 | export component CardItem inherits Rectangle {
+warning: k6wp-studio@0.1.0:     |                  ^^^^^^^^
+warning: k6wp-studio@0.1.0: warning: padding only has effect on layout elements
+warning: k6wp-studio@0.1.0:    --> 
+C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\crates\k6wp-studio\ui\app.slint:238:26
+warning: k6wp-studio@0.1.0:     |
+warning: k6wp-studio@0.1.0: 238 |                 padding: Tokens.space-xs;
+warning: k6wp-studio@0.1.0:     |                          ^^^^^^^^^^^^^^^^
+warning: k6wp-studio@0.1.0: warning: padding-left only has effect on layout elements
+warning: k6wp-studio@0.1.0:    --> 
+C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\crates\k6wp-studio\ui\app.slint:239:31
+warning: k6wp-studio@0.1.0:     |
+warning: k6wp-studio@0.1.0: 239 |                 padding-left: Tokens.space-sm;
+warning: k6wp-studio@0.1.0:     |                               ^^^^^^^^^^^^^^^^
+warning: k6wp-studio@0.1.0: warning: padding-right only has effect on layout elements
+warning: k6wp-studio@0.1.0:    --> 
+C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\crates\k6wp-studio\ui\app.slint:240:32
+warning: k6wp-studio@0.1.0:     |
+warning: k6wp-studio@0.1.0: 240 |                 padding-right: Tokens.space-sm;
+warning: k6wp-studio@0.1.0:     |                                ^^^^^^^^^^^^^^^^
+warning: k6wp-studio@0.1.0: warning: padding only has effect on layout elements
+warning: k6wp-studio@0.1.0:    --> 
+C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\crates\k6wp-studio\ui\app.slint:256:26
+warning: k6wp-studio@0.1.0:     |
+warning: k6wp-studio@0.1.0: 256 |                 padding: Tokens.space-xs;
+warning: k6wp-studio@0.1.0:     |                          ^^^^^^^^^^^^^^^^
+warning: k6wp-studio@0.1.0: warning: padding-left only has effect on layout elements
+warning: k6wp-studio@0.1.0:    --> 
+C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\crates\k6wp-studio\ui\app.slint:257:31
+warning: k6wp-studio@0.1.0:     |
+warning: k6wp-studio@0.1.0: 257 |                 padding-left: Tokens.space-sm;
+warning: k6wp-studio@0.1.0:     |                               ^^^^^^^^^^^^^^^^
+warning: k6wp-studio@0.1.0: warning: padding-right only has effect on layout elements
+warning: k6wp-studio@0.1.0:    --> 
+C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\crates\k6wp-studio\ui\app.slint:258:32
+warning: k6wp-studio@0.1.0:     |
+warning: k6wp-studio@0.1.0: 258 |                 padding-right: Tokens.space-sm;
+warning: k6wp-studio@0.1.0:     |                                ^^^^^^^^^^^^^^^^
+warning: k6wp-studio@0.1.0: warning: padding only has effect on layout elements
+warning: k6wp-studio@0.1.0:    --> 
+C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden\rust\crates\k6wp-studio\ui\app.slint:340:22
+warning: k6wp-studio@0.1.0:     |
+warning: k6wp-studio@0.1.0: 340 |             padding: Tokens.space-md;
+warning: k6wp-studio@0.1.0:     |                      ^^^^^^^^^^^^^^^^
+warning: unused import: `serde_json::json`
+  --> crates\k6wp-studio\src\worker.rs:17:5
+   |
+17 | use serde_json::json;
+   |     ^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `std::thread`
+   --> crates\k6wp-studio\src\worker.rs:597:9
+    |
+597 |     use std::thread;
+    |         ^^^^^^^^^^^
+
+warning: unused import: `Instant`
+   --> crates\k6wp-studio\src\worker.rs:598:31
+    |
+598 |     use std::time::{Duration, Instant};
+    |                               ^^^^^^^
+
+warning: unused import: `windows::core::PCWSTR`
+   --> crates\k6wp-studio\src\worker.rs:599:9
+    |
+599 |     use windows::core::PCWSTR;
+    |         ^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `CloseHandle`, `HANDLE`, and `INVALID_HANDLE_VALUE`
+   --> crates\k6wp-studio\src\worker.rs:600:38
+    |
+600 |     use windows::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
+    |                                      ^^^^^^^^^^^  ^^^^^^  ^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `WriteFile`
+   --> crates\k6wp-studio\src\worker.rs:601:57
+    |
+601 |     use windows::Win32::Storage::FileSystem::{ReadFile, WriteFile, FILE_FLAGS_AND_ATTRIBUTES};
+    |                                                         ^^^^^^^^^
+
+warning: unused imports: `ConnectNamedPipe`, `CreateNamedPipeW`, `NAMED_PIPE_MODE`, `PIPE_READMODE_MESSAGE`, 
+`PIPE_TYPE_MESSAGE`, and `PIPE_WAIT`
+   --> crates\k6wp-studio\src\worker.rs:603:9
+    |
+603 |         ConnectNamedPipe, CreateNamedPipeW, NAMED_PIPE_MODE, PIPE_READMODE_MESSAGE,
+    |         ^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^
+604 |         PIPE_TYPE_MESSAGE, PIPE_WAIT,
+    |         ^^^^^^^^^^^^^^^^^  ^^^^^^^^^
+compress_args::tests::every_emitted_flag_is_known: test
+compress_args::tests::the_argv_is_the_golden_vector: test
+compress_args::tests::the_optional_flags_are_omitted: test
+config::tests::a_corrupt_document_is_an_error: test
+config::tests::a_corrupt_version_is_an_error_and_a_newer_one_is_not: test
+config::tests::a_legacy_fill_becomes_cover: test
+config::tests::a_migrated_config_may_still_be_invalid: test
+config::tests::a_missing_key_takes_the_default: test
+config::tests::a_v0_or_v1_file_forces_the_monitor_id: test
+config::tests::a_wrong_type_is_an_error_not_a_default: test
+config::tests::the_default_is_the_cpp_default: test
+config::tests::the_migration_trigger_matches_the_cpp_field_list: test
+config::tests::the_validation_ranges_are_the_cpp_ones: test
+config_store::tests::a_bad_value_does_not_touch_the_file: test
+config_store::tests::child_writer_entry: test
+config_store::tests::persist_preserves_foreign_keys_and_reports_a_no_op: test
+config_store::tests::persist_rebuilds_a_corrupt_file_and_keeps_a_backup: test
+config_store::tests::the_foreign_key_budget_matches_the_cpp_side: test
+config_store::tests::the_lock_is_a_bounded_wait: test
+config_store::tests::two_processes_do_not_lose_updates: test
+displays::tests::a_corrupt_document_is_rejected: test
+displays::tests::a_future_version_is_rejected: test
+displays::tests::a_missing_path_is_rejected: test
+displays::tests::a_non_array_displays_is_rejected: test
+displays::tests::a_non_object_assignment_is_rejected: test
+displays::tests::a_v0_document_migrates_to_the_current_version: test
+displays::tests::a_wrong_typed_exists_is_rejected: test
+displays::tests::a_wrong_typed_key_stable_is_ignored: test
+displays::tests::the_assignments_keep_their_shape: test
+displays::tests::the_json_mapping_carries_every_field: test
+displays::tests::the_validator_rejects_a_traversal: test
+ipc::tests::a_frame_round_trips: test
+ipc::tests::a_frame_without_a_payload_gets_an_empty_one: test
+ipc::tests::a_wrong_typed_state_falls_back_to_the_defaults: test
+ipc::tests::the_frame_is_the_frozen_byte_sequence: test
+ipc::tests::the_malformed_frames_are_rejected: test
+ipc::tests::the_state_defaults_are_kept: test
+ipc::tests::the_vocabulary_is_append_only: test
+library::tests::a_missing_entries_array_is_empty: test
+library::tests::a_non_array_entries_is_an_error: test
+library::tests::a_utf8_bom_is_accepted_like_the_cpp_side: test
+library::tests::broken_json_is_an_error: test
+library::tests::missing_keys_take_the_defaults: test
+library::tests::parses_the_cpp_shape: test
+library::tests::the_round_trip_keeps_the_fields: test
+playlist::tests::a_future_version_is_rejected: test
+playlist::tests::a_non_string_order_entry_is_rejected: test
+playlist::tests::a_v0_document_migrates_to_the_current_version: test
+playlist::tests::a_wrong_typed_interval_is_rejected: test
+playlist::tests::an_empty_playlist_has_nothing_to_select: test
+playlist::tests::the_order_drops_the_empty_entries_and_the_duplicates: test
+playlist::tests::the_order_is_normalized_on_load: test
+playlist::tests::the_path_lookup_is_case_insensitive: test
+playlist::tests::the_rotation_wraps: test
+playlist::tests::the_shuffle_never_picks_the_current_entry: test
+playlist::tests::the_shuffle_sequence_is_the_frozen_one: test
+playlist::tests::the_validator_rejects_an_out_of_range_interval: test
+settings::tests::a_missing_key_takes_the_default: test
+settings::tests::a_wrong_type_is_an_error_not_a_default: test
+settings::tests::an_unknown_version_is_an_error: test
+settings::tests::the_basename_is_a_byte_array: test
+settings::tests::the_default_is_the_cpp_default: test
+settings::tests::the_plan_todo_8_enums_are_tolerant: test
+
+warning: unused import: `HANDLE`
+   --> crates\k6wp-studio\src\worker.rs:695:63
+    |
+695 |                 use windows::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
+    |                                                               ^^^^^^
+
+warning: unused import: `HANDLE`
+   --> crates\k6wp-studio\src\worker.rs:843:63
+    |
+843 |                 use windows::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
+    |                                                               ^^^^^^
+
+warning: unused import: `HANDLE`
+    --> crates\k6wp-studio\src\worker.rs:1000:63
+     |
+1000 |                 use windows::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
+     |                                                               ^^^^^^
+
+warning: unused import: `HANDLE`
+    --> crates\k6wp-studio\src\worker.rs:1136:63
+     |
+1136 |                 use windows::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
+     |                                                               ^^^^^^
+
+settings::tests::the_removed_keys_are_ignored: test
+settings::tests::the_stored_sync_flags_are_never_flipped: test
+warning: variable does not need to be mutable
+   --> crates\k6wp-studio\src\worker.rs:194:9
+    |
+194 |     let mut studio_visible = true; // updated by UI via a new Request variant if needed
+    |         ----^^^^^^^^^^^^^^
+    |         |
+    |         help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `index`
+   --> crates\k6wp-studio\src\worker.rs:347:49
+    |
+347 | fn handle_set_wallpaper(client: &mut IpcClient, index: usize, media: &PathBuf, sink: &Sink) {
+    |                                                 ^^^^^ help: if this is intentional, prefix it with an 
+underscore: `_index`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `is_set_video`
+   --> crates\k6wp-studio\src\worker.rs:749:25
+    |
+749 |                     let is_set_video = request.contains("\"set_video\"");
+    |                         ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_is_set_video`
+
+warning: unused variable: `options`
+   --> crates\k6wp-studio\src\worker.rs:763:13
+    |
+763 |         let options = ConnectOptions {
+    |             ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_options`
+
+warning: unused variable: `options`
+   --> crates\k6wp-studio\src\worker.rs:908:13
+    |
+908 |         let options = ConnectOptions {
+    |             ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_options`
+
+warning: unused variable: `options`
+    --> crates\k6wp-studio\src\worker.rs:1042:13
+     |
+1042 |         let options = ConnectOptions {
+     |             ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_options`
+
+warning: unused variable: `options`
+    --> crates\k6wp-studio\src\worker.rs:1179:13
+     |
+1179 |         let options = ConnectOptions {
+     |             ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_options`
+
+warning: `k6wp-studio` (bin "k6wp-studio" test) generated 18 warnings (run `cargo fix --bin "k6wp-studio" -p 
+k6wp-studio --tests` to apply 18 suggestions)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.11s
+     Running unittests src\lib.rs (D:\cargo-target2\x86_64-pc-windows-msvc\debug\deps\k6wp_core-98d731ec77a3f35a.exe)
+     Running tests\_config_probe.rs 
+(D:\cargo-target2\x86_64-pc-windows-msvc\debug\deps\_config_probe-dea6dfc8eb1f66b7.exe)
+settings::tests::the_v5_offset_rule_moves_only_an_exactly_one: test
+sps::tests::an_sps_nal_is_recognised: test
+sps::tests::an_unknown_frame_size_is_never_guessed: test
+sps::tests::the_emulation_prevention_bytes_are_removed: test
+sps::tests::the_exp_golomb_reader_is_correct: test
+sps::tests::the_frame_size_follows_the_bit_depth_and_the_chroma: test
+sps::tests::the_signed_exp_golomb_is_correct: test
+version::tests::an_invalid_version_compares_equal: test
+version::tests::the_component_is_clamped: test
+version::tests::the_junk_inside_a_component_is_ignored: test
+version::tests::the_numeric_parts_compare: test
+version::tests::the_prerelease_sorts_below_the_release: test
+version::tests::the_whitespace_and_the_v_prefix_are_stripped: test
+
+78 tests, 0 benchmarks
+the_config_and_settings_golden_cases_match: test
+     Running tests\engine_logic_golden.rs 
+(D:\cargo-target2\x86_64-pc-windows-msvc\debug\deps\engine_logic_golden-89f79bc7ffdfe3fa.exe)
+the_error_messages_are_the_cpp_ones_verbatim: test
+the_validation_agrees_with_the_cpp_validate_config: test
+
+3 tests, 0 benchmarks
+the_rust_port_matches_the_cpp_golden_fixtures: test
+
+1 test, 0 benchmarks
+     Running tests\golden.rs (D:\cargo-target2\x86_64-pc-windows-msvc\debug\deps\golden-e86a51d785541040.exe)
+the_golden_fixtures_pass_on_the_rust_side: test
+
+1 test, 0 benchmarks
+     Running tests\probe.rs (D:\cargo-target2\x86_64-pc-windows-msvc\debug\deps\probe-a5563f311de7a891.exe)
+the_displays_json_is_sorted: test
+the_golden_fixtures_match_on_the_rust_side: test
+the_order_api_agrees_with_the_count_api: test
+
+3 tests, 0 benchmarks
+     Running tests\sps_fuzz.rs (D:\cargo-target2\x86_64-pc-windows-msvc\debug\deps\sps_fuzz-b92cff6e79d3257f.exe)
+the_parser_never_panics_on_arbitrary_bytes: test
+the_parser_never_panics_on_box_like_bytes: test
+the_parser_never_panics_on_the_mutated_corpus: test
+the_regression_vectors_are_handled: test
+
+4 tests, 0 benchmarks
+     Running tests\sps_golden.rs (D:\cargo-target2\x86_64-pc-windows-msvc\debug\deps\sps_golden-c02eb60153941a37.exe)
+the_dpb_byte_budget_is_pinned: test
+the_savings_a_reencode_can_obtain_are_pinned: test
+the_sps_parser_agrees_with_ffmpeg: test
+
+3 tests, 0 benchmarks
+     Running tests\sps_read_strategy.rs 
+(D:\cargo-target2\x86_64-pc-windows-msvc\debug\deps\sps_read_strategy-682ddd8dc5ac4ae3.exe)
+a_matroska_file_falls_back_and_never_guesses: test
+a_non_faststart_file_is_found_by_seeking_and_costs_kilobytes: test
+the_container_policy_is_explicit: test
+the_corpus_sweep_reports_the_fallback_percentage: test
+
+4 tests, 0 benchmarks
+     Running unittests src\lib.rs (D:\cargo-target2\x86_64-pc-windows-msvc\debug\deps\k6wp_ipc-c4791e6fd350b7cf.exe)
+0 tests, 0 benchmarks
+     Running tests\client.rs (D:\cargo-target2\x86_64-pc-windows-msvc\debug\deps\client-3c687735507cfdeb.exe)
+a_busy_pipe_waits_then_says_why: test
+a_missing_pipe_fails_fast: test
+a_payload_over_the_limit_is_refused_before_the_pipe: test
+a_silent_server_times_out_instead_of_hanging: test
+set_video_encodes_correctly: test
+set_video_error_payload_decodes: test
+set_video_missing_media: test
+the_pipe_name_is_the_per_session_one: test
+the_reconnect_releases_the_old_handle: test
+
+9 tests, 0 benchmarks
+     Running tests\env_override.rs 
+(D:\cargo-target2\x86_64-pc-windows-msvc\debug\deps\env_override-83554f2de2d01a89.exe)
+the_accepted_server_images_are_the_known_ones: test
+the_env_override_wins: test
+the_override_does_not_weaken_the_server_verification: test
+
+3 tests, 0 benchmarks
+     Running tests\live_engine.rs (D:\cargo-target2\x86_64-pc-windows-msvc\debug\deps\live_engine-31cd557030190f58.exe)
+the_live_engine_answers_the_whole_command_set: test
+
+1 test, 0 benchmarks
+     Running unittests src\main.rs 
+(D:\cargo-target2\x86_64-pc-windows-msvc\debug\deps\k6wp_studio-beae78852421fe40.exe)
+grid::tests::card_width_keeps_the_gaps: test
+grid::tests::columns_grow_with_width: test
+grid::tests::columns_never_zero: test
+grid::tests::rows_are_row_major_and_short_at_the_end: test
+grid::tests::visible_items_clamps_at_the_end: test
+grid::tests::visible_items_covers_the_viewport_plus_buffer: test
+grid::tests::visible_items_empty_inputs: test
+grid::tests::visible_items_moves_with_the_scroll: test
+thumbs::tests::a_short_file_is_not_an_image: test
+thumbs::tests::a_solid_png_decodes_and_is_scaled_to_cover: test
+thumbs::tests::box_resize_averages_a_solid_image: test
+thumbs::tests::cache_evicts_the_coldest_when_over_the_cap: test
+thumbs::tests::retain_only_releases_what_left_the_viewport: test
+worker::tests::a_dead_unc_probe_does_not_block_the_decode_behind_it: test
+worker::tests::a_drive_letter_path_is_probed_inline: test
+worker::tests::a_missing_index_is_an_error_not_a_panic: test
+worker::tests::an_unreachable_probe_gives_up_after_the_timeout: test
+worker::tests::set_wallpaper_engine_error: test
+worker::tests::set_wallpaper_engine_timeout: test
+worker::tests::set_wallpaper_missing_media_no_ipc_sent: test
+worker::tests::set_wallpaper_success_with_fake_server: test
+
+21 tests, 0 benchmarks
+   Doc-tests k6wp_core
+0 tests, 0 benchmarks
+   Doc-tests k6wp_ipc
+0 tests, 0 benchmarks

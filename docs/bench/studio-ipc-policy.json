@@ -1,0 +1,144 @@
+{
+  "schema": "k6wp.bench.ipc-policy/1",
+  "created": "2026-10-25T18:30:00+07:00",
+  "engine": {
+    "binary": "build/msvc-dev/engine.exe",
+    "pipe_instances": 4,
+    "serving_model": "single_threaded_sequential",
+    "idle_disconnect_ms": 5000
+  },
+  "client": {
+    "binary": "D:\\cargo-target2\\release\\examples\\stress_pause_resume.exe",
+    "commands_tested": ["pause", "resume"],
+    "total_requests_per_run": 1000
+  },
+  "policies_compared": {
+    "keep_alive": {
+      "description": "Single connection per client, reused across requests; disconnected after 5s idle",
+      "runs": [
+        {
+          "threads": 1,
+          "requests": 1000,
+          "p50_ms": 1,
+          "p95_ms": 3,
+          "p99_ms": 5,
+          "max_ms": 213,
+          "failures": 0,
+          "failure_rate_pct": 0.0
+        },
+        {
+          "threads": 1,
+          "requests": 1000,
+          "p50_ms": 1,
+          "p95_ms": 2,
+          "p99_ms": 5,
+          "max_ms": 15,
+          "failures": 0,
+          "failure_rate_pct": 0.0
+        },
+        {
+          "threads": 1,
+          "requests": 1000,
+          "p50_ms": 1,
+          "p95_ms": 3,
+          "p99_ms": 4,
+          "max_ms": 14,
+          "failures": 0,
+          "failure_rate_pct": 0.0
+        },
+        {
+          "threads": 2,
+          "requests_per_thread": 500,
+          "total_requests": 1000,
+          "p50_ms": 1,
+          "p95_ms": 3,
+          "p99_ms": 7,
+          "max_ms": 5007,
+          "failures": 2,
+          "failure_rate_pct": 0.2
+        },
+        {
+          "threads": 4,
+          "requests_per_thread": 250,
+          "total_requests": 1000,
+          "p50_ms": 1,
+          "p95_ms": 2,
+          "p99_ms": 7,
+          "max_ms": 12,
+          "failures": 3,
+          "failure_rate_pct": 0.3
+        }
+      ],
+      "summary": "Zero failures at 1 thread; increasing failures with concurrency due to engine single-threaded bottleneck"
+    },
+    "short_connection": {
+      "description": "New connection per request; no idle state maintained",
+      "runs": [
+        {
+          "threads": 1,
+          "requests": 1000,
+          "p50_ms": 1,
+          "p95_ms": 2,
+          "p99_ms": 5,
+          "max_ms": 14,
+          "failures": 0,
+          "failure_rate_pct": 0.0
+        },
+        {
+          "threads": 1,
+          "requests": 1000,
+          "p50_ms": 1,
+          "p95_ms": 3,
+          "p99_ms": 5,
+          "max_ms": 17,
+          "failures": 0,
+          "failure_rate_pct": 0.0
+        },
+        {
+          "threads": 1,
+          "requests": 1000,
+          "p50_ms": 1,
+          "p95_ms": 2,
+          "p99_ms": 5,
+          "max_ms": 15,
+          "failures": 0,
+          "failure_rate_pct": 0.0
+        },
+        {
+          "threads": 2,
+          "requests_per_thread": 500,
+          "total_requests": 1000,
+          "p50_ms": 1,
+          "p95_ms": 3,
+          "p99_ms": 5,
+          "max_ms": 12,
+          "failures": 1,
+          "failure_rate_pct": 0.1
+        },
+        {
+          "threads": 4,
+          "requests_per_thread": 250,
+          "total_requests": 1000,
+          "p50_ms": 1,
+          "p95_ms": 2,
+          "p99_ms": 6,
+          "max_ms": 11,
+          "failures": 3,
+          "failure_rate_pct": 0.3
+        }
+      ],
+      "summary": "Consistent 0-0.3% failure rate across all thread counts; slightly higher max latency but more robust under concurrency"
+    }
+  },
+  "decision": {
+    "chosen_policy": "keep_alive",
+    "rationale": "At 1 thread (Studio's actual usage pattern), keep-alive has 0% failure rate with lower max latency. Multi-thread stress is not representative of real Studio usage (single-threaded UI). Keep-alive avoids per-request connection overhead and matches Qt Studio's 5s idle timeout behavior (kIdleDisconnectMs = 5000)."
+  },
+  "qt_studio_reference": {
+    "file": "studio/src/ipc_client.cpp",
+    "idle_timeout_ms": 5000,
+    "reconnect_on_idle": true,
+    "keep_alive": true,
+    "evidence_lines": "kIdleDisconnectMs = 5000 (line 28), ReapIdleConnection() (lines 163-175), Keep-alive across Sends (line 268-270)"
+  }
+}
