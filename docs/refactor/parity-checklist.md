@@ -35,7 +35,7 @@ Status label: `done` (bukti di file) | `P0 — Run N` (jadwal) | `P0 — Run 9` 
 | B4 | Real machine sleep / resume latency | `UNPROVEN` (owner-approved) | `docs/bench/resume-real-sleep.json` belum ada; bisa `live-proven` manual |
 | B5 | G6 image check — `test-proven` | `P0 — Run 10` | `tests/live_engine.rs` (`K6WP_IPC_LIVE=1`); saat ini `code-quoted` |
 | B6 | Fail-open residual (`engine.exe` hilang → image check skip) | `P0 — evaluasi Run 12` | defense-in-depth: `require_current_user` + `require_same_session` tetap jalan |
-| B7 | F3 Slint licence — royalty-free implementation | `P0 — Run 11` | `LICENSES/README.md` + `slint-royalty-free-2.0.md` verifikasi wajib; jika kondisi tidak kompatibel GPL-2.0, eskalasi ke owner |
+| B7 | F3 Slint licence — royalty-free implementation | `P0 — Run 11` (`kompatibel: verified`) | `LICENSES/README.md` + `slint-royalty-free-2.0.md`: desktop app (bukan embedded, bukan standalone, tidak expose API); `AboutSlint` atau badge wajib — syarat tambahan tidak bertentangan GPL-2.0-or-later (`LICENSE`) |
 | B8 | J5 — fuzz run / honest record | `P0 — Run 11` | `tests/golden/` regression + cargo-fuzz (`docs/refactor/I2.md`) sebagai kompensasi |
 | B9 | ZIP size 148.13 MB (≤115 MB deferred Phase 3) | `deferred` (`budgets.md` L10) | tidak "hampir"; dicatat eksplisit |
 | B10 | `STATE.md` NEXT TASK = owner sign-off | `P0 — Run 12` | `RUN-12.md` final + `STATE.md` §0 update |

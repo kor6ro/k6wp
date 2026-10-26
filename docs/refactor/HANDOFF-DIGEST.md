@@ -72,7 +72,7 @@ K6WP — engine C++ (reference) + Studio Slint (separate process, L5). Refactor:
 - **G6 `code-quoted` vs `test-proven`** (`A`): `parity-checklist.md` `A10` harus `code-quoted — test pending (Run 10)`, bukan `done`. Jangan klaim `test-proven` sebelum `tests/live_engine.rs` dijalankan.
 - **Fail-open** (`B`): `B6` (`parity-checklist.md`) harus eksplisit (`deferred` atau `P0` evaluasi), bukan disembunyikan.
 - **Run 2 urutan** (`D`): `Gate A/B` wajib (`P0`). Tanpa ini, `Run 3-8` fitur studio jalan tanpa acuan paritas.
-- **F3**: `royalty-free` (`b`) dipilih. Verifikasi `LICENSES/README.md` + `slint-royalty-free-2.0.md` wajib `P0` Run 11. Kalau kondisi tidak kompatibel GPL-2.0, eskalasi ke owner (`F3` → `(a)` atau `(c)`).
+- **F3**: `royalty-free` (`b`) dipilih (`kompatibel: verified` — desktop app bukan embedded, bukan standalone, tidak expose API; syarat `AboutSlint`/badge tidak bertentangan GPL-2.0-or-later; `LICENSE` tetap). Verifikasi `LICENSES/README.md` + `slint-royalty-free-2.0.md` wajib `P0` Run 11. Kalau kondisi tidak kompatibel GPL-2.0, eskalasi ke owner (`F3` → `(a)` atau `(c)`).
 
 ---
 *File ini (`HANDOFF-DIGEST.md`) dipotong manual (`python -c len('...')/3.5` = 5562 token, `> 3000`). Bagian 3 (tabel lengkap) dipersingkat menjadi baris `P0` / `deferred`; bagian 4-6 (klaim ditarik, peta repo, sisa pekerjaan) dipotong; bagian 8-10 dipotong. Isi lengkap tetap di `STATE.md`, `ledger.md`, `budget.md`. Token target `≤3000` wajib tercapai sebelum `STATS.md` (`Run 11`).*
