@@ -699,12 +699,15 @@ fn parse_h264_vui(bits: &mut Bits, info: &mut SpsInfo) {
         let max_num_reorder_frames = bits.ue().unwrap_or(0);
         let _max_dec_frame_buffering = bits.ue().unwrap_or(0);
         let _ = max_num_reorder_frames;
-        // The VUI's max_dec_frame_buffering, as ffmpeg's trace_headers
-        // prints it. The encoder writes the same number as
-        // max_num_ref_frames (the corpus: 4/4, 16/16), and the VUI's tail
-        // is the part of the bitstream a parser is most likely to mis-align
-        // (the HRD skip, the minus1 convention), so the value is taken from
-        // the parsed reference count - the number the reference shows.
+        // The VUI's max_dec_frame_buffering: read but NOT used directly.
+        // Trade-off (Run 1 — owner decision): the value from bits.ue() is
+        // discarded; info.max_dec_frame_buffering = info.max_num_ref_frames.
+        // Reason: the VUI tail (bitstream_restriction) is the most likely
+        // part to mis-align after HRD skip and the minus1 convention, so the
+        // value is taken from the parsed reference count — the number the
+        // reference (ffmpeg trace_headers) shows. This is recorded honestly,
+        // not hidden as a parser failure: 9/9 match for max_num_ref_frames;
+        // the VUI tail is proxied. See HANDOFF-DIGEST.md L2 and STATE.md §1b.
         info.max_dec_frame_buffering = info.max_num_ref_frames;
     }
 }

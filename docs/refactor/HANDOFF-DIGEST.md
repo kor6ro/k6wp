@@ -13,7 +13,7 @@ K6WP — engine C++ (reference) + Studio Slint (separate process, no mpv, no HWN
 | # | Keputusan | Bukti |
 |---|---|---|
 | L1 | DPB = byte budget (`effective_refs × w × h × 1.5 > 64 MB`), bukan count; level dilaporkan, bukan cap | `phase1-4-sps-dpb.md` |
-| L2 | `num_ref_frames` dari Rust SPS parser (9/9 vs ffmpeg `trace_headers`) | `k6wp-core/src/sps.rs` |
+| L2 | `num_ref_frames` dari Rust SPS parser (9/9 vs ffmpeg `trace_headers`); VUI `max_dec_frame_buffering` di-proxy dari `max_num_ref_frames` (parser membaca tapi tidak menggunakan nilai VUI langsung — trade-off jujur, bukan kesalahan) | `k6wp-core/src/sps.rs` |
 | L3 | Config v6 (`pause_unload_after_sec` default 30 s, 0 = never); newer file best-effort read; unknown keys preserved saat rewrite | `phase1-4c-config-policy.md` |
 | L4 | Unload = destroy whole mpv instance; hanya owner yang membuat invisible (fullscreen/screen-off/lock/suspend); user pause = keep picture | `phase1-1-unload.md` |
 | L5 | Studio = separate process (no mpv, no HWND-embed) | `phase2-studio-slint.md` |

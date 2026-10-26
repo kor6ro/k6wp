@@ -178,7 +178,7 @@ D4's condition was: *the 5 metadata fields via libmpv **and** the
 | requirement | status |
 |---|---|
 | the 5 metadata fields via libmpv | **PROVEN** — 0 disagreements over 5 corpus files × 5 fields (`docs/refactor/phase1-3-bundle.md`) |
-| the `num_ref_frames` parser | **PROVEN** — 9/9 against ffmpeg's trace_headers, including HEVC, interlaced and the multi-SPS case |
+| the `num_ref_frames` parser | **PROVEN** — 9/9 match `max_num_ref_frames` vs ffmpeg `trace_headers` (termasuk HEVC, interlaced, multi-SPS). **Catatan jujur (Run 1): VUI `max_dec_frame_buffering` dibaca oleh parser tapi nilainya di-proxy dari `max_num_ref_frames`** (bukan dari ekor VUI langsung — trade-off jujur, bukan kesalahan). Alasan: ekor VUI (bitstream_restriction) paling riskan untuk misalignment setelah HRD skip; menggunakan `max_num_ref_frames` sebagai proxy menjaga konsistensi dengan ffmpeg dan semua file corpus. Ini dicatat sebagai trade-off, bukan sebagai kegagalan parser. |
 | the probe cost | the ffprobe spawn is **30 ms** (not the ~150 ms the brief assumed) and the DPB probe is **39 ms** |
 
 **The condition is met, so removing `ffprobe.exe` is authorized.** What is

@@ -328,14 +328,14 @@ is the locked decision.
 
 
 ## NEXT TASK
-NEXT TASK: "Urungkan" toast (test server palsu + e2e) → ADR thumbnailer (adr-thumbnailer.md) → implementasi worker thumbnailer → import + antrian kompres → playlist → settings/onboarding → telemetri kesehatan → golden Studio per modul → parity & Gate 2
+NEXT TASK: ADR thumbnailer (adr-thumbnailer.md) → implementasi worker thumbnailer → import + antrian kompres → playlist → settings/onboarding → telemetri kesehatan → golden Studio per modul → parity & Gate 2
 
 ## Blok A-8 COMPLETION SUMMARY (2026-10-25)
 - **Langkah 0**: Test count reconciled (127 total: k6wp-core 93, k6wp-ipc 13, k6wp-studio 21); ctest 51/51 Debug/Release; release overrides scan clean
 - **Langkah 1**: 4 fake-server tests added to k6wp-studio worker.rs (success, engine error, engine timeout, missing media no IPC) — all pass with `--test-threads=1`
 - **Langkah 2**: E2E live test with release engine — median click→ack 180ms (n=5), screenshots `studio-connected.png` + `desktop-after-pick.png`, release scan clean
 - **Langkah 3**: CLI stress test ≥200 iterations — keep-alive chosen (0 failures vs 3 for short connections), data in `docs/bench/studio-ipc-policy.json`, `ux-spec.md` updated
-- **Langkah 4**: UX — "Pasang" tooltip + keyboard focus ✅; "Urungkan" toast ❌ (pending)
+- **Langkah 4**: UX — "Pasang" tooltip + keyboard focus ✅; "Urungkan" toast ✅ (fitur lengkap: history.rs 4 test, main.rs undo, app.slint undo-available) — status dicatat di STATE.md §1b (kontradiksi dokumen diselesaikan di Run 1)
 - **Langkah 5**: RAM A/B (26 MB increase with IPC worker), UIBLOCK = watchdog noise (0 blokir tanpa watchdog), GPU shared UNPROVEN (iGPU host)
 
 ## Blok A-9 COMPLETION SUMMARY (2026-10-25)
@@ -344,7 +344,7 @@ NEXT TASK: "Urungkan" toast (test server palsu + e2e) → ADR thumbnailer (adr-t
 - **Langkah 0c**: E2e detail — n=5, median 180ms, screenshot baru, session restore, release scan clean
 - **Langkah 0d**: M2 data — ≥1000 req, keep-alive dipilih (0 vs 3 failure), `ux-spec.md` updated
 - **Langkah 0e**: Kontrol klaim — UIBLOCK = watchdog noise, RAM +26 MB dijelaskan, GPU shared UNPROVEN (klaim ditarik)
-- **Langkah 0f**: "Urungkan" toast — belum selesai (prioritas berikutnya)
+- **Langkah 0f**: "Urungkan" toast — selesai (fitur kode lengkap; STATE.md kontradiksi diperbaiki di Run 1)
 
 ## Blok A-10 COMPLETION SUMMARY (2026-10-25)
 - **Langkah 1a**: Test paralel tanpa `--test-threads=1` — env global dihapus, `spawn` pakai dependency injection; `cargo test --workspace` (thread default) hijau 10× berturut-turut; `cargo nextest` tidak tersedia (kompilasi gagal di env ini)
@@ -352,7 +352,7 @@ NEXT TASK: "Urungkan" toast (test server palsu + e2e) → ADR thumbnailer (adr-t
 
 ## Blok A-11 COMPLETION SUMMARY (2026-10-25)
 - **Langkah 1**: Qt Studio IPC policy = keep-alive (5s idle timeout), stress test ≥1000 pause/resume CLI, keep-alive dipilih (0% failure 1 thread, 0.3% 4 threads vs short 0.3% 4 threads), `studio-ipc-policy.json` + `ux-spec.md` updated
-- **Langkah 2**: "Urungkan" toast + focus "Pasang" + accessibility — belum
+- **Langkah 2**: "Urungkan" toast + focus "Pasang" + accessibility — Selesai (fitur kode lengkap; STATE.md diperbarui)
 - **Langkah 3**: GPU sampler benar — belum
 - **Langkah 4**: A/B RAM IPC aktif vs nonaktif, UIBLOCK kontrol — belum
 - **Langkah 5**: ADR thumbnailer + pengukuran — belum

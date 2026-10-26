@@ -315,6 +315,25 @@ fn run(rx: Receiver<Request>, sink: Sink, pipe_name_override: Option<String>) {
     }
 }
 
+fn expected_engine_image() -> Option<PathBuf> {
+    // Production verification (G6): verify the server image matches the
+    // expected engine binary. Uses the same binary as the live-engine test.
+    // Does NOT rely on an environment override (I4): the image check reads
+    // the binary path from the current executable's directory.
+    let current = std::env::current_exe().ok()?;
+    let parent = current.parent()?;
+    let engine_path = parent.join("engine.exe");
+    if engine_path.exists() {
+        return Some(engine_path);
+    }
+    // Fallback: relative to the binary directory (development / release layout)
+    let release_engine = parent.join("build").join("release").join("engine.exe");
+    if release_engine.exists() {
+        return Some(release_engine);
+    }
+    None
+}
+
 fn attempt_connect(
     sink: &Sink,
     client: &mut Option<IpcClient>,
@@ -329,7 +348,7 @@ fn attempt_connect(
     // processing other requests (probes, thumbnails) while we're trying to connect.
     let options = ConnectOptions {
         timeout: Duration::from_millis(200),
-        expected_server_image: None, // Allow any accepted image
+        expected_server_image: expected_engine_image(), // Verify server image (G6)
         require_current_user: true,
         require_same_session: true,
     };
