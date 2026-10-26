@@ -1,0 +1,37 @@
+{
+  "output": {
+    "style": "markdown",
+    "filePath": "handoff/repomix-{name}.md"
+  },
+  "ignore": {
+    "useGitignore": true,
+    "useIgnoreFile": true,
+    "patterns": [
+      "tests/corpus/**",
+      "vendor/**",
+      "thirdparty/**",
+      "build/**",
+      "rust/target/**",
+      ".git/**",
+      "docs/img/**",
+      "LICENSES/**",
+      "shadow-evidence/**",
+      "video/**",
+      "brand/**",
+      "**/Cargo.lock",
+      "tests/golden/*.json",
+      "*.log",
+      ".env*",
+      "handoff/**"
+    ],
+    "exceptions": [
+      "vendor/VERSIONS.md"
+    ]
+  },
+  "compress": false,
+  "removeComments": false,
+  "removeEmptyLines": false,
+  "topFilesLen": 15,
+  "noFileSummary": false,
+  "headerText": "K6WP Handoff Pack — branch refactor/rust-wt (workdir calm-otter; official folder proud-garden empty/non-repo). Generated without measurements; read docs/refactor/STATE.md and ledger.md first."
+}
