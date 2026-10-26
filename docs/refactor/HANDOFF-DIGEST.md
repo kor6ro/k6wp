@@ -34,7 +34,24 @@ K6WP — engine C++ (reference) + Studio Slint (separate process, L5). Refactor:
 
 ---
 
-## 4. 3 temuan review (semua `done` — `RUN-1.md` detail)
+## 4. Angka terukur (singkat — lengkap: `budget.md`, `docs/bench/*.json`)
+- `private bytes, paused 30 s`: 162.35 → 60.1 MB (n=5, `live-proven`).
+- `GPU shared, paused 30 s`: 151.57 → 0 MB (n=5, `live-proven`).
+- `CPU 1080p`: 4.73% → 1.06% (n=5, `live-proven`).
+- `rate`: 0.70-0.75 → 0.98-1.00 (`live-proven`).
+- `4K/16-ref RAM`: 387.23 → 228.2 MB (—41%, `live-proven`).
+- `Studio shell`: 500.67/3576 ms (Qt) → 39.56/1027 ms (Slint 2.0, `live-proven`).
+- `IPC p99`: 84 ms → 3-4 ms (`live-proven`); `get_state` max 56 → 7 ms (`test-proven`).
+- `ZIP`: 148.13 MB (`deferred`, `budget.md`).
+- `Golden fixtures`: 92/92 (`test-proven`, `tests/golden/`).
+- `Ctest`: 49/49 (`test-proven`, `docs/bench/ctest-stability.json`).
+- `Config lock`: 366 cek (`test-proven`, `docs/refactor/config_test.cpp`).
+- `Release overrides`: 5/5 bersih (`test-proven`, `I4`).
+- `G6`: `code-quoted — test pending Run 10` (Run 1 fix, belum `K6WP_IPC_LIVE=1`).
+
+---
+
+## 5. 3 temuan review (semua `done` — `RUN-1.md` detail)
 - **#1 G6 image check** (`code-quoted — test pending Run 10`): `expected_engine_image()` produksi (`current_exe()` + `engine.exe`); tes (`tests/live_engine.rs`) belum `K6WP_IPC_LIVE=1`.
 - **#2 Urungkan** (`done`): kode (`history.rs` 4 test + `main.rs::undo` + `app.slint`) lengkap; `STATE.md` konsisten.
 - **#3 VUI proxy** (`done`): `max_dec_frame_buffering` = `max_num_ref_frames` (`sps.rs` l.708); dicatat jujur (`HANDOFF-DIGEST.md` L2 ini, `ledger.md` E3, `phase1-4-sps-dpb.md`).
