@@ -24,7 +24,7 @@ Bukan "kira-kira sama" — salin angka/nama persis agar transisi Qt→Rust tidak
 |---|---|---|
 | Seek formula | `SafeSeekSeconds` (l.74-78) | `if !(duration > 0.0) return 0.0; if (duration >= 2.0) return 1.0; return duration / 2.0;` |
 | Seek format | `FormatSeekSeconds` (l.82-89) | `std::fixed << std::setprecision(6)` → strip trailing `0` + `.` |
-| Scale + pad | `BuildThumbCommand` (l.95-112) — **persis** ini | `scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2` (`W=320`=`kThumbWidth`, `H=180`=`kThumbHeight`, `int width, int height` dinamis dari parameter, **bukan hardcode**) |
+| Scale + pad | `BuildThumbCommand` (l.95-112) — **persis** ini | `GenerateTo` (l.54-55) hanya menerima `(video, thumb)`, **tanpa** `width, height`; `GenerateTo` selalu memanggil `BuildThumbCommand(ffmpeg, video, thumb, seek, kThumbWidth, kThumbHeight, kJpegQuality)` (`l.424-425`): `-vf scale=320:180:force_original_aspect_ratio=decrease,pad=320:180` — **hardcode 320:180**, bukan dinamis (`W`/`H` tetap `kThumbWidth`/`kThumbHeight`) |
 | Quality | `kJpegQuality = 4` (l.52) | `-q:v 4` |
 | Frames | `-frames:v 1` (l.103) | `-frames:v 1` (bukan `-vframes`) |
 | Timeout | `kFfmpegTimeoutMs = 10000` (l.53) | 10 detik; jika lewat → cancel (`CancelIoEx` atau `kill`) + error |

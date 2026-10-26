@@ -10,7 +10,7 @@ Status label: `done` (bukti di file) | `P0 — Run N` (jadwal) | `P0 — Run 9` 
 
 | # | Komponen | Status | Catatan / alasan |
 |---|---|---|---|
-| A1 | Thumbnailer video (ADR thumbnailer) | `P0 — Run 4` (`ADR`) + `P0 — Run 4b` (`impl+test+ukur`) | `docs/refactor/adr-thumbnailer.md` (`done`); kontrak Qt persis (`thumb-v3`, `pad=320:180` dinamis `width,height`, `UNPROVEN` angka `Run 4b`) |
+| A1 | Thumbnailer video (ADR thumbnailer) | `P0 — Run 4` (`ADR`) + `P0 — Run 4b` (`impl+test+ukur`) | `docs/refactor/adr-thumbnailer.md` (`done`); kontrak Qt persis (`thumb-v3`, `GenerateTo` hardcode `kThumbWidth`/`kThumbHeight` = 320:180, `UNPROVEN` angka `Run 4b`) |
 | A2 | Import flow (media picker + probe) | `P0 — Run 4` | `library_index_path()` sudah ada (`main.rs`); alur UI import belum lengkap |
 | A3 | Compress antrian (compressor Rust / IPC) | `P0 — Run 5` | `compressor/src/` belum porting |
 | A4 | Settings page (konfigurasi pengguna) | `P0 — Run 6` | `studio/src/` (Qt) masih referensi; `k6wp-studio` belum |
