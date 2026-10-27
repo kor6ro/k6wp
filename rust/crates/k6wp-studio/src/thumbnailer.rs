@@ -41,7 +41,7 @@ const THUMB_VERSION: &str = "thumb-v3";
 const THUMB_MAX_CONCURRENT: usize = 2;
 
 /// Default thumbnail dimensions (kontrak `thumbnailer.cpp`: `kThumbWidth` = 320, `kThumbHeight` = 180).
-/// **Dinamis** (`BuildThumbCommand` menerima `int width, int height` — `ADR` C1 verified).
+/// **Hardcode** (`GenerateTo` hanya `(video, thumb)`, `BuildThumbCommand` dipanggil dengan `kThumbWidth`/`kThumbHeight` — `ADR` C1 verified: `GenerateTo` tanpa `width,height` param).
 pub const THUMB_WIDTH: u32 = 320;
 pub const THUMB_HEIGHT: u32 = 180;
 
