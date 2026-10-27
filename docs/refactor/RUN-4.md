@@ -1,6 +1,6 @@
 # RUN-4 — Thumbnailer (impl + test, Opsi A split, 2026-10-27)
 
-**Branch**: `refactor/rust-wt`. **ADR** (`adr-thumbnailer.md`, `bd213b0` koreksi): `GenerateTo` hanya `(video, thumb)` → `BuildThumbCommand` dipanggil dengan `kThumbWidth=320, kThumbHeight=180` (`hardcode`, bukan `int width,height` dinamis). Cache key (`ThumbCacheKeyMaterial`): `abs_path|size|mtime|thumb-v3` — **tanpa w×h** (match Qt `thumbnailer.cpp`, `ADR` §4, C1 verified). **Biaya**: 1 run (`P0` — Run 4: impl + test), `P0` — Run 4b (cold cache 200 `UNPROVEN`). Budget tight ($0.25 buffer), **tidak rework**.
+**Branch**: `refactor/rust-wt`. **ADR** (`adr-thumbnailer.md`, `bd213b0` koreksi): `GenerateTo` hanya `(video, thumb)` → `BuildThumbCommand` dipanggil dengan `kThumbWidth=320, kThumbHeight=180` (`hardcode`, bukan `int width,height` dinamis). Cache key (`ThumbCacheKeyMaterial`): `abs_path|size|mtime|thumb-v3` — **tanpa w×h** (match Qt `thumbnailer.cpp`, `ADR` §4, C1 verified). **Biaya**: 1 run (`P0` — Run 4: impl + test), `P0` — Run 4b (cold cache 200 `UNPROVEN`). **Opsi A split**: total 13 run (`~$9.75` < `$10`, buffer `$0.25`). `B2`: syarat jujur — `UNPROVEN` dicatat eksplisit (`ADR` §7, `RUN-4.md` §3). **Tidak rework** (budget tight — tanpa buffer untuk error besar).
 
 ---
 

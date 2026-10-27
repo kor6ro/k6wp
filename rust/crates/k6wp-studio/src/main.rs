@@ -12,6 +12,7 @@ slint::include_modules!();
 
 mod grid;
 mod history;
+pub mod thumbnailer;
 mod thumbs;
 mod worker;
 
