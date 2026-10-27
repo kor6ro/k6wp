@@ -26,7 +26,9 @@ use std::time::{Duration, Instant};
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use crate::thumbs::{ImageCache, Pixels, CACHE_CAP_BYTES};
-use crate::worker::{EngineState, Entry, Event, IpcStatus, Request};
+use crate::worker::{
+    choose_thumb_request, EngineState, Entry, Event, IpcStatus, Request, ThumbChoice,
+};
 
 /// The rows kept alive above and below the viewport. One row of buffer is
 /// enough to hide a scroll step; two would double the decode work.
@@ -520,13 +522,26 @@ impl Studio {
                 continue;
             }
             self.pending.insert(index);
-            let _ = self.tx.send(Request::Thumb {
-                index,
-                generation: self.generation,
-                path: card.thumb.clone(),
-                width,
-                height,
-            });
+
+            // Use cached thumbnail if available, otherwise generate from video
+            let choice = worker::choose_thumb_request(&card.thumb, &card.media);
+            match choice {
+                worker::ThumbChoice::Decode { thumb_path } => {
+                    let _ = self.tx.send(Request::Thumb {
+                        index,
+                        generation: self.generation,
+                        path: thumb_path,
+                        width,
+                        height,
+                    });
+                }
+                worker::ThumbChoice::Generate { media_path } => {
+                    let _ = self.tx.send(Request::Thumbnail {
+                        index,
+                        media: media_path,
+                    });
+                }
+            }
         }
     }
 

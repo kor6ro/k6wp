@@ -10,6 +10,7 @@ description = "The K6WP Studio: the wallpapers, the library and the settings, in
 k6wp-core = { path = "../k6wp-core", version = "0.1.0" }
 k6wp-ipc = { path = "../k6wp-ipc", version = "0.1.0" }
 slint = { workspace = true }
+sha1 = "0.10.6"
 serde_json = "1"
 # The minimal decoders: the Studio reads thumbnails, it is not an image editor.
 # Default features off - jpeg-decoder's `rayon` would pull a thread pool for a
@@ -32,3 +33,7 @@ slint-build = "1"
 [[bin]]
 name = "k6wp-studio"
 path = "src/main.rs"
+
+[lib]
+name = "k6wp_studio"
+path = "src/lib.rs"

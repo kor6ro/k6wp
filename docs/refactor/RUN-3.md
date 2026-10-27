@@ -2,7 +2,7 @@
 
 Status: ADR `docs/refactor/adr-thumbnailer.md` (Run 3, 76 baris) sudah `done`. Kontrak Qt (`thumbnailer.cpp`) disalin persis (`thumb-v3`, `pad=W:H` dinamis `int width,height` dari `BuildThumbCommand`, `SafeSeekSeconds`, `ThumbCacheKeyMaterial`). File ini (`thumbnailer.rs`) baru (`B3` — spawn ffmpeg terpisah dari `thumbs.rs` decode pure).
 
-**Angka**: semua `UNPROVEN` (`P0` — `Run 4b`). Tidak ada `live-proven` / `test-proven` sebelum implementasi + test (`tests/thumbnailer.rs`).
+**Angka**: semua `UNPROVEN` (`P0` — `Run 12`). Tidak ada `live-proven` / `test-proven` sebelum implementasi + test (`tests/thumbnailer.rs`).
 
 ---
 
@@ -48,7 +48,7 @@ File baru (`B3` — `thumbnailer.rs`, bukan `thumbs.rs`): spawn ffmpeg (`process
 4. `missing_file_errors`: `ThumbError::InvalidMedia` (tidak butuh ffmpeg — selalu jalan).
 5. `timeout_kills_ffmpeg`: fake ffmpeg (`.bat` sleep 60s) → timeout 10s, child kill, `ThumbError::Timeout`. Skip jika `find_ffmpeg()` `None`.
 
-## 4. Ukur (`P0` — `Run 4b` — `UNPROVEN` di ADR, `live-proven` / `test-proven` setelah `Run 4`)
+## 4. Ukur (`P0` — `Run 12` — `UNPROVEN` di ADR, `live-proven` / `test-proven` setelah `Run 4`)
 
 Tidak ada angka `live-proven` / `test-proven` di ADR. Angka wajib `RUN-4.md`:
 
@@ -67,8 +67,8 @@ Tidak ada angka `live-proven` / `test-proven` di ADR. Angka wajib `RUN-4.md`:
 ## NEXT TASK (`RUN-4.md` — `P0`)
 
 - `Run 4`: implementasi (`thumbnailer.rs`) + test (`tests/thumbs.rs`) + kompilasi (`cargo check`/`clippy`) + `RUN-4.md` (≤15 baris, angka `UNPROVEN` wajib dicatat).
-- `Run 4b`: cold cache 200 item (`thumbnail-cold-200.json`, `live-proven` atau `UNPROVEN`) + RAM (`thumbnail-ram.json`).
-- `A1` checklist (`parity-checklist.md`): `P0 — Run 4` (impl+test) + `P0 — Run 4b` (angka).
+- `Run 12`: cold cache 200 item (`thumbnail-cold-200.json`, `live-proven` atau `UNPROVEN`) + RAM (`thumbnail-ram.json`).
+- `A1` checklist (`parity-checklist.md`): `P0 — Run 4` (impl+test) + `P0 — Run 12` (angka).
 - `B3/B4` (`2-monitor` + `real sleep`): `UNPROVEN` (`P0` `Run 10` atau manual).
 - `B5` (`G6` test-proven): `P0 — Run 10` (`K6WP_IPC_LIVE=1`).
 - `B6` (`fail-open`): `P0 — evaluasi Run 12` (`parity-checklist.md` `B6`).

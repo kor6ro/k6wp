@@ -16,6 +16,7 @@ use k6wp_core::{ipc::IpcMessage, LibraryIndex};
 use k6wp_ipc::{current_session_pipe_name, ConnectOptions, IpcClient, IpcError};
 use serde_json::Value;
 
+use crate::thumbnailer::{generate_thumbnail, THUMB_HEIGHT, THUMB_WIDTH};
 use crate::thumbs::{decode_to_cover, Pixels};
 
 /// How long an unreachable path may take before the card says
@@ -71,6 +72,8 @@ pub enum Request {
     Resume,
     /// Stop the worker (sent on shutdown; the loop also ends on hang-up).
     Stop,
+    /// Generate thumbnail for a library card (async, done on worker thread).
+    Thumbnail { index: usize, media: PathBuf },
 }
 
 /// The current IPC connection status.
@@ -242,6 +245,23 @@ fn run(rx: Receiver<Request>, sink: Sink, pipe_name_override: Option<String>) {
                     index,
                     generation,
                     result,
+                });
+            }
+            Ok(Request::Thumbnail { index, media }) => {
+                // Generate thumbnail using ffmpeg, then decode
+                let cache_dir = std::env::current_exe()
+                    .ok()
+                    .and_then(|p| p.parent().map(|d| d.join("thumbs")))
+                    .unwrap_or_else(|| std::env::temp_dir().join("k6wp-thumbs"));
+                std::fs::create_dir_all(&cache_dir).ok();
+                let result = generate_thumbnail(&media, &cache_dir, THUMB_WIDTH, THUMB_HEIGHT);
+                let decoded = result
+                    .map_err(|e| e.to_string())
+                    .and_then(|path| read_and_decode(&path, THUMB_WIDTH, THUMB_HEIGHT));
+                sink.emit(Event::Thumb {
+                    index,
+                    generation: 0, // thumbnail generation is separate from card generation
+                    result: decoded,
                 });
             }
             Ok(Request::Theme) => {
@@ -1283,5 +1303,42 @@ mod tests {
         apply_state_answer(&answer, &mut state);
         assert_eq!(state.video_name, None);
         assert!(!state.is_paused);
+    }
+}
+
+#[allow(dead_code)]
+pub(crate) enum ThumbChoice {
+    Generate { media_path: PathBuf },
+    Decode { thumb_path: PathBuf },
+}
+
+#[allow(dead_code)]
+pub(crate) fn choose_thumb_request(thumb: &Path, media: &Path) -> ThumbChoice {
+    if thumb.as_os_str().is_empty() {
+        ThumbChoice::Generate {
+            media_path: media.to_path_buf(),
+        }
+    } else {
+        ThumbChoice::Decode {
+            thumb_path: thumb.to_path_buf(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod choose_thumb_tests {
+    use super::*;
+
+    #[test]
+    fn choose_empty_thumb_generates() {
+        let choice = choose_thumb_request(Path::new(""), Path::new(r"C:\video.mp4"));
+        assert!(matches!(choice, ThumbChoice::Generate { .. }));
+    }
+
+    #[test]
+    fn choose_existing_thumb_decodes() {
+        let choice =
+            choose_thumb_request(Path::new(r"C:\cache\abc.jpg"), Path::new(r"C:\video.mp4"));
+        assert!(matches!(choice, ThumbChoice::Decode { .. }));
     }
 }
