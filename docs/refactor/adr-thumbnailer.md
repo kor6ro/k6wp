@@ -1,6 +1,6 @@
 # ADR-Thumbnailer — ffmpeg subprocess (kontrak `studio/src/thumbnailer.cpp`)
 
-Status: ADR only (Run 3, `wip-a11-snapshot`). Implementasi (`rust/crates/k6wp-studio/src/thumbs.rs` / `thumbs.rs` baru) = `P0 — Run 4`. Test (`tests/thumbs.rs`) + ukur cold cache 200 item = `P0 — Run 4`. Tidak ada angka `live-proven` / `test-proven` di ADR — angka hanya muncul setelah implementasi + pengukuran (`RUN-4.md`).
+Status: ADR dikoreksi (Run 3b) — `GenerateTo` menerima `(video, thumb)`, **tanpa** `width, height`; selalu panggil `BuildThumbCommand(ffmpeg, video, thumb, seek, kThumbWidth, kThumbHeight, kJpegQuality)` (`l.424-425`): `-vf scale=320:180:force_original_aspect_ratio=decrease,pad=320:180` — **hardcode 320:180** (`kThumbWidth`/`kThumbHeight` `l.50-51`), bukan dinamis (`W:H` tetap konstanta, bukan parameter dinamis). Cache key = `abs_path|size|mtime|thumb-v3` (`ADR` §4) — **tanpa w×h**, match persis `thumbnailer.cpp` (`ThumbCacheKeyMaterial`).
 
 ---
 
