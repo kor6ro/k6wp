@@ -48,5 +48,11 @@ All 36 tests pass (34 original + 2 new).
 ## Parity Checklist Update
 | A2 | Import flow | `done — Run 6 (file pick + import)` + `deferred (drag-drop, post-v1)` |
 
-## Next (Run 7)
-- A3: Compress antrian (compressor Rust / IPC)
+## Next (Run 7 — DONE)
+- A3: Compress antrian (compressor Rust / IPC) — **completed Run 7**
+  - `Request::Compress` / `Request::CompressCancel` variants in `worker.rs`
+  - `Event::CompressProgress` / `Event::CompressDone` variants
+  - Worker spawns `compressor.exe` per job (via `cmd /c` for `.bat`), parses `time=` progress from stdout
+  - `taskkill /T /F /PID` cancel support
+  - 4 tests: `compress_spawns_compressor`, `compress_parses_error`, `compress_progress_from_stderr`, `compress_cancel_kills_tree`
+  - All 41 lib tests pass (37 original + 4 new)
