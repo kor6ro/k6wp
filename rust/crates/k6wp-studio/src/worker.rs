@@ -559,10 +559,14 @@ fn compress_handler(
     let argv = build_argv(&args);
 
     // On Windows, .bat/.cmd files cannot be executed directly; run them via cmd /c.
+    // Only compiled in debug/test builds — production always spawns compressor.exe directly.
+    #[cfg(debug_assertions)]
     let is_batch = compressor_exe
         .extension()
         .map(|e| e == "bat" || e == "cmd")
         .unwrap_or(false);
+    #[cfg(not(debug_assertions))]
+    let is_batch = false;
     let mut base_cmd: std::process::Command = if is_batch {
         let mut c = std::process::Command::new("cmd");
         c.arg("/c").arg(&compressor_exe);
