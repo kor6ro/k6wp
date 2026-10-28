@@ -9,7 +9,6 @@
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::time::{Duration, Instant};
 
 /// Thumbnail error hierarchy (untuk `tests/thumbnailer.rs` 5 test).
 #[derive(Debug, PartialEq, Eq)]
@@ -38,8 +37,6 @@ impl std::fmt::Display for ThumbError {
 const THUMB_VERSION: &str = "thumb-v3";
 
 /// Konkurensi thumbnail generation (konstanta, bukan hardcode `PROBE_THREADS`-style).
-const THUMB_MAX_CONCURRENT: usize = 2;
-
 /// Default thumbnail dimensions (kontrak `thumbnailer.cpp`: `kThumbWidth` = 320, `kThumbHeight` = 180).
 /// **Hardcode** (`GenerateTo` hanya `(video, thumb)`, `BuildThumbCommand` dipanggil dengan `kThumbWidth`/`kThumbHeight` — `ADR` C1 verified: `GenerateTo` tanpa `width,height` param).
 pub const THUMB_WIDTH: u32 = 320;
@@ -82,7 +79,7 @@ pub fn find_ffmpeg() -> Option<PathBuf> {
 /// Alasan: `-ss 1` gagal untuk video <1s (seek past EOF, no frame);
 /// clamp half-duration untuk klip pendek (`duration/2.0`); fallback `0.0` jika durasi ≤0.
 pub fn safe_seek_seconds(duration_seconds: f64) -> f64 {
-    if !(duration_seconds > 0.0) {
+    if duration_seconds <= 0.0 {
         return 0.0;
     }
     if duration_seconds >= 2.0 {
@@ -103,7 +100,15 @@ pub fn generate_thumbnail(
     // 1. Cek ffmpeg (fallback placeholder jika `None` — `ADR` §6)
     let ffmpeg_path = find_ffmpeg().ok_or(ThumbError::FfmpegNotFound)?;
 
-    // 2. Cache key (`ADR` §4, `C1` verified: `abs|size|mtime|thumb-v3`)
+    // 2. Validasi file media (return InvalidMedia jika tidak ada — `ADR` §6)
+    if !media_path.exists() {
+        return Err(ThumbError::InvalidMedia(format!(
+            "file tidak ditemukan: {}",
+            media_path.display()
+        )));
+    }
+
+    // 3. Cache key (`ADR` §4, `C1` verified: `abs|size|mtime|thumb-v3`)
     let abs_string = media_path
         .canonicalize()
         .unwrap_or_else(|_| media_path.to_path_buf());
@@ -257,14 +262,26 @@ mod tests {
 
     #[test]
     fn missing_file_errors() {
+        // Set up a fake ffmpeg that exits with error code 1 (so file validation happens first)
+        let fake_dir = std::env::temp_dir().join("k6wp-test-fake-ffmpeg-missing");
+        std::fs::create_dir_all(&fake_dir).ok();
+        let fake_bat = fake_dir.join("ffmpeg.bat");
+        std::fs::write(&fake_bat, "@exit /b 1\n").expect("write fake ffmpeg");
+        std::env::set_var("K6WP_FFMPEG", &fake_bat);
+
         let missing = std::env::temp_dir().join("k6wp-test-missing.mp4");
         let cache = std::env::temp_dir().join("k6wp-test-thumb-missing");
         std::fs::create_dir_all(&cache).ok();
         let result = generate_thumbnail(&missing, &cache, 320, 180);
+        eprintln!("DEBUG missing_file_errors: result = {:?}", result);
         assert!(
             matches!(result, Err(ThumbError::InvalidMedia(_))),
-            "expected InvalidMedia for missing file"
+            "expected InvalidMedia for missing file, got: {:?}",
+            result
         );
+
+        // Clean up
+        std::env::remove_var("K6WP_FFMPEG");
     }
 
     #[test]

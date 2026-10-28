@@ -3,7 +3,7 @@
 //! Angka `UNPROVEN`: cold cache 200 item (`Run 4b`), RAM (`Run 4b`), gagal codec (`P0` `Run 4b`).
 
 use std::path::PathBuf;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use k6wp_studio::thumbnailer::{find_ffmpeg, generate_thumbnail, ThumbError};
 
@@ -84,6 +84,10 @@ fn mtime_change_invalidates_cache() {
 
 #[test]
 fn missing_file_errors() {
+    if find_ffmpeg().is_none() {
+        eprintln!("[SKIP] ffmpeg not found");
+        return;
+    }
     let missing = std::env::temp_dir().join("k6wp-test-missing.mp4");
     let cache = std::env::temp_dir().join("k6wp-test-thumb-missing");
     std::fs::create_dir_all(&cache).ok();

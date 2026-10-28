@@ -11,7 +11,7 @@ Status label: `done` (bukti di file) | `P0 — Run N` (jadwal) | `P0 — Run 9` 
 | # | Komponen | Status | Catatan / alasan |
 |---|---|---|---|
 | A1 | Thumbnailer video (ADR thumbnailer) | `done — Run 3 (ADR), Run 4 (impl+test), Run 5 (wiring)` + `P0 — Run 12 (cold 200 + RAM)` | `thumbnailer.rs` (184 baris), `tests/thumbnailer.rs` (5 test), `Request::Thumbnail` + `choose_thumb_request` (test-proven, Run 5). Cold 200 `UNPROVEN — Run 12` |
-| A2 | Import flow (media picker + probe) | `P0 — Run 4` | `library_index_path()` sudah ada (`main.rs`); alur UI import belum lengkap |
+| A2 | Import flow (media picker + probe) | `done — Run 6 (file pick + import)` + `deferred (drag-drop, post-v1)` | `LibraryIndex::save_atomic`, `Request::Import`, `rfd` file pick, `import_tests` (4 test: save_atomic_round_trip, import_appends_to_library, import_validates_extension, import_validates_missing_file). Drag-drop deferred post-v1. |
 | A3 | Compress antrian (compressor Rust / IPC) | `P0 — Run 5` | `compressor/src/` belum porting |
 | A4 | Settings page (konfigurasi pengguna) | `P0 — Run 6` | `studio/src/` (Qt) masih referensi; `k6wp-studio` belum |
 | A5 | Assign per-monitor + playlist UI | `P0 — Run 7` | `pause_controller` (C++) masih referensi |

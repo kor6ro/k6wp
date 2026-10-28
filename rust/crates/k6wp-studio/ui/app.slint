@@ -1,4 +1,4 @@
-﻿// The K6WP Studio - the Library page (Phase 2, Blok A-6).
+// The K6WP Studio - the Library page (Phase 2, Blok A-6).
 //
 // One page: a header, a virtualised grid of cards and a status line. The grid
 // is a ListView, which instantiates only the rows that fit the viewport; Rust
@@ -206,6 +206,8 @@ export component AppWindow inherits Window {
     callback resume();
     // User clicked "Urungkan" in the toast: go back to the previous wallpaper.
     callback undo();
+    // User clicked "Impor" in the header.
+    callback import();
 
     title: "K6WP Studio";
     preferred-width: 960px;
@@ -272,9 +274,13 @@ export component AppWindow inherits Window {
                 }
             }
 
-            // Right: pause/resume buttons
+            // Right: import/pause/resume buttons
             HorizontalLayout {
                 spacing: Tokens.space-xs;
+                Button {
+                    text: "Impor";
+                    clicked => { root.import(); }
+                }
                 Button {
                     text: "Jeda";
                     enabled: !is-paused;

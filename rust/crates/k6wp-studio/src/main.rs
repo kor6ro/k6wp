@@ -30,6 +30,9 @@ use crate::worker::{
     choose_thumb_request, EngineState, Entry, Event, IpcStatus, Request, ThumbChoice,
 };
 
+#[cfg(debug_assertions)]
+use rfd::FileDialog;
+
 /// The rows kept alive above and below the viewport. One row of buffer is
 /// enough to hide a scroll step; two would double the decode work.
 const BUFFER_ROWS: usize = 1;
@@ -185,6 +188,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ui.on_pause(|| with_studio(|studio| studio.pause()));
     ui.on_resume(|| with_studio(|studio| studio.resume()));
     ui.on_undo(|| with_studio(|studio| studio.undo()));
+    ui.on_import(|| with_studio(|studio| studio.import()));
 
     STUDIO.with(|slot| {
         *slot.borrow_mut() = Some(Studio {
@@ -644,6 +648,19 @@ impl Studio {
     /// Callback: user clicked "Lanjut" in the header.
     fn resume(&mut self) {
         let _ = self.tx.send(Request::Resume);
+    }
+
+    /// Callback: user clicked "Impor" in the header.
+    fn import(&mut self) {
+        let files = rfd::FileDialog::new()
+            .add_filter("Video", &["mp4", "mkv", "webm", "mov"])
+            .set_directory(std::env::var("USERPROFILE").unwrap_or_default())
+            .pick_files();
+        if let Some(files) = files {
+            if !files.is_empty() {
+                let _ = self.tx.send(Request::Import { paths: files });
+            }
+        }
     }
 }
 

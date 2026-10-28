@@ -240,6 +240,10 @@ impl ImageCache {
         self.map.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.map.is_empty()
+    }
+
     /// Looks a key up and touches it (that is what makes it an LRU).
     pub fn get(&mut self, key: u64) -> Option<slint::Image> {
         self.stamp += 1;

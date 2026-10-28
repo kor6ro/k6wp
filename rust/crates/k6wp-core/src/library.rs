@@ -166,6 +166,18 @@ impl LibraryIndex {
     pub fn to_json(&self) -> String {
         serde_json::to_string_pretty(self).unwrap_or_else(|_| "{}".to_string())
     }
+
+    /// Persists the index atomically: writes to `<path>.tmp`, then renames over `<path>`.
+    ///
+    /// This mirrors the C++ `config_store::AtomicWriteJson` behaviour: the target
+    /// file is only replaced on success, so a crash never leaves a half-written file.
+    pub fn save_atomic(&self, path: &std::path::Path) -> Result<(), LibraryError> {
+        let json = self.to_json();
+        let tmp = path.with_extension("tmp");
+        std::fs::write(&tmp, json).map_err(|e| LibraryError::Io(e.to_string()))?;
+        std::fs::rename(&tmp, path).map_err(|e| LibraryError::Io(e.to_string()))?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -235,5 +247,22 @@ mod tests {
         let index = LibraryIndex::parse(text).expect("parse");
         let again = LibraryIndex::parse(&index.to_json()).expect("re-parse");
         assert_eq!(index, again);
+    }
+
+    #[test]
+    fn save_atomic_round_trip() {
+        let text = r#"{"version":1,"entries":[{"src":"a","dst":"b","res":"1x1","fps":24,
+            "crf":22,"encoder":"libx264","mtime":1,"size":2,"duration":3.5,
+            "codec":"h264","width":4,"height":5,"thumb":"t","broken":true}]}"#;
+        let index = LibraryIndex::parse(text).expect("parse");
+        let temp_dir = std::env::temp_dir();
+        let test_path = temp_dir.join(format!("k6wp-test-library-{}.json", std::process::id()));
+        index
+            .save_atomic(&test_path)
+            .expect("save_atomic must succeed");
+        let reloaded =
+            LibraryIndex::parse(&std::fs::read_to_string(&test_path).unwrap()).expect("re-parse");
+        assert_eq!(index, reloaded);
+        let _ = std::fs::remove_file(&test_path);
     }
 }

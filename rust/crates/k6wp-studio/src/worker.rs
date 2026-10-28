@@ -1,4 +1,4 @@
-﻿//! The Studio worker: every touch of the file system, the registry, the
+//! The Studio worker: every touch of the file system, the registry, the
 //! network, or the IPC pipe happens here, never on the Slint event loop.
 //!
 //! `tools/lint_ui_thread.ps1` enforces the split: a line in this file that
@@ -39,12 +39,15 @@ const POLL_INTERVAL_VISIBLE: Duration = Duration::from_secs(2);
 /// One library entry, reduced to what the grid draws.
 #[derive(Clone, Debug)]
 pub struct Entry {
+    pub index: usize,
     pub name: String,
     pub meta: String,
     pub thumb: PathBuf,
     pub media: PathBuf,
     /// The index already knows the copy is gone (written by the C++ side).
     pub broken: bool,
+    /// File is missing from disk.
+    pub unavailable: bool,
 }
 
 /// A request from the UI thread to the worker.
@@ -74,6 +77,8 @@ pub enum Request {
     Stop,
     /// Generate thumbnail for a library card (async, done on worker thread).
     Thumbnail { index: usize, media: PathBuf },
+    /// Import one or more media files into the library.
+    Import { paths: Vec<PathBuf> },
 }
 
 /// The current IPC connection status.
@@ -295,6 +300,44 @@ fn run(rx: Receiver<Request>, sink: Sink, pipe_name_override: Option<String>) {
                     );
                 }
             }
+            Ok(Request::Import { paths }) => {
+                // Import: validate paths, add to library.json, emit LibraryUpdated
+                let lib_path = match library_index_path(None) {
+                    Some(p) => p,
+                    None => {
+                        sink.emit(Event::IpcError(
+                            "Tidak bisa menemukan library.json".to_string(),
+                        ));
+                        return;
+                    }
+                };
+                match import_into_library(&lib_path, &paths) {
+                    Ok(added_indices) => {
+                        // Emit updated library
+                        let index = LibraryIndex::parse(
+                            &std::fs::read_to_string(&lib_path).unwrap_or_default(),
+                        )
+                        .unwrap_or_default();
+                        let entries: Vec<Entry> = index
+                            .entries
+                            .iter()
+                            .map(|e| Entry {
+                                index: 0,
+                                name: e.dst.file_name().unwrap().to_string_lossy().to_string(),
+                                meta: String::new(),
+                                thumb: e.thumb.clone(),
+                                media: e.dst.clone(),
+                                unavailable: !e.dst.exists(),
+                                broken: e.broken,
+                            })
+                            .collect();
+                        sink.emit(Event::Library(Ok(entries)));
+                    }
+                    Err(e) => {
+                        sink.emit(Event::IpcError(e));
+                    }
+                }
+            }
             Ok(Request::Pause) => {
                 if let Some(client) = &mut ipc_client {
                     handle_pause(client, &sink);
@@ -315,7 +358,6 @@ fn run(rx: Receiver<Request>, sink: Sink, pipe_name_override: Option<String>) {
                 }
             }
         }
-
         // If disconnected, attempt reconnection with backoff (non-blocking)
         if ipc_client.is_none()
             && ipc_status != IpcStatus::Disconnected
@@ -333,6 +375,69 @@ fn run(rx: Receiver<Request>, sink: Sink, pipe_name_override: Option<String>) {
             next_connect_attempt = Instant::now() + backoff;
         }
     }
+}
+
+pub(crate) fn import_into_library(
+    lib_path: &Path,
+    paths: &[PathBuf],
+) -> Result<Vec<usize>, String> {
+    let mut index =
+        match LibraryIndex::parse(&std::fs::read_to_string(lib_path).unwrap_or_default()) {
+            Ok(idx) => idx,
+            Err(e) => return Err(format!("Gagal baca library.json: {e}")),
+        };
+    let mut added = 0;
+    let lib_dir = lib_path.parent().unwrap();
+    for path in paths {
+        if !path.exists() {
+            return Err(format!("File tidak ditemukan: {}", path.display()));
+        }
+        let ext = path
+            .extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_lowercase();
+        if !matches!(ext.as_str(), "mp4" | "mkv" | "webm" | "mov") {
+            return Err(format!("Format tidak didukung: {}", path.display()));
+        }
+        let meta = std::fs::metadata(path)
+            .map_err(|e| format!("Gagal baca metadata {}: {e}", path.display()))?;
+        if meta.len() == 0 {
+            return Err(format!("File kosong: {}", path.display()));
+        }
+        let dst_name = path.file_name().unwrap().to_string_lossy().to_string();
+        let dst = lib_dir.join("wallpapers").join(&dst_name);
+        std::fs::create_dir_all(lib_dir.join("wallpapers")).ok();
+        std::fs::copy(path, &dst).map_err(|e| format!("Gagal copy {}: {e}", path.display()))?;
+        let mtime = meta
+            .modified()
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        let entry = k6wp_core::library::LibraryEntry {
+            src: path.clone(),
+            dst,
+            res: "0x0".to_string(),
+            fps: 30,
+            crf: 23,
+            encoder: "libx264".to_string(),
+            mtime,
+            size: meta.len(),
+            duration: 0.0,
+            codec: "".to_string(),
+            width: 0,
+            height: 0,
+            thumb: PathBuf::new(),
+            broken: false,
+        };
+        index.entries.push(entry);
+        added += 1;
+    }
+    index
+        .save_atomic(lib_path)
+        .map_err(|e| format!("Gagal simpan library.json: {e}"))?;
+    Ok((index.entries.len() - added..index.entries.len()).collect())
 }
 
 fn expected_engine_image() -> Option<PathBuf> {
@@ -512,6 +617,34 @@ pub fn load_library(path: &Path) -> Result<Vec<Entry>, String> {
     Ok(index.entries.iter().map(entry_view).collect())
 }
 
+/// Returns the path to `library.json` if it can be found.
+/// Tries the current executable's directory first, then the current working directory.
+fn library_index_path(override_dir: Option<PathBuf>) -> Option<PathBuf> {
+    if let Some(dir) = override_dir {
+        let p = dir.join("library.json");
+        if p.exists() {
+            return Some(p);
+        }
+    }
+    // Try current executable's directory
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let p = dir.join("library.json");
+            if p.exists() {
+                return Some(p);
+            }
+        }
+    }
+    // Try current working directory
+    if let Ok(cwd) = std::env::current_dir() {
+        let p = cwd.join("library.json");
+        if p.exists() {
+            return Some(p);
+        }
+    }
+    None
+}
+
 fn entry_view(entry: &k6wp_core::LibraryEntry) -> Entry {
     let name = entry
         .dst
@@ -535,10 +668,12 @@ fn entry_view(entry: &k6wp_core::LibraryEntry) -> Entry {
         meta.push_str(&entry.codec);
     }
     Entry {
+        index: 0,
         name,
         meta,
         thumb: entry.thumb.clone(),
         media: entry.dst.clone(),
+        unavailable: !entry.dst.exists(),
         broken: entry.broken,
     }
 }
@@ -648,6 +783,25 @@ fn system_is_dark() -> bool {
 #[cfg(not(windows))]
 fn system_animations_enabled() -> bool {
     true
+}
+
+#[allow(dead_code)]
+pub(crate) enum ThumbChoice {
+    Generate { media_path: PathBuf },
+    Decode { thumb_path: PathBuf },
+}
+
+#[allow(dead_code)]
+pub(crate) fn choose_thumb_request(thumb: &Path, media: &Path) -> ThumbChoice {
+    if thumb.as_os_str().is_empty() {
+        ThumbChoice::Generate {
+            media_path: media.to_path_buf(),
+        }
+    } else {
+        ThumbChoice::Decode {
+            thumb_path: thumb.to_path_buf(),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1086,6 +1240,9 @@ mod tests {
                     // Accept connection but NEVER read/answer - ReadFile blocks forever.
                     // This simulates a server that accepts but doesn't respond.
                     let _ = unsafe { ReadFile(pipe, Some(&mut [0u8; 1]), Some(&mut 0u32), None) };
+                    // Hold pipe open so client times out (800ms ConnectOptions), not transport error.
+                    // This tests the real timeout path, not pipe-close transport error.
+                    std::thread::sleep(Duration::from_secs(3));
                     unsafe {
                         let _ = CloseHandle(pipe);
                     }
@@ -1304,41 +1461,84 @@ mod tests {
         assert_eq!(state.video_name, None);
         assert!(!state.is_paused);
     }
-}
 
-#[allow(dead_code)]
-pub(crate) enum ThumbChoice {
-    Generate { media_path: PathBuf },
-    Decode { thumb_path: PathBuf },
-}
+    #[cfg(test)]
+    mod choose_thumb_tests {
+        use super::*;
+        use crate::thumbnailer::ThumbError;
 
-#[allow(dead_code)]
-pub(crate) fn choose_thumb_request(thumb: &Path, media: &Path) -> ThumbChoice {
-    if thumb.as_os_str().is_empty() {
-        ThumbChoice::Generate {
-            media_path: media.to_path_buf(),
+        #[test]
+        fn choose_empty_thumb_generates() {
+            let choice = choose_thumb_request(Path::new(""), Path::new(r"C:\video.mp4"));
+            assert!(matches!(choice, ThumbChoice::Generate { .. }));
         }
-    } else {
-        ThumbChoice::Decode {
-            thumb_path: thumb.to_path_buf(),
+
+        #[test]
+        fn choose_existing_thumb_decodes() {
+            let choice =
+                choose_thumb_request(Path::new(r"C:\cache\abc.jpg"), Path::new(r"C:\video.mp4"));
+            assert!(matches!(choice, ThumbChoice::Decode { .. }));
         }
     }
-}
 
-#[cfg(test)]
-mod choose_thumb_tests {
-    use super::*;
+    #[cfg(test)]
+    mod import_tests {
+        use super::*;
+        use k6wp_core::library::LibraryEntry;
 
-    #[test]
-    fn choose_empty_thumb_generates() {
-        let choice = choose_thumb_request(Path::new(""), Path::new(r"C:\video.mp4"));
-        assert!(matches!(choice, ThumbChoice::Generate { .. }));
-    }
+        #[test]
+        fn import_validates_extension() {
+            // Test that generate_thumbnail rejects non-video files
+            let temp =
+                std::env::temp_dir().join(format!("k6wp-test-import-{}.txt", std::process::id()));
+            std::fs::write(&temp, b"fake content").expect("must create temp file");
+            let cache = std::env::temp_dir().join("k6wp-test-thumb-import-ext");
+            std::fs::create_dir_all(&cache).ok();
+            let result = generate_thumbnail(&temp, &cache, THUMB_WIDTH, THUMB_HEIGHT);
+            assert!(result.is_err(), "txt should be rejected");
+        }
 
-    #[test]
-    fn choose_existing_thumb_decodes() {
-        let choice =
-            choose_thumb_request(Path::new(r"C:\cache\abc.jpg"), Path::new(r"C:\video.mp4"));
-        assert!(matches!(choice, ThumbChoice::Decode { .. }));
+        #[test]
+        fn import_validates_missing_file() {
+            let missing = PathBuf::from(r"Z:\definitely\not\here.mp4");
+            let cache = std::env::temp_dir().join("k6wp-test-thumb-missing");
+            std::fs::create_dir_all(&cache).ok();
+            let result = generate_thumbnail(&missing, &cache, THUMB_WIDTH, THUMB_HEIGHT);
+            assert!(result.is_err(), "missing file should be rejected");
+        }
+
+        #[test]
+        fn import_appends_to_library() {
+            // Setup: temp dir untuk library.json
+            let dir = std::env::temp_dir().join(format!("k6wp-import-test-{}", std::process::id()));
+            std::fs::create_dir_all(&dir).unwrap();
+            let lib_path = dir.join("library.json");
+            // Seed: 1 entry
+            let existing = LibraryIndex {
+                version: 1,
+                entries: vec![LibraryEntry {
+                    src: "old.mp4".into(),
+                    ..Default::default()
+                }],
+            };
+            existing.save_atomic(&lib_path).unwrap();
+            // Import: 1 file baru (buat file dummy)
+            let new_file = dir.join("new.mp4");
+            std::fs::write(&new_file, b"fake").unwrap();
+            let result = import_into_library(&lib_path, &[new_file.clone()]);
+            assert!(result.is_ok(), "import must succeed");
+            // Verify: 2 entries (append, bukan overwrite)
+            let after = LibraryIndex::parse(&std::fs::read_to_string(&lib_path).unwrap()).unwrap();
+            assert_eq!(after.entries.len(), 2, "import must APPEND, not overwrite");
+            assert!(after
+                .entries
+                .iter()
+                .any(|e| e.src.to_string_lossy().contains("old.mp4")));
+            assert!(after
+                .entries
+                .iter()
+                .any(|e| e.src.to_string_lossy().contains("new.mp4")));
+            std::fs::remove_dir_all(&dir).ok();
+        }
     }
 }

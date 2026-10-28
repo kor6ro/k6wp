@@ -18,6 +18,9 @@ serde_json = "1"
 jpeg-decoder = { version = "0.3", default-features = false }
 png = { version = "0.17", default-features = false }
 
+# File picker for import (cross-platform, minimal dependency)
+rfd = "0.15"
+
 # The system light/dark preference, read on the worker thread. Same crate and
 # version the other two crates already build, so no new DLL surface.
 [target.'cfg(windows)'.dependencies]

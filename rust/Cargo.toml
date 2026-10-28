@@ -14,7 +14,7 @@ rust-version = "1.80"
 license = "GPL-2.0-or-later"
 
 [workspace.dependencies]
-slint = "1"
+slint = "1.17"
 
 [profile.release]
 opt-level = "z"
