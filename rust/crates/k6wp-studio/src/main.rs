@@ -17,7 +17,7 @@ mod thumbs;
 mod worker;
 
 use std::cell::RefCell;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::mpsc::Sender;
@@ -77,6 +77,12 @@ struct Studio {
     /// E2E test: index to pick for set_wallpaper (debug-only).
     #[cfg(debug_assertions)]
     e2e_pick: Option<usize>,
+    /// Active compress jobs: job_id → pid (for taskkill cancel).
+    compress_jobs: HashMap<u64, u32>,
+    /// Next compress job id.
+    compress_next_id: u64,
+    /// Current compress progress (0-100) for toast display.
+    compress_pct: Option<u8>,
 }
 
 thread_local! {
@@ -189,6 +195,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ui.on_resume(|| with_studio(|studio| studio.resume()));
     ui.on_undo(|| with_studio(|studio| studio.undo()));
     ui.on_import(|| with_studio(|studio| studio.import()));
+    ui.on_compress(|index| with_studio(|studio| studio.compress(index)));
 
     STUDIO.with(|slot| {
         *slot.borrow_mut() = Some(Studio {
@@ -208,6 +215,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             engine_state: EngineState::default(),
             toast: None,
             history: history::WallpaperHistory::default(),
+            compress_jobs: HashMap::new(),
+            compress_next_id: 0,
+            compress_pct: None,
             #[cfg(debug_assertions)]
             e2e_pick: None,
         });
@@ -332,6 +342,38 @@ impl Studio {
                     .map(|a| a.name.clone())
                     .unwrap_or_default();
                 self.show_toast(format!("Terpasang: {name}"), undo);
+            }
+            Event::CompressProgress {
+                job_id,
+                pct,
+                eta_secs,
+            } => {
+                self.compress_pct = Some(pct);
+                let eta = eta_secs
+                    .map(|e| format!(" ({e}s remaining)"))
+                    .unwrap_or_default();
+                self.show_toast(format!("Mengompres... {pct}%{eta}"), false);
+            }
+            Event::CompressDone {
+                job_id,
+                ok,
+                out_path,
+                error,
+            } => {
+                self.compress_pct = None;
+                self.compress_jobs.remove(&job_id);
+                self.ui.set_compress_job_id(-1);
+                if ok {
+                    let name = out_path
+                        .as_ref()
+                        .and_then(|p| p.file_name().and_then(|n| n.to_str()))
+                        .unwrap_or("")
+                        .to_string();
+                    self.show_toast(format!("Selesai: {name}"), false);
+                } else {
+                    let msg = error.unwrap_or_else(|| "Gagal diketahui".to_string());
+                    self.show_toast(format!("Gagal: {msg}"), false);
+                }
             }
         }
     }
@@ -661,6 +703,41 @@ impl Studio {
                 let _ = self.tx.send(Request::Import { paths: files });
             }
         }
+    }
+
+    /// Callback: user clicked "Kompres" on a library card.
+    fn compress(&mut self, index: i32) {
+        let index = index as usize;
+        let Some(card) = self.cards.get(index) else {
+            return;
+        };
+        if card.unavailable {
+            return;
+        }
+        let job_id = self.compress_next_id;
+        self.compress_next_id += 1;
+        let out = card.media.with_extension("compressed.mp4");
+        self.compress_jobs.insert(job_id, 0); // pid will be set by worker
+        self.compress_pct = Some(0);
+        self.ui.set_compress_job_id(job_id as i32);
+        let _ = self.tx.send(Request::Compress {
+            job_id,
+            src: card.media.clone(),
+            out: out.clone(),
+            res_w: 1920,
+            res_h: 1080,
+            fps: 30,
+            crf: 23,
+        });
+        self.show_toast(format!("Mengompres {}... 0%", card.name), false);
+    }
+
+    /// Callback: user clicked "Batal" to cancel a compress job.
+    fn compress_cancel(&mut self, job_id: u64) {
+        let _ = self.tx.send(Request::CompressCancel { job_id });
+        self.compress_pct = None;
+        self.ui.set_compress_job_id(-1);
+        self.show_toast("Kompresi dibatalkan".to_string(), false);
     }
 }
 
