@@ -781,12 +781,14 @@ impl Studio {
         let settings = StudioSettings {
             version: self.settings.version,
             auto_compress_on_import: self.ui.get_settings_auto_compress(),
-            compress_output_dir: PathBuf::from(self.ui.get_settings_compress_output_dir()),
+            compress_output_dir: PathBuf::from(
+                self.ui.get_settings_compress_output_dir().to_string(),
+            ),
             default_crf: crf,
             default_fps: fps,
-            default_resolution_mode: self.ui.get_settings_default_resolution(),
+            default_resolution_mode: self.ui.get_settings_default_resolution().to_string(),
             start_with_windows: self.settings.start_with_windows,
-            cache_dir: PathBuf::from(self.ui.get_settings_cache_dir()),
+            cache_dir: PathBuf::from(self.ui.get_settings_cache_dir().to_string()),
             wallpaper_sync: self.ui.get_settings_wallpaper_sync(),
             lockscreen_sync: self.ui.get_settings_lockscreen_sync(),
             lockscreen_offset_sec: offset,
@@ -794,8 +796,8 @@ impl Studio {
             compress_advanced_visible: self.settings.compress_advanced_visible,
             check_updates: self.ui.get_settings_check_updates(),
             close_to_tray: self.ui.get_settings_close_to_tray(),
-            playlist_source: self.settings.playlist_source,
-            performance_preset: self.settings.performance_preset,
+            playlist_source: self.settings.playlist_source.clone(),
+            performance_preset: self.settings.performance_preset.clone(),
         };
         let _ = self.tx.send(Request::SettingsSave { settings });
     }
@@ -810,13 +812,13 @@ impl Studio {
             if let Some(path) = folder {
                 match field.as_ref() {
                     "compress_output_dir" => {
-                        self.ui.set_settings_compress_output_dir(SharedString::from(
-                            path.to_string_lossy(),
-                        ));
+                        self.ui.set_settings_compress_output_dir(
+                            path.to_string_lossy().to_string().into(),
+                        );
                     }
                     "cache_dir" => {
                         self.ui
-                            .set_settings_cache_dir(SharedString::from(path.to_string_lossy()));
+                            .set_settings_cache_dir(path.to_string_lossy().to_string().into());
                     }
                     _ => {}
                 }
