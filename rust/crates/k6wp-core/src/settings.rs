@@ -17,9 +17,12 @@
 //! `performancePreset`), which are read tolerantly and normalize to their
 //! safe default instead of failing the load.
 
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde_json::{Map, Value};
+
+use crate::config::merge_unknown_keys;
 
 pub use crate::config::ConfigError;
 
@@ -417,6 +420,56 @@ pub fn settings_report_json(settings: &StudioSettings) -> Value {
     Value::Object(out)
 }
 
+/// Crash-safe save of studio settings: serializes via [`settings_json`],
+/// merges unknown keys from the existing file (preserving fields from
+/// future versions), writes `"<path>.tmp"`, then renames over `path`.
+///
+/// # Errors
+///
+/// [`ConfigError`] when validation fails, the temp file cannot be written,
+/// or the atomic rename fails.
+pub fn save_studio_settings(path: &Path, settings: &StudioSettings) -> Result<(), ConfigError> {
+    let mut settings = settings.clone();
+    validate_studio_settings(&mut settings)?;
+    let existing = read_existing_json(path);
+    let known = settings_json(&settings);
+    let doc = merge_unknown_keys(&existing, &known);
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent)
+                .map_err(|e| ConfigError(format!("cannot create settings directory: {e}")))?;
+        }
+    }
+    let mut tmp = path.as_os_str().to_owned();
+    tmp.push(".tmp");
+    let tmp = PathBuf::from(tmp);
+    let text = serde_json::to_string_pretty(&doc)
+        .map_err(|e| ConfigError(format!("cannot serialize settings: {e}")))?;
+    fs::write(&tmp, text).map_err(|e| {
+        ConfigError(format!(
+            "cannot write settings temp file: {} ({e})",
+            tmp.display()
+        ))
+    })?;
+    fs::rename(&tmp, path).map_err(|e| {
+        let _ = fs::remove_file(&tmp);
+        ConfigError(format!(
+            "atomic settings replace failed: {} ({e})",
+            path.display()
+        ))
+    })
+}
+
+/// Read the existing settings file as a JSON object; an empty object when
+/// the file is missing, unreadable or not a JSON object.
+fn read_existing_json(path: &Path) -> Value {
+    fs::read_to_string(path)
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .filter(Value::is_object)
+        .unwrap_or_else(|| Value::Object(Map::new()))
+}
+
 /// The last path segment of `path` as an array of code units - the C++
 /// `std::filesystem::path(...).filename().wstring()` that the golden dump
 /// serializes as a byte array.
@@ -546,5 +599,91 @@ mod tests {
                 Value::from(101)
             ])
         );
+    }
+
+    #[test]
+    fn settings_round_trip() {
+        let dir =
+            std::env::temp_dir().join(format!("k6wp_settings_roundtrip_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).expect("scratch dir");
+        let path = dir.join("studio_settings.json");
+
+        let mut settings = StudioSettings::default();
+        settings.default_crf = 20;
+        settings.default_fps = 24;
+        settings.default_resolution_mode = "1080p".to_string();
+        settings.wallpaper_sync = false;
+        settings.lockscreen_sync = false;
+        settings.check_updates = false;
+
+        save_studio_settings(&path, &settings).expect("save must succeed");
+
+        let loaded = migrate_studio_settings(&fs::read_to_string(&path).expect("read settings"))
+            .expect("load must succeed");
+        assert_eq!(loaded, settings);
+        assert_eq!(loaded.default_crf, 20);
+        assert_eq!(loaded.default_fps, 24);
+        assert_eq!(loaded.default_resolution_mode, "1080p");
+        assert!(!loaded.wallpaper_sync);
+        assert!(!loaded.lockscreen_sync);
+        assert!(!loaded.check_updates);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn settings_validation_rejects_bad_crf() {
+        let dir = std::env::temp_dir().join(format!("k6wp_settings_badcrf_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).expect("scratch dir");
+        let path = dir.join("studio_settings.json");
+
+        let mut settings = StudioSettings::default();
+        settings.default_crf = 99;
+        let err = save_studio_settings(&path, &settings).expect_err("crf 99 must fail");
+        assert!(err.to_string().contains("default_crf out of range"));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn settings_validation_rejects_bad_fps() {
+        let dir = std::env::temp_dir().join(format!("k6wp_settings_badfps_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).expect("scratch dir");
+        let path = dir.join("studio_settings.json");
+
+        let mut settings = StudioSettings::default();
+        settings.default_fps = 31;
+        let err = save_studio_settings(&path, &settings).expect_err("fps 31 must fail");
+        assert!(err.to_string().contains("default_fps out of range"));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn settings_save_preserves_unknown_keys() {
+        let dir = std::env::temp_dir().join(format!("k6wp_settings_unknownkeys_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).expect("scratch dir");
+        let path = dir.join("studio_settings.json");
+
+        // Seed with an unknown key from the future.
+        let mut seed = Map::new();
+        seed.insert("version".to_string(), Value::from(5));
+        seed.insert("auto_compress_on_import".to_string(), Value::from(true));
+        seed.insert("future_key".to_string(), Value::from(42));
+        fs::write(&path, serde_json::to_string(&seed).unwrap()).expect("write seed");
+
+        let settings = StudioSettings::default();
+        save_studio_settings(&path, &settings).expect("save must succeed");
+
+        let doc: Value = serde_json::from_str(&fs::read_to_string(&path).expect("read settings"))
+            .expect("valid json");
+        assert_eq!(doc["future_key"], 42, "unknown key must be preserved");
+        assert_eq!(doc["version"], 5, "version must be current schema");
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }

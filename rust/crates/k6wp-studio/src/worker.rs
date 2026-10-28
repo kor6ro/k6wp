@@ -14,7 +14,8 @@ use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::time::{Duration, Instant};
 
 use k6wp_core::compress_args::{build_argv, CompressArgs};
-use k6wp_core::{ipc::IpcMessage, LibraryIndex};
+use k6wp_core::settings::save_studio_settings;
+use k6wp_core::{ipc::IpcMessage, LibraryIndex, StudioSettings};
 use k6wp_ipc::{current_session_pipe_name, ConnectOptions, IpcClient, IpcError};
 use serde_json::Value;
 
@@ -93,6 +94,10 @@ pub enum Request {
     },
     /// Cancel a running compress job (kills the compressor process tree).
     CompressCancel { job_id: u64 },
+    /// Load studio settings from disk.
+    SettingsLoad,
+    /// Save studio settings to disk.
+    SettingsSave { settings: StudioSettings },
 }
 
 /// The current IPC connection status.
@@ -153,6 +158,8 @@ pub enum Event {
         out_path: Option<PathBuf>,
         error: Option<String>,
     },
+    /// Studio settings loaded from disk.
+    SettingsLoaded(StudioSettings),
 }
 
 /// The number of threads that answer "does this file exist". A dead UNC path
@@ -389,6 +396,45 @@ fn run(rx: Receiver<Request>, sink: Sink, pipe_name_override: Option<String>) {
                         out_path: None,
                         error: Some("Dibatalkan".to_string()),
                     });
+                }
+            }
+            Ok(Request::SettingsLoad) => {
+                let path = match settings_index_path() {
+                    Some(p) => p,
+                    None => {
+                        sink.emit(Event::IpcError(
+                            "LOCALAPPDATA tidak ditemukan: settings tidak bisa dibaca".to_string(),
+                        ));
+                        continue;
+                    }
+                };
+                match std::fs::read_to_string(&path) {
+                    Ok(text) => match k6wp_core::settings::migrate_studio_settings(&text) {
+                        Ok(settings) => sink.emit(Event::SettingsLoaded(settings)),
+                        Err(e) => {
+                            sink.emit(Event::IpcError(format!("Gagal migrasi settings: {e}")))
+                        }
+                    },
+                    Err(_) => {
+                        // Missing settings file is not an error: emit defaults.
+                        sink.emit(Event::SettingsLoaded(StudioSettings::default()));
+                    }
+                }
+            }
+            Ok(Request::SettingsSave { settings }) => {
+                let path = match settings_index_path() {
+                    Some(p) => p,
+                    None => {
+                        sink.emit(Event::IpcError(
+                            "LOCALAPPDATA tidak ditemukan: settings tidak bisa disimpan"
+                                .to_string(),
+                        ));
+                        continue;
+                    }
+                };
+                match save_studio_settings(&path, &settings) {
+                    Ok(()) => sink.emit(Event::SettingsLoaded(settings)),
+                    Err(e) => sink.emit(Event::IpcError(format!("Gagal simpan settings: {e}"))),
                 }
             }
             Ok(Request::Pause) => {
@@ -885,6 +931,19 @@ fn library_index_path(override_dir: Option<PathBuf>) -> Option<PathBuf> {
         }
     }
     None
+}
+
+/// Returns the path to `studio_settings.json`: `%LOCALAPPDATA%\K6WP\studio_settings.json`.
+pub(crate) fn settings_index_path() -> Option<PathBuf> {
+    let local = std::env::var("LOCALAPPDATA").ok()?;
+    if local.is_empty() {
+        return None;
+    }
+    Some(
+        PathBuf::from(local)
+            .join("K6WP")
+            .join("studio_settings.json"),
+    )
 }
 
 fn entry_view(entry: &k6wp_core::LibraryEntry) -> Entry {

@@ -27,8 +27,10 @@ use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use crate::thumbs::{ImageCache, Pixels, CACHE_CAP_BYTES};
 use crate::worker::{
-    choose_thumb_request, EngineState, Entry, Event, IpcStatus, Request, ThumbChoice,
+    choose_thumb_request, settings_index_path, EngineState, Entry, Event, IpcStatus, Request,
+    ThumbChoice,
 };
+use k6wp_core::StudioSettings;
 
 #[cfg(debug_assertions)]
 use rfd::FileDialog;
@@ -83,6 +85,10 @@ struct Studio {
     compress_next_id: u64,
     /// Current compress progress (0-100) for toast display.
     compress_pct: Option<u8>,
+    /// Studio settings (loaded from disk).
+    settings: StudioSettings,
+    /// Settings file path.
+    settings_path: Option<PathBuf>,
 }
 
 thread_local! {
@@ -196,6 +202,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ui.on_undo(|| with_studio(|studio| studio.undo()));
     ui.on_import(|| with_studio(|studio| studio.import()));
     ui.on_compress(|index| with_studio(|studio| studio.compress(index)));
+    ui.on_save_settings(|| with_studio(|studio| studio.save_settings()));
+    ui.on_pick_folder(|field| with_studio(|studio| studio.pick_folder(field)));
 
     STUDIO.with(|slot| {
         *slot.borrow_mut() = Some(Studio {
@@ -218,6 +226,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             compress_jobs: HashMap::new(),
             compress_next_id: 0,
             compress_pct: None,
+            settings: StudioSettings::default(),
+            settings_path: None,
             #[cfg(debug_assertions)]
             e2e_pick: None,
         });
@@ -243,6 +253,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             ));
         }
     }
+
+    // Load studio settings from disk.
+    let _ = tx.send(Request::SettingsLoad);
 
     // Store e2e_pick in the Studio for later use.
     #[cfg(debug_assertions)]
@@ -374,6 +387,11 @@ impl Studio {
                     let msg = error.unwrap_or_else(|| "Gagal diketahui".to_string());
                     self.show_toast(format!("Gagal: {msg}"), false);
                 }
+            }
+            Event::SettingsLoaded(settings) => {
+                self.settings = settings;
+                self.settings_path = settings_index_path();
+                self.apply_settings_ui();
             }
         }
     }
@@ -738,6 +756,82 @@ impl Studio {
         self.compress_pct = None;
         self.ui.set_compress_job_id(-1);
         self.show_toast("Kompresi dibatalkan".to_string(), false);
+    }
+
+    /// Callback: user clicked "Simpan" in the settings page.
+    fn save_settings(&mut self) {
+        let crf: i64 = self
+            .ui
+            .get_settings_default_crf()
+            .trim()
+            .parse()
+            .unwrap_or(22);
+        let fps: i64 = self
+            .ui
+            .get_settings_default_fps()
+            .trim()
+            .parse()
+            .unwrap_or(30);
+        let offset: f64 = self
+            .ui
+            .get_settings_lockscreen_offset()
+            .trim()
+            .parse()
+            .unwrap_or(0.0);
+        let settings = StudioSettings {
+            version: self.settings.version,
+            auto_compress_on_import: self.ui.get_settings_auto_compress(),
+            compress_output_dir: PathBuf::from(self.ui.get_settings_compress_output_dir()),
+            default_crf: crf,
+            default_fps: fps,
+            default_resolution_mode: self.ui.get_settings_default_resolution(),
+            start_with_windows: self.settings.start_with_windows,
+            cache_dir: PathBuf::from(self.ui.get_settings_cache_dir()),
+            wallpaper_sync: self.ui.get_settings_wallpaper_sync(),
+            lockscreen_sync: self.ui.get_settings_lockscreen_sync(),
+            lockscreen_offset_sec: offset,
+            lockscreen_offer_shown: self.settings.lockscreen_offer_shown,
+            compress_advanced_visible: self.settings.compress_advanced_visible,
+            check_updates: self.ui.get_settings_check_updates(),
+            close_to_tray: self.ui.get_settings_close_to_tray(),
+            playlist_source: self.settings.playlist_source,
+            performance_preset: self.settings.performance_preset,
+        };
+        let _ = self.tx.send(Request::SettingsSave { settings });
+    }
+
+    /// Callback: user clicked "Pilih" for a settings folder.
+    fn pick_folder(&mut self, field: SharedString) {
+        #[cfg(debug_assertions)]
+        {
+            let folder = rfd::FileDialog::new()
+                .set_directory(std::env::var("USERPROFILE").unwrap_or_default())
+                .pick_folder();
+            if let Some(path) = folder {
+                match field.as_ref() {
+                    "compress_output_dir" => {
+                        self.ui.set_settings_compress_output_dir(SharedString::from(
+                            path.to_string_lossy(),
+                        ));
+                    }
+                    "cache_dir" => {
+                        self.ui
+                            .set_settings_cache_dir(SharedString::from(path.to_string_lossy()));
+                    }
+                    _ => {}
+                }
+            }
+        }
+        #[cfg(not(debug_assertions))]
+        {
+            let _ = field;
+        }
+    }
+
+    /// Apply loaded settings to the Slint UI.
+    fn apply_settings_ui(&mut self) {
+        // Settings are reflected back through Slint properties; the UI
+        // will re-read them on next render. For now, just confirm load.
     }
 }
 

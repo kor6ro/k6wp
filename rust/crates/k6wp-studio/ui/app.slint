@@ -200,6 +200,23 @@ export component AppWindow inherits Window {
     /// Active compress job id (-1 = none). Shown as cancel button in toast.
     in-out property <int> compress-job-id: -1;
 
+    // Settings page
+    in-out property <bool> settings-open: false;
+    in-out property <bool> settings-auto-compress: true;
+    in-out property <string> settings-compress-output-dir: "";
+    in-out property <string> settings-default-crf: "22";
+    in-out property <string> settings-default-fps: "30";
+    in-out property <string> settings-default-resolution: "match_monitor";
+    in-out property <string> settings-cache-dir: "";
+    in-out property <bool> settings-wallpaper-sync: true;
+    in-out property <bool> settings-lockscreen-sync: true;
+    in-out property <string> settings-lockscreen-offset: "0.0";
+    in-out property <bool> settings-check-updates: true;
+    in-out property <bool> settings-close-to-tray: false;
+
+    callback save-settings();
+    callback pick-folder(string);
+
     // Rust rebuilds the row model when the column count changes.
     callback rebuild-grid(width: length);
     // Rust asks the worker for the thumbnails of the visible band.
@@ -292,6 +309,10 @@ export component AppWindow inherits Window {
                     clicked => { root.import(); }
                 }
                 Button {
+                    text: "Pengaturan";
+                    clicked => { root.settings-open = true; }
+                }
+                Button {
                     text: "Jeda";
                     enabled: !is-paused;
                     clicked => { root.pause(); }
@@ -378,6 +399,338 @@ export component AppWindow inherits Window {
                 if compress-job-id >= 0 : Button {
                     text: "Batal";
                     clicked => { root.compress-cancel(compress-job-id); }
+                }
+            }
+        }
+
+        // Settings page overlay
+        if settings-open : Rectangle {
+            background: #000000aa;
+            VerticalLayout {
+                horizontal-stretch: 1;
+                vertical-stretch: 1;
+                padding: Tokens.space-lg;
+                spacing: Tokens.space-md;
+
+                Text {
+                    text: "Pengaturan";
+                    color: #ffffff;
+                    font-size: Tokens.font-xl;
+                    font-family: Tokens.font-family;
+                    font-weight: 600;
+                }
+
+                // Auto compress on import
+                HorizontalLayout {
+                    spacing: Tokens.space-md;
+                    TouchArea {
+                        clicked => { root.settings-auto-compress = !root.settings-auto-compress; }
+                    }
+                    if root.settings-auto-compress : Text {
+                        text: "[✓]";
+                        color: #ffffff;
+                        font-size: Tokens.font-sm;
+                        font-family: Tokens.font-family;
+                        vertical-alignment: center;
+                    }
+                    if !root.settings-auto-compress : Text {
+                        text: "[ ]";
+                        color: #ffffff;
+                        font-size: Tokens.font-sm;
+                        font-family: Tokens.font-family;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        text: "Kompres otomatis setelah impor";
+                        color: #ffffff;
+                        font-size: Tokens.font-sm;
+                        font-family: Tokens.font-family;
+                        vertical-alignment: center;
+                    }
+                }
+
+                // Compress output dir
+                HorizontalLayout {
+                    spacing: Tokens.space-md;
+                    Text {
+                        text: "Folder output kompresi:";
+                        color: #ffffff;
+                        font-size: Tokens.font-sm;
+                        font-family: Tokens.font-family;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        text: settings-compress-output-dir;
+                        color: #bbbbbb;
+                        font-size: Tokens.font-sm;
+                        font-family: Tokens.font-family;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                        overflow: elide;
+                    }
+                    Button {
+                        text: "Pilih";
+                        clicked => { root.pick-folder("compress_output_dir"); }
+                    }
+                }
+
+                // Default CRF
+                HorizontalLayout {
+                    spacing: Tokens.space-md;
+                    Text {
+                        text: "Kualitas default (CRF):";
+                        color: #ffffff;
+                        font-size: Tokens.font-sm;
+                        font-family: Tokens.font-family;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        text: "16 - 28";
+                        color: #bbbbbb;
+                        font-size: Tokens.font-sm;
+                        font-family: Tokens.font-family;
+                        vertical-alignment: center;
+                    }
+                    TextInput {
+                        text: root.settings-default-crf;
+                        width: 40px;
+                        edited => {
+                            root.settings-default-crf = self.text;
+                        }
+                    }
+                }
+
+                // Default FPS
+                HorizontalLayout {
+                    spacing: Tokens.space-md;
+                    Text {
+                        text: "Frame rate default (FPS):";
+                        color: #ffffff;
+                        font-size: Tokens.font-sm;
+                        font-family: Tokens.font-family;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        text: "1 - 30";
+                        color: #bbbbbb;
+                        font-size: Tokens.font-sm;
+                        font-family: Tokens.font-family;
+                        vertical-alignment: center;
+                    }
+                    TextInput {
+                        text: root.settings-default-fps;
+                        width: 40px;
+                        edited => {
+                            root.settings-default-fps = self.text;
+                        }
+                    }
+                }
+
+                // Default resolution mode
+                HorizontalLayout {
+                    spacing: Tokens.space-md;
+                    Text {
+                        text: "Resolusi default:";
+                        color: #ffffff;
+                        font-size: Tokens.font-sm;
+                        font-family: Tokens.font-family;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        text: "(match_monitor / source / 720p / 1080p / 2160p)";
+                        color: #bbbbbb;
+                        font-size: Tokens.font-sm;
+                        font-family: Tokens.font-family;
+                        vertical-alignment: center;
+                    }
+                    TextInput {
+                        text: root.settings-default-resolution;
+                        width: 100px;
+                        edited => {
+                            root.settings-default-resolution = self.text;
+                        }
+                    }
+                }
+
+                // Cache dir
+                HorizontalLayout {
+                    spacing: Tokens.space-md;
+                    Text {
+                        text: "Folder cache:";
+                        color: #ffffff;
+                        font-size: Tokens.font-sm;
+                        font-family: Tokens.font-family;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        text: settings-cache-dir;
+                        color: #bbbbbb;
+                        font-size: Tokens.font-sm;
+                        font-family: Tokens.font-family;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                        overflow: elide;
+                    }
+                    Button {
+                        text: "Pilih";
+                        clicked => { root.pick-folder("cache_dir"); }
+                    }
+                }
+
+                // Wallpaper sync
+                HorizontalLayout {
+                    spacing: Tokens.space-md;
+                    TouchArea {
+                        clicked => { root.settings-wallpaper-sync = !root.settings-wallpaper-sync; }
+                    }
+                    if root.settings-wallpaper-sync : Text {
+                        text: "[✓]";
+                        color: #ffffff;
+                        font-size: Tokens.font-sm;
+                        font-family: Tokens.font-family;
+                        vertical-alignment: center;
+                    }
+                    if !root.settings-wallpaper-sync : Text {
+                        text: "[ ]";
+                        color: #ffffff;
+                        font-size: Tokens.font-sm;
+                        font-family: Tokens.font-family;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        text: "Sinkronisasi wallpaper";
+                        color: #ffffff;
+                        font-size: Tokens.font-sm;
+                        font-family: Tokens.font-family;
+                        vertical-alignment: center;
+                    }
+                }
+
+                // Lockscreen sync
+                HorizontalLayout {
+                    spacing: Tokens.space-md;
+                    TouchArea {
+                        clicked => { root.settings-lockscreen-sync = !root.settings-lockscreen-sync; }
+                    }
+                    if root.settings-lockscreen-sync : Text {
+                        text: "[✓]";
+                        color: #ffffff;
+                        font-size: Tokens.font-sm;
+                        font-family: Tokens.font-family;
+                        vertical-alignment: center;
+                    }
+                    if !root.settings-lockscreen-sync : Text {
+                        text: "[ ]";
+                        color: #ffffff;
+                        font-size: Tokens.font-sm;
+                        font-family: Tokens.font-family;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        text: "Sinkronisasi layar kunci";
+                        color: #ffffff;
+                        font-size: Tokens.font-sm;
+                        font-family: Tokens.font-family;
+                        vertical-alignment: center;
+                    }
+                }
+
+                // Lockscreen offset
+                HorizontalLayout {
+                    spacing: Tokens.space-md;
+                    Text {
+                        text: "Offset layar kunci (detik):";
+                        color: #ffffff;
+                        font-size: Tokens.font-sm;
+                        font-family: Tokens.font-family;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        text: "≥ 0";
+                        color: #bbbbbb;
+                        font-size: Tokens.font-sm;
+                        font-family: Tokens.font-family;
+                        vertical-alignment: center;
+                    }
+                    TextInput {
+                        text: root.settings-lockscreen-offset;
+                        width: 60px;
+                        edited => {
+                            root.settings-lockscreen-offset = self.text;
+                        }
+                    }
+                }
+
+                // Check updates
+                HorizontalLayout {
+                    spacing: Tokens.space-md;
+                    TouchArea {
+                        clicked => { root.settings-check-updates = !root.settings-check-updates; }
+                    }
+                    if root.settings-check-updates : Text {
+                        text: "[✓]";
+                        color: #ffffff;
+                        font-size: Tokens.font-sm;
+                        font-family: Tokens.font-family;
+                        vertical-alignment: center;
+                    }
+                    if !root.settings-check-updates : Text {
+                        text: "[ ]";
+                        color: #ffffff;
+                        font-size: Tokens.font-sm;
+                        font-family: Tokens.font-family;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        text: "Periksa pembaruan saat mulai";
+                        color: #ffffff;
+                        font-size: Tokens.font-sm;
+                        font-family: Tokens.font-family;
+                        vertical-alignment: center;
+                    }
+                }
+
+                // Close to tray
+                HorizontalLayout {
+                    spacing: Tokens.space-md;
+                    TouchArea {
+                        clicked => { root.settings-close-to-tray = !root.settings-close-to-tray; }
+                    }
+                    if root.settings-close-to-tray : Text {
+                        text: "[✓]";
+                        color: #ffffff;
+                        font-size: Tokens.font-sm;
+                        font-family: Tokens.font-family;
+                        vertical-alignment: center;
+                    }
+                    if !root.settings-close-to-tray : Text {
+                        text: "[ ]";
+                        color: #ffffff;
+                        font-size: Tokens.font-sm;
+                        font-family: Tokens.font-family;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        text: "Tutup ke sistem tray";
+                        color: #ffffff;
+                        font-size: Tokens.font-sm;
+                        font-family: Tokens.font-family;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle { vertical-stretch: 1; }
+
+                HorizontalLayout {
+                    spacing: Tokens.space-md;
+                    Button {
+                        text: "Simpan";
+                        clicked => { root.save-settings(); }
+                    }
+                    Button {
+                        text: "Batal";
+                        clicked => { root.settings-open = false; }
+                    }
                 }
             }
         }
