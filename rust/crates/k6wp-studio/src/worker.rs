@@ -1871,7 +1871,7 @@ mod compress_tests {
     fn compress_progress_from_stderr() {
         // Tests that ffmpeg-style `time=HH:MM:SS.xx` strings are parsed correctly.
         // In production, ffmpeg writes progress to stderr; compress_handler reads
-        // stdout for now (see comment in compress_handler).
+        // stderr (see compress_handler).
         assert_eq!(parse_ffmpeg_time("00:00:01.00"), Some(1.0));
         assert_eq!(parse_ffmpeg_time("00:01:30.00"), Some(90.0));
         assert_eq!(parse_ffmpeg_time("01:00:00.00"), Some(3600.0));
