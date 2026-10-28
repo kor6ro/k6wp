@@ -398,3 +398,26 @@ NEXT TASK: ADR thumbnailer (adr-thumbnailer.md) → implementasi worker thumbnai
 
 
 **Worktree resmi:** C:\Users\axioo\.local\share\opencode\worktree\1e41a2\proud-garden | branch refactor/rust-wt. Desktop (C:\Users\axioo\Desktop\k6wp) bukan kanonik.
+
+## Run cost tracking (updated 2026-10-29)
+
+**Actual commits dengan prefix "run": 21** (dari `git log --grep="^run" origin/main..origin/refactor/rust-wt`).
+
+| Commit prefix | Jumlah | Catatan |
+|---|---|---|
+| run 2 | 4× | verif final ×2, verif, define Gate A/B |
+| run 3 | 5× | ADR thumbnailer ×3, verif final ×2 |
+| run 4 | 5× | impl ×2, ADR correction, verif ×2 |
+| run 5 | 2× | verif final, final |
+| run 6 | 1× | import + LibraryIndex::save_atomic |
+| run 7 | 1× | compress queue |
+| run 8 | 1× | settings page |
+
+**Unique deliverable run: 8** (Run 1-8). Sisanya (13 commit) = verifikasi/fix/docs correction.
+
+**Implikasi budget:**
+- Kalau setiap commit = ~1 LLM call @ ~$0.75, 21 commit = **~$15.75**.
+- Budget asli: $10. **Defisit: ~$5.75.**
+- Owner perlu memutuskan: (a) approve over $5.75, (b) cut scope P0, (c) stop.
+
+**Root cause:** Setiap run commit impl, lalu commit fix (verifikasi salah), lalu commit docs correction. Pola: verify-then-commit with wrong **verify**, bukan verify-before-commit. Untuk Run 9+: verifikasi dulu dengan pattern yang benar (kebab-case untuk Slint properti, bukan snake_case), amend sebelum push, bukan commit docs terpisah.
