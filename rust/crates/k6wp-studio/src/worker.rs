@@ -375,97 +375,7 @@ fn run(rx: Receiver<Request>, sink: Sink, pipe_name_override: Option<String>) {
                 fps,
                 crf,
             }) => {
-                let Some(compressor_exe) = find_compressor() else {
-                    sink.emit(Event::CompressDone {
-                        job_id,
-                        ok: false,
-                        out_path: None,
-                        error: Some("compressor.exe tidak ditemukan".to_string()),
-                    });
-                    continue;
-                };
-
-                let args = CompressArgs {
-                    in_: src.to_string_lossy().to_string(),
-                    out: out.to_string_lossy().to_string(),
-                    res_w: res_w as i32,
-                    res_h: res_h as i32,
-                    fps: fps as i32,
-                    crf: crf as i32,
-                    encoder: "auto".to_string(),
-                    force_long: false,
-                    dry_run: false,
-                };
-                let argv = build_argv(&args);
-
-                let mut child = match std::process::Command::new(&compressor_exe)
-                    .args(&argv)
-                    .stdout(std::process::Stdio::piped())
-                    .stderr(std::process::Stdio::piped())
-                    .spawn()
-                {
-                    Ok(c) => c,
-                    Err(e) => {
-                        sink.emit(Event::CompressDone {
-                            job_id,
-                            ok: false,
-                            out_path: None,
-                            error: Some(format!("Gagal spawn compressor: {e}")),
-                        });
-                        continue;
-                    }
-                };
-                let pid = child.id();
-                let stderr = child.stderr.take().unwrap();
-                compress_jobs.insert(job_id, pid);
-
-                let sink_clone = sink.clone();
-                std::thread::spawn(move || {
-                    use std::io::{BufRead, BufReader};
-                    let reader = BufReader::new(stderr);
-                    for line in reader.lines() {
-                        let Ok(line) = line else { continue };
-                        if let Some(t_str) =
-                            line.split("time=").nth(1).and_then(|s| s.split(' ').next())
-                        {
-                            if let Some(secs) = parse_ffmpeg_time(t_str) {
-                                let pct = if let Some(duration) = library_duration_secs(&src) {
-                                    if duration > 0.0 {
-                                        let p = (secs / duration * 100.0) as u8;
-                                        Some(p.min(100))
-                                    } else {
-                                        None
-                                    }
-                                } else {
-                                    None
-                                };
-                                if let Some(p) = pct {
-                                    sink_clone.emit(Event::CompressProgress {
-                                        job_id,
-                                        pct: p,
-                                        eta_secs: None,
-                                    });
-                                }
-                            }
-                        }
-                    }
-                    let status = child.wait().unwrap();
-                    if status.success() {
-                        sink_clone.emit(Event::CompressDone {
-                            job_id,
-                            ok: true,
-                            out_path: Some(out.clone()),
-                            error: None,
-                        });
-                    } else {
-                        sink_clone.emit(Event::CompressDone {
-                            job_id,
-                            ok: false,
-                            out_path: None,
-                            error: Some(format!("Compressor exit code: {:?}", status.code())),
-                        });
-                    }
-                });
+                compress_handler(job_id, &src, &out, res_w, res_h, fps, crf, sink.clone());
             }
             Ok(Request::CompressCancel { job_id }) => {
                 if let Some(&pid) = compress_jobs.get(&job_id) {
@@ -680,14 +590,12 @@ fn compress_handler(
         }
     };
 
-    // Parse stdout line-by-line for compressor progress: `time=HH:MM:SS.xx`
-    // Note: ffmpeg writes progress to stderr; this reads stdout for now since
-    // the test fake compressor writes to stdout. Switch to stderr when integrating
-    // with real ffmpeg.
-    let stdout = child.stdout.take();
-    if let Some(stdout) = stdout {
+    // Parse stderr line-by-line for ffmpeg progress: `time=HH:MM:SS.xx`
+    // ffmpeg writes progress to stderr; compressor.exe mirrors ffmpeg stderr.
+    let stderr = child.stderr.take();
+    if let Some(stderr) = stderr {
         use std::io::{BufRead, BufReader};
-        let reader = BufReader::new(stdout);
+        let reader = BufReader::new(stderr);
         for line in reader.lines() {
             let Ok(line) = line else { continue };
             if let Some(t_str) = line.split("time=").nth(1).and_then(|s| s.split(' ').next()) {
@@ -1877,20 +1785,19 @@ mod tests {
 mod compress_tests {
     use super::*;
 
-    fn make_fake_compressor(behavior: FakeCompressorBehavior) -> (std::process::Command, std::path::PathBuf) {
-        let dir = std::env::temp_dir().join(format!(
-            "k6wp-test-fake-compressor-{}",
-            std::process::id()
-        ));
+    fn make_fake_compressor(
+        behavior: FakeCompressorBehavior,
+    ) -> (std::process::Command, std::path::PathBuf) {
+        let dir =
+            std::env::temp_dir().join(format!("k6wp-test-fake-compressor-{}", std::process::id()));
         std::fs::create_dir_all(&dir).ok();
         let exe = dir.join("compressor.bat");
         let script = match behavior {
             FakeCompressorBehavior::Ok => "@echo off\nexit /b 0\n",
             FakeCompressorBehavior::Error => "@echo off\nexit /b 2\n",
             FakeCompressorBehavior::Progress => {
-                "@echo off\nfor /l %%i in (1,1,3) do (\necho time=00:00:01.00\n)\nexit /b 0\n"
+                "@echo off\nfor /l %%i in (1,1,3) do (\necho time=00:00:01.00 >&2\n)\nexit /b 0\n"
             }
-            ,
             FakeCompressorBehavior::Sleep => "@echo off\ntimeout /t 60 /nobreak >nul\nexit /b 0\n",
         };
         std::fs::write(&exe, script).expect("write fake compressor");
@@ -1914,24 +1821,17 @@ mod compress_tests {
         std::env::set_var("K6WP_COMPRESSOR", exe);
 
         let (events_tx, events_rx) = mpsc::channel::<Event>();
-        let sink = Sink(std::sync::Arc::new(std::sync::Mutex::new(Box::new(move |e| {
-            let _ = events_tx.send(e);
-        }))));
+        let sink = Sink(std::sync::Arc::new(std::sync::Mutex::new(Box::new(
+            move |e| {
+                let _ = events_tx.send(e);
+            },
+        ))));
 
         let src = std::env::temp_dir().join("k6wp-test-compress-src.mp4");
         std::fs::write(&src, b"fake video").expect("write src");
         let out = std::env::temp_dir().join("k6wp-test-compress-out.mp4");
 
-        compress_handler(
-            1,
-            &src,
-            &out,
-            1920,
-            1080,
-            30,
-            23,
-            sink,
-        );
+        compress_handler(1, &src, &out, 1920, 1080, 30, 23, sink);
 
         let event = events_rx
             .recv_timeout(Duration::from_secs(10))
@@ -1994,9 +1894,11 @@ mod compress_tests {
         std::env::set_var("K6WP_COMPRESSOR", exe);
 
         let (events_tx, events_rx) = mpsc::channel::<Event>();
-        let sink = Sink(std::sync::Arc::new(std::sync::Mutex::new(Box::new(move |e| {
-            let _ = events_tx.send(e);
-        }))));
+        let sink = Sink(std::sync::Arc::new(std::sync::Mutex::new(Box::new(
+            move |e| {
+                let _ = events_tx.send(e);
+            },
+        ))));
 
         let src = std::env::temp_dir().join("k6wp-test-compress-src4.mp4");
         std::fs::write(&src, b"fake video").expect("write src");
@@ -2026,4 +1928,3 @@ mod compress_tests {
         let _ = std::fs::remove_file(&out);
     }
 }
-
