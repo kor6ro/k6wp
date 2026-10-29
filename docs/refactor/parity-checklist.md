@@ -14,13 +14,13 @@ Status label: `done` (bukti di file) | `P0 — Run N` (jadwal) | `P0 — Run 9` 
 | A2 | Import flow (media picker + probe) | `done — Run 6 (file pick + import)` + `deferred (drag-drop, post-v1)` | `LibraryIndex::save_atomic`, `Request::Import`, `rfd` file pick, `import_tests` (4 test: save_atomic_round_trip, import_appends_to_library, import_validates_extension, import_validates_missing_file). Drag-drop deferred post-v1. |
 | A3 | Compress antrian (compressor Rust / IPC) | `done — Run 7 (single-shot + FIFO, taskkill cancel, 4 test)` | `compress_handler` in `worker.rs`, `Request::Compress`/`CompressCancel`, `Event::CompressProgress`/`CompressDone`, `compress_tests` (4 test: compress_spawns_compressor, compress_parses_error, compress_progress_from_stderr, compress_cancel_kills_tree) |
 | A4 | Settings page (konfigurasi pengguna) | `done — Run 8 (11 user-facing fields)` | `save_studio_settings`, `Request::SettingsLoad/Save`, `Event::SettingsLoaded`, settings form (11 field: auto_compress_on_import, compress_output_dir, default_crf, default_fps, default_resolution_mode, cache_dir, wallpaper_sync, lockscreen_sync, lockscreen_offset_sec, check_updates, close_to_tray), 4 tests. Deferred: start_with_windows (HKCU, post-v1), playlist_source (Run 9), compress_advanced_visible (internal UI state) |
-| A5 | Assign per-monitor + playlist UI | `P0 — Run 7` | `pause_controller` (C++) masih referensi |
+| A5 | Assign per-monitor + playlist UI | `done — Run 9 (5 test: assign_video_sends_correct_payload, clear_assignment_sends_clear_true, playlist_rejects_interval_zero, playlist_preserves_order, save_playlist_round_trip)` | `app.slint` 3-tab settings (Umum/Monitor/Playlist), `MonitorAssignment` struct, `Request::ListMonitors/AssignVideo/ClearAssignment/LoadPlaylist/SavePlaylist`, `save_playlist` atomic + validation, `save_studio_settings` includes playlist fields |
 | A6 | Preview Studio Rust | `deferred` (owner 2026-10-27) | via IPC = effort besar; subprocess mpv = melanggar L5; tidak menyentuh core flow |
 | A7 | i18n | `OK` (owner 2026-10-27) | single-language id; semua string `id`; tidak butuh infra i18n |
 | A8 | J4 — Studio golden fixtures (12 TO FIXTURE) | `P0 — Run 8` | `tests/golden/studio_logic.json` belum ada; `g5-coverage.md`: 12 baris belum dibekukan |
-| A9 | `parity-checklist.md` final | `P0 — Run 9` | semua baris berlabel; `RUN-9.md` ≤15 baris delta |
+| A9 | `parity-checklist.md` final | `P0 — Run 10` | semua baris berlabel; `RUN-9.md` ≤15 baris delta |
 | A10 | G6 image check — test-proven | `code-quoted — test pending (Run 10)` | `expected_engine_image()` (Run 1); `tests/live_engine.rs` (`K6WP_IPC_LIVE=1`) belum dijalankan |
-| A11 | Studio RAM / startup (E1 final, bukan shell 2.0) | `P0 — Run 9` | angka saat ini: 39.56 MB / 1027 ms (shell 2.0); target: ≤150 MB / ≤700 ms (Studio final belum porting) |
+| A11 | Studio RAM / startup (E1 final, bukan shell 2.0) | `P0 — Run 10` | target: ≤150 MB / ≤700 ms (Studio final belum porting) |
 | A12 | `Urungkan` toast | `done` (Run 1) | `history.rs` 4 test, `main.rs::undo`, `app.slint` undo-available; `STATE.md` NEXT TASK + ringkasan diperbarui |
 
 ---

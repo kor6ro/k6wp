@@ -664,7 +664,8 @@ mod tests {
 
     #[test]
     fn settings_save_preserves_unknown_keys() {
-        let dir = std::env::temp_dir().join(format!("k6wp_settings_unknownkeys_{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("k6wp_settings_unknownkeys_{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).expect("scratch dir");
         let path = dir.join("studio_settings.json");

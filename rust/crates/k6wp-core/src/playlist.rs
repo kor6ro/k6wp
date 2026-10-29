@@ -25,6 +25,8 @@
 
 use std::cell::Cell;
 use std::collections::HashSet;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use serde_json::{Map, Value};
 
@@ -317,6 +319,42 @@ pub fn playlist_json(cfg: &PlaylistConfig) -> Value {
         Value::Array(cfg.order.iter().map(|p| Value::String(p.clone())).collect()),
     );
     Value::Object(out)
+}
+
+/// Crash-safe save of playlist: serializes via [`playlist_json`],
+/// writes `"<path>.tmp"`, then renames over `path`.
+///
+/// # Errors
+///
+/// [`ConfigError`] when validation fails, the temp file cannot be written,
+/// or the atomic rename fails.
+pub fn save_playlist(path: &Path, cfg: &PlaylistConfig) -> Result<(), ConfigError> {
+    validate_playlist(cfg)?;
+    let doc = playlist_json(cfg);
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent)
+                .map_err(|e| ConfigError(format!("cannot create playlist directory: {e}")))?;
+        }
+    }
+    let mut tmp = path.as_os_str().to_owned();
+    tmp.push(".tmp");
+    let tmp = PathBuf::from(tmp);
+    let text = serde_json::to_string_pretty(&doc)
+        .map_err(|e| ConfigError(format!("cannot serialize playlist: {e}")))?;
+    fs::write(&tmp, text).map_err(|e| {
+        ConfigError(format!(
+            "cannot write playlist temp file: {} ({e})",
+            tmp.display()
+        ))
+    })?;
+    fs::rename(&tmp, path).map_err(|e| {
+        let _ = fs::remove_file(&tmp);
+        ConfigError(format!(
+            "atomic playlist replace failed: {} ({e})",
+            path.display()
+        ))
+    })
 }
 
 /// Rejects the values outside the accepted ranges - the C++

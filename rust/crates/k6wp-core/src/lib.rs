@@ -24,5 +24,7 @@ pub use config_store::{
     persist_config_field, save_config, ConfigFileLock, LOCK_TIMEOUT, MAX_CONFIG_BYTES,
 };
 pub use library::{LibraryEntry, LibraryIndex};
+pub use playlist::{save_playlist, PlaylistConfig};
 pub use settings::StudioSettings;
+pub use settings::{migrate_studio_settings, save_studio_settings};
 pub use sps::{probe_dpb, Codec, DpbReport, SpsError, SpsInfo};
