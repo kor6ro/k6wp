@@ -362,9 +362,9 @@ is the locked decision.
 
 
 ## NEXT TASK
-NEXT TASK: Run 12 = Gate A verify (A9) + B3/B4/B5 (engine validation). Run 13 = F3 impl (B7) + J5 (B8) + Gate B final.
-A10: UNPROVEN — engine.exe not built (mpv deps missing); Run 11b: build release + jalankan live test.
-A11: done — Run 11 (median first_frame=735ms, private=90.5MB); target: ≤150 MB ✓, ≤700 ms ✗ (+35ms).
+NEXT TASK: Run 11b = A10 (fix libmpv vendor 404 → build engine.exe → live test) + A11 (investigate bimodal: 60% thumbnail load rate, fix, re-measure 5 runs stable). 
+A10: UNPROVEN — libmpv vendor 404 → engine.exe missing → live test skipped.
+A11: PARTIAL — bimodal 40-98MB (3/5 runs thumbnail load fail), not stable.
 
 ## Blok A-8 COMPLETION SUMMARY (2026-10-25)
 - **Langkah 0**: Test count reconciled (127 total: k6wp-core 93, k6wp-ipc 13, k6wp-studio 21); ctest 51/51 Debug/Release; release overrides scan clean

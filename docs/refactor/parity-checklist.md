@@ -19,8 +19,8 @@ Status label: `done` (bukti di file) | `P0 — Run N` (jadwal) | `P0 — Run 9` 
 | A7 | i18n | `OK` (owner 2026-10-27) | single-language id; semua string `id`; tidak butuh infra i18n |
 | A8 | J4 — Studio golden fixtures (12 TO FIXTURE) | `partial — Run 10 (7 modul, 56 case, DRAFT), 5 modul deferred post-v1 (owner 2026-10-29: display/UX helper)` | `tests/golden/studio_logic.json` (DRAFT, hand-written), Rust replayer (56 case pass dalam 5 test), C++ writer/checker DEFERRED |
 | A9 | `parity-checklist.md` final | `P0 — Run 12` | semua baris berlabel, A8 belum final |
-| A10 | G6 image check — test-proven | `UNPROVEN — engine.exe not built (mpv deps missing)` | `expected_engine_image()` (Run 1); `tests/live_engine.rs` (`K6WP_IPC_LIVE=1`) butuh `build/release/engine.exe` (mpv deps missing) |
-| A11 | Studio RAM / startup (E1 final, bukan shell 2.0) | `done — Run 11 (median first_frame=735ms, private=90.5MB)` | target: ≤150 MB / ≤700 ms; hasil: private=90.5MB ✓, first_frame=735ms (target 700ms, +35ms) |
+| A10 | G6 image check — test-proven | `UNPROVEN — libmpv vendor download 404, engine.exe missing` | `expected_engine_image()` (Run 1); `tests/live_engine.rs` (`K6WP_IPC_LIVE=1`) butuh `build/release/engine.exe` (libmpv vendor 404) |
+| A11 | Studio RAM / startup (E1 final, bukan shell 2.0) | `partial — bimodal 40-98MB, thumbnail load 60% (3/5 runs fail)` | target: ≤150 MB / ≤700 ms; hasil: private=90.5MB ✓ (bimodal), first_frame=735ms (+35ms) |
 | A12 | `Urungkan` toast | `done` (Run 1) | `history.rs` 4 test, `main.rs::undo`, `app.slint` undo-available; `STATE.md` NEXT TASK + ringkasan diperbarui |
 
 ---
