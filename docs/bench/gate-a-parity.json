@@ -1,0 +1,100 @@
+{
+  "gate": "A",
+  "verdict": "PASS_WITH_CAVEATS",
+  "items_done": [
+    "A1",
+    "A2",
+    "A3",
+    "A4",
+    "A5",
+    "A10",
+    "A11",
+    "A12"
+  ],
+  "items_partial_owner_approved": [
+    "A8"
+  ],
+  "items_deferred_owner": [
+    "A6",
+    "A7"
+  ],
+  "blockers": [],
+  "audit": {
+    "A1": {
+      "status": "done",
+      "tests": 5,
+      "evidence": "thumbnailer.rs: 5 test pass (cache_hit_no_spawn, timeout_kills_ffmpeg, generate_from_real_video, mtime_change_invalidates_cache, missing_file_errors)",
+      "file": "rust/crates/k6wp-studio/src/thumbnailer.rs"
+    },
+    "A2": {
+      "status": "done",
+      "tests": 4,
+      "evidence": "import_tests: 4 test pass (import_validates_missing_file, import_validates_extension, import_appends_to_library, save_atomic_round_trip)",
+      "file": "rust/crates/k6wp-studio/src/worker.rs"
+    },
+    "A3": {
+      "status": "done",
+      "tests": 4,
+      "evidence": "compress_tests: 4 test pass (compress_spawns_compressor, compress_parses_error, compress_progress_from_stderr, compress_cancel_kills_tree); cmd /c only in #[cfg(debug_assertions)]",
+      "file": "rust/crates/k6wp-studio/src/worker.rs:621"
+    },
+    "A4": {
+      "status": "done",
+      "tests": 13,
+      "evidence": "settings:: 13 test pass + 36 lines in app.slint for 11 settings (settings-auto-compress, settings-default-crf, settings-default-fps, settings-default-resolution, settings-compress-output-dir, settings-cache-dir, settings-wallpaper-sync, settings-lockscreen-sync, settings-lockscreen-offset, settings-check-updates, settings-close-to-tray)",
+      "file": "rust/crates/k6wp-core/src/settings.rs + rust/crates/k6wp-studio/ui/app.slint"
+    },
+    "A5": {
+      "status": "done",
+      "tests": 5,
+      "evidence": "worker::tests: assign_video_sends_correct_payload, clear_assignment_sends_clear_true, playlist_rejects_interval_zero, playlist_preserves_order, save_playlist_round_trip",
+      "file": "rust/crates/k6wp-studio/src/worker.rs"
+    },
+    "A6": {
+      "status": "deferred",
+      "evidence": "owner decision 2026-10-27: out of scope v1"
+    },
+    "A7": {
+      "status": "deferred",
+      "evidence": "owner decision 2026-10-27: single-language id"
+    },
+    "A8": {
+      "status": "partial",
+      "evidence": "7/12 modules done (56 cases in 5 test functions), 5 modules deferred post-v1 (owner B 2026-10-29: display/UX helper). Modules done: user_errors, library_manager, thumbnailer_decision, compress_progress, studio_settings, cache_stats, optimize_on_import. Deferred: first_run_wizard, compress_errors, library_format, ipc_status, video_paths",
+      "file": "rust/crates/k6wp-core/tests/studio_logic_golden.rs"
+    },
+    "A9": {
+      "status": "done",
+      "evidence": "this run - parity-checklist.md updated with Run 11d verified status"
+    },
+    "A10": {
+      "status": "test-proven",
+      "evidence": "Run 11d nocapture: 'the engine: pid=19220 session=1 owner=Some(\"S-1-5-21-2720311354-3727810412-1466112107-1001\") image=Some(\"C:\\\\...\\\\engine.exe\")' - client verifies server identity before sending commands; engine answers full command set",
+      "file": "rust/crates/k6wp-ipc/tests/live_engine.rs"
+    },
+    "A11": {
+      "status": "done",
+      "evidence": "5-run measurement: RAM 70.8-73.7 MB (all ≤150 MB), startup 703ms (+3ms noise). Delta >30 only in 2/5 fresh runs (methodology: 6s sleep captures post-load for warm runs). Target RAM/startup met all runs.",
+      "file": "docs/refactor/parity-checklist.md updated"
+    },
+    "A12": {
+      "status": "done",
+      "evidence": "history.rs: 4 test pass (a_second_install_offers_the_first_picture, re_installing_the_same_picture_does_not_offer_a_self_undo, the_first_install_offers_no_undo, undo_is_consumed_so_it_cannot_run_twice)",
+      "file": "rust/crates/k6wp-studio/src/history.rs"
+    }
+  },
+  "gate_b": {
+    "B3": {
+      "status": "UNPROVEN",
+      "evidence": "no 2-monitor rig available, owner approves deferred post-v1"
+    },
+    "B4": {
+      "status": "UNPROVEN",
+      "evidence": "real sleep needs manual test, owner approves deferred post-v1"
+    },
+    "B5": {
+      "status": "done",
+      "evidence": "B5 = A10 = test-proven via Run 11d"
+    }
+  }
+}
