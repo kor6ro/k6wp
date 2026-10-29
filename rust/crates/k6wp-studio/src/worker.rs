@@ -1094,7 +1094,7 @@ pub(crate) enum ThumbChoice {
 
 #[allow(dead_code)]
 pub(crate) fn choose_thumb_request(thumb: &Path, media: &Path) -> ThumbChoice {
-    if thumb.as_os_str().is_empty() {
+    if thumb.as_os_str().is_empty() || !thumb.exists() {
         ThumbChoice::Generate {
             media_path: media.to_path_buf(),
         }
@@ -1804,8 +1804,11 @@ mod tests {
 
         #[test]
         fn choose_existing_thumb_decodes() {
-            let choice =
-                choose_thumb_request(Path::new(r"C:\cache\abc.jpg"), Path::new(r"C:\video.mp4"));
+            let temp = std::env::temp_dir().join(format!("k6wp-test-thumb-{}", std::process::id()));
+            std::fs::create_dir_all(&temp).expect("create temp dir");
+            let thumb = temp.join("existing_thumb.jpg");
+            std::fs::write(&thumb, b"fake thumbnail").expect("write thumb");
+            let choice = choose_thumb_request(&thumb, Path::new(r"C:\video.mp4"));
             assert!(matches!(choice, ThumbChoice::Decode { .. }));
         }
     }

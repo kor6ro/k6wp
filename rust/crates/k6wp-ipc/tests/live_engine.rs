@@ -71,6 +71,9 @@ fn the_live_engine_answers_the_whole_command_set() {
         "a server with the wrong image must be refused"
     );
 
+    // Give the engine time to recreate the pipe instance after the refused connection.
+    std::thread::sleep(Duration::from_millis(200));
+
     // 2. The real engine: the connection is verified.
     let mut client = IpcClient::connect_current_session(options(engine_exe.clone()))
         .expect("the engine must accept the connection");
@@ -185,7 +188,9 @@ fn the_live_engine_answers_the_whole_command_set() {
     );
 
     // 10. RECONNECT: close the pipe and connect again.
+    // The engine quits and restarts with --restarted; wait for it to be ready.
     client.close();
+    std::thread::sleep(Duration::from_millis(2000));
     let mut again =
         IpcClient::connect_current_session(options(engine_exe)).expect("the reconnect must work");
     let state = again

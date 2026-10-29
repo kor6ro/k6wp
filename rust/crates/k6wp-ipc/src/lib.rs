@@ -643,10 +643,24 @@ fn open_pipe(
                     if !waited.as_bool() {
                         // SAFETY: GetLastError has no preconditions.
                         let code = unsafe { windows::Win32::Foundation::GetLastError() };
+                        let code_val = code.0;
+                        // Error 2 = pipe disappeared during wait (engine recreating instance).
+                        // Retry CreateFileW instead of failing.
+                        if code_val == 2 && wait_for_the_pipe {
+                            // Pipe disappeared during wait; engine is recreating instance.
+                            // Sleep briefly and retry the loop.
+                            std::thread::sleep(Duration::from_millis(50).min(remaining));
+                            continue;
+                        }
+                        let reason = if code_val == 2 {
+                            "the engine is not listening (pipe name absent)"
+                        } else {
+                            "every instance is in use"
+                        };
                         return Err(IpcError::Connect(format!(
-                            "the pipe {pipe_name} has no free instance after {:.1} s (the Win32 error {}): every instance is in use",
+                            "the pipe {pipe_name} has no free instance after {:.1} s (the Win32 error {}): {reason}",
                             timeout.as_secs_f64(),
-                            code.0
+                            code_val
                         )));
                     }
                     // An instance is free now: open it (the loop retries).
