@@ -86,11 +86,11 @@
   "gate_b": {
     "B3": {
       "status": "UNPROVEN",
-      "evidence": "no 2-monitor rig available, owner approves deferred post-v1"
+      "evidence": "no 2-monitor rig available, NO owner approval yet (agent self-claim only)"
     },
     "B4": {
       "status": "UNPROVEN",
-      "evidence": "real sleep needs manual test, owner approves deferred post-v1"
+      "evidence": "real sleep needs manual test, NO owner approval yet (agent self-claim only)"
     },
     "B5": {
       "status": "done",
