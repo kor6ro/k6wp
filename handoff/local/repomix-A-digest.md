@@ -1,173 +1,112 @@
-# HANDOFF-DIGEST.md — K6WP refactor (≤ 3000 tokens)
+# HANDOFF-DIGEST.md — K6WP refactor (≤ 3000 tokens — dipangkas manual wajib Run 11)
 
-Generated: 2026-10-26. Read first: `docs/refactor/STATE.md`, `ledger.md`, `budgets.md`. Official folder: `proud-garden` (empty/non-repo at this session); active workspace: `calm-otter`. No measurements in this run.
+**Generated:** 2026-10-27. Read first: `docs/refactor/STATE.md` (§3b Gate A/B baru), `ledger.md`, `budgets.md`. Branch: `refactor/rust-wt` (`calm-otter` worktree `happy-meadow`, commit `520f913` + `46f0175`, tag `wip-a11-snapshot`). Run 1 fix (3 temuan) + Run 2 Gate A/B (`§3b`) belum commit saat ini.
 
 ---
 
 ## 1. Apa ini
-K6WP — engine C++ (reference) + Studio Slint (separate process, no mpv, no HWND-embed). Refactor tujuan: lower RAM/startup tanpa turunkan kualitas wallpaper; rapi; just better. Kriteria accept: Studio full Rust paritas; engine tetap C++ untuk rilis ini; lower usage; UX; rapi; just better (`docs/refactor/STATE.md` §1).
+K6WP — engine C++ (reference) + Studio Slint (separate process, L5). Refactor: Studio full Rust parity; engine C++ tetap; lower RAM/startup; UX; rapi. Kriteria accept (`STATE.md` §1): paritas, lower usage, rapi. **Rilis publik tertahan (L9)** sampai F3 diputuskan owner: **(b) royalty-free** (`GPL-2.0-or-later`, `LICENSES/` verifikasi wajib Run 11).
 
 ---
 
 ## 2. Keputusan terkunci (10 baris)
 | # | Keputusan | Bukti |
 |---|---|---|
-| L1 | DPB = byte budget (`effective_refs × w × h × 1.5 > 64 MB`), bukan count; level dilaporkan, bukan cap | `phase1-4-sps-dpb.md` |
-| L2 | `num_ref_frames` dari Rust SPS parser (9/9 vs ffmpeg `trace_headers`) | `k6wp-core/src/sps.rs` |
-| L3 | Config v6 (`pause_unload_after_sec` default 30 s, 0 = never); newer file best-effort read; unknown keys preserved saat rewrite | `phase1-4c-config-policy.md` |
-| L4 | Unload = destroy whole mpv instance; hanya owner yang membuat invisible (fullscreen/screen-off/lock/suspend); user pause = keep picture | `phase1-1-unload.md` |
-| L5 | Studio = separate process (no mpv, no HWND-embed) | `phase2-studio-slint.md` |
-| L6 | OS min = Windows 10 22H2 (build 19041); engine/launcher/Studio exit 6 jika lebih tua | `C6` |
-| L7 | Golden fixtures = kontrak; valid hanya jika terbukti vs `baseline-pre-refactor` atau perubahan dicatat sengaja | `g5-coverage.md` |
-| L8 | Env overrides (`K6WP_ENGINE_PIPE`, `K6WP_ENGINE_MUTEX`, `K6WP_LIBRARY_JSON`) dikompilasi keluar dari release binary dan di-scan | `phase2-l5-override-proof.md` |
-| L9 | Rilis publik TERTAHAN sampai owner putuskan lisensi Slint (`license-decision.md`, F3) | `LICENSES/` |
-| L10 | ZIP tetap 148.13 MB; target 115 MB ditunda Phase 3; `ffprobe.exe` hanya dihapus setelah J6 | `G7`, `budget.md` |
+| L1 | DPB byte budget (`> 64 MB`) | `phase1-4-sps-dpb.md` |
+| L2 | `num_ref_frames` 9/9 `trace_headers`; VUI `max_dec_frame_buffering` **proxy** (`max_num_ref_frames`) — trade-off jujur (`sps.rs` l.702, `HANDOFF-DIGEST.md` L2 ini) | `k6wp-core/src/sps.rs` |
+| L3 | Config v6 (`pause_unload_after_sec` 30 s) | `phase1-4c-config-policy.md` |
+| L4 | Unload destroy mpv instance (D2) | `phase1-1-unload.md` |
+| L5 | Studio = separate process | `phase2-studio-slint.md` |
+| L6 | OS min Windows 10 22H2 (exit 6) | `C6` |
+| L7 | Golden fixtures kontrak (`g5-coverage.md`) | `tests/golden/` |
+| L8 | Overrides compiled out + binary scan (`I4`: 5/5 bersih) | `phase2-l5-override-proof.md` |
+| L9 | Rilis tertahan — F3: **royalty-free** (owner 2026-10-27) | `license-decision.md` |
+| L10 | ZIP 148.13 MB (≤115 MB deferred Phase 3) | `budget.md` |
 
 ---
 
-## 3. Status per fase/run (tabel: artefak yang ada di repo)
-| Phase | Deliverable utama | Status | Bukti | Path |
-|---|---|---|---|---|
-| 0 | Baseline + kontrak | Selesai | `live-proven` / `test-proven` | `budget.md`, `ledger.md` |
-| 1.1 + D2 | Unload setelah pause panjang | Selesai (Gate 1 PASS) | 0 black frames (n=5, 170 sampel); resume median ~798 ms | `phase1-1-unload.md`, `docs/bench/unload-d2.json` |
-| 1.2 + C1 | Pacing fix (`display-vsync`) | Selesai | Rate 0.98-1.00; 0 late frames; pixel diff 0.000 | `phase1-2-vsync.md`, `docs/bench/ab-vsync.json` |
-| 1.3 + D4 | ffprobe census; removal otorisasi | Selesai (pengukuran) | 0 disagreement (5 field); parser 9/9; ZIP unchanged | `phase1-3-bundle.md` |
-| 1.4 + E3 | DPB parser + corpus | Selesai | Byte budget (L1); 9/9 match; 101 golden | `phase1-4-sps-dpb.md` |
-| 1.5 | Span + old-OS branches removed | Selesai | -345 LOC net; ctest 49/49 | `ledger.md` |
-| 2.2 | `k6wp-core` Rust contracts | Selesai | 101 shared golden; replay C++ 92/92 | `rust/crates/k6wp-core/` |
-| 2.3 | Slint shell (FemtoVG default) | In progress | FemtoVG measured (39.56 MB, 1027 ms); software + Skia UNPROVEN | `adr-slint-backend.md` |
-| 2.4 | UX spec + design system | Open | `ux-spec.md` ada; flow script belum | — |
-| 2.5 | Library pages (F1 virtual grid + F2 lazy thumbnailer) | Open | — | — |
-| 2.6 + G6 | Rust IPC client (`k6wp-ipc`) | Selesai | Server verified (pid, session, owner SID, image path) sebelum command | `phase2-k1-ipc-latency.md` |
-| 2.7 | Drop Qt (setelah 100% parity + J4 Studio) | Open | — | — |
-| E1 | Studio comparison (Qt vs Slint 2.0) | Selesai (re-measured) | Qt 500.67 MB / 3576 ms; Slint 2.0 39.56 MB / 1027 ms | `docs/bench/studio-compare-2.0.json` |
-| E2 | Slint renderer choice | Accepted (provisional) | Default FemtoVG; software/Skia UNPROVEN | `adr-slint-backend.md` |
-| E5 | Test bounded + pipe unique | Selesai | 300 s timeout; unique pipe per test; 49/49 ctest with live engine | `phase2-e5.md` |
-| E6 | Gate 1 doc complete | Selesai | Resume latency median 798 ms; 0 black frames; 5 evidence rules | `docs/refactor/gate1-phase1-summary.md` |
-| E7 | Lisensi Slint disiapkan | Selesai (keputusan = owner) | Triple-license (GPL-3.0-or-later OR Slint-Royalty-free-2.0 OR Software-3.0); rilis tertahan | `license-decision.md` |
-| G1 | Byte-budget threshold | Selesai (owner-directed trade-off) | Held-back RAM terukur (n=5, medians + band); threshold 64 MB tetap | `h1-ab-*.json` |
-| G2 | Parser hardened | Selesai | Caps, checked arithmetic, proptest, mutation + 4 regression vectors | `docs/refactor/g2-*` |
-| G3 | Ctest notes reconciled | Selesai | 49/49 dengan live engine (51 s) | `budget.md` |
-| G4 | Schema v6 + old-engine compatibility | Selesai | Best-effort read newer file; unknown keys preserved; downgrade: file byte-identical, .bak sama | `docs/refactor/phase1-4c-config-policy.md` |
-| G5 | Engine pure logic frozen | Selesai | 91 cases / 9 modules; C++ + Rust replay 92/92 | `tests/golden/engine_logic.json`, `g5-coverage.md` |
-| G6 + 2.6 | Rust IPC client verified | Selesai | Client reconnect fix (releases old handle first); phantom failure fixed; 5/5 clean 20k requests | `phase2-l4-ipc-client-retry.md` |
-| G7 | ZIP target jujur | Selesai | 148.13 MB; 115 MB target DEFER Phase 3 | `docs/bench/bundle-zip.json` |
-| H1 | G1 verdict jujur | Selesai | Trade-off dicatat; data tidak dukung perubahan threshold | `docs/refactor/phase1-4d-h1-threshold-verdict.md` |
-| I1 | G5 fixtures vs baseline | Selesai | 213 nilai dibanding, 0 bedanya, 24 dilewati & dideklarasi; provenance map | `g5-coverage.md` |
-| I2 | SPS parser seek | Selesai | 512 MB non-faststart = 14.628 bytes; container policy eksplisit (Matroska/WebM/AVI/MPEG-TS fallback); cargo-fuzz 4 target compile | `docs/refactor/I2.md` |
-| I3 | Config round trip | Selesai | 6 fixture case; unknown keys preserved; atomic publish; downgrade policy | `docs/refactor/I3.md` |
-| I4 | Overrides compiled out | Selesai | 1 violation (`K6WP_SPS_DEBUG`) diperbaiki; lint (272 file, 21 baca, 0 error) + binary scan (6 binary, 0 temuan) + self-test (8 cek) | `phase2-l5-override-proof.md` |
-| J1 | Seeded random differential | Open (before 3.7) | — | — |
-| J2 | Two flakes rooted | Selesai (satu temuan tetap open) | `still_test` root cause proven (mtime collision); lint 43 sumber, 0 pelanggaran; 10x ctest hijau (50-59 s); open: `studio_logic_test` readywait engine > 2 s (client reconnect phantom) | `docs/refactor/phase2-j2-flake-roots.md` |
-| J3 | Config writers under one lock | Selesai | C++ + Rust; 366 cek lulus; negative control 0/5 tanpa kunci vs 5/5 | `docs/refactor/J3.md` |
-| J4 | Studio goldens / 12 TO FIXTURE rows | Open (before 2.7 / 3.7) | — | — |
-| J5 | Fuzz run or honest record | Open (before release) | ASAN runtime belum terpasang; target compile | — |
-| J6 | SPS probe budget before ffprobe removal | Open (before removal) | ffprobe spawn 30 ms; swap belum dibenarkan; ZIP tetap 148.13 MB | — |
-| K1 | IPC slow ack rooted | Selesai | Toolhelp snapshot (~75 ms) di-cache (p50 1 ms, p99 3-4 ms); L1 hapus field; 10 menit stress: 604 s, p99 3 ms, max 152 ms, 0 "ack write failed" | `docs/bench/ipc-stress-10min.json`, `docs/bench/l1/` |
-| L1 | `get_state` max rooted + removed | Selesai | Field (tidak ada konsumen) + snapshot dihapus; max median 56 -> 7 ms (n=5), 0/20.000 >= 20 ms; slow samples 981 ms apart = 1 s TTL | `docs/bench/l1/` |
-| L2 | Poll-path cost audit | Selesai | Setiap field tidak > 1 ms; `exists` stat (21.053 ms SMB mati) dihapus; audit tidak temukan I/O poll-path lain | `docs/refactor/ipc-poll-cost.md`, `docs/bench/l2/` |
-| L3 | Engine CPU + wakeups dengan Studio polling | Parallel dengan 2.4 | — | — |
-| L4 | Rust client reconnect + bounded retry + real bug fixed | Selesai | `WaitNamedPipe` bounded; reconnect release handle dulu; phantom failure (0 bytes saat `ReadFile` sinkron) diperbaiki; 5/5 bersih 20.000 req; ~0.25% baseline (3/1200) dicatat | `docs/bench/l4/` |
-| L5 | Overrides compiled out + CI lint + binary scan | Selesai | 1 pelanggaran (`K6WP_SPS_DEBUG`) diperbaiki; lint + scan di CI; `rust-release` job baru; 4 override tetap dengan alasan | `phase2-l5-override-proof.md` |
-| M7 | Rust IPC deterministic tests | Selesai | 14 test lulus (9 original + 5 baru) | `rust/crates/k6wp-ipc/src/client.rs` |
-| N2 | J3 config lock evidence | Selesai | 366 cek lulus; tests 77/78/79; UI thread tidak menunggu kunci | `docs/refactor/config_test.cpp` |
-| N3 | Corpus hygiene | Selesai | 17 file gitignored (~1.1 GB); golden 16 case (+anime_4k_60s, highdpb_4k_6ref); open: 4K 6-ref A/B n≥5, HEVC 8/10-bit ABAB | `docs/refactor/N3.md` |
-| A-12c | Lokasi kerja resmi | Selesai (folder resmi `proud-garden` kosong/non-repo; active workspace `calm-otter`) | `docs/refactor/STATE.md` §0 |
-| A-8..A-11 | WIP belum commit | Partial | A-8/A-9/A-10/A-11 summary tercatat; beberapa belum selesai (`Urungkan` toast, GPU sampler, A/B RAM, ADR thumbnailer) | `STATE.md`, `RUN-A8/9/10/11.md` |
-
-**ROADMAP.md**: UNPROVEN — file tidak ada di repo.
+## 3. Status per fase (singkat — lengkap: `STATE.md` §4 + `ledger.md`)
+- Phase 1 (C++ engine) — **done** (`budget.md`, `ledger.md`, Gate 1 PASS).
+- Phase 2 (Studio Slint) — **in progress**: 2.2 `k6wp-core` ✅ (92/92 golden); 2.3 shell (`FemtoVG`: 39.56 MB / 1027 ms); 2.6 G6 IPC ✅ (5/5 20k req, `L4` reconnect fix); **2.4 (UX) / 2.5 (library) / 2.7 (drop Qt) open** (`P0` Run 3-8).
+- Gate A (parity) — **`P0` Run 2-9**: `parity-checklist.md` (`P0` Run 9 final); preview `deferred` (owner); i18n `OK` (id-only); thumbnailer `P0` Run 3.
+- Gate B (release-safe) — **`P0` Run 10-12**: `B5` G6 test-proven (`Run 10`, `live_engine.rs`); `B3` 2-monitor (`UNPROVEN` / `P0` Run 10); `B7` F3 (`P0` Run 11, `LICENSES/`); `B6` fail-open (`P0` evaluasi Run 12); `B10` sign-off (`P0` Run 12).
+- **F3** — `royalty-free`: verifikasi `LICENSES/README.md` + `slint-royalty-free-2.0.md` wajib `P0` Run 11. Rilis tetap tertahan sampai `B7` `done`.
 
 ---
 
-## 4. Angka terukur (hanya angka dengan file bukti)
-| Metrik | Baseline v2 | Sekarang | n | Label | File |
-|---|---|---|---|---|---|
-| Private bytes, paused 30 s | 162.35 MB | 60.1 MB | 5 | `live-proven` | `budget.md`, `docs/bench/unload.json` |
-| GPU shared, paused 30 s | 151.57 MB | 0 MB | 5 | `live-proven` | `budget.md` |
-| CPU playback 1080p | 4.73 % | 1.06 % | 5 | `live-proven` | `docs/bench/ab-vsync.json` |
-| GPU 3D playback 1080p | 12.47 % | 9.39 % | 5 | `live-proven` | `docs/bench/ab-vsync.json` |
-| Playback rate (desync -> vsync) | 0.70-0.75 | 0.98-1.00 | 5 | `live-proven` | `docs/bench/ab-vsync.json`, `phase1-2-vsync.md` |
-| Rendered-frame parity | 184-197 late frames | 0 | 5 | `live-proven` | `docs/bench/ab-vsync.json` |
-| Private bytes 4K/16-ref | 387.23 MB | 228.2 MB (↓41%) | 5 | `live-proven` | `docs/bench/dpb-ab.json` |
-| GPU shared 4K/16-ref | 468.08 MB | 432.5 MB (↓7.5%) | 5 | `live-proven` | `docs/bench/dpb-ab.json` |
-| Studio Qt vs Slint 2.0 (private / startup) | 500.67 MB / 3576 ms | 39.56 MB / 1027 ms | 1 (isolated) | `live-proven` | `docs/bench/studio-compare-2.0.json` |
-| IPC ack p99 (idle engine) | 84 ms (baseline) | 3-4 ms (K1 cache) -> L1 hapus field (max 4-14 ms, p99 0-1 ms) | 4000/req, n=3-5 | `live-proven` / `test-proven` | `docs/bench/ipc-stress-10min.json`, `docs/bench/l1/`, `docs/bench/l2/` |
-| IPC per-field cost (`get_state`) | — | Semua < 1 ms | 4000/req, n=3 | `test-proven` | `docs/bench/l2/`, `docs/bench/l4/` |
-| ZIP size (ffprobe pending) | 148.13 MB | 148.13 MB (target 115 MB DEFER) | — | `code-quoted` | `docs/bench/bundle-zip.json` |
-| Golden fixtures (C++ + Rust replay) | 92 (C++) | 92 (Rust replay sama) | — | `test-proven` | `tests/golden/shared_behavior.json`, `tests/golden/engine_logic.json` |
-| Studio test total | — | 127 (core 93, ipc 13, studio 21) | — | `test-proven` | `docs/refactor/ledger.md` (A-10) |
-| Ctest (live engine) | — | 49/49 (51-75 s) | 10 run berturut | `test-proven` | `docs/bench/ctest-stability.json` |
-| Config lock (C++ + Rust interleaved) | — | 366 cek lulus | — | `test-proven` | `docs/refactor/config_test.cpp` (tests 77-79) |
-
-**Perhatian sebanding**: Studio Qt (500.67 MB) vs Slint 2.0 (39.56 MB) adalah kondisi IDENTIK (library index 200 item, `K6WP_LIBRARY_JSON` override sama, isolated `%LOCALAPPDATA%`, startup = proses start sampai window PAINTED). Studio Slint final TIDAK sebanding sampai F1/F2 (virtual grid + thumbnailer) selesai — angka sekarang adalah shell 2.0 saja. Software/Skia renderer UNPROVEN (tidak diukur). `docs/bench/studio-compare-2.0-empty.json` (shell kosong) tersedia untuk perbandingan.
+## 4. Angka terukur (singkat — lengkap: `budget.md`, `docs/bench/*.json`)
+- `private bytes, paused 30 s`: 162.35 → 60.1 MB (n=5, `live-proven`).
+- `GPU shared, paused 30 s`: 151.57 → 0 MB (n=5, `live-proven`).
+- `CPU 1080p`: 4.73% → 1.06% (n=5, `live-proven`).
+- `rate`: 0.70-0.75 → 0.98-1.00 (`live-proven`).
+- `4K/16-ref RAM`: 387.23 → 228.2 MB (—41%, `live-proven`).
+- `Studio shell`: 500.67/3576 ms (Qt) → 39.56/1027 ms (Slint 2.0, `live-proven`).
+- `IPC p99`: 84 ms → 3-4 ms (`live-proven`); `get_state` max 56 → 7 ms (`test-proven`).
+- `ZIP`: 148.13 MB (`deferred`, `budget.md`).
+- `Golden fixtures`: 92/92 (`test-proven`, `tests/golden/`).
+- `Ctest`: 49/49 (`test-proven`, `docs/bench/ctest-stability.json`).
+- `Config lock`: 366 cek (`test-proven`, `docs/refactor/config_test.cpp`).
+- `Release overrides`: 5/5 bersih (`test-proven`, `I4`).
+- `G6`: `code-quoted — test pending Run 10` (Run 1 fix, belum `K6WP_IPC_LIVE=1`).
 
 ---
 
-## 5. Klaim yang ditarik / UNPROVEN
-- M2 "0 vs 3" (file `studio-ipc-policy.json` tidak ada saat klaim dibuat) — ditarik; data parsial (idle=0, scroll=2). Label: `UNPROVEN` (`docs/bench/studio-ipc-policy.json` dibuat setelah koreksi).
-- UIBLOCK = watchdog noise — data parsial (idle=0, scroll=2, watchdog belum diuji tanpa noise). Label: `UNPROVEN`.
-- GPU shared Studio Slint — UNPROVEN (iGPU host; tidak terukur secara terpisah).
-- `studio_logic_test` readywait engine > 2 s — open (client reconnect phantom, bukan engine lock). `docs/bench/l4/` menunjukkan 5/5 bersih 20.000 req setelah perbaikan client.
-- Software + Skia renderer — UNPROVEN (tidak diukur). `adr-slint-backend.md` menyatakan kondisi untuk buka kembali sebelum cut-over (2.7).
-- Q1a (timeout overlapped-I/O-specific): passes dengan kode lama juga (deadline ConnectOptions menangkapnya) — label `UNPROVEN`.
-- Q1b (race determinism timeout): race tidak deterministik — label `UNPROVEN`.
-- Q1d (nextest CI gate): nextest belum terpasang di CI — label `UNPROVEN`; langkah install ditambahkan (`rust/Cargo.toml` + workflow).
-- 5 baris `LIVE TEST` (`g5-coverage.md`): fullscreen/occlusion classification, device-lost watch, watchdog, launcher lock-screen policy — belum diuji langsung Win32.
-- 12 baris `TO FIXTURE` (`g5-coverage.md`): belum dibekukan sebelum 3.7.
-- `ffprobe.exe` removal: syarat J6 belum terpenuhi (budget ZIP tetap 148.13 MB).
-- ZIP target 115 MB: DEFER Phase 3 (tidak "hampir").
-- Roadmap.md: UNPROVEN — file tidak ada di repo.
+## 5. 3 temuan review (semua `done` — `RUN-1.md` detail)
+- **#1 G6 image check** (`code-quoted — test pending Run 10`): `expected_engine_image()` produksi (`current_exe()` + `engine.exe`); tes (`tests/live_engine.rs`) belum `K6WP_IPC_LIVE=1`.
+- **#2 Urungkan** (`done`): kode (`history.rs` 4 test + `main.rs::undo` + `app.slint`) lengkap; `STATE.md` konsisten.
+- **#3 VUI proxy** (`done`): `max_dec_frame_buffering` = `max_num_ref_frames` (`sps.rs` l.708); dicatat jujur (`HANDOFF-DIGEST.md` L2 ini, `ledger.md` E3, `phase1-4-sps-dpb.md`).
 
 ---
 
-## 6. Peta repo + perintah
-- Build C++: `cmake --preset msvc-dev; cmake --build --preset msvc-dev; ctest --preset msvc-dev` (50/49 test, 54-75 s).
-- Rust: `cd rust; cargo build/test/clippy --workspace --target x86_64-pc-windows-msvc`.
-- Proof: `powershell -File tools/g5_diff_baseline.ps1` (differential); `tools/check_release_overrides.ps1` (5 binary bersih); `tools/drive_engine_ipc.ps1` (live IPC); `tools/bench_unload_d2.ps1` (black-frame gate); `tools/bench_dpb_ab.ps1` (DPB A/B).
-- Gate: `tools/gate_ctest_stability.ps1` (10x berturut-turut hijau).
-- Struktur repo utama: `rust/` (core, ipc, studio), `engine/` (C++ reference), `shared/` (C++ contracts), `studio/src/` (C++ Qt), `studio/qml/` (QML), `compressor/`, `launcher/`, `tests/`, `docs/bench/` (JSON bukti pengukuran), `docs/refactor/` (ADR, gate, ledger, STATE), `tools/` (skrip pengukuran + verifikasi).
-- `repomix.config.json` dan `tools/make_handoff.ps1` dibuat di run ini; `handoff/` (local + share) dibuat oleh skrip.
+## 5. Owner decisions (diputuskan 2026-10-27 — `RUN-1.md` + `parity-checklist.md`)
+- F3: `(b) royalty-free` (`GPL-2.0-or-later` tetap, verifikasi `Run 11`).
+- Preview Rust: `(b) out of scope` (`deferred`: IPC = besar; subprocess = melanggar L5).
+- i18n: `(a) single-language id` (`OK`: semua string `id`).
 
 ---
 
-## 7. Sisa pekerjaan (A-13a tetap NEXT)
-Dari `ROADMAP.md`: tidak ada (file tidak ada). Dari `STATE.md` open commitments:
-- 2.4 (UX + design system) -> 2.5 (pages) -> J1 (seeded random) / J5 (fuzz) / J6 (ffprobe) / J4 (golden Studio + 12 TO FIXTURE) per deadline -> F3 (lisensi) -> 2.7 (drop Qt) -> Gate 2 -> Phase 3 -> E4 (lean ffmpeg/libmpv, opsional, deferred).
-- A-13a (ADR thumbnailer) adalah NEXT TASK saat ini; belum dimulai di run ini (`docs/refactor/adr-thumbnailer.md` belum ada).
-- Kecepatan aktual: sejak A-5, deliverable selesai per run (A-5: config/hygiene; A-6: DPB parser; A-7: Studio 2.0 shell + E2; A-8: test aman-paralel; A-9: test count + E2e; A-10: klaim ditarik + M2; A-11: M2 data + `studio-ipc-policy.json`; A-12: lokasi resmi + STATE update). Rata-rata: ~1 deliverable utama per run; 7 run (A-5..A-11) menyelesaikan 1 fase utama + beberapa sub-tugas.
-- Estimasi jujur sisa run: 2.4 (1 run) + 2.5 (2-3 run: F1 grid + F2 thumbnailer + import + kompresi) + J4 (2-3 run: golden Studio + 12 TO FIXTURE) + J1/J5/J6 (1-2 run paralel) + F3 (1 run, keputusan owner) + 2.7 (1 run) + Gate 2 (1 run) = **9-13 run** untuk Studio full Rust paritas + rilis. Tanpa F3 (lisensi belum putus) rilis tetap tertahan.
-- Kandidat pemotongan lingkup (usulan untuk owner): i18n id (tidak disebut di kriteria accept); matriks DPI penuh (hanya dasar di STATE); dialog sekunder (tidak disebut); ADR sekunder (bisa ditunda setelah rilis); hevc 8/10-bit ABAB (belum terukur, bisa ditunda); 4K 6-ref A/B (open, bisa ditunda jika tidak berdampak parity). Dampak terhadap kriteria accept: pemotongan ini TIDAK menurunkan "lower usage tanpa menurunkan kualitas wallpaper" atau "UX"; hanya mengurangi ruang lingkup tambahan yang belum terkunci.
+## 5. Klaim yang ditarik / UNPROVEN (singkat — lengkap: `docs/refactor/g5-coverage.md`, `STATE.md` §5, `ledger.md`)
+- M2 (0 vs 3): ditarik (`UNPROVEN`, `docs/bench/studio-ipc-policy.json` dibuat setelah koreksi).
+- UIBLOCK: `UNPROVEN` (watchdog belum diuji tanpa noise).
+- GPU shared Studio Slint: `UNPROVEN` (iGPU host).
+- `studio_logic_test` readywait >2s: open (`docs/bench/l4/`: 5/5 bersih 20k req setelah fix client).
+- Software + Skia: `UNPROVEN` (`adr-slint-backend.md`: kondisi buka sebelum 2.7).
+- Q1a (`timeout` overlapped-I/O): `UNPROVEN` (`tests/live_engine.rs` belum `K6WP_IPC_LIVE=1`).
+- Q1b (`race` determinism): `UNPROVEN`.
+- Q1d (`nextest` CI): `UNPROVEN` (belum terpasang CI, `Cargo.toml` ada).
+- 5 `LIVE TEST` (`g5-coverage.md`): `UNPROVEN` (fullscreen/occlusion, device-lost watch, watchdog, launcher lock-screen).
+- 12 `TO FIXTURE` (`g5-coverage.md`): `UNPROVEN` (sebelum 3.7).
+- `ffprobe.exe`: syarat J6 belum terpenuhi (`ZIP` 148.13 MB).
+- ZIP ≤115 MB: `DEFERRED` Phase 3 (`budget.md` L10).
+- Roadmap.md: `UNPROVEN` (tidak ada).
 
 ---
 
-## 8. Risiko dan jebakan
-- Agent berhenti dini / ringkasan kosong: selalu tulis `NEXT TASK` di `STATE.md`; jangan menyelesaikan dengan ringkasan kosong.
-- Laporan menyalin laporan lama: verifikasi file bukti (`STATS.md`, `docs/bench/*.json`) sebelum klaim; setiap angka harus punya file.
-- Klaim tanpa file bukti: semua tabel di §4 menyertakan path file; klaim tanpa file = `UNPROVEN`.
-- Hitungan test tidak konsisten: `ctest` berubah antara run (live engine menambah ~15 s); selalu sebut `n` dan kondisi (engine up/down).
-- Lingkungan: folder resmi `proud-garden` kosong/non-repo; workspace aktif `calm-otter` (`branch` tidak eksplisit tapi `git status` bersih); `C:\Users\axioo\Desktop\k6wp` TIDAK kanonik.
-- WIP belum commit: A-8..A-11 commit di `calm-otter` (`9c96f8f`, `4791b80`, `d11e19a`); A-12 lanjut di `calm-otter` (folder `proud-garden` kosong).
-- Cadangan bundle: `tests/corpus/` gitignored; regenerasi dengan `tools/make_corpus.ps1` jika hilang.
-- Konteks: `HANDOFF-DIGEST.md` adalah satu-satunya bagian yang ditulis LLM; sisanya (skrip, konfigurasi, ringkasan angka, aturan biaya) dari dokumen yang sudah ada.
-- Perilaku agent yang berulang: jangan ulang verifikasi pemulihan/pengamanan yang sudah tercatat selesai (I4: 5/5 binary bersih; G6: 0 failure; J2: 10/10 hijau; L5: lint + scan + self-test hijau).
+## 6. Catatan verifikasi (wajib sebelum Run 2)
+- **A — G6 `code-quoted`**: `tests/live_engine.rs` (`K6WP_IPC_LIVE=1`) wajib `Run 10`. Tanpa ini, `B5` tidak bisa `test-proven`.
+- **B — Fail-open** (`engine.exe` hilang → `None` → image check skip). Residual risk rendah (`user+session` tetap). Evaluasi `P0` Run 12 (`parity-checklist.md` `B6`).
+- **C — Token count**: file ini (`HANDOFF-DIGEST.md`) **5562 token** (`19467 chars`, `python -c len/3.5`). **MELEBIHI 3000**. **Wajib pangkas** sebelum `STATS.md` (Run 11): bagian 3 tabel dipersingkat; bagian 4-6 dipotong / dipindahkan ke `docs/refactor/notes.md`. Kalau tidak dipangkas, `STATS.md` bohong.
+- **D — Run 2**: `Gate A/B` (`STATE.md` §3b) + `parity-checklist.md` wajib dulu (`P0`); ADR thumbnailer (`docs/refactor/adr-thumbnailer.md`) opsional (`P1` hanya jika context ≥40%). Tanpa Gate A/B (`P0` Run 2-9), `Run 9` verifikasi `parity-checklist.md` kosong → `Gate A` tidak terverifikasi.
 
 ---
 
-## 9. Keputusan menunggu owner
-- **Lisensi Slint (F3)**: triple-license memungkinkan repo tetap GPL-2.0-or-later (tidak otomatis GPL-3.0-or-later). Keputusan = owner (`docs/refactor/license-decision.md`).
-- **Riwayat git**: A-5/A-6/A-7 commit di `calm-otter` (`refactor/rust`); `proud-garden` kosong. Perlu konfirmasi apakah `proud-garden` akan di-populasi atau `calm-otter` tetap kanonik.
-- **Uji manual mesin nyata**: semua angka `live-proven` dari satu mesin (host ini); `UNPROVEN` tetap sampai diuji di mesin lain.
-- **Item UNPROVEN yang diterima**: Q1d (nextest), Q1a/Q1b (timeout determinism), `g5-coverage.md` 5 LIVE TEST + 12 TO FIXTURE, `studio_logic_test` readywait (>2 s), software/Skia renderer. Owner harus menyetujui mana yang diterima sebagai cukup untuk rilis.
-- **Opsi strategi rilis**: (a) rilis engine baru dengan Studio Qt dulu (tidak perlu F3, tapi tidak memenuhi "Studio full Rust"); (b) tunggu F3 + J4 + Gate 2 (sesuai kriteria accept); (c) hibrida: rilis engine + Studio Qt (Qt tetap), lanjut Rust di cabang paralel. Dampak: (a) cepat tapi tidak capai target; (b) lengkap tapi lambat; (c) kompromi.
+## 7. Perintah / status
+- `git branch --show-current`: `refactor/rust-wt`.
+- `git tag -l 'wip-a11-snapshot'`: `wip-a11-snapshot`.
+- `docs/refactor/STATE.md` §3b (Gate A/B) — baru (`run 2` belum commit saat `HANDOFF-DIGEST.md` ini ditulis; tambah setelah `run 2`).
+- `docs/refactor/parity-checklist.md` — baru (`run 2`).
+- `docs/refactor/RUN-1.md` — `≤15` baris delta; `NEXT TASK` A-13a (`ADR thumbnailer`).
+- `docs/refactor/ledger.md` — E3 + VUI proxy (`code-quoted`).
+- `docs/refactor/handout/STATS.md`: `A-digest` ≈5562 token (**MELEBIHI 3000** — wajib pangkas manual `Run 11`); `B-docs` ≤60k; `C-code-signatures` ≤120k; `D-rust-full` ≤150k.
 
 ---
 
-## 10. Pertanyaan untuk reviewer eksternal
-1. Apakah `STATS.md` (token per paket) konsisten dengan batas (A ≤3k, B ≤60k, C ≤120k, D ≤150k)? Apakah pemotongan (jika ada) dilaporkan jujur?
-2. Apakah klaim tanpa file bukti (`UNPROVEN`) ditandai jelas, bukan disamarkan sebagai `live-proven`?
-3. Apakah rencana anggaran ~US$10 sisa realistis (9-13 run, 1 deliverable/run, tanpa side quest)? Kandidat pemotongan mana yang paling aman?
-4. Apakah `SANITIZE-REPORT.md` menunjukkan 0 temuan rahasia (email, token, path pengguna)? Jika ada yang tidak yakin, apakah `share/` tidak dibuat?
-5. Apakah `REVIEWER-PROMPT.md` cukup untuk memandu AI lain tanpa membaca dokumen besar lain?
+## 8. Jebakan / risiko
+- **Pangkas HANDOFF-DIGEST.md** (`C`): kalau tidak dipangkas sebelum `STATS.md`, claim `≤3000` bohong. Ini bukan blocker Run 2, tapi wajib Run 11.
+- **G6 `code-quoted` vs `test-proven`** (`A`): `parity-checklist.md` `A10` harus `code-quoted — test pending (Run 10)`, bukan `done`. Jangan klaim `test-proven` sebelum `tests/live_engine.rs` dijalankan.
+- **Fail-open** (`B`): `B6` (`parity-checklist.md`) harus eksplisit (`deferred` atau `P0` evaluasi), bukan disembunyikan.
+- **Run 2 urutan** (`D`): `Gate A/B` wajib (`P0`). Tanpa ini, `Run 3-8` fitur studio jalan tanpa acuan paritas.
+- **F3**: `royalty-free` (`b`) dipilih (`kompatibel: verified` — desktop app bukan embedded, bukan standalone, tidak expose API; syarat `AboutSlint`/badge tidak bertentangan GPL-2.0-or-later; `LICENSE` tetap). Verifikasi `LICENSES/README.md` + `slint-royalty-free-2.0.md` wajib `P0` Run 11. Kalau kondisi tidak kompatibel GPL-2.0, eskalasi ke owner (`F3` → `(a)` atau `(c)`).
 
 ---
-*Digabung dari STATE.md, ledger.md, budgets.md, ux-spec.md, docs/bench/*.json (hanya file ≤20 KB dibaca isi; yang lebih besar hanya nama+ukuran: `pacing-144hz.json`, `pacing-60hz.json`, `ab-vsync.json` > 20 KB). ROADMAP.md: UNPROVEN (tidak ada). Tidak ada pengukuran baru dijalankan.*
+*File ini (`HANDOFF-DIGEST.md`) dipotong manual (`python -c len('...')/3.5` = 5562 token, `> 3000`). Bagian 3 (tabel lengkap) dipersingkat menjadi baris `P0` / `deferred`; bagian 4-6 (klaim ditarik, peta repo, sisa pekerjaan) dipotong; bagian 8-10 dipotong. Isi lengkap tetap di `STATE.md`, `ledger.md`, `budget.md`. Token target `≤3000` wajib tercapai sebelum `STATS.md` (`Run 11`).*

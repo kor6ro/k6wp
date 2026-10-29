@@ -5,7 +5,7 @@ Kamu reviewer teknis independen. Tujuan: verifikasi paket handoff K6WP (`A-diges
 ---
 
 ## Aturan baca
-- Baca `A-digest` (`HANDOFF-DIGEST.md`) dulu; lalu `B-docs` (`docs/refactor/*.md` + `STATS.md`). Buka `C` (`C-code-signatures`) atau `D` (`D-rust-full`) HANYA untuk memeriksa klaim tertentu (merujuk label bukti dan path).
+- Baca `A-digest` (`HANDOFF-DIGEST.md`) dulu; lalu `B-docs` (`docs/refactor/*.md` + `STATS.md`). Buka `C1-code-rust` (Rust source), `C2-code-cpp` (C++ engine/shared/studio source), `C3-code-tools` (tools/CMake/packaging) atau `D` (`D-rust-full`) HANYA untuk memeriksa klaim tertentu (merujuk label bukti dan path).
 - Anggap hanya apa yang ada di paket sebagai fakta. Klaim tanpa file bukti (`STATS.md` atau `docs/bench/*.json` atau `ledger.md`) = hipotesis. Tandai sebagai hipotesis, bukan fakta.
 - Jangan menulis kode produk. Jangan menyarankan perubahan kode kecuali sebagai catatan. Jika menyarankan perubahan keputusan terkunci (`L1`-`L10`), sebutkan sebagai "usulan perubahan keputusan", bukan revisi otomatis.
 
