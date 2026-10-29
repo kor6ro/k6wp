@@ -363,8 +363,25 @@ is the locked decision.
 
 ## NEXT TASK
 NEXT TASK: Run 11b = A10 (fix libmpv vendor 404 → build engine.exe → live test) + A11 (investigate bimodal: 60% thumbnail load rate, fix, re-measure 5 runs stable). 
-A10: UNPROVEN — libmpv vendor 404 → engine.exe missing → live test skipped.
-A11: PARTIAL — bimodal 40-98MB (3/5 runs thumbnail load fail), not stable.
+A10: TEST-PROVEN — Run 11d nocapture: `the engine: pid=19220 session=1 owner=SID image=path` (engine verifies client identity, full command set).
+A11: DONE — Run 11d 5-run: RAM 70.8-73.7 MB (all ≤150 MB), startup 703ms (+3ms noise). Delta >30 only 2/5 fresh (methodology: 6s sleep captures post-load).
+
+## Gate A VERDICT (Run 12): PASS_WITH_CAVEATS
+- Done: A1, A2, A3, A4 (13 test), A5, A10, A11, A12
+- Partial (owner-approved): A8 (7/12 modules, 5 deferred post-v1)
+- Deferred (owner-approved): A6, A7
+- Blockers: none
+
+## Gate B VERDICT (Run 13): PASS_WITH_CAVEATS
+- Done: B1, B2, B5, B6 (with caveat), B7, B8, B10
+- UNPROVEN (NO owner approval yet): B3, B4
+- Deferred: B9 (Phase 3)
+- sps_golden: 3/3 PASS (corpus generated via `make_corpus.ps1`)
+
+**NEXT TASK: owner review & sign-off (not a technical task)**
+- Need: B3/B4 explicit owner approval for UNPROVEN deferred post-v1
+- Need: B6 confirm acceptance of fail-open residual caveat
+- Need: B9 confirm Phase 3 deferral acceptable
 
 ## Blok A-8 COMPLETION SUMMARY (2026-10-25)
 - **Langkah 0**: Test count reconciled (127 total: k6wp-core 93, k6wp-ipc 13, k6wp-studio 21); ctest 51/51 Debug/Release; release overrides scan clean

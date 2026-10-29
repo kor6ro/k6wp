@@ -1,0 +1,56 @@
+{
+  "gate": "B",
+  "verdict": "PASS_WITH_CAVEATS",
+  "items": {
+    "B1": {
+      "status": "done",
+      "evidence": "Run 1 - `RUN-1.md` Temuan #2 (Urungkan kontradiksi) resolved"
+    },
+    "B2": {
+      "status": "done",
+      "evidence": "Run 1 - `HANDOFF-DIGEST.md` L2 + `ledger.md` E3 + `phase1-4-sps-dpb.md`; VUI proxy honest record"
+    },
+    "B3": {
+      "status": "UNPROVEN",
+      "evidence": "no 2-monitor rig available, NO owner approval yet (agent self-claim only). Deferred post-v1 pending owner decision."
+    },
+    "B4": {
+      "status": "UNPROVEN",
+      "evidence": "real sleep/resume needs manual test on physical machine, NO owner approval yet (agent self-claim only). Deferred post-v1 pending owner decision."
+    },
+    "B5": {
+      "status": "done",
+      "evidence": "B5 = A10 = test-proven via Run 11d: `the engine: pid=19220 session=1 owner=SID image=path` nocapture proof"
+    },
+    "B6": {
+      "status": "done with caveat",
+      "evidence": "fail-open residual: `expected_engine_image()` returns `None` if engine.exe missing -> image check skipped. Residual risk LOW: `require_current_user` + `require_same_session` still enforced. Owner accepts with caveat (Run 13 decision Q2=a)."
+    },
+    "B7": {
+      "status": "done",
+      "evidence": "F3 royalty-free implementation: `Cargo.toml license = \"GPL-2.0-or-later\"`; `cargo deny check licenses` = ok (only unmatched allowances warnings). Slint used as desktop app (not embedded/standalone/API-exposing). AboutSlint badge requirement noted in `LICENSES/README.md`."
+    },
+    "B8": {
+      "status": "done",
+      "evidence": "J5 honest record: `STATE.md` updated: \"cargo-fuzz not run on this host (ASAN DLL missing). Compensation: proptest 256 cases + mutation pass + 4 regression vectors in `sps_fuzz.rs`. Honest record, not claiming fuzz executed.\""
+    },
+    "B9": {
+      "status": "deferred",
+      "evidence": "ZIP size 148.13 MB (<=115 MB deferred Phase 3 per `budgets.md` L10). Explicitly documented, not \"almost\"."
+    },
+    "B10": {
+      "status": "done",
+      "evidence": "`STATE.md` NEXT TASK = \"owner review & sign-off (not a technical task)\". Gate A/B verdicts recorded."
+    }
+  },
+  "caveats": [
+    "B3/B4 UNPROVEN - no owner approval yet, deferred post-v1",
+    "B6 fail-open residual - accepted with caveat (user+session checks remain)",
+    "B9 ZIP size - deferred to Phase 3"
+  ],
+  "owner_decisions_needed": [
+    "B3/B4: explicit owner approval for UNPROVEN deferred post-v1",
+    "B6: confirm acceptance of fail-open residual caveat",
+    "B9: confirm Phase 3 deferral acceptable"
+  ]
+}
