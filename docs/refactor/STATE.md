@@ -362,7 +362,9 @@ is the locked decision.
 
 
 ## NEXT TASK
-NEXT TASK: Run 11 = A11 (E1 final) + A10 (G6 test-proven). A10: live_engine.rs dengan K6WP_IPC_LIVE=1. A11: 200-item library measurement (5 run) → docs/bench/studio-e1-final.json (first_frame_ms, private_mb, library_items=200). Target: ≤150 MB / ≤700 ms.
+NEXT TASK: Run 12 = Gate A verify (A9) + B3/B4/B5 (engine validation). Run 13 = F3 impl (B7) + J5 (B8) + Gate B final.
+A10: UNPROVEN — engine.exe not built (mpv deps missing); Run 11b: build release + jalankan live test.
+A11: done — Run 11 (median first_frame=735ms, private=90.5MB); target: ≤150 MB ✓, ≤700 ms ✗ (+35ms).
 
 ## Blok A-8 COMPLETION SUMMARY (2026-10-25)
 - **Langkah 0**: Test count reconciled (127 total: k6wp-core 93, k6wp-ipc 13, k6wp-studio 21); ctest 51/51 Debug/Release; release overrides scan clean
