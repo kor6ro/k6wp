@@ -129,6 +129,7 @@ pub enum Event {
         index: usize,
         generation: u64,
         result: Result<Pixels, String>,
+        new_thumb_path: Option<PathBuf>,
     },
     Theme {
         dark: bool,
@@ -285,6 +286,7 @@ fn run(rx: Receiver<Request>, sink: Sink, pipe_name_override: Option<String>) {
                     index,
                     generation,
                     result,
+                    new_thumb_path: None,
                 });
             }
             Ok(Request::Thumbnail { index, media }) => {
@@ -294,14 +296,26 @@ fn run(rx: Receiver<Request>, sink: Sink, pipe_name_override: Option<String>) {
                     .and_then(|p| p.parent().map(|d| d.join("thumbs")))
                     .unwrap_or_else(|| std::env::temp_dir().join("k6wp-thumbs"));
                 std::fs::create_dir_all(&cache_dir).ok();
+                eprintln!(
+                    "WORKER: Request::Thumbnail index={} media={}",
+                    index,
+                    media.display()
+                );
                 let result = generate_thumbnail(&media, &cache_dir, THUMB_WIDTH, THUMB_HEIGHT);
-                let decoded = result
+                let (decoded, new_thumb_path) = result
                     .map_err(|e| e.to_string())
-                    .and_then(|path| read_and_decode(&path, THUMB_WIDTH, THUMB_HEIGHT));
+                    .and_then(|path| {
+                        read_and_decode(&path, THUMB_WIDTH, THUMB_HEIGHT)
+                            .map(|pixels| (pixels, path))
+                    })
+                    .map_err(|e| e.to_string())
+                    .map(|(pixels, path)| (Ok(pixels), Some(path)))
+                    .unwrap_or_else(|e| (Err(e), None));
                 sink.emit(Event::Thumb {
                     index,
                     generation: 0, // thumbnail generation is separate from card generation
                     result: decoded,
+                    new_thumb_path,
                 });
             }
             Ok(Request::Theme) => {

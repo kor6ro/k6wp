@@ -305,6 +305,7 @@ impl Studio {
                 index,
                 generation,
                 result,
+                new_thumb_path,
             } => {
                 self.pending.remove(&index);
                 if generation != self.generation {
@@ -313,6 +314,11 @@ impl Studio {
                 match result {
                     Ok(pixels) => {
                         self.cache.insert(index as u64, image_from(pixels));
+                        if let Some(path) = new_thumb_path {
+                            if let Some(card) = self.cards.get_mut(index) {
+                                card.thumb = path;
+                            }
+                        }
                         self.sync_row(index);
                         self.update_footer();
                     }
