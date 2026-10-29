@@ -17,8 +17,8 @@ Status label: `done` (bukti di file) | `P0 — Run N` (jadwal) | `P0 — Run 9` 
 | A5 | Assign per-monitor + playlist UI | `done — Run 9 (5 test: assign_video_sends_correct_payload, clear_assignment_sends_clear_true, playlist_rejects_interval_zero, playlist_preserves_order, save_playlist_round_trip)` | `app.slint` 3-tab settings (Umum/Monitor/Playlist), `MonitorAssignment` struct, `Request::ListMonitors/AssignVideo/ClearAssignment/LoadPlaylist/SavePlaylist`, `save_playlist` atomic + validation, `save_studio_settings` includes playlist fields |
 | A6 | Preview Studio Rust | `deferred` (owner 2026-10-27) | via IPC = effort besar; subprocess mpv = melanggar L5; tidak menyentuh core flow |
 | A7 | i18n | `OK` (owner 2026-10-27) | single-language id; semua string `id`; tidak butuh infra i18n |
-| A8 | J4 — Studio golden fixtures (12 TO FIXTURE) | `P0 — Run 8` | `tests/golden/studio_logic.json` belum ada; `g5-coverage.md`: 12 baris belum dibekukan |
-| A9 | `parity-checklist.md` final | `P0 — Run 10` | semua baris berlabel; `RUN-9.md` ≤15 baris delta |
+| A8 | J4 — Studio golden fixtures (12 TO FIXTURE) | `partial — Run 10 (7 modul, 56 case, DRAFT) + Run 10b (5 modul)` | `tests/golden/studio_logic.json` (DRAFT, hand-written), Rust replayer (56 case pass dalam 5 test), C++ writer/checker DEFERRED |
+| A9 | `parity-checklist.md` final | `P0 — Run 12` | semua baris berlabel, A8 belum final |
 | A10 | G6 image check — test-proven | `code-quoted — test pending (Run 10)` | `expected_engine_image()` (Run 1); `tests/live_engine.rs` (`K6WP_IPC_LIVE=1`) belum dijalankan |
 | A11 | Studio RAM / startup (E1 final, bukan shell 2.0) | `P0 — Run 10` | target: ≤150 MB / ≤700 ms (Studio final belum porting) |
 | A12 | `Urungkan` toast | `done` (Run 1) | `history.rs` 4 test, `main.rs::undo`, `app.slint` undo-available; `STATE.md` NEXT TASK + ringkasan diperbarui |
