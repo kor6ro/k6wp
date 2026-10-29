@@ -374,14 +374,17 @@ A11: DONE — Run 11d 5-run: RAM 70.8-73.7 MB (all ≤150 MB), startup 703ms (+3
 
 ## Gate B VERDICT (Run 13): PASS_WITH_CAVEATS
 - Done: B1, B2, B5, B6 (with caveat), B7, B8, B10
-- UNPROVEN (NO owner approval yet): B3, B4
+- UNPROVEN (owner APPROVED deferred post-v1): B3, B4
 - Deferred: B9 (Phase 3)
 - sps_golden: 3/3 PASS (corpus generated via `make_corpus.ps1`)
 
-**NEXT TASK: owner review & sign-off (not a technical task)**
-- Need: B3/B4 explicit owner approval for UNPROVEN deferred post-v1
-- Need: B6 confirm acceptance of fail-open residual caveat
-- Need: B9 confirm Phase 3 deferral acceptable
+**OWNER SIGN-OFF (2026-10-30) — RELEASE READY**
+- B3 (2-monitor rig): APPROVED deferred post-v1 ✅
+- B4 (real sleep): APPROVED deferred post-v1 ✅
+- B6 (fail-open): ACCEPTED with caveat ✅
+- B9 (ZIP 148.13 MB): ACCEPTED Phase 3 deferral ✅
+
+**NEXT TASK: Release build + tag v1.10** (no technical blockers remain)
 
 ## Blok A-8 COMPLETION SUMMARY (2026-10-25)
 - **Langkah 0**: Test count reconciled (127 total: k6wp-core 93, k6wp-ipc 13, k6wp-studio 21); ctest 51/51 Debug/Release; release overrides scan clean
