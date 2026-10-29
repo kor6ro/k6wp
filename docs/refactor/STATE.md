@@ -362,7 +362,7 @@ is the locked decision.
 
 
 ## NEXT TASK
-NEXT TASK: ADR thumbnailer (adr-thumbnailer.md) → implementasi worker thumbnailer → import + antrian kompres → playlist → settings/onboarding → telemetri kesehatan → golden Studio per modul → parity & Gate 2
+NEXT TASK: Run 11 = A11 (E1 final) + A10 (G6 test-proven). A10: live_engine.rs dengan K6WP_IPC_LIVE=1. A11: 200-item library measurement (5 run) → docs/bench/studio-e1-final.json (first_frame_ms, private_mb, library_items=200). Target: ≤150 MB / ≤700 ms.
 
 ## Blok A-8 COMPLETION SUMMARY (2026-10-25)
 - **Langkah 0**: Test count reconciled (127 total: k6wp-core 93, k6wp-ipc 13, k6wp-studio 21); ctest 51/51 Debug/Release; release overrides scan clean
