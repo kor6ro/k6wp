@@ -13,4 +13,4 @@
 - C1-code-rust (Rust source): 48,163 tokens
 - C2-code-cpp (C++ engine/shared/studio source): 66,484 tokens  
 - C3-code-tools (tools/CMake/packaging): 67,808 tokens
-- **Total C tokens: 182,455** (1.5× original 120K spec). The essential build/measurement tools in C3 (fetch_vendor, make_corpus, gate_ctest, stress_ipc, lint_*, session_snapshot, make_handoff, bench_lib, CMakeLists, Cargo.toml, packaging) account for ~68K tokens. Compressed mode applied; further trimming would remove essential tools needed for workflow reproduction.
+- **Total C tokens: 182,455** (1.5× original 120K spec). Owner approved over-budget for audit navigability (3 packages vs 1 monolithic). Essential tools in C3 (fetch_vendor, make_corpus, gate_ctest, stress_ipc, lint_*, session_snapshot, make_handoff, bench_lib, CMakeLists, Cargo.toml, packaging) account for ~68K tokens.
